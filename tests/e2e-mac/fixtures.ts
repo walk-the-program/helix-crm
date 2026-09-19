@@ -27,6 +27,7 @@
 import { test as base, expect } from "@playwright/test";
 import Database from "better-sqlite3";
 import { mkdtempSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -91,6 +92,9 @@ class DbBridge {
   open(path: string): void {
     if (this.db) this.close();
     try {
+      // The app creates the workspace folder through the (stubbed) fs plugin,
+      // so the real directory has to be made here, as Rust's db_open does.
+      mkdirSync(dirname(path), { recursive: true });
       this.db = new Database(path);
     } catch (err) {
       throw new BridgeError("DB_OPEN_FAILED", err instanceof Error ? err.message : String(err));
@@ -266,7 +270,7 @@ class DbBridge {
  * It is written as one self-contained function with no imports because
  * addInitScript serialises it.
  */
-function installShim(seed: { appData: string; workspacesDir: string }): void {
+function installShim(seed: { appData: string; workspacesDir: string; files?: Record<string, string> }): void {
   type Rpc = (method: string, args: unknown[]) => Promise<RpcResultLike>;
   type RpcResultLike =
     | { ok: true; value: unknown }
@@ -311,7 +315,7 @@ function installShim(seed: { appData: string; workspacesDir: string }): void {
     /** Keychain stand-in: "<workspaceId>:<kind>" -> value. */
     secrets: {} as Record<string, string>,
     /** In-memory files for plugin:fs. */
-    files: {} as Record<string, string>,
+    files: { ...(seed.files ?? {}) } as Record<string, string>,
     /** Everything the app opened through the OS opener. */
     opened: [] as string[],
     /** Every invoke, in order, for assertions. */
@@ -365,7 +369,8 @@ function installShim(seed: { appData: string; workspacesDir: string }): void {
       // --- fs ---------------------------------------------------------------
       case "plugin:fs|read_text_file":
       case "plugin:fs|readTextFile":
-        return state.files[String(a.path)] ?? "";
+        // The plugin decodes bytes, not a string.
+        return Array.from(new TextEncoder().encode(state.files[String(a.path)] ?? ""));
       case "plugin:fs|write_text_file":
       case "plugin:fs|writeTextFile":
         state.files[String(a.path)] = String(a.data ?? a.contents ?? "");
@@ -485,7 +490,21 @@ export const test = base.extend<{ helix: HelixHarness }>({
       }),
     );
 
-    await page.addInitScript(installShim, { appData: root, workspacesDir: join(root, "workspaces") });
+    // Pre-seed helix.json so the app opens THIS test's database instead of
+    // creating a fresh workspace under a new id.
+    const registry = {
+      workspaces: [
+        { id: "e2e-workspace", name: "E2E Workspace", path: dbPath, lastPolledAt: null, lastBackupAt: null, archived: false },
+      ],
+      lastOpened: "e2e-workspace",
+      theme: "light",
+      density: "comfortable",
+    };
+    await page.addInitScript(installShim, {
+      appData: root,
+      workspacesDir: join(root, "workspaces"),
+      files: { [join(root, "helix.json")]: JSON.stringify(registry) },
+    });
     // The app opens its workspace itself, but tests that arrange rows before
     // the first paint need the file to exist.
     bridge.open(dbPath);

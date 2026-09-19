@@ -24,7 +24,7 @@ test.describe("boot", () => {
     await expect(sidebar.getByRole("link", { name: "Today" })).toBeVisible();
 
     // Today is the landing screen.
-    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
 
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
 

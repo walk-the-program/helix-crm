@@ -1,15 +1,16 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { cn } from "@/ui/cn";
 
 export function Sidebar(props: { children: ReactNode; footer?: ReactNode }) {
   return (
     <aside
+      aria-label="Sidebar"
       className={[
         "flex h-full w-[var(--sidebar-w)] shrink-0 flex-col",
         "border-r border-[var(--color-border)] bg-[var(--color-surface)]",
       ].join(" ")}
     >
-      <div className="flex-1 overflow-y-auto py-[var(--space-3)]">{props.children}</div>
+      <nav aria-label="Main" className="flex-1 overflow-y-auto py-[var(--space-3)]">{props.children}</nav>
       {props.footer ? (
         <div className="border-t border-[var(--color-border)] p-[var(--space-3)]">
           {props.footer}
@@ -36,7 +37,7 @@ export function NavItem(props: {
   label: string;
   icon?: ReactNode;
   active?: boolean;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLElement>) => void;
   href?: string;
   badge?: ReactNode;
 }) {

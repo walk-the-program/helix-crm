@@ -79,7 +79,11 @@ export function Shell({ registry, workspace }: ShellProps) {
                     ? location === "/" || location === "/today"
                     : location === item.to || location.startsWith(`${item.to}/`)
                 }
-                onClick={() => navigate(item.to)}
+                href={item.to}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate(item.to);
+                }}
                 badge={item.badge}
               />
             ))}
