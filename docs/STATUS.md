@@ -1650,3 +1650,214 @@ disabled/loading semantics, and the gallery generator's own assertions.
    for, because defaulting to muted would have greyed the name column in every
    table already built.
 4. No contract change is needed. No token was added or renamed.
+
+---
+
+## 2026-09-18 — Settings and AI agent
+
+Scope touched: `src/features/settings/**`, `src/features/ai/**`,
+`tests/unit/{settings,ai}/**`, `tests/repo/{settings,ai}/**`,
+`tests/e2e-mac/specs/{settings,ai}.e2e.ts`, this file. Nothing else.
+
+### Did
+
+**Settings (`src/features/settings/`)**
+
+`index.tsx` registers nine routes — `/settings` (the index), `/settings/workspace`,
+`/vocabulary`, `/tags`, `/fields`, `/appearance`, `/shortcuts`, `/workspaces`,
+`/diagnostics` — the Settings nav item at order 90, and four commands:
+`open-settings` (mod+,), `toggle-theme`, `switch-workspace`, `show-shortcuts` (?).
+`lib/sections.ts` is the single list the index grid and the section rail both
+read, including the four rows other agents own and this feature only links to
+(`/pipeline` for stage management, `/settings/site`, `/backups`, `/trash`).
+
+- **Overview**: a two-column index of every section, each with one line saying
+  what it is for.
+- **Workspace**: the business name — written to both the settings table and
+  `helix.json`, because the workspace list reads it while that file is closed —
+  plus currency, locale and default phone region, each with a live sample built
+  from `src/lib/money` and `src/lib/dates` so the choice is legible before it is
+  made.
+- **Vocabulary**: Deals / Jobs / Quotes, saved on selection, with a preview
+  driven by the radio's own state so it updates before the query round-trips.
+- **Tags**: create with a colour from the stage ramp or a neutral, rename,
+  recolour, delete behind a confirm that names the tag and its usage count.
+- **Custom fields**: per entity type; create (text, number, date, choice with
+  options), rename, reorder, delete behind a confirm naming the number of stored
+  values. Kind is locked on edit: changing it would orphan the values.
+- **Appearance**: theme and density through `appSettings`, live, no Save button.
+- **Shortcuts**: every command in the registry, grouped, plus the shortcuts the
+  shell owns, as both a screen and a sheet on `?`.
+- **Workspaces (E7)**: the list from `helix.json` with each one's last poll and
+  last backup; create (new uuid, `<workspacesDir>/<uuid>/helix.db`, then
+  `switchWorkspace`), rename, switch, archive and unarchive. Switching is
+  refused with a sentence while a write holds the lock. Archiving deletes that
+  workspace's `anthropic` and `site` secrets and never touches a file, and the
+  confirmation says exactly that.
+- **Diagnostics**: version, data path, DB size, SQLite version, FTS5, migration
+  version, last backup, site origin, last poll and last poll error, the write
+  queue, whether the keychain answers, Copy log and Reveal data folder. Every
+  reader returns a value or a stated reason instead of throwing, which is why
+  the screen renders in full under the e2e stubs.
+
+**AI (`src/features/ai/`)**
+
+- `provider.ts`: `AiProvider` — `extractRecord`, `draftFollowUp`, `summarize`,
+  `testKey` — over `POST <baseUrl>/v1/messages` with `x-api-key`,
+  `anthropic-version: 2023-06-01`, an explicit `max_tokens`, and structured
+  output through `output_config.format = { type: "json_schema", schema }`. Model
+  ids, the wire shape and the two traps below come from the `claude-api` skill,
+  read on the day, not from memory: `temperature` is removed on the Claude 5
+  models and 400s if sent, and `output_config.effort` is rejected by Haiku 4.5,
+  so it is only sent for the models that take it. Default model
+  `claude-sonnet-5`, with `claude-opus-5` and `claude-haiku-4-5` offered.
+- The fetch is injectable. By default it is `fetch` from
+  `@tauri-apps/plugin-http`, so the request is made in Rust and the CSP stays
+  `connect-src 'self'`; under the e2e build it falls back to the browser's fetch,
+  the same way `boot.ts` swaps the database driver.
+- Named errors: `AiKeyMissing`, `AiKeyRejected` (401/403, carrying the API's own
+  message), `AiRequestError` (429 / 5xx / network, retried once, and a model
+  refusal marked not-retryable), `AiParseError` (keeps the raw text, which the
+  paste dialog shows under "What it actually said").
+- `/settings/ai`: the on/off switch (`aiEnabled`, default false), a write-only
+  key field that goes straight to `secret_set` and is never read back, the model
+  picker, "Test key" (one tiny request), and a plain-language block on what is
+  sent and when. A `KeychainError` on save shows the plan's sentence and leaves
+  AI off.
+- The three actions are exported components, documented with their props in
+  `src/features/ai/README.md`. Each is visible but disabled, with a one-line
+  reason and a link to settings, when AI is off or the key is missing or
+  rejected. `PasteToRecordDialog` is also mounted by this feature on
+  `mod+shift+v`, so paste-to-record works in v1 without any Records change.
+  Confirm writes the contact and the deal in one transaction under one batch id.
+
+### Verified
+
+```
+$ npm run typecheck
+(no output)
+
+$ npm test
+ Test Files  59 passed (59)
+      Tests  738 passed (738)
+
+$ npx vite build --outDir dist-settings
+✓ built
+
+$ E2E_PORT=4185 E2E_OUT=dist-settings npx playwright test -c tests/e2e-mac/playwright.config.ts \
+    tests/e2e-mac/specs/settings.e2e.ts tests/e2e-mac/specs/ai.e2e.ts
+  17 passed (12.4s)
+```
+
+48 of those unit and repo tests are new: the provider against an injected fetch
+(success, the header and body shape, 401, 429 with its retry, a 500 that clears
+on the retry, a dropped connection, malformed JSON, JSON of the wrong shape, a
+refusal, an empty paste that never reaches the network, and a sweep proving the
+key appears in no console line, no URL, no request body and no error object);
+the masked suffix; the shortcuts grouping; the settings keys this feature adds;
+and `createFromProposal` (both rows, the stage event, one batch id, position,
+currency, and nothing written when the workspace has no stages).
+
+The 17 e2e cover: the index listing every section including the four another
+feature owns; vocabulary changing the preview and the stored setting; theme and
+density setting the `<html>` attributes and reaching `helix.json`; creating a tag
+and a custom field and finding them in the database through the bridge;
+Diagnostics rendering under the stubs; creating a second workspace and proving
+the open SQLite file actually changed (`bridge.info().path`), with `helix.json`
+listing both; archiving it, with `secret_delete` recorded for both kinds; `?`
+opening the sheet; AI off showing the disabled reason; saving a key and proving
+only the last four reach the database; "Test key" arriving at a local fake on
+127.0.0.1:4795 with the right headers; paste-to-record extracting, editing and
+confirming into real rows; and a 401 producing AiKeyRejected and disabling the
+actions. Both specs screenshot their screens at 1280 in light and dark into
+`tests/e2e-mac/.cache/screens/settings/` (22 images).
+
+Four things the screenshots caught and this agent fixed: the settings column was
+capped at `--content-max` (a prose measure) and squeezed the tables; the async
+screens flashed a bare spinner, which §8 does not want and which reads as a
+broken screen (now a quiet "Reading…" line); the radio controls painted their
+selection in the accent, which §5 reserves for "this needs you" (now ink); and
+the paste dialog ran its footer off the bottom of a short window, because the
+shared `DialogContent` is centred and unbounded (capped and scrolled locally —
+see the note for `src/ui` below).
+
+One app bug the e2e suite found and this agent fixed: switching workspaces left
+the mounted list showing the workspace the owner had just left as the open one.
+Every `db_open` calls `resetQueryCache()` (`queryClient.clear()`), which removes
+the registry query outright, so the `invalidateQueries` that followed the switch
+had nothing to mark stale. `lib/queries.ts` now exposes `refetchRegistry`, which
+`fetchQuery`s the key back into the cache, and the screen bumps a state counter
+so the mounted observer rebuilds against it. Asserted in the archive test.
+
+### Not done
+
+- **The sidebar footer still does not open the switcher.** It shows the open
+  workspace's name, which is where a switcher belongs, but `src/app/Shell.tsx`
+  belongs to foundations. The picker is reachable from the palette
+  ("Switch workspace") and from Settings > Workspaces. The change is one
+  `onClick` — see below.
+- **No stage management screen.** The Stages row links to `/pipeline`, where the
+  records agent owns the dialog, exactly as briefed.
+- **The keychain is only ever exercised against the e2e stub.** `secret_*` is
+  Rust; the real macOS and Windows stores are still unproven from this side, and
+  the foundations agent reported the same gap. It needs a manual first-run check.
+- **The provider has never spoken to the real Anthropic API.** Every test drives
+  a local fake. The wire shape is from the `claude-api` skill and the fake mirrors
+  it; the first real call is a manual step.
+- **No `draftFollowUp` or `summarize` e2e.** Both are unit-tested against the
+  injected fetch and both components are built, but nothing in v1 mounts them
+  yet, so there is no screen to drive them from. They are one import away
+  whenever Records wants them (README documents the props).
+- **`ai_base_url` has no field on the AI screen.** It is a settings row the e2e
+  suite points at its fake; exposing it to the owner would be a footgun, so it
+  stays a row.
+- **No Windows e2e.** Workspace switching is in the plan's Windows list, and this
+  agent cannot run it.
+
+### Contract changes needed
+
+1. **Promote three settings keys into `src/db/repos/settings.ts`**: `aiKeySuffix`
+   (`string | null`, default null), `aiKeyState` (`"unset" | "saved" | "rejected"`,
+   default "unset") and `aiBaseUrl` (string, default
+   `https://api.anthropic.com`). They are declared with zod and read and written
+   through `getRaw`/`setRaw` in `src/features/settings/lib/extraKeys.ts` until
+   then. Note also that the plan's `ai_enabled` and `ai_base_url` are the
+   repository's `aiEnabled` and `aiBaseUrl`: the registry is camelCase.
+2. **`settings.aiModel`'s default is `claude-sonnet-4-5`, which is not a current
+   model id.** `readAiConfig` substitutes `claude-sonnet-5` for any id the
+   provider does not know, so nothing breaks, but the registry default should be
+   corrected at the source.
+3. **`deals.createStatements`** does not exist. Paste-to-record has to write a
+   contact and a deal in one transaction, the write lock is not reentrant, and
+   `contacts.createStatements` already exists for the CSV import — so the deal
+   half is built in `src/features/ai/lib/proposal.ts`, mirroring `deals.create`
+   exactly (row plus the first `deal_stage_events` entry). Promote it and delete
+   the local copy.
+4. **`customFields.valueCount(fieldId)`** does not exist; "delete this field" has
+   to say how many values it would take with it. Written in
+   `src/features/settings/lib/counts.ts`, along with a read of
+   `schema_migrations` for Diagnostics that probably belongs in the db layer.
+5. **The shell binds no command shortcuts.** It binds `mod+k` and the palette,
+   and draws every other command's `shortcut` in the palette without registering
+   it, so `mod+,` and `mod+shift+v` would be decorative. This feature binds its
+   own from an overlay host. The shell binding `allCommands()` centrally would
+   remove that whole mechanism.
+6. **`FeatureModule` has no slot for an always-mounted overlay.** The shortcuts
+   sheet, the workspace picker and the paste dialog have to exist on every
+   screen, so `src/features/settings/lib/overlayHost.tsx` mounts a second React
+   root on `<body>` sharing the app's QueryClient, from `onBoot`. An
+   `overlays?: ReactNode[]` field on `FeatureModule` would make that a one-liner
+   and keep everything in one tree.
+7. **The sidebar footer should open the workspace picker.** In `Shell.tsx`, make
+   the footer a button whose `onClick` runs the `switch-workspace` command (or
+   imports `workspacePicker.open` from
+   `@/features/settings/components/SettingsHost`).
+8. **`src/ui/Dialog.tsx`'s `DialogContent` is centred with no height bound**, so
+   a form taller than the window runs its footer off-screen and unreachable —
+   the paste dialog hit exactly that, and e2e caught it as "element is outside of
+   the viewport". It is capped locally with `max-h-[85vh] overflow-y-auto`; the
+   shared component should do it for everyone.
+9. **Observation for whoever owns the leads path**: `src-tauri/src/leads.rs`
+   reads `settings.site_origin`, while the TypeScript settings registry stores
+   that key as `siteOrigin`. Nothing this agent owns depends on it, but the two
+   spellings cannot both be right.
