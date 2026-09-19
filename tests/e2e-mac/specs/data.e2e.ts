@@ -29,7 +29,7 @@ import type { Page } from "@playwright/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, "..", "..", "..");
-const SCREENS = join(here, "..", ".cache", "screens", "sweep-data");
+const SCREENS = join(here, "..", ".cache", "screens", "brand-a");
 
 function fixture(...parts: string[]): string {
   return readFileSync(join(REPO, "tests", "fixtures", ...parts), "utf8");
@@ -100,6 +100,23 @@ async function switchTheme(page: Page, theme: "light" | "dark"): Promise<void> {
 async function shoot(page: Page, name: string) {
   mkdirSync(SCREENS, { recursive: true });
   await page.screenshot({ path: join(SCREENS, `${name}.png`) });
+}
+
+/**
+ * The same screen at `data-density="compact"`. Compact is what catches a
+ * hard-coded height or font size: every size in the product is a token, so a
+ * compact screen is 25% denser and not a broken one.
+ */
+async function shootCompact(page: Page, name: string) {
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-density", "compact");
+  });
+  await page.waitForTimeout(150);
+  await shoot(page, `${name}-compact`);
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-density", "comfortable");
+  });
+  await page.waitForTimeout(150);
 }
 
 /** The same screen in both themes, left in light afterwards. */
@@ -216,6 +233,7 @@ test.describe("data", () => {
       "Skip this column",
     );
     await shootBoth(page, "import-mapping");
+    await shootCompact(page, "import-mapping");
 
     await page.getByRole("button", { name: "Continue" }).click();
 

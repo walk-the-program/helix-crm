@@ -7,8 +7,8 @@
  * second, for 30 days.
  *
  * The pairs are one grouped inset list rather than a stack of cards with a
- * black button on each: a list of twelve primary buttons has no primary at all
- * (docs/DESIGN.md §5), and the black button belongs to the merge dialog, which
+ * primary button on each: a list of twelve primary buttons has no primary at
+ * all, and the one primary block belongs to the merge dialog, which
  * is where something actually happens.
  */
 import { useEffect, useMemo, useState } from "react";
@@ -87,7 +87,7 @@ function PairRow(props: {
       <div className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)] py-[var(--space-2)]">
         <div className="flex flex-wrap items-center gap-[var(--space-2)]">
           <Badge tone="neutral">{matchLabel(pair)}</Badge>
-          <span className="rounded-[var(--radius-sm)] bg-[var(--color-accent-soft)] px-[var(--space-2)] py-[1px] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+          <span className="bg-[var(--color-accent-soft)] px-[var(--space-2)] py-[1px] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
             {pair.value}
           </span>
         </div>

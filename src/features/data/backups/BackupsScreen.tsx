@@ -101,7 +101,7 @@ export function BackupsScreen() {
         title="Backups"
         subtitle="Helix backs up your database automatically."
         actions={
-          // One black button per screen: while the list is empty the empty
+          // One primary block per screen: while the list is empty the empty
           // state carries it, and the header's copy would be the second.
           files.length > 0 ? (
             <Button
@@ -124,7 +124,7 @@ export function BackupsScreen() {
             role="alert"
             className={[
               "flex items-start gap-[var(--space-3)]",
-              "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+              "border border-[var(--color-border)]",
               "bg-[var(--color-danger-soft)] px-[var(--space-4)] py-[var(--space-3)]",
               "text-[length:var(--text-sm)] text-[var(--color-danger-ink)]",
             ].join(" ")}

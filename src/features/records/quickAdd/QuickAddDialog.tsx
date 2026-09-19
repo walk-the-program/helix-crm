@@ -298,7 +298,7 @@ export function QuickAddDialog() {
                 setError(null);
               }}
               className={[
-                "min-h-[var(--control-h)] rounded-[var(--radius-md)] px-[var(--space-3)]",
+                "min-h-[var(--control-h)] px-[var(--space-3)]",
                 "text-[length:var(--text-sm)]",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
                 type === option.id

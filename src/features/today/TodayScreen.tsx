@@ -11,7 +11,7 @@
  *
  * A brand-new workspace gets a different screen entirely. Four empty panels
  * stacked up is not a first impression, it is a failure. That screen shows the
- * three things that fill Today and nothing else, with one black button on it.
+ * three things that fill Today and nothing else, with one primary block on it.
  */
 
 import type { ReactNode } from "react";
@@ -84,8 +84,8 @@ function StarterCard(props: {
   action: ReactNode;
 }) {
   return (
-    <li className="flex flex-col gap-[var(--space-2)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]">
-      <h3 className="text-[length:var(--text-lg)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
+    <li className="flex flex-col gap-[var(--space-2)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]">
+      <h3>
         {props.title}
       </h3>
       <p className="flex-1 text-[length:var(--text-base)] text-[var(--color-text-muted)]">
@@ -99,7 +99,7 @@ function StarterCard(props: {
 /** A link drawn as the one black button on the screen. */
 const primaryLinkClasses = [
   "inline-flex h-[var(--control-h)] flex-none items-center justify-center",
-  "rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--space-4)] no-underline",
+  "bg-[var(--color-accent)] px-[var(--space-4)] no-underline shadow-[var(--shadow-sticker)]",
   "text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-accent-text)]",
   "hover:bg-[var(--color-accent-hover)] hover:no-underline",
   "active:scale-[var(--press-scale)] motion-reduce:active:scale-100",
@@ -110,7 +110,7 @@ const primaryLinkClasses = [
 /** A link drawn as a macOS push button: white fill, one hairline, full ink. */
 const secondaryLinkClasses = [
   "inline-flex h-[var(--control-h)] flex-none items-center justify-center",
-  "rounded-[var(--radius-md)] border border-[var(--color-border-strong)]",
+  "border border-[var(--color-border-strong)]",
   "bg-[var(--color-surface)] px-[var(--space-4)] no-underline",
   "text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)]",
   "hover:bg-[var(--color-hover)] hover:no-underline",
@@ -124,7 +124,7 @@ function FirstRun() {
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
       <div className="max-w-[var(--content-max)]">
-        <h2 className="text-[length:var(--text-xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
+        <h2>
           Nothing here yet, and that is the right place to start
         </h2>
         <p className="mt-[var(--space-2)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">

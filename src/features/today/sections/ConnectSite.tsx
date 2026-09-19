@@ -8,7 +8,7 @@
  * anywhere" applies here more than anywhere else on the screen.
  *
  * It is drawn as the quietest thing on Today, which is the point: a grouped
- * inset panel with no shadow, no spot glyph, and no black button — the primary
+ * inset panel with no shadow, no spot glyph, and no primary fill — the primary
  * button on this screen belongs to what the owner came here to do, not to an
  * ask (DESIGN.md §5, §11).
  *
@@ -33,13 +33,10 @@ export function ConnectSiteCard() {
     <section
       aria-labelledby="today-connect-heading"
       data-today-section="connect-site"
-      className="relative rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]"
+      className="relative border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]"
     >
       <div className="min-w-0 pr-[var(--space-8)]">
-        <h2
-          id="today-connect-heading"
-          className="text-[length:var(--text-lg)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]"
-        >
+        <h2 id="today-connect-heading">
           Send quote-form leads straight here
         </h2>
         <p className="mt-[var(--space-2)] max-w-[var(--content-max)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
@@ -50,7 +47,7 @@ export function ConnectSiteCard() {
         <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
           <Link
             href="/settings/site"
-            className="inline-flex h-[var(--control-h)] flex-none items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-[var(--space-4)] text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)] no-underline hover:bg-[var(--color-hover)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+            className="inline-flex h-[var(--control-h)] flex-none items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-[var(--space-4)] text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)] no-underline hover:bg-[var(--color-hover)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
           >
             Connect website
           </Link>

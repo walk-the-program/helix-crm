@@ -15,7 +15,7 @@ function Count(props: { value: number; label: string; tone?: "accent" | "muted" 
     <div className="flex flex-col gap-[var(--space-1)]">
       <span
         className={[
-          "text-[length:var(--text-2xl)] font-semibold leading-[var(--leading-tight)] tabular-nums",
+          "font-[family-name:var(--font-heading)] text-[length:var(--text-heading)] font-bold leading-[var(--leading-heading)] tabular-nums",
           props.tone === "muted" ? "text-[var(--color-text-muted)]" : "text-[var(--color-text)]",
         ].join(" ")}
       >

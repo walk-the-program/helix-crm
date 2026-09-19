@@ -251,7 +251,7 @@ export function PipelineScreen() {
             />
           </div>
 
-          <div className="mt-[var(--space-4)] overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+          <div className="mt-[var(--space-4)] overflow-x-auto border border-[var(--color-border)] bg-[var(--color-surface)]">
             <Table>
               <THead>
                 <TR>

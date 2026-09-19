@@ -95,14 +95,14 @@ function Thumbnail(props: { attachment: Attachment; dir: string | null }) {
       <img
         src={src}
         alt=""
-        className="h-[var(--space-8)] w-[var(--space-8)] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover"
+        className="h-[var(--space-8)] w-[var(--space-8)] shrink-0 border border-[var(--color-border)] object-cover"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="flex h-[var(--space-8)] w-[var(--space-8)] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-faint)]"
+      className="flex h-[var(--space-8)] w-[var(--space-8)] shrink-0 items-center justify-center border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-faint)]"
     >
       <FileText size={18} weight="regular" aria-hidden="true" />
     </span>
@@ -228,7 +228,7 @@ export function AttachmentList(props: {
         <CardBody className="pb-0">
           <p
             role="alert"
-            className="rounded-[var(--radius-md)] bg-[var(--color-danger-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
+            className="bg-[var(--color-danger-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
           >
             {problem}
           </p>
@@ -252,7 +252,7 @@ export function AttachmentList(props: {
             description="Quotes, photos of the job, a signed estimate: anything you would otherwise dig out of email."
             action={
               compact ? (
-                <Button variant="primary" size="sm" onClick={() => void add()} loading={adding}>
+                <Button variant="secondary" size="sm" onClick={() => void add()} loading={adding}>
                   Add a file
                 </Button>
               ) : undefined

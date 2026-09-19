@@ -150,7 +150,13 @@ export function DealPage() {
 
       <div className="flex flex-col gap-[var(--space-2)]">
         <div className="flex flex-wrap items-center gap-[var(--space-3)]">
-          <span className="money text-[length:var(--text-2xl)] font-semibold tabular-nums text-[var(--color-text)]">
+          {/* The one primary block on this screen: the money, flat-filled,
+              with the accent sticker shadow as its single detail. Everything
+              else on the deal page is a neutral or a hairline. */}
+          <span
+            data-testid="deal-value"
+            className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]"
+          >
             {formatMoney(deal.valueCents, deal.currency)}
           </span>
           <Badge dotColor={(stages ?? []).find((s) => s.id === deal.stageId)?.color}>
@@ -306,7 +312,7 @@ export function DealPage() {
                     value={deal.contactId}
                     onChange={(contactId) => {
                       void patch({ contactId }).catch((err: unknown) =>
-                        reportError(err, "That did not save."),
+                        reportError(err, "That change did not save."),
                       );
                     }}
                   />
@@ -326,7 +332,7 @@ export function DealPage() {
                     value={deal.companyId}
                     onChange={(companyId) => {
                       void patch({ companyId }).catch((err: unknown) =>
-                        reportError(err, "That did not save."),
+                        reportError(err, "That change did not save."),
                       );
                     }}
                   />
@@ -346,7 +352,7 @@ export function DealPage() {
                     value={deal.sourceId}
                     onChange={(sourceId) => {
                       void patch({ sourceId }).catch((err: unknown) =>
-                        reportError(err, "That did not save."),
+                        reportError(err, "That change did not save."),
                       );
                     }}
                   />

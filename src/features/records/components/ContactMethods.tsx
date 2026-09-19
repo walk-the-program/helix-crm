@@ -86,7 +86,7 @@ export function PhoneList(props: { contactId: string; phones: ContactPhone[] }) 
       await contactsRepo.updatePhone(phoneId, { isPrimary: true });
       await invalidateRecords();
     } catch (err) {
-      reportError(err, "That did not save.");
+      reportError(err, "That phone number did not save.");
     }
   }
 
@@ -112,7 +112,7 @@ export function PhoneList(props: { contactId: string; phones: ContactPhone[] }) 
     <div className="flex flex-col gap-[var(--space-3)]">
       {phones.length === 0 && !adding ? (
         <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          No phone number yet. Without one you cannot call him back.
+          No phone number yet.
         </p>
       ) : null}
 
@@ -137,7 +137,7 @@ export function PhoneList(props: { contactId: string; phones: ContactPhone[] }) 
                     void oneTap("call", phone.e164 ?? phone.raw, { contactId }, { label: display })
                   }
                   className={cn(
-                    "flex min-w-0 flex-1 items-center gap-[var(--space-2)] rounded-[var(--radius-md)]",
+                    "flex min-w-0 flex-1 items-center gap-[var(--space-2)]",
                     "py-[var(--space-1)] text-left",
                     "hover:bg-[var(--color-hover)]",
                     "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1",
@@ -154,7 +154,7 @@ export function PhoneList(props: { contactId: string; phones: ContactPhone[] }) 
                     <button
                       type="button"
                       aria-label={`Change the label for ${display}, currently ${phone.label}`}
-                      className="rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1"
+                      className="focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1"
                     >
                       <Badge tone="neutral">{cap(phone.label)}</Badge>
                     </button>
@@ -356,7 +356,7 @@ export function EmailList(props: { contactId: string; emails: ContactEmail[] }) 
       });
       await invalidateRecords();
     } catch (err) {
-      reportError(err, "That did not save.");
+      reportError(err, "That email did not save.");
     }
   }
 
@@ -393,7 +393,7 @@ export function EmailList(props: { contactId: string; emails: ContactEmail[] }) 
                 type="button"
                 onClick={() => void oneTap("email", email.emailLower, { contactId })}
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-[var(--space-2)] rounded-[var(--radius-md)]",
+                  "flex min-w-0 flex-1 items-center gap-[var(--space-2)]",
                   "py-[var(--space-1)] text-left",
                   "hover:bg-[var(--color-hover)]",
                   "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1",
@@ -411,7 +411,7 @@ export function EmailList(props: { contactId: string; emails: ContactEmail[] }) 
                   <button
                     type="button"
                     aria-label={`Change the label for ${email.emailLower}, currently ${email.label}`}
-                    className="rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1"
+                    className="focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1"
                   >
                     <Badge tone="neutral">{cap(email.label)}</Badge>
                   </button>

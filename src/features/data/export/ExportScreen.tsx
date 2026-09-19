@@ -86,7 +86,7 @@ export function ExportScreen() {
         {isEmpty ? (
           <EmptyState
             title="Nothing to export yet"
-            description="There is nothing in this workspace yet."
+            description="Add contacts and companies, then come back to export them."
             action={
               <Link href="/import">
                 <Button variant="primary">Import your data</Button>
@@ -104,8 +104,8 @@ export function ExportScreen() {
                       Everything, as one file
                     </span>
                     <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                      One .zip containing a CSV for every entity - contacts, companies, deals,
-                      tasks and activities - plus a full JSON dump of the whole workspace.
+                      One .zip containing a CSV for every entity — contacts, companies, deals,
+                      tasks and activities — plus a full JSON dump of the whole workspace.
                     </span>
                   </div>
                   <Button

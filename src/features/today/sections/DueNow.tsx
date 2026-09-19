@@ -59,7 +59,7 @@ function RowActions({ row }: { row: DueNowRow }) {
         },
       });
     } catch {
-      toast.error("The phone app did not open.");
+      toast.error(`The phone app did not open. Call ${phone} directly.`);
     } finally {
       setCalling(false);
     }
@@ -149,6 +149,7 @@ export function DueNowSection() {
       id="due-now"
       title="Due now"
       count={rows.length}
+      emphasis
       note={
         overdue > 0
           ? overdue === 1
@@ -167,7 +168,7 @@ export function DueNowSection() {
         action: (
           <Link
             href="/tasks"
-            className="inline-flex h-[var(--control-h)] flex-none items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-[var(--space-4)] text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)] no-underline hover:bg-[var(--color-hover)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+            className="inline-flex h-[var(--control-h)] flex-none items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-[var(--space-4)] text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)] no-underline hover:bg-[var(--color-hover)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
           >
             See every task
           </Link>

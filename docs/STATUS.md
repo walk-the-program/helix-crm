@@ -2484,3 +2484,43 @@ used real consumer email domains (gmail.com, yahoo.com, outlook.com,
 hotmail.com, comcast.net, icloud.com, aol.com, msn.com, live.com) were moved
 to the same local part under the reserved `.example` TLD (e.g.
 `gmail.example`), matching duplicates across fixture files preserved.
+
+---
+
+## 2026-09-19 — Brand sweep: records, Today, data
+
+The brand guide (`assets/brand/guide/helix-crm-brand-guide.html`) applied to
+`src/features/records`, `src/features/today` and `src/features/data`, in
+parallel with the foundation pass that rewrote the tokens, the fonts and the
+component kit. Full write-up, including the primary block chosen for every
+screen: `design/brand/sweep-records-today-data.md`.
+
+- **Radius 0.** 38 `rounded-[var(--radius-*)]` utilities removed from 23 files.
+  The stage dots and the timeline dot are squares now, on purpose.
+- **Type.** Heading elements carry no type utilities at all any more —
+  `globals.css` sets `h1`–`h6` in Zilla Slab at the brand's steps. The two
+  non-heading headings (the import drop zone's lead line, the import result's
+  four figures) keep the `font-[family-name:var(--font-heading)]` utility. The
+  two list column strips, the stage manager's header row and the search
+  dialog's group label moved to the `.section-label` class.
+- **One primary block per view.** Timeline's Save and the attachments panel's
+  Add a file were both primary inside a record page that already had one, and
+  are now secondary. The deal page had no primary at all, so the deal value is
+  now a flat primary block. Today's panels view gained one: the Due now count,
+  filled, and drawn only when something is actually due (`Section` takes a new
+  `emphasis` prop; only Due now passes it).
+- **Accent.** `--shadow-sticker` on exactly three hero elements: Today's
+  first-run Import a CSV, the import drop zone's Choose a file, the deal value.
+  Nothing else in these features is yellow.
+- **Voice.** 13 strings changed across the three features — mostly error
+  messages that said "That did not save." where they could name the thing, and
+  two phone-failure toasts that now give the number to dial by hand. None was
+  asserted on by a spec.
+
+Screens captured at 1280 light/dark (plus compact on Today, the contact page,
+the pipeline board and the import mapping step) into
+`tests/e2e-mac/.cache/screens/brand-a/`.
+
+Verified: typecheck clean, `npm test` 799 green, the three e2e specs 26 passed
+on port 4194, `vite build` succeeds, and the no-literals grep over the three
+features returns only `font-[family-name:var(...)]` utilities.

@@ -11,7 +11,7 @@
  * The shape is a macOS setup assistant (docs/DESIGN.md §1): a quiet trail of
  * step names in the canvas, one panel of content under it, and the two buttons
  * that move the assistant pinned to the bottom right - Back, then the single
- * black button for the step. Nothing is coloured and nothing is a pill.
+ * primary button for the step. Nothing else on the step is coloured.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -142,7 +142,7 @@ function ParseFailure(props: { error: ImportParseError; onRetry: () => void }) {
         <span className="flex flex-col items-center gap-[var(--space-3)]">
           <span>{error.message}</span>
           {error.sample ? (
-            <code className="rounded-[var(--radius-sm)] bg-[var(--color-accent-soft)] px-[var(--space-2)] py-[var(--space-1)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+            <code className="bg-[var(--color-accent-soft)] px-[var(--space-2)] py-[var(--space-1)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
               {error.sample}
             </code>
           ) : null}

@@ -30,11 +30,11 @@ export function ProgressBar(props: {
         aria-valuemin={0}
         aria-valuemax={indeterminate ? undefined : max}
         aria-valuenow={indeterminate ? undefined : value}
-        className="h-[var(--space-2)] w-full overflow-hidden rounded-[var(--radius-full)] bg-[var(--color-accent-soft)]"
+        className="h-[var(--space-2)] w-full overflow-hidden bg-[var(--color-accent-soft)]"
       >
         <div
           className={[
-            "h-full rounded-[var(--radius-full)] bg-[var(--color-accent)]",
+            "h-full bg-[var(--color-accent)]",
             "transition-[width] duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
             indeterminate ? "animate-pulse opacity-40 motion-reduce:animate-none" : "",
           ].join(" ")}

@@ -134,7 +134,7 @@ export function StageManagerDialog(props: {
 
         <div
           aria-hidden="true"
-          className="flex flex-wrap items-end gap-[var(--space-2)] pb-[var(--space-2)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]"
+          className="section-label flex flex-wrap items-end gap-[var(--space-2)] pb-[var(--space-2)]"
         >
           <span className="min-w-[180px] flex-1">Name</span>
           <span className="w-[160px]">Colour</span>
@@ -167,7 +167,7 @@ export function StageManagerDialog(props: {
               <div className="w-[160px]">
                 <div className="flex items-center gap-[var(--space-2)]">
                   <span
-                    className="h-[7px] w-[7px] shrink-0 rounded-[var(--radius-full)]"
+                    className="h-[7px] w-[7px] shrink-0"
                     style={{ background: stage.color }}
                     aria-hidden="true"
                   />
@@ -241,7 +241,7 @@ export function StageManagerDialog(props: {
         </ul>
 
         {deleting ? (
-          <div className="mt-[var(--space-4)] rounded-[var(--radius-md)] border border-[var(--color-danger)] bg-[var(--color-danger-soft)] p-[var(--space-4)]">
+          <div className="mt-[var(--space-4)] border border-[var(--color-danger)] bg-[var(--color-danger-soft)] p-[var(--space-4)]">
             <p className="text-[length:var(--text-base)] text-[var(--color-danger-ink)]">
               Delete {deleting.name}? Anything still in it has to go somewhere.
             </p>

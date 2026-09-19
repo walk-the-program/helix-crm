@@ -116,7 +116,7 @@ export function CompanyPage() {
                   void companiesRepo
                     .restore(id)
                     .then(invalidateRecords)
-                    .catch((err: unknown) => reportError(err, "That did not restore."));
+                    .catch((err: unknown) => reportError(err, "That company could not be restored."));
                 }}
               >
                 Restore
@@ -291,7 +291,7 @@ export function CompanyPage() {
                     value={company.sourceId}
                     onChange={(sourceId) => {
                       void patch({ sourceId }).catch((err: unknown) =>
-                        reportError(err, "That did not save."),
+                        reportError(err, "That change did not save."),
                       );
                     }}
                   />

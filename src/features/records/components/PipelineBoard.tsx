@@ -239,12 +239,12 @@ function StageColumn(props: {
       <header className="flex flex-col gap-[var(--space-1)] border-b border-[var(--color-border)] px-[var(--space-1)] pb-[var(--space-2)]">
         <div className="flex items-baseline gap-[var(--space-2)]">
           <span
-            className="h-[7px] w-[7px] flex-none translate-y-[-1px] rounded-[var(--radius-full)]"
+            className="h-[7px] w-[7px] flex-none translate-y-[-1px]"
             style={{ background: stage.color }}
             aria-hidden="true"
           />
           <h2
-            className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)]"
+            className="min-w-0 flex-1 truncate font-[family-name:var(--font-heading)] text-[length:var(--text-base)] font-semibold leading-[var(--leading-tight)] text-[var(--color-heading)]"
             title={stage.name}
           >
             {stage.name}
@@ -262,7 +262,7 @@ function StageColumn(props: {
         ref={setNodeRef}
         className={[
           "flex min-h-[120px] flex-1 flex-col gap-[var(--space-2)]",
-          "rounded-[var(--radius-lg)] p-[var(--space-2)]",
+          "p-[var(--space-2)]",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
           isOver ? "bg-[var(--color-selected)]" : "",
         ].join(" ")}

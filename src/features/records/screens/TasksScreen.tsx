@@ -194,7 +194,7 @@ export function TasksScreen(): ReactElement {
                   <VirtualList
                     items={group.tasks}
                     ariaLabel={group.label}
-                    className="max-h-[520px] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]"
+                    className="max-h-[520px] border border-[var(--color-border)] bg-[var(--color-surface)]"
                     getKey={(task) => task.id}
                     renderRow={(task) => (
                       <div className="border-b border-[var(--color-border)] px-[var(--space-4)] last:border-b-0">
@@ -203,7 +203,7 @@ export function TasksScreen(): ReactElement {
                     )}
                   />
                 ) : (
-                  <div className="flex flex-col divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-4)]">
+                  <div className="flex flex-col divide-y divide-[var(--color-border)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-4)]">
                     {group.tasks.map((task) => (
                       <TaskRow key={task.id} task={task} chips={chipsFor(task)} />
                     ))}

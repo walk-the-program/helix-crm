@@ -186,7 +186,7 @@ export function Timeline(props: TimelineProps) {
             />
             <div className="flex items-center gap-[var(--space-2)]">
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 loading={saving}
                 disabled={body.trim().length === 0}
@@ -310,7 +310,7 @@ function TimelineRow(props: {
         aria-hidden="true"
         className={[
           "absolute left-[-3px] top-[calc(var(--space-3)+0.55em)]",
-          "h-[5px] w-[5px] rounded-[var(--radius-full)]",
+          "h-[5px] w-[5px]",
           system
             ? "border border-[var(--color-border-strong)] bg-[var(--color-surface)]"
             : "bg-[var(--color-border-strong)]",
@@ -413,7 +413,7 @@ function TimelineEditor(props: {
       />
       <div className="flex items-center gap-[var(--space-2)]">
         <Button
-          variant="primary"
+          variant="secondary"
           size="sm"
           disabled={text.trim().length === 0}
           onClick={() => void props.onSave(text)}

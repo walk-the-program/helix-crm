@@ -121,7 +121,7 @@ export function MergeDialog(props: {
                     aria-pressed={active}
                     className={[
                       "flex flex-col gap-[var(--space-1)] p-[var(--space-4)] text-left",
-                      "rounded-[var(--radius-lg)] border",
+                      "border",
                       "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
                       "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
                       active
@@ -177,7 +177,7 @@ export function MergeDialog(props: {
                             key={side}
                             className={[
                               "flex min-w-0 cursor-pointer items-center gap-[var(--space-2)]",
-                              "rounded-[var(--radius-md)] px-[var(--space-2)] py-[var(--space-1)]",
+                              "px-[var(--space-2)] py-[var(--space-1)]",
                               "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
                               chosen === side
                                 ? "bg-[var(--color-selected)] text-[var(--color-text)]"

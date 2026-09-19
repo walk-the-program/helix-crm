@@ -394,13 +394,13 @@ test.describe("records", () => {
 /**
  * Screenshots of every finished records screen, light and dark, at the
  * 1280 px width DESIGN.md's review pass calls for. They land in
- * tests/e2e-mac/.cache/screens/records/ (gitignored) so the agent that built
+ * tests/e2e-mac/.cache/screens/brand-a/ (gitignored) so the agent that built
  * the screens can look at them and fix what reads wrong.
  */
 test.describe("records screens", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  const OUT = "tests/e2e-mac/.cache/screens/sweep-records";
+  const OUT = "tests/e2e-mac/.cache/screens/brand-a";
 
   async function setTheme(page: Page, theme: "light" | "dark"): Promise<void> {
     await page.evaluate((value) => {

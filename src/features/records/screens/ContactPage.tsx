@@ -134,7 +134,7 @@ export function ContactPage() {
               <ArrowLeft size={14} weight="bold" aria-hidden="true" /> Contacts
             </Link>
             <h1
-              className="truncate text-[length:var(--text-2xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]"
+              className="truncate"
               title={name}
             >
               {name}
@@ -164,7 +164,7 @@ export function ContactPage() {
                   void contactsRepo
                     .restore(id)
                     .then(invalidateRecords)
-                    .catch((err: unknown) => reportError(err, "That did not restore."));
+                    .catch((err: unknown) => reportError(err, "That contact could not be restored."));
                 }}
               >
                 Restore
@@ -283,7 +283,7 @@ export function ContactPage() {
                   value={contact.companyId}
                   onChange={(companyId) => {
                     void patch({ companyId }).catch((err: unknown) =>
-                      reportError(err, "That did not save."),
+                      reportError(err, "That change did not save."),
                     );
                   }}
                 />
@@ -298,7 +298,7 @@ export function ContactPage() {
                   value={contact.sourceId}
                   onChange={(sourceId) => {
                     void patch({ sourceId }).catch((err: unknown) =>
-                      reportError(err, "That did not save."),
+                      reportError(err, "That change did not save."),
                     );
                   }}
                 />

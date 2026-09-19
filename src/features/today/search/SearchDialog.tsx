@@ -37,7 +37,7 @@ export const SEARCH_DEBOUNCE_MS = 80;
  *  this is passed as the `heading` node rather than through `className`. */
 function GroupHeading(props: { children: string }) {
   return (
-    <span className="block px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]">
+    <span className="section-label block px-[var(--space-2)] py-[var(--space-1)]">
       {props.children}
     </span>
   );
@@ -60,7 +60,7 @@ function ResultItem(props: { row: SearchRow; onPick: (row: SearchRow) => void })
       value={`${row.entityType}:${row.entityId}`}
       keywords={[row.label, row.subtitle ?? ""]}
       onSelect={() => onPick(row)}
-      className="flex min-h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] rounded-[var(--radius-md)] px-[var(--space-3)] data-[selected=true]:bg-[var(--color-selected)]"
+      className="flex min-h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] px-[var(--space-3)] data-[selected=true]:bg-[var(--color-selected)]"
     >
       <span className="min-w-0 flex-1">
         <span
@@ -132,7 +132,7 @@ export function SearchDialog(props: {
         label="Search records"
         shouldFilter={false}
         loop
-        className="w-full max-w-[600px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]"
+        className="w-full max-w-[600px] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
@@ -213,7 +213,7 @@ export function SearchDialog(props: {
               onOpenChange(false);
               openCommandPalette();
             }}
-            className="inline-flex items-center gap-[var(--space-2)] rounded-[var(--radius-md)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+            className="inline-flex items-center gap-[var(--space-2)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
           >
             Commands
             <Kbd keys={PALETTE_SHORTCUT} />

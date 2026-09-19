@@ -74,7 +74,7 @@ export function FilePickStep(props: {
         data-testid="import-dropzone"
         className={[
           "flex flex-col items-center justify-center gap-[var(--space-5)]",
-          "rounded-[var(--radius-lg)] border border-dashed",
+          "border border-dashed",
           "px-[var(--space-6)] py-[var(--space-10)] text-center",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
           dragging
@@ -83,7 +83,7 @@ export function FilePickStep(props: {
         ].join(" ")}
       >
         <div className="flex flex-col items-center gap-[var(--space-2)]">
-          <p className="text-[length:var(--text-lg)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
+          <p className="font-[family-name:var(--font-heading)] text-[length:var(--text-subhead)] font-bold leading-[var(--leading-subhead)] tracking-[var(--tracking-title)] text-[var(--color-heading)]">
             Drop a spreadsheet here
           </p>
           <p className="max-w-[var(--content-max)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
@@ -95,6 +95,7 @@ export function FilePickStep(props: {
         <Button
           ref={buttonRef}
           variant="primary"
+          className="shadow-[var(--shadow-sticker)]"
           loading={busy}
           loadingLabel="Opening…"
           iconLeft={<FolderOpen size={16} weight="bold" aria-hidden="true" />}

@@ -2,8 +2,8 @@
  * A card on the pipeline board. Four things and no more (DESIGN.md §3): the
  * title, the company, the value, and the next step.
  *
- * It is a hairline card and nothing else — `--radius-lg` because it contains
- * things, one hairline, no shadow. Only a floating layer casts a shadow, which
+ * It is a hairline card and nothing else — hard corners, one hairline, no
+ * shadow. Only a floating layer casts a shadow, which
  * on this board is the drag overlay, and `dragging` is what turns that on.
  *
  * A card with no next step says so in tertiary ink, in a sentence. The old
@@ -70,7 +70,7 @@ export const DealCard = forwardRef<HTMLDivElement, DealCardProps>(function DealC
       onKeyDown={handleKeyDown}
       className={[
         "group flex w-full cursor-default gap-[var(--space-2)]",
-        "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+        "border border-[var(--color-border)]",
         "bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-3)]",
         "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
         dragging

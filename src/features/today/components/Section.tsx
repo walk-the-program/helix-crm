@@ -1,18 +1,18 @@
 /**
  * Today's section chrome: a heading with a count, and a panel of rows.
  *
- * DESIGN.md §3 fixes the order and §4 fixes the type. A section heading is
- * `--text-xl` semibold and tracked, which is the contract's "section heading"
- * step and the thing that gives Today real hierarchy against a `--text-base`
- * row. The count beside it is plain tabular text in secondary ink, and the
- * one-line explanation is tertiary — a count is not an alarm.
+ * DESIGN.md §3 fixes the order. A section heading is a plain `h2`, which
+ * globals.css sets in the brand's slab at the 20px subhead step — the thing
+ * that gives Today real hierarchy against a 15px row. The one-line
+ * explanation beside it is tertiary; a count is not an alarm.
  *
- * There is no attention colour on this screen any more (§5). "Needs you" is
- * carried by position and weight: Due now is first, its rows are in full ink,
- * and an overdue row's own badge says the number of days out loud. The old
- * black count pill and the 3px accent left rail on a row are both gone — a
- * rail on the first cell is a web-app device, and a native list separates rows
- * with one hairline and nothing else.
+ * The brand guide allows the primary colour once per view, as a single
+ * confident block. On Today that block is the Due now count, and only when
+ * something is actually due: it passes `emphasis` and nothing else does. Every
+ * other count is plain tabular text in secondary ink. "Needs you" is still
+ * mostly position and weight — Due now is first, its rows are in full ink, and
+ * an overdue row's badge says the number of days out loud. Rows are separated
+ * by one hairline and nothing else; there is no rail on the first cell.
  */
 
 import type { ReactNode } from "react";
@@ -24,20 +24,30 @@ export function SectionHeading(props: {
   count?: number;
   note?: ReactNode;
   action?: ReactNode;
+  /**
+   * Paints the count as the screen's one primary block. Due now sets it and
+   * nothing else does: the brand guide allows the primary colour once per
+   * view, and on Today the thing that earns it is the number of promises
+   * that are due. With nothing due the block is not drawn at all.
+   */
+  emphasis?: boolean;
 }) {
-  const { id, title, count, note, action } = props;
+  const { id, title, count, note, action, emphasis } = props;
   return (
     <div className="mb-[var(--space-3)] flex flex-wrap items-baseline gap-[var(--space-3)]">
-      <h2
-        id={id}
-        className="text-[length:var(--text-xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]"
-      >
+      <h2 id={id}>
         {title}
       </h2>
       {typeof count === "number" && count > 0 ? (
-        <span className="tabular text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-          {count}
-        </span>
+        emphasis ? (
+          <span className="tabular inline-flex min-w-[var(--control-h-sm)] items-center justify-center bg-[var(--color-accent)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-body)] font-semibold text-[var(--color-accent-text)]">
+            {count}
+          </span>
+        ) : (
+          <span className="tabular text-[length:var(--text-body)] text-[var(--color-text-muted)]">
+            {count}
+          </span>
+        )
       ) : null}
       {note ? (
         <span className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
@@ -51,14 +61,14 @@ export function SectionHeading(props: {
 
 /**
  * The grouped inset list every Today section's rows sit in: white surface, one
- * hairline, `--radius-lg`, and no shadow at all — only a floating layer casts
- * one (DESIGN.md §6).
+ * hairline, hard corners (radius 0 everywhere, per the brand guide), and no
+ * shadow at all — only a floating layer casts one.
  */
 export function Panel(props: { children: ReactNode; className?: string }) {
   return (
     <div
       className={[
-        "overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+        "overflow-hidden border border-[var(--color-border)]",
         "bg-[var(--color-surface)]",
         props.className ?? "",
       ].join(" ")}
@@ -81,6 +91,8 @@ export function Section(props: {
   count?: number;
   note?: ReactNode;
   headerAction?: ReactNode;
+  /** Passed straight to SectionHeading; only Due now sets it. */
+  emphasis?: boolean;
   isLoading?: boolean;
   isEmpty: boolean;
   empty: { title: string; description: ReactNode; action?: ReactNode };
@@ -95,6 +107,7 @@ export function Section(props: {
         count={props.count}
         note={props.note}
         action={props.headerAction}
+        emphasis={props.emphasis}
       />
       <Panel>
         {props.isLoading ? (

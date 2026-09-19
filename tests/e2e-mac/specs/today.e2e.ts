@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { test, expect, type HelixHarness } from "../fixtures";
 import type { Page } from "@playwright/test";
 
-const SCREENS = fileURLToPath(new URL("../.cache/screens/sweep-records/", import.meta.url));
+const SCREENS = fileURLToPath(new URL("../.cache/screens/brand-a/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
 
 // ---------------------------------------------------------------------------

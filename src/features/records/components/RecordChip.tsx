@@ -45,7 +45,7 @@ export function RecordChip(props: { target: RecordChipTarget; className?: string
       title={target.label}
       className={cn(
         "inline-flex min-w-0 max-w-full shrink-0 items-center gap-[var(--space-1)]",
-        "rounded-[var(--radius-sm)] border border-[var(--color-border)]",
+        "border border-[var(--color-border)]",
         "bg-[var(--color-surface)] px-[var(--space-2)] py-[2px]",
         "text-[length:var(--text-xs)] text-[var(--color-text-muted)] leading-[var(--leading-tight)]",
         "hover:bg-[var(--color-hover)]",

@@ -259,10 +259,10 @@ export function ContactsScreen() {
           />
         )
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           {/* The column strip: the one uppercase type in the product, which is
               how a native list view labels a column (DESIGN.md §4). */}
-          <div className="flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]" aria-hidden="true">
+          <div className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]" aria-hidden="true">
             <span className="min-w-0 flex-1">Name</span>
             <span className="w-[200px] flex-none">Company</span>
             <span className="hidden w-[180px] flex-none text-right md:block">Tags</span>

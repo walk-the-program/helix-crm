@@ -56,7 +56,7 @@ export function NewLeadsSection() {
         action: { label: result.logLabel, onClick: () => void result.logThis() },
       });
     } catch {
-      toast.error("The phone app did not open.");
+      toast.error(`The phone app did not open. Call ${lead.contactPhone} directly.`);
     }
   }
 
