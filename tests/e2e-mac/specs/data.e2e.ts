@@ -221,7 +221,7 @@ test.describe("data", () => {
 
     // Step 3: twenty mapped rows and the duplicate policy.
     await expect(page.getByText("The first 20 of")).toBeVisible();
-    await expect(page.getByText("sarah.mitchell83@gmail.com").first()).toBeVisible();
+    await expect(page.getByText("sarah.mitchell83@gmail.example").first()).toBeVisible();
     await expect(page.getByRole("radio", { name: "Skip them" })).toBeChecked();
     await shootBoth(page, "import-preview");
 
@@ -299,7 +299,7 @@ test.describe("data", () => {
     const written = await lastWrittenText(page);
     expect(written, "the CSV was written through the fs plugin").toBeTruthy();
     expect(written!.split("\r\n")[0]).toContain("First Name");
-    expect(written).toContain("sarah.mitchell83@gmail.com");
+    expect(written).toContain("sarah.mitchell83@gmail.example");
 
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });

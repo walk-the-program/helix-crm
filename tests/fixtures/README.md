@@ -42,12 +42,12 @@ dedupe/merge logic something real to reconcile:
 
 | Email | Appears in | Name variants | Note |
 |---|---|---|---|
-| `sarah.mitchell83@gmail.com` | hubspot, zoho, pipedrive, google | Sarah Mitchell / Sara Mitchell / Sarah J Mitchell | pipedrive uses "Sandy Landscape LLC" vs "Sandy Landscape Co" elsewhere |
-| `dchen.hvac@yahoo.com` | hubspot, zoho, excel | David Chen / Dave Chen | excel uses "Orem HVAC Services" vs "Orem Heating & Air" elsewhere |
-| `mgonzalez.plumbing@outlook.com` | zoho, pipedrive, excel | Maria Gonzalez / Maria Gonzales | excel uses "Layton Pipe & Drain" vs "Layton Plumbing Co" elsewhere |
-| `jwhitfield@comcast.net` | hubspot, pipedrive, google | James Whitfield / Jim Whitfield | google uses "Draper Roof & Gutter" vs "Draper Roofing Co" elsewhere |
-| `amybrewer99@gmail.com` | hubspot, google, excel | Amy Brewer | excel uses "Logan Electrical Services" vs "Logan Electric" elsewhere |
-| `tnguyen.roofing@gmail.com` | zoho, google, excel | Tom Nguyen / Thomas Nguyen | excel uses "Riverton Roof & Gutter" vs "Riverton Roofing LLC" elsewhere |
+| `sarah.mitchell83@gmail.example` | hubspot, zoho, pipedrive, google | Sarah Mitchell / Sara Mitchell / Sarah J Mitchell | pipedrive uses "Sandy Landscape LLC" vs "Sandy Landscape Co" elsewhere |
+| `dchen.hvac@yahoo.example` | hubspot, zoho, excel | David Chen / Dave Chen | excel uses "Orem HVAC Services" vs "Orem Heating & Air" elsewhere |
+| `mgonzalez.plumbing@outlook.example` | zoho, pipedrive, excel | Maria Gonzalez / Maria Gonzales | excel uses "Layton Pipe & Drain" vs "Layton Plumbing Co" elsewhere |
+| `jwhitfield@comcast.example` | hubspot, pipedrive, google | James Whitfield / Jim Whitfield | google uses "Draper Roof & Gutter" vs "Draper Roofing Co" elsewhere |
+| `amybrewer99@gmail.example` | hubspot, google, excel | Amy Brewer | excel uses "Logan Electrical Services" vs "Logan Electric" elsewhere |
+| `tnguyen.roofing@gmail.example` | zoho, google, excel | Tom Nguyen / Thomas Nguyen | excel uses "Riverton Roof & Gutter" vs "Riverton Roofing LLC" elsewhere |
 
 ## Malformed fixtures (`malformed/`)
 

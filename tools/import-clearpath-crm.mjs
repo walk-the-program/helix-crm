@@ -5,23 +5,23 @@
 // under "ClearPath Sites/crm") is the source of truth for outreach until Helix
 // takes over; this reads its prospects file and writes the same people out in
 // Helix's import shape. The source file is opened read-only and is never
-// written, moved or touched in any other way.
+// written, moved or touched in any other way. The output also stays inside
+// "ClearPath Sites/crm/data" — Walker's private outreach data never gets
+// written into this (public) repo; tests/fixtures/clearpath-prospects.csv is
+// a synthetic, hand-authored fixture and is not touched by this script.
 //
 //   node tools/import-clearpath-crm.mjs
 //   node tools/import-clearpath-crm.mjs --in <path> --out <path>
+//   node tools/import-clearpath-crm.mjs --out /custom/path.csv
 //
 // Zero dependencies: node: builtins only.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, "..");
-
 const DEFAULT_IN = "/Users/walker_tracy/Desktop/ClearPath Sites/crm/data/prospects.json";
-const DEFAULT_OUT = resolve(REPO, "tests/fixtures/clearpath-prospects.csv");
+const DEFAULT_OUT = "/Users/walker_tracy/Desktop/ClearPath Sites/crm/data/helix-import.csv";
 
 /** Helix's default pipeline stages, keyed by ClearPath's outreach status. */
 const STAGE_BY_STATUS = new Map([

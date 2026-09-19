@@ -17,7 +17,7 @@
 7. Promote feature-local repo helpers listed under "Contract changes needed" in STATUS.md into src/db/repos.
 8. Full e2e run of every spec sequentially; fix flakes.
 9. Real Tauri launch on this Mac: `npm run tauri dev`, walk the manual checklist (tests/RELEASE-CHECKLIST.md to be written), keychain prompt behaviour, backups on disk, restore, workspace switch.
-10. Import Walker's tests/fixtures/clearpath-prospects.csv as customer zero in a real workspace.
+10. Import Walker's real prospects (`ClearPath Sites/crm/data/helix-import.csv`, produced by `tools/import-clearpath-crm.mjs`) as customer zero in a real workspace; `tests/fixtures/clearpath-prospects.csv` is a synthetic fixture and is not this data.
 11. Port the CRM endpoint to the other 17 templates per templates/CRM-ENDPOINT-PORT.md (Sonnet, one commit per template, tsc + config:check gates).
 12. README.md (install, first run, unsigned-build caveats on Mac and Windows, keychain prompt), CONTRIBUTING.md, CHANGELOG.md.
 13. Release: tag v0.1.0, GitHub repo (public, AGPL), release workflow builds unsigned dmg + msi.

@@ -137,7 +137,7 @@ describe("CSV import: spot checks on real values", () => {
 
     const full = await contacts.get(row!.id);
     expect(full?.companyName).toBe("Sandy Landscape Co");
-    expect(full?.emails.some((e) => e.emailLower === "sarah.mitchell83@gmail.com")).toBe(true);
+    expect(full?.emails.some((e) => e.emailLower === "sarah.mitchell83@gmail.example")).toBe(true);
     expect(full?.phones.some((p) => p.e164 === "+18015550142")).toBe(true);
   });
 
@@ -168,7 +168,7 @@ describe("CSV import: spot checks on real values", () => {
     await importBytes(fixtureBytes("clearpath-prospects.csv"), { policy: "skip" });
 
     const list = await contacts.list({}, { limit: 1000 });
-    const row = list.rows.find((c) => c.companyName === "Ironwood Landscaping");
+    const row = list.rows.find((c) => c.companyName === "Ironpeak Landscape Co");
     expect(row).toBeDefined();
     expect(row?.firstName).toBe("");
     expect(row?.lastName).toBe("");
@@ -190,7 +190,7 @@ describe("CSV import: dedupe policies", () => {
     expect(beforeSecond.total).toBe(first.created);
 
     const second = await importBytes(fixtureBytes("zoho-contacts.csv"), { policy: "skip" });
-    // README: sarah.mitchell83@gmail.com and dchen.hvac@yahoo.com are the only
+    // README: sarah.mitchell83@gmail.example and dchen.hvac@yahoo.example are the only
     // two of the six documented cross-file emails shared by hubspot AND zoho.
     expect(second.skipped).toBe(2);
     expect(second.updated).toBe(0);
@@ -229,7 +229,7 @@ describe("CSV import: dedupe policies", () => {
     await importBytes(fixtureBytes("hubspot-contacts.csv"), { policy: "duplicate" });
     await importBytes(fixtureBytes("zoho-contacts.csv"), { policy: "duplicate" });
 
-    const dupes = await contacts.findDuplicates({ emails: ["sarah.mitchell83@gmail.com"] });
+    const dupes = await contacts.findDuplicates({ emails: ["sarah.mitchell83@gmail.example"] });
     expect(dupes).toHaveLength(2);
   });
 

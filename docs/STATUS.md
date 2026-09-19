@@ -2465,3 +2465,22 @@ one card.
    sweep; confirmed here). The Files panel on a record page passes
    `className="py-[var(--space-5)]"` to bring a 300px box down to something a
    380px column can hold. A `compact` prop would be the honest fix.
+
+---
+
+## 2026-09-19 — Privacy scrub
+
+`tests/fixtures/clearpath-prospects.csv` is a synthetic fixture (invented Utah
+landscaping businesses, `.example` emails, fictional 801-555-01xx/385-555-01xx
+phone numbers). It never held Walker's real prospects in this repo; earlier
+entries above describing `tools/import-clearpath-crm.mjs` writing "Walker's"
+prospects into this fixture predate this change and are left as-is for
+history, but are no longer accurate. The real ClearPath export now lives
+outside the repo at `/Users/walker_tracy/Desktop/ClearPath Sites/crm/data/helix-import.csv`,
+and `tools/import-clearpath-crm.mjs` defaults its `--out` there instead of
+into `tests/fixtures/`. All fixture rows across `tests/fixtures/`,
+`tools/fake-site/`, `tests/e2e-mac/`, `tests/unit/`, and `tests/repo/` that
+used real consumer email domains (gmail.com, yahoo.com, outlook.com,
+hotmail.com, comcast.net, icloud.com, aol.com, msn.com, live.com) were moved
+to the same local part under the reserved `.example` TLD (e.g.
+`gmail.example`), matching duplicates across fixture files preserved.
