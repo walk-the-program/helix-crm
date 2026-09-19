@@ -1,0 +1,72 @@
+name: e2e-win
+
+# This suite only runs on windows-latest: it drives the real compiled Tauri
+# app through tauri-driver + msedgedriver against the Windows WebView2
+# control, which has no macOS/Linux equivalent. It is intentionally separate
+# from ci.yml (which runs the fast, cross-platform Vitest/cargo test suites
+# on every push) because a cold Tauri launch, a Rust build, and a driver
+# download make it much slower.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  e2e-win:
+    runs-on: windows-latest
+    # A full Rust build plus the Tauri/WebView2 launch dance is slow; this
+    # caps a stuck or hung run well short of GitHub's 6h default instead of
+    # burning the whole budget.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build debug Tauri app (no installer bundle)
+        # --debug: build against the dev cargo profile (debug assertions on,
+        #   fast-ish, matches what wdio.conf.ts expects at target/debug).
+        # --no-bundle: skip producing an .msi/.exe installer - this suite
+        #   only needs the raw binary tauri-driver can launch directly.
+        run: npx tauri build --debug --no-bundle
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Resolve matching msedgedriver
+        id: msedgedriver
+        shell: pwsh
+        run: tests/e2e-win/scripts/match-msedgedriver.ps1
+
+      - name: Install WebdriverIO (not part of package.json - see tests/e2e-win/README.md)
+        run: npm i --no-save --no-audit --no-fund webdriverio @wdio/cli @wdio/local-runner @wdio/mocha-framework @wdio/spec-reporter @wdio/globals @wdio/types tsx
+
+      - name: Run Windows e2e suite
+        env:
+          MSEDGEDRIVER_PATH: ${{ steps.msedgedriver.outputs.msedgedriver-path }}
+        run: npx wdio run tests/e2e-win/wdio.conf.ts
+
+      - name: Upload e2e logs/screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-win-output
+          path: tests/e2e-win/.output/**
+          if-no-files-found: ignore

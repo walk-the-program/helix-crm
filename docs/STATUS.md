@@ -167,3 +167,152 @@ One implementation note for whoever builds `src/db/client.ts`: `db_open`
 returns the path absolutised but **not** canonicalised. On Windows
 `canonicalize` produces a `\\?\C:\...` extended-length path, which would leak
 into Diagnostics and stop matching the path the frontend passed in.
+
+---
+
+## 2026-09-18 — Integration agent (site endpoint, fake site, import tool, test harnesses)
+
+### Did
+
+**ClearPath site endpoint.** `GET /api/crm/leads` added to the
+`landscaping-classic` template (its own repo, commit `a4aeec0`). One new block in
+`server/routes.ts` and nothing else — the schema, the storage layer and the public
+form are untouched, so the diff ports to the other seventeen templates unchanged.
+Bearer token from `CRM_API_TOKEN` compared in constant time through SHA-256
+digests; a missing header, a wrong token and an unset env var all answer the same
+401. Oldest-first on `(created_at, id)`, opaque `base64url("<ISO>|<id>")` cursor
+resolved as `created_at > X OR (created_at = X AND id > Y)`; an absent or empty
+`after` starts from the beginning; `limit` defaults to 100 and caps at 200;
+`nextCursor` is null on a short page. 60 requests a minute per token, keyed on a
+digest of the presented token so a wrong token is throttled too. The response
+carries exactly the eight contract fields — the address, preferred visit, status,
+owner's notes and source stay in the admin, and `pageUrl` is null because no
+template has a page-attribution column. `CRM_API_TOKEN` is documented in that
+template's `TEMPLATE.md` (its own section) and `.env.example`. The other seventeen
+templates were not touched; the recipe for them is
+`ClearPath Sites/templates/CRM-ENDPOINT-PORT.md` (the diff, the per-template
+`toCrmLead` mapping table, the env var, the gates, the commit line, and the five
+mistakes that are easy to make).
+
+**`tools/fake-site/`** — zero-dependency Node server on 4711 implementing the same
+contract from an in-memory list, plus `POST /api/leads` taking the ClearPath quote
+form's JSON so leads can be added by curl. Token from `FAKE_SITE_TOKEN` (default
+`dev-token`), `--seed N` for realistic Utah trade leads including a deliberate
+timestamp tie, `--slow` (5 s) and `--fail` (500) for poller testing, loopback-only
+bind, clean SIGINT. README with a curl for every endpoint.
+
+**`tools/import-clearpath-crm.mjs`** — reads Walker's `crm/data/prospects.json`
+read-only and writes `tests/fixtures/clearpath-prospects.csv` (19 rows) with the
+thirteen Helix import columns. Statuses map to the default stages, the original
+status rides along in `Tags` (with `clearpath` and the niche), `gap` + `notes` +
+the second contact + the site and Yelp links go into `Notes`, source `Import`,
+title `<Business> website`, value 1500, `contact.name` split into first and last.
+
+**`tests/fixtures/`** — five vendor exports with the real header rows (HubSpot 52,
+Zoho 47, Pipedrive 58, Google Contacts 44, Excel save-as 41 rows) of invented Utah
+trade businesses, with mixed phone formats, blank cells, quoted commas, escaped
+quotes, non-ASCII names, a 47-character company name, Excel's two phantom trailing
+columns, and six people duplicated across three or four files by email.
+`malformed/` has bom, crlf, semicolon, ragged and empty-with-headers, plus
+`gen-100k.mjs` (streaming, backpressure-aware, output gitignored). README documents
+every file.
+
+**`tests/e2e-mac/`** — `playwright.config.ts` (webServer `VITE_E2E=1 npx vite
+preview --port 4173`, one chromium project, specs matched as `*.e2e.ts` so Vitest
+never collects them) and `fixtures.ts`, which binds `window.__helixDb` to
+better-sqlite3 in a per-test temp workspace with the Rust pipe's semantics
+(rows as arrays, batch as BEGIN/COMMIT in autocommit and SAVEPOINT/RELEASE inside a
+transaction, VACUUM INTO a `.tmp` then rename, `TX_STATE`/`DB_CLOSED` codes) and
+installs a `__TAURI_INTERNALS__` invoke shim for `plugin:dialog|*`, `plugin:fs|*`,
+`plugin:opener|*`, `plugin:log|*`, `secret_*`, `leads_fetch`, `copy_in` and
+`app_paths`, steerable and readable from `window.__helixE2E`. Method names match
+`src/db/drivers/e2e.ts` exactly. One smoke spec.
+
+**`tests/e2e-win/`** — `wdio.conf.ts` (tauri-driver spawned in `onPrepare` and only
+that child killed in `onComplete`, `maxInstances: 1`, `browserName: "wry"`,
+failure screenshots), `scripts/match-msedgedriver.ps1` (reads the WebView2 version
+from HKLM then HKCU then the install directory, downloads the matching driver,
+falls back to the major version's UTF-16 pointer file, caches by version, writes
+`GITHUB_OUTPUT`), a smoke spec, a README, and
+`.github/workflows/e2e-win.yml` building the debug app on windows-latest.
+
+**`tests/README.md`** — the ASCII test-setup diagram and, for each suite, what it
+can and cannot verify, plus the port table.
+
+### Verified
+
+```
+$ npm test
+ Test Files  6 passed (6)
+      Tests  124 passed (124)      # includes the 26 new tests/unit/fixtures.test.ts
+
+$ npx tsc --noEmit
+(silent, exit 0)
+
+$ npx playwright test --list -c tests/e2e-mac/playwright.config.ts
+  [chromium] › smoke.e2e.ts:15:3 › boot › the app boots and the sidebar shows Today
+  [chromium] › smoke.e2e.ts:40:3 › boot › the database bridge answers the contract's methods
+  Total: 2 tests in 1 file
+```
+
+Template gates, in `ClearPath Sites/templates/landscaping-classic`:
+
+```
+$ npx tsc --noEmit          -> exit 0
+$ npm run config:check      -> OK: Sorensen Landscaping (DEMO business, fictional)
+$ npx tsx server/__tests__/crm-leads.test.ts
+  18 passed, 0 failed
+```
+
+Template smoked live on port 3900 against the JSON file store (server started and
+stopped by this agent, `data/leads.json` removed afterwards, tree clean): no token
+401, wrong token 401, junk cursor 400, three curl-posted leads accepted, paging at
+`limit=4` returned 4 + 4 + 2 ids with no repeat and `nextCursor` null on the short
+page, and request 61 in a minute returned 429.
+
+Fake site, on 4711 (started and stopped by this agent, port free afterwards):
+
+```
+no token 401 · wrong token 401 · junk cursor 400 · unknown path 404
+seeded 25, paged at limit=7 -> 7, 7, 7, 4 leads; 25 unique ids; paged order
+  identical to the full listing; the tie pair (2026-09-11T11:21:20.434Z, two ids)
+  came back whole
+no `after` parameter and `after=` both start at the oldest lead
+POST /api/leads -> 201, the lead comes back at the end of the list
+requests 1-60 all 200, request 61 -> 429 with Retry-After: 60, window reopens
+--slow -> 5.003 s · --fail -> 500 · FAKE_SITE_TOKEN honoured
+```
+
+Import tool: `19 rows -> tests/fixtures/clearpath-prospects.csv`, stages
+`New 10, Lost 9`; papaparse reads it with 0 errors, 19 rows, 13 fields, `\r\n`
+line breaks. `prospects.json` was opened read-only and is unchanged.
+
+Fixtures: all five vendor exports parse with 0 papaparse errors and uniform row
+widths; `ragged.csv` produces the TooFewFields/TooManyFields errors it exists for;
+`gen-100k.mjs` wrote 2,000 rows to a scratch path in 6 ms and was deleted.
+
+### Not done
+
+- Neither e2e suite has been run. The app does not build into `dist/` yet, so
+  e2e-mac can only be listed, and e2e-win needs Windows — its config, driver
+  script and workflow are unexercised, and its selectors (`nav`, `aria/Today`,
+  `h1*=Today`) are guesses that will need fixing against the real shell.
+- The other seventeen ClearPath templates do not have the endpoint. They need the
+  port doc applied, one commit each; `restaurant-*`, `wedding-venue-*` and
+  `church-*` need a different `toCrmLead` because their lead tables use
+  `eventType` / `kind` instead of `service`.
+- No test runs against a real Postgres: the template smoke used its JSON file
+  store, and the handler tests use a stub, so the Drizzle path is unproven.
+- `tests/RELEASE-CHECKLIST.md` (referenced from PLAN.md and tests/README.md) is
+  not written.
+- The 100k-row fixture is generated on demand and is not committed; nothing has
+  yet imported it end to end.
+
+### Contract changes needed
+
+None. Two things worth recording, both already reflected above: the response `id`
+is a string (the template's column is a serial integer, stringified, so
+`leads_fetch`'s `Lead.id: string` deserialises), and the template pages in memory
+over `storage.listLeads()` rather than pushing the cursor into SQL — deliberate,
+to keep the port to a single file, and documented as the thing to revisit if a
+site ever holds thousands of leads.
