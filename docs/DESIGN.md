@@ -1,114 +1,143 @@
 # Helix CRM: design direction
 
-Status: contract. Owner: design agent. Revision: 2 (2026-09-19).
-Companion documents: `src/styles/tokens.css` (the values), `src/ui/icons.ts`
-(the icon set), `design/apple/review.md` (what the screenshots caught),
-`design/research.md` (the audience evidence, still current).
+Status: contract. Owner: design agent. Revision: 3 (2026-09-19).
+Companion documents: `assets/brand/guide/helix-crm-brand-guide.html` (the brand
+guide this revision implements), `src/styles/tokens.css` (the values),
+`src/ui/icons.ts` (the icon set), `design/brand/review.md` (what the
+screenshots caught), `design/research.md` (the audience evidence, still
+current).
 
 This file decides. If a component disagrees with it, the component is wrong.
 Token names are fixed by `docs/CONTRACTS.md`; this file may add names, never
 rename them.
 
-Revision 2 replaces the light-first, equipment-orange, dense-ledger direction.
-The short version of what changed is at the bottom under **Superseded**.
+Revision 3 puts the supplied brand guide on top of revision 2's desktop
+chassis. What changed and what did not is at the bottom under **Superseded**.
 
 ---
 
 ## 1. What this should feel like
 
-A native desktop application. Not a web app in a window, not a SaaS dashboard,
-not a design system demo. The reference is the software already on the owner's
-Mac: System Settings, Notes, Reminders, Mail. What those share is not a colour
-or a font — it is a set of habits:
+A native desktop application with a brand. Revision 2 got the chassis right —
+air, hairlines, calm hierarchy, nothing decorative — and then refused to have
+a point of view. The brand guide supplies the point of view, and it is
+specific: a slab serif, a flat five-colour palette, hard edges everywhere, and
+one confident block of colour per screen.
 
-- a **translucent grey sidebar** against **white content**, with a single
-  hairline between them and no shadow anywhere;
-- **one selected row**, marked by a soft neutral-blue tint and slightly heavier
-  text, never by a bar, a chevron or a coloured pill;
-- **grouped inset lists**: related rows in a 10px-radius panel with hairlines
-  between them and a small-capitals label sitting above it in the canvas;
-- **type between 11 and 28px**, the platform's own face, with weight and
-  colour — not size — doing most of the hierarchy work;
-- **air**. The single biggest difference between a native pane and a web page
-  is how much nothing there is between things;
-- **nothing decorative**. No gradient, no card shadow, no icon in a coloured
-  circle, no illustration, no progress ring that is not showing progress.
+The two things together:
+
+- **From the desktop chassis**: generous air, one hairline between things,
+  40px rows, weight and position doing the hierarchy work, no gradient, no
+  card shadow, no icon in a coloured circle, no illustration, a real dark
+  mode, and a compact density that is a setting rather than the design.
+- **From the brand guide**: Zilla Slab headings against Poppins body, a
+  #FAFAFF canvas, corners at zero, the primary `#97B1C3` used once per view as
+  a single confident block, the accent `#EDF0A3` as a detail and never a
+  background, and the mark wearing a hard offset sticker shadow.
 
 The owner is still the one from `design/research.md`: a solo owner, 40 to 65,
 running a trade or service business, on a laptop at a kitchen table or in a
-truck cab, whose trusted software is QuickBooks, Gmail and his bank's app. He
-still wants exactly two things —
+truck cab. He still wants exactly two things —
 
 > **Do not lose a lead. Remember what I promised.**
 
-— and every screen is still measured against those sentences. Revision 2 does
-not change the job. It changes the surface so the app looks like it belongs on
-the machine it is running on.
+— and every screen is still measured against those sentences. The brand does
+not change the job. It gives the tool a face.
 
 ## 2. Principles
 
-1. **Air is the aesthetic.** Density is a setting (`compact`), not the design.
-   The comfortable default leaves room between things.
-2. **Colour is scarce.** Black for the one primary action, system blue for
-   focus and links, muted pastels for tags and stages. Nothing else is
-   coloured, ever.
-3. **"Needs you" is position and weight, not colour.** The thing that needs the
-   owner is at the top of the screen, in full-strength ink, with a real verb on
-   its button. There is no attention colour any more.
-4. **One hairline.** Everything is separated by `rgba(0,0,0,0.06)`, 1px, and by
-   space. Nothing is separated by a shadow except a layer that actually floats.
-5. **The platform's type.** System stack, 11 to 28px, no webfont, no serif, no
-   monospace outside a code detail or a diagnostic dump.
-6. **Plain words.** Buttons name what will happen. Errors say what went wrong
-   and what to do. No exclamation marks, no apologies, no cleverness.
-7. **No dark patterns, ever.** Nothing asks for money, an upgrade, an account,
-   an email address or a review. No telemetry, no nag. Destructive actions are
-   undoable and say so before they run.
-8. **Built for the edge case.** A 47-character company name, an unparseable
-   phone number, a 10 000-row table and a 1024px window are the normal case.
+1. **Neutrals carry the layout.** The guide's own words. The canvas, the
+   sidebar, the panels and the ink are all neutral. Colour is an event.
+2. **One confident block per view.** The primary `#97B1C3` appears once: the
+   selected sidebar row, and — on a screen that has a primary action — the
+   primary button. A screen with two primary buttons is a bug.
+3. **The accent is a detail, never a background.** `#EDF0A3` belongs to the
+   mark's sticker shadow and to at most one hero element per screen. It is
+   never a fill behind text, never a panel, never a row.
+4. **Flat fills only.** No gradient, including a "subtle" one. No blurred
+   shadow. A tint is the primary mixed into the neutral at 8% or less, and it
+   is written as a flat hex so it does not shift with what is behind it.
+5. **Hard edges.** Every radius in the product is zero — controls, cards,
+   panels, badges, the mark. Nothing is a pill and nothing is rounded.
+6. **Air is still the aesthetic.** Zero radius plus flat fills plus hairlines
+   will read as a wireframe if the spacing gives out. Density is a setting
+   (`compact`); the comfortable default leaves room between things.
+7. **One hairline.** Everything is separated by the neutral dark at 14%, 1px,
+   and by space. Nothing is separated by a shadow — even a floating layer gets
+   a second hairline rather than a blur.
+8. **Contrast is measured, not assumed.** Two of the five brand colours cannot
+   legally carry small text on a light surface. The guide says so itself:
+   "anything under 4.5:1 is reserved for large type and graphic shapes." Every
+   pair the product can produce is measured in `tokens.css`.
+9. **Plain words.** Direct, specific, warm. No hype, no jargon, no filler —
+   the guide's voice page, applied to buttons, errors and empty states.
+10. **No dark patterns, ever.** Nothing asks for money, an upgrade, an account
+    or a review. No telemetry, no nag. Destructive actions are undoable and
+    say so before they run.
+11. **Built for the edge case.** A 47-character company name, an unparseable
+    phone number, a 10 000-row table and a 1024px window are the normal case.
 
 ## 3. The window
 
 ```
 ┌──────────────┬──────────────────────────────────────────────┐
-│              │  toolbar 48px, white, hairline bottom        │
-│  sidebar     ├──────────────────────────────────────────────┤
-│  240px       │                                              │
-│  #F7F6F3     │  content, #FBFBFA canvas                     │
-│  hairline    │  32px side gutter, 24px top                  │
-│  right edge  │  panels are #FFFFFF, 10px radius, hairline   │
-│              │                                              │
+│  [mark]Helix │  toolbar 48px, white, hairline bottom        │
+│              ├──────────────────────────────────────────────┤
+│  sidebar     │                                              │
+│  240px       │  content, #FAFAFF canvas                     │
+│  #F2F4FA     │  32px side gutter, 24px top                  │
+│  hairline    │  panels are #FFFFFF, radius 0, hairline      │
+│  right edge  │                                              │
+│  ███ selected│  <- the one primary block, #97B1C3           │
 │  ──────────  │                                              │
 │  workspace   │                                              │
 └──────────────┴──────────────────────────────────────────────┘
 ```
 
-- **Sidebar**: `--sidebar-w` 240px, `--color-sidebar` (#F7F6F3), one hairline
-  right edge, never collapses, never scrolls horizontally. Nav rows are 32px
-  tall at `--radius-md`, label at body size in secondary ink, icon at 18px
-  regular taking the row's own ink. The selected row is `--color-selected`
-  (system blue at 10%) with full ink and weight 500. Group labels are the
-  11px small-capitals style. The workspace name sits in the footer at
-  `--text-sm` in tertiary ink.
+- **Sidebar**: `--sidebar-w` 240px, `--color-sidebar` (#F2F4FA — the primary at
+  8% over the neutral light, which is the guide's tint ceiling), one hairline
+  right edge, never collapses. The `Brand` lockup sits at the top with room
+  under it for the sticker shadow's 4px overhang. Nav rows are 32px tall with
+  a hard edge, label at body size in secondary ink, icon at 18px taking the
+  row's own ink. **The selected row is the primary block**: a flat `#97B1C3`
+  fill with `#141414` ink at 8.24:1. Group labels are the 11px caption style.
 - **Toolbar**: `--topbar-h` 48px (44 compact), `--color-surface`, one hairline
-  bottom. It holds three things — where you are, the search field, quick add —
-  and nothing is ever added to it. Toolbar glyphs are monochrome, 16px bold, in
+  bottom. Three things — where you are, the search field, quick add — and
+  nothing is ever added to it. Toolbar glyphs are monochrome, 16px bold, in
   secondary ink.
-- **Search field**: the macOS search control. A soft grey rounded field
-  (`--color-accent-soft`, `--radius-full`, no border), a 16px magnifier in
-  tertiary ink, the shortcut hint on the right. It is a button that opens the
-  search dialog; the field is the affordance.
-- **Content**: `--color-bg` (#FBFBFA) canvas, 32px side gutter, 24px top.
-  Panels are white with a hairline and a 10px radius. The minimum window is
-  1024px and the design target is 1280.
+- **Search field**: a square field on `--color-accent-soft` with the 16px
+  magnifier in tertiary ink and the shortcut hint on the right. It is a button
+  that opens the search dialog; the field is the affordance.
+- **Content**: `--color-bg` (#FAFAFF) canvas, 32px side gutter, 24px top.
+  Panels are white with a hairline and no radius. Minimum window 1024px,
+  design target 1280.
 
 ## 4. Typography
 
-The platform's own text face and nothing else. `-apple-system` resolves to
-SF Pro Text under 20px and SF Pro Display above it, which is the optical-size
-switch a native app gets for free; Windows gets Segoe UI Variable Text. There
-is **no serif anywhere in the application** — the minimalist-ui skill's
-editorial serif is for marketing pages, and this is a tool.
+Two faces, both self-hosted, both OFL 1.1: **Zilla Slab** for headings and
+**Poppins** for everything else. They live in `public/fonts` as latin-subset
+woff2, are declared in `globals.css` with `font-display: swap`, and the two
+faces the first frame needs are preloaded from `index.html`. The app is
+offline; there is no CDN and no network font request, ever.
+
+Zilla Slab ships at 600 and 700 only, and Poppins at 400, 500 and 600, so
+nothing in the product can ask for a weight the browser would have to
+synthesise. `font-synthesis-weight: none` keeps that honest.
+
+The guide's scale, verbatim:
+
+| Token | Size / leading | Where |
+| --- | --- | --- |
+| `--text-display` | 52 / 1.0 | the boot lockup, and nothing else |
+| `--text-heading` | 32 / 1.1 | the page title |
+| `--text-subhead` | 20 / 1.3 | dialog title, empty-state title |
+| `--text-body` | 15 / 1.65 | body copy |
+| `--text-caption` | 11 / 1.4 | labels, table headers, metadata |
+
+The desktop app needs sizes between those five steps, so the revision-2 UI
+scale stays alongside it, and where the two meet they now agree: `--text-base`
+**is** the guide's body, `--text-label` **is** its caption, `--text-xl` **is**
+its subhead, `--text-3xl` **is** its heading.
 
 | Token | Comfortable | Compact | Where |
 | --- | --- | --- | --- |
@@ -118,112 +147,158 @@ editorial serif is for marketing pages, and this is a tool.
 | `--text-base` | 15px | 13px | body, table cells, inputs, buttons, menus |
 | `--text-lg` | 17px | 15px | card titles, the primary line of a list row |
 | `--text-xl` | 20px | 18px | dialog title, section heading |
-| `--text-2xl` | 24px | 22px | page title, the money on a record |
-| `--text-3xl` | 28px | 24px | report headline figures only |
-
-**Body is 15px, not 14.** The brief allowed either. 15px wins here for two
-reasons: the audience skews presbyopic (`design/research.md`), and at 1280 the
-content column has the room — a 14px body saves about one row per screen and
-costs legibility on every row. 15px is also what macOS uses for Notes and Mail
-body copy, so it reads as native rather than as small. Compact drops to 13px,
-which is the macOS list size, and nothing in the product goes below 10px.
+| `--text-2xl` | 24px | 22px | the money on a record |
+| `--text-3xl` | 32px | 26px | page title, report headline figures |
 
 Rules:
 
-- Line height is 1.5 on body (`--leading-normal`), 1.25 on anything set at
-  `--text-lg` or larger (`--leading-tight`).
-- Titles at `--text-xl` and up are semibold with `--tracking-title` (-0.01em).
-  Nothing else is tracked.
-- **Section labels** are the only capitals in the product: 11px, weight 590,
-  `--tracking-label` (0.05em), uppercase, `--color-text-faint`, never more than
-  three words. They label a group of rows or a table column, never a paragraph.
+- **Headings are the slab.** Every `h1`–`h6`, `PageHeader`, `CardTitle`,
+  `DialogTitle`, `EmptyState` title and the `Brand` wordmark are
+  `--font-heading` in `--color-heading` (#141414 light, #FAFAFF dark) tracked
+  -0.01em. Nothing else is.
+- **Everything else is Poppins.** `--font-sans` resolves to `--font-body`, so
+  the whole kit picked it up without an edit.
+- **Two leadings.** Prose — a paragraph, a description, an empty state — takes
+  `--leading-body` (1.65), which is what the guide specifies. Rows and
+  controls take `--leading-normal` (1.5), because 1.65 pushes a label off the
+  centre of a 32px control.
+- **Section labels** are the only capitals in the product: the caption step at
+  11px, weight 600, tracked 0.05em, uppercase, `--color-text-faint`, never
+  more than three words. They label a group of rows or a table column, never a
+  paragraph.
 - Money, counts, dates and phone numbers carry tabular figures
-  (`data-numeric`, `.tabular`, `.money` in `globals.css`). A column of amounts
-  that does not line up reads as sloppy bookkeeping to this audience.
+  (`data-numeric`, `.tabular`, `.money` in `globals.css`).
 - A name truncates with an ellipsis and carries a `title`; it never wraps
   inside a fixed-height row.
-- Sentence case everywhere else, including buttons, tags and stage names.
+- Sentence case everywhere except the section label.
 
 ## 5. Colour
+
+### The brand
+
+| | Hex | Token |
+| --- | --- | --- |
+| Primary | `#97B1C3` | `--brand-primary` |
+| Secondary | `#8B85C2` | `--brand-secondary` |
+| Accent | `#EDF0A3` | `--brand-accent` |
+| Neutral dark | `#4E555A` | `--brand-neutral-dark` |
+| Neutral light | `#FAFAFF` | `--brand-neutral-light` |
+| Primary tint | `#F2F4FA` | `--brand-primary-tint` (primary at 8% over the neutral light) |
 
 ### The canvas
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `--color-bg` | `#FBFBFA` | `#1E1E1E` |
-| `--color-surface` | `#FFFFFF` | `#2A2A2A` |
-| `--color-surface-raised` | `#FFFFFF` | `#323232` |
-| `--color-sidebar` | `#F7F6F3` | `#232323` |
-| `--color-hover` | `#F2F2F0` | `#323232` |
-| `--color-selected` | `#E9EFF9` | `#24344A` |
-| `--color-border` | `rgba(0,0,0,0.06)` | `rgba(255,255,255,0.08)` |
-| `--color-border-strong` | `rgba(0,0,0,0.13)` | `rgba(255,255,255,0.16)` |
-| `--color-text` | `#1D1D1F` | `#F5F5F7` |
-| `--color-text-muted` | `#56565A` | `#B0B0B5` |
-| `--color-text-faint` | `#6E6E73` | `#9A9AA0` |
-| `--color-text-disabled` | `#A1A1A6` | `#6E6E73` |
+| `--color-bg` | `#FAFAFF` | `#141414` |
+| `--color-surface` | `#FFFFFF` | `#1E1E1E` |
+| `--color-surface-raised` | `#FFFFFF` | `#282828` |
+| `--color-sidebar` | `#F2F4FA` | `#191919` |
+| `--color-hover` | `#EAEDF3` | `#242424` |
+| `--color-selected` | `#EEF1F8` | `#2A2D2E` |
+| `--color-border` | `rgba(78,85,90,0.14)` | `rgba(250,250,255,0.12)` |
+| `--color-border-strong` | `rgba(78,85,90,0.30)` | `rgba(250,250,255,0.24)` |
+| `--color-heading` | `#141414` | `#FAFAFF` |
+| `--color-text` | `#4E555A` | `#FAFAFF` |
+| `--color-text-muted` | `#5C6368` | `#B4B5BE` |
+| `--color-text-faint` | `#646B71` | `#A6A7B1` |
+| `--color-text-disabled` | `#8B9196` | `#6E7278` |
 
-Dark mode is true Apple greys — a #1E1E1E canvas with #2A2A2A content and white
-hairlines at 8%. Never pure black, never a blue-black, never a tinted charcoal.
+The dark canvas is `#141414` because that is the near-black the guide measured
+the palette against: `#97B1C3` at 8.24:1 and `#EDF0A3` at 15.43:1 are the
+numbers printed on its palette page, so in dark mode the brand runs at exactly
+its stated contrast.
 
-**On the ink ramp.** The platform's own label greys do not clear WCAG AA:
-`#A1A1A6` measures 2.57:1 on white and `#86868B` measures 3.62:1. Helix ships
-the accessible cousins — same hue family, darkened until they clear 4.5:1 on
-every surface they can land on (`#56565A` 7.31:1, `#6E6E73` 5.07:1). `#A1A1A6`
-survives as `--color-text-disabled`, which is allowed on a disabled glyph or a
-scrollbar thumb and is **never** allowed on text the owner has to read.
-Tertiary ink is also not allowed on `--color-selected` (4.39:1); a selected row
-uses full ink.
+**On the ink ramp.** Body ink is the brand's neutral dark. Headings step up to
+the near-black. Muted and faint are that same grey lightened until they stop
+clearing AA on **every** surface in the product, not just on white — tertiary
+ink is `#646B71` (4.61:1 at worst, on the hover tint) rather than the `#6A7278`
+the ramp first reached for, which measured 4.89:1 on white but 4.45:1 on the
+sidebar tint, exactly where a kbd glyph and a sidebar group label land. The
+ramp is compressed — 7.58 / 6.11 / 5.41 on white — because the brand's neutral
+dark is already a mid grey; size and weight carry the hierarchy, as they always
+did. `--color-text-disabled` is 3.19:1 and may carry a glyph or a scrollbar
+thumb, never text the owner has to read.
 
 ### The one filled control
 
-`--color-accent` is the primary button fill: `#111111` in light, `#F5F5F7` in
-dark with `#1D1D1F` ink, because a black button on a #1E1E1E canvas is
-invisible and a native dark app inverts its default button. There is exactly
-one primary button per screen — the thing the owner came to that screen to do.
+`--color-accent` is the brand primary, and it is the only saturated fill a view
+gets. Its ink is `--color-accent-text` `#141414` at **8.24:1** — the same pairing
+the guide uses on its own cover page. White on `#97B1C3` measures 2.24:1 and is
+never used anywhere.
 
-`--color-accent-soft` (`#F2F2F0`) is the quiet neutral tint: the search field,
-a pressed ghost button, a `kbd`, a code block. It is not an accent; it is the
+In practice the block is:
+
+- the **selected sidebar row**, on every screen; and
+- the **primary button**, on a screen that has a primary action.
+
+It does not invert in dark mode. Same colour, same ink, same ratio, both
+themes — which is the strongest single thing the brand does.
+
+`--color-accent-soft` (`#F2F4FA`) is the quiet tint: the search field, a
+pressed ghost button, a `kbd`, a code block. It is not an accent; it is the
 absence of one.
 
-### Blue
+### The secondary
 
-System blue does three things and nothing else:
+The secondary does two jobs and no others:
 
-- **Focus.** `--color-focus` (#007AFF light / #0A84FF dark), a 2px ring at a
-  1px offset, on every interactive element, keyboard-only, never removed.
-- **Links.** `--color-accent-ink` / `--color-link` (#0B62D6 light / #64ABFF
-  dark). Apple's #007AFF measures 4.02:1 on white and fails AA for 15px text,
-  so link text is darkened and #007AFF stays the ring.
-- **The selected row tint**, `--color-selected`, which is the blue at 10%.
+- **Focus.** `--color-focus` is the pure `#8B85C2`, a 2px ring at a 1px offset,
+  on every interactive element, keyboard-only, never removed. It measures
+  3.37:1 on white, which clears the 3:1 bar a non-text indicator has to meet.
+- **Links.** `--color-link` is `#5F58A6` — the same hue darkened until it
+  clears AA for 15px text (6.12:1 on white), because the pure secondary at
+  3.37:1 does not. This is the guide's own rule about sub-4.5:1 colour,
+  applied rather than ignored.
 
-Blue is never a button fill, never a badge, never an icon colour.
+The secondary is never a button fill and never chrome.
 
-### Muted pastels
+### The accent
 
-Every tag, badge, stage and semantic state is a washed-out pastel fill with its
-own dark text partner. Pale blue, green, yellow and red come from the
-minimalist-ui palette verbatim; lavender, teal, clay and slate are derived in
-the same family. Measured ratios are in `tokens.css` beside each pair.
+`#EDF0A3` is a detail. It appears in exactly two shapes:
+
+- `--shadow-sticker` (`4px 4px 0`), which belongs to the `Brand` lockup and to
+  **at most one hero element per screen**; and
+- `--color-brand-accent-soft` (`#FDFEF6`), the accent at 10%, which is the one
+  surface it is allowed to make and is nearly white by design.
+
+It is never a background, never a row, never a fill behind body text.
+
+### Brand tint pairs
+
+Each brand colour at 10% over white with the AA ink it is always shown with.
+These are what a square badge wears.
+
+| Tone | Fill | Ink | Ratio |
+| --- | --- | --- | --- |
+| `brand` / `accent` / `info` | `#F5F7F9` | `#2C5670` | 7.32:1 |
+| `secondary` | `#F3F3F9` | `#5F58A6` | 5.53:1 |
+| `highlight` | `#FDFEF6` | `#5A5D18` | 6.86:1 |
+
+### Semantics
+
+Danger, success and warning keep their revision-2 muted pastels. The guide is
+silent on state colour, and these are the only three hues in the product that
+mean something on their own. Info now follows the brand primary, which is what
+an informational tag should look like in a product with a palette.
 
 | Role | Fill | Ink |
 | --- | --- | --- |
-| info / `tone="accent"` | `#E1F3FE` | `#1F6C9F` |
+| info / `tone="accent"` | `#F5F7F9` | `#2C5670` |
 | success | `#EDF3EC` | `#346538` |
 | warning | `#FBF3DB` | `#956400` |
 | danger | `#FDEBEC` | `#9F2F2D` |
 
-The bare semantic token (`--color-danger`) is a fill for white text and appears
-in exactly one place: the confirm button of a destructive dialog, where the
-sentence above it has already explained the red.
+The bare semantic token (`--color-danger`) is a fill for light text and
+appears in exactly one place: the confirm button of a destructive dialog,
+where the sentence above it has already explained the red.
 
 ### The stage ramp
 
-Eight muted pastels, `--stage-1` … `--stage-8` (the readable ink: the 7px dot,
-the stage name, a board column rule) paired with `--stage-N-soft` (the pastel
-fill). Every ink clears 4.5:1 on its own tint and on white, and the ramp keeps
-its identity across themes: the same eight hues, lifted to the light side in
-dark mode with the dark tint behind them.
+Unchanged. Eight muted pastels, `--stage-1` … `--stage-8` (the readable ink)
+paired with `--stage-N-soft` (the fill). A pipeline needs eight separable hues
+and a five-colour brand cannot supply them, so the ramp is held in the same
+washed-out family — it sits under the brand rather than fighting it. Every ink
+clears 4.5:1 on its own tint and on white.
 
 1 slate · 2 blue · 3 lavender · 4 teal · 5 green · 6 red · 7 clay · 8 yellow.
 
@@ -233,23 +308,27 @@ time (`color-mix(in srgb, <stage> 14%, var(--color-surface))`).
 
 ### What has no colour
 
-The sidebar, the toolbar, tabs, menus, checkboxes, switches, tables, the
-selected row's text, an icon in a nav row, a count in a badge, an empty state,
-and the word "overdue". If something in the chrome is coloured, that is a bug.
+The toolbar, tabs, menus, checkboxes, switches, tables, an icon in a nav row, a
+count in a badge, an empty state, and the word "overdue". The sidebar has one
+coloured row and no others. If something else in the chrome is coloured, that
+is a bug.
 
 ## 6. Shape, elevation, space
 
-- **Radius**: `--radius-md` 6px on anything you click (buttons, inputs,
-  selects, nav rows, menu items); `--radius-lg` 10px on anything that contains
-  things (cards, grouped lists, dialogs, menus, popovers); `--radius-sm` 4px on
-  the checkbox box and a `kbd`; `--radius-full` on tags and count pills only.
-  Nothing else is a pill, and nothing is square.
-- **Elevation**: one shadow in the product, `0 2px 8px rgba(0,0,0,0.04)`
-  (`--shadow-md` / `--shadow-lg`), and only a floating layer may wear it:
-  menus, popovers, tooltips, dialogs, the command palette, toasts.
-  `--shadow-sm` is `none` — cards, rows, tables, inputs and buttons cast
-  nothing. In dark the same shadow runs at 0.40 alpha because the hairline and
-  the lighter surface do most of the lifting.
+- **Radius**: zero. `--radius-sm`, `--radius-md`, `--radius-lg` and
+  `--radius-full` all resolve to `0`. The names survive so no call site breaks
+  and so `docs/CONTRACTS.md` holds, but there is no rounded corner anywhere in
+  the product, including on badges, count pills, the search field and the
+  mark.
+- **Elevation**: there is no blurred shadow. `--shadow-sm` is `none`, and
+  `--shadow-md` / `--shadow-lg` are a second hairline drawn outside the box
+  (`0 0 0 1px`) — a floating layer gets a crisp double edge instead of a grey
+  haze over the content it covers. Only menus, popovers, tooltips, dialogs, the
+  command palette and toasts may wear it.
+- **`--shadow-sticker`** (`4px 4px 0 var(--brand-accent)`) is **not** part of
+  that ramp. It is the brand's signature: the `Brand` lockup wears it, and a
+  screen may give it to at most one hero element. A second element wearing it
+  on the same screen is a bug.
 - **Space**: the 4px scale, `--space-1` … `--space-10`. Content gutter 32px,
   panel padding 16px, gap between panels 24px, gap between a label and its
   field 4px, gap between fields 16px.
@@ -261,131 +340,135 @@ and the word "overdue". If something in the chrome is coloured, that is a bug.
 
 Two modes and no more. **Comfortable** is the default. **Compact** takes about
 25% more rows out of padding, row height and the type scale (body 15 → 13px,
-rows 40 → 32px), and nothing drops below 10px. Density is a token change on
-`<html data-density>`; a component that hard-codes a height or a font size
-breaks it, which is why every size in `src/ui` is a `var()`.
+rows 40 → 32px), and nothing drops below 10px. The guide's five steps come
+down with the rest and keep their ratios, and `--shadow-sticker` shortens to
+`3px 3px 0` so the offset stays proportional to the type it sits behind.
+Density is a token change on `<html data-density>`; a component that hard-codes
+a height or a font size breaks it, which is why every size in `src/ui` is a
+`var()`.
 
 ## 8. Motion
 
-Motion answers something the owner did, or it does not happen.
+Unchanged. Motion answers something the owner did, or it does not happen.
 
 - 150ms (`--dur-fast`) on hover and press, 180ms (`--dur-base`) on a menu or
   popover opening, 200ms (`--dur-slow`) on a dialog. All of it `--ease-out`.
-- `scale(0.98)` (`--press-scale`) on a button's `:active`. That is the only
-  transform in the product.
-- Nothing on scroll. No entrance animation, no staggered reveal, no hover lift,
-  no ambient anything.
+- `scale(0.98)` (`--press-scale`) on a button's `:active`. The only transform.
+- Nothing on scroll. No entrance animation, no staggered reveal, no hover lift.
 - Everything is off under `prefers-reduced-motion`, including the spinner.
 
 ## 9. Components
 
 One paragraph per type. The kit lives in `src/ui`; feature code never restyles
-a primitive, it passes props.
+a primitive, it passes props. Every prop and export name from revision 2 is
+unchanged — the brand landed through the tokens, not through the API.
 
-**Buttons.** Four variants. `primary` is the solid near-black control with
-white ink, 6px radius, no shadow, one per screen. `secondary` is the default:
-white fill, a `--color-border-strong` hairline, full ink — the macOS push
-button. `ghost` is no fill, no border, secondary ink, for toolbars and row
-actions. `destructive` (and its legacy alias `danger`) is **text-only red**,
-gaining `--color-danger-soft` on hover and a red fill only when it is a
+**Brand.** New in this revision. The lockup: the mark in a hard-edged square
+with a hairline and the accent sticker shadow behind it, and "Helix" in Zilla
+Slab bold beside it. Two sizes — `sm` (a 26px mark, for the sidebar header) and
+`lg` (56px, for a boot screen) — plus `wordmark` and `sticker` switches. The
+mark is a transparent PNG, so it needs the surface behind it for the sticker to
+read as an offset card rather than a smear behind the glyphs; that surface is
+also what the guide draws around it on its "Marks & Surfaces" page. When the
+wordmark is showing, the image is decorative (`alt=""`, `aria-hidden`) so a
+screen reader does not say "Helix" twice.
+
+**Buttons.** Four variants. `primary` is the `#97B1C3` block with `#141414`
+ink, square, no shadow, **one per screen**, and it does not invert in dark.
+`secondary` is the default: surface fill, one `--color-border-strong`
+hairline, full ink. `ghost` is no fill, no border, secondary ink, for toolbars
+and row actions. `destructive` (and its legacy alias `danger`) is text-only
+red, gaining `--color-danger-soft` on hover and a red fill only when it is a
 dialog's confirm button (`solid`). Heights are `--control-h`; a loading button
-keeps its label in the progressive form of its own verb and shows a 16px bold
-CircleNotch.
+keeps its label in the progressive form of its own verb.
 
-**Inputs, textareas, selects.** White fill, one `--color-border-strong`
-hairline, `--radius-md`, `--control-h` tall, body type, placeholder in tertiary
-ink. Focus is the blue ring and nothing else — the border does not thicken and
-the field does not change colour, because a field that redraws itself on focus
-reads as a web form. An invalid field turns its border `--color-danger`; it
-never recolours the ring, which means "the keyboard is here" and nothing else.
-The select trigger is identical to an input with a 14px caret in secondary ink
-at the right edge. `Input` has a `search` form: the soft grey rounded macOS
-search field, borderless.
+**Inputs, textareas, selects.** Surface fill, one `--color-border-strong`
+hairline, hard edge, `--control-h` tall, body type, placeholder in tertiary
+ink. Focus is the secondary ring and nothing else — the border does not
+thicken and the field does not change colour, because a field that redraws
+itself on focus reads as a web form. An invalid field turns its border
+`--color-danger`; it never recolours the ring, which means "the keyboard is
+here" and nothing else. The select trigger is identical to an input with a
+14px caret in secondary ink at the right edge.
 
 **Fields.** Label above the control at `--text-sm` in secondary ink, always
 visible, never a placeholder standing in for a label. Required is the word
 "Required" in tertiary ink, not an asterisk. Helper text sits under the field
 at `--text-xs` in tertiary ink; an error replaces it in `--color-danger-ink`
-with a 14px WarningCircle beside it. Both are wired through `aria-describedby`
-so a screen reader reads the sentence that says what to fix.
+with a 14px WarningCircle beside it. Both are wired through `aria-describedby`.
 
 **Tables.** A white surface, rows separated by one hairline, **no zebra
 striping, no vertical rules, no shadow, no row rails.** The header is the
-section-label style — 11px uppercase tracked in tertiary ink — which is how a
-native list view labels a column; the sort caret is 10px and only appears on
-hover until the column is actually sorted. Rows are `--row-h` tall; the primary
-cell is body size at weight 500 in full ink (not a larger size), subordinate
+caption style — 11px uppercase tracked in tertiary ink. Rows are `--row-h`
+tall; the primary cell is body size at weight 500 in full ink, subordinate
 cells are `--text-sm` in secondary ink, numeric cells are right-aligned with
-tabular figures. A selected row is the `--color-selected` tint with full ink.
-The totals row is a `<tfoot>` with one `--color-border-strong` hairline above
-it, and it is deliberately not sticky.
+tabular figures. A selected row is the `--color-selected` tint with full ink —
+**not** the primary block, which belongs to the sidebar. The totals row is a
+`<tfoot>` with one `--color-border-strong` hairline above it.
 
-**Cards and grouped lists.** A card is a grouped inset list: white,
-`--radius-lg`, one hairline, **no shadow, ever**. `CardRow` gives the inset-list
-row — full-bleed, hairline under every row but the last, `--row-h` tall, label
-left and value right — and `CardGroupLabel` gives the small-capitals label that
-sits above the panel in the canvas. Cards never nest. `attention` no longer
-paints a rail; it swaps the hairline for the stronger one, because attention in
-this product is position and weight.
+**Cards and grouped lists.** A card is a grouped inset list: white, square, one
+hairline, **no shadow, ever**. `CardRow` gives the inset-list row — full-bleed,
+hairline under every row but the last, `--row-h` tall, label left and value
+right — and `CardGroupLabel` gives the caption label that sits above the panel
+in the canvas. Cards never nest. `CardTitle` is the slab. `attention` swaps the
+hairline for the stronger one; it does not paint a rail.
 
-**Badges and tags.** A pastel fill with its matching ink, pill radius, 12px,
+**Badges and tags.** A flat tint with its matching ink, **square**, 12px,
 sentence case, and always a word — never colour alone. `tone` covers neutral,
-accent/info, success, warning and danger; `dotColor` renders a stage tag whose
-fill is mixed from the stage colour at 14%. `solid` is reserved for a count
-that has to read instantly from the sidebar. There is no loud filled badge.
+accent/info, the three brand tints (`brand`, `secondary`, `highlight`),
+success, warning and danger; `dotColor` renders a stage tag whose fill is mixed
+from the stage colour at 14%. `solid` is reserved for a count that has to read
+instantly from the sidebar.
 
 **Dialogs, menus, popovers, tooltips.** The floating layer: raised surface, one
-hairline, `--radius-lg`, the single diffuse shadow, over a light scrim
-(`rgba(0,0,0,0.22)`). Dialogs are 480px for a confirm, 680px for a form, 840px
-for a reference sheet, and they are **height-bound**: the content column is
-capped at `100vh - 2 × 48px` and scrolls internally while `DialogHeader` and
-`DialogFooter` stick to the top and bottom of that scroll box. Without the cap
-a tall form ran its Save button off-screen, which the settings e2e caught as an
-unreachable element; the pinning lives in the header and footer components so
-every existing call site gets the fix for free. Menu items are `--radius-md`
-and `--control-h-sm` tall, the highlight is `--color-selected`, a destructive
-item is `--color-danger-ink`, and a menu label is the section-label style.
+hairline, square, the hairline-only `--shadow-md`, over `--color-overlay`.
+Dialogs are 480px for a confirm, 680px for a form, 840px for a reference sheet,
+and they are **height-bound**: the content column is capped at
+`100vh - 2 × 48px` and scrolls internally while `DialogHeader` and
+`DialogFooter` stick to the top and bottom of that scroll box. `DialogTitle` is
+the slab at the subhead step. Menu items are `--control-h-sm` tall, the
+highlight is `--color-selected`, a destructive item is `--color-danger-ink`,
+and a menu label is the caption style.
 
-**Sidebar and nav.** Covered in §3. The one rule worth repeating: the nav icon
-takes the row's ink. A sidebar full of coloured glyphs is the loudest tell of a
-web app pretending to be a desktop one.
+**Sidebar and nav.** Covered in §3. The rule worth repeating: the selected row
+is the product's one primary block, and the nav icon takes the row's ink — on
+the selected row that ink is the near-black, so the glyph reads against the
+block without being given a colour of its own.
 
-**Page header.** Title at `--text-2xl` semibold tracked -0.01em, truncated with
-a `title` attribute; optional breadcrumb above at `--text-sm` in tertiary ink,
-optional subtitle below at `--text-sm` in secondary ink, actions right-aligned
-on the baseline. **No bottom hairline** — the toolbar 24px above already draws
-one, and a second rule under it is the detail that makes a window look
-assembled rather than designed.
+**Page header.** Title at `--text-heading` (32/1.1) in Zilla Slab bold, tracked
+-0.01em, truncated with a `title` attribute; optional breadcrumb above at
+`--text-sm` in tertiary ink, optional subtitle below at `--text-sm` in
+secondary ink, actions right-aligned on the baseline. **No bottom hairline** —
+the toolbar 24px above already draws one.
 
-**Empty states.** One short title, one sentence in secondary grey, one black
-button, centred in air. No illustration, no glyph, no card, no border. The
-`icon` prop is still accepted so call sites compile and is deliberately not
-drawn.
+**Empty states.** One short title in the slab at the subhead step, one sentence
+in secondary grey at the prose leading, one button, centred in air. No
+illustration, no glyph, no card, no border. The `icon` prop is still accepted
+so call sites compile and is deliberately not drawn.
 
 **Command palette and search.** A Spotlight panel: 600px, held 14% down the
-window over the scrim, `--radius-lg`, one hairline, the diffuse shadow. A 18px
+window over the scrim, square, one hairline, the hairline shadow. A 18px
 magnifier and a 17px input in the header with one hairline under it, group
-headings in the section-label style, rows `--row-h` tall with the
-`--color-selected` highlight and no icons.
+headings in the caption style, rows `--row-h` tall with the `--color-selected`
+highlight and no icons.
+
+**Boot screens.** The `Brand` lockup at `lg` above the panel. A boot screen is
+the first thing the owner sees when something has gone wrong, and the brand
+saying who is talking is worth more there than on any other screen. The title
+is the slab at the subhead step; the detail stays in the mono face.
 
 **Toasts.** Bottom right, a sentence in the past tense — "Deleted 1 contact" —
 with an Undo for the ten seconds it lives. Errors do not auto-dismiss and carry
-"Copy details", because the owner is often offline and pasting the detail
-somewhere is the only way to send it.
+"Copy details", because the owner is often offline.
 
-**Kbd.** The glyph in tertiary ink on `--color-accent-soft`, one hairline, 4px
-radius, **the system sans face** — macOS draws ⌘K in the system font, not in a
-monospace, and the mono version was the single most web-looking thing in the
-old kit.
+**Kbd.** The glyph in tertiary ink on `--color-accent-soft`, one hairline,
+square, in the body face — a shortcut glyph is drawn in the UI font, not in a
+monospace.
 
 ## 10. Iconography
 
-**Phosphor only** (`@phosphor-icons/react`), imported through `src/ui/icons.ts`
-and never directly. Lucide is banned by the minimalist-ui skill and is gone
-from `src/ui` and `src/app`; `src/features` migrates by changing
-`from "lucide-react"` to `from "@/ui/icons"`, because the map re-exports every
-Lucide name the product used under its old spelling alongside the Phosphor
-name.
+Unchanged. **Phosphor only** (`@phosphor-icons/react`), imported through
+`src/ui/icons.ts` and never directly.
 
 - `weight="regular"` at **18px** in lists, nav rows, timelines, empty states.
 - `weight="bold"` at **16px** inside a button, an icon button or a menu item.
@@ -402,15 +485,32 @@ the icon set contains `Table`, `Check` and `X`, which would collide with the
 component of the same name. Import icons from `@/ui/icons`, components from
 `@/ui`.
 
-## 11. Do / Don't
+## 11. Voice
+
+The guide's voice page, applied to product copy.
+
+**We sound like** — direct (the point comes first, the detail second), specific
+(real numbers and real examples over adjectives), warm (plain language, written
+to a person, not a segment).
+
+**We never sound like** — hype (no superlatives we cannot demonstrate), jargon
+(if a shorter word works, it wins), filler (nothing on the page that does no
+work).
+
+In practice: buttons name what will happen ("Save changes", not "Submit").
+Errors say what went wrong and what to do. Toasts are past tense. No
+exclamation marks, no apologies, no cleverness, no emoji anywhere including in
+code comments and alt text.
+
+## 12. Do / Don't
 
 **Do**
 
 - Separate things with a hairline and with space.
-- Let the primary button be the only filled thing on the screen.
+- Spend the primary once per view, and know where you spent it.
 - Put the thing that needs the owner at the top, in full ink.
-- Use the section-label style for the label above a group, and sentence case
-  for everything else.
+- Set every title in the slab and everything else in Poppins.
+- Use the caption style for the label above a group, sentence case elsewhere.
 - Keep one size down a column and let weight carry the hierarchy.
 - Wrap every bare glyph in a `--control-h-sm` hit target.
 - Give every number tabular figures.
@@ -418,46 +518,67 @@ component of the same name. Import icons from `@/ui/icons`, components from
 
 **Don't**
 
-- No shadow on a card, a row, a button, an input or a table. One diffuse shadow
-  exists and only a floating layer may wear it.
-- No gradient, anywhere, including a "subtle" one.
-- No coloured chrome: no coloured sidebar row, tab, icon, toolbar or header.
+- No rounded corner, anywhere, on anything.
+- No blurred shadow. A floating layer gets a second hairline; nothing else gets
+  anything.
+- No second `--shadow-sticker` on a screen, and never on something that is not
+  a hero.
+- No accent background. `#EDF0A3` is a detail, not a surface.
+- No second primary block on a screen.
+- No gradient, including a "subtle" one.
+- No coloured chrome beyond the one selected sidebar row.
 - No zebra striping, no vertical cell rules, no coloured row rails.
-- No pill-shaped container, panel or primary button. Tags and counts only.
-- No Lucide, no Feather, no Heroicons, no Inter, no serif, no webfont.
-- No all-caps text outside the 11px section label.
+- No `#97B1C3` or `#8B85C2` carrying small text: 2.24:1 and 3.37:1 on white.
+- No Lucide, no Feather, no Heroicons, no Inter, no third webfont, no CDN.
+- No all-caps text outside the 11px caption label.
 - No emoji, anywhere, including in code comments and alt text.
 - No illustration or spot glyph in an empty state.
 - No entrance animation, no scroll reveal, no hover lift.
-- No second accent colour, and no colour that means something on its own.
 - No hex, `rgb()`, `rgba()` or `hsl()` outside `src/styles/tokens.css`.
 - No hard-coded px height or font size in a component: it breaks compact.
 
-## 12. Superseded
+## 13. Superseded
+
+**Revision 2 (superseded, 2026-09-19).** Revision 2 was the Apple-like native
+direction: a warm `#FBFBFA` canvas, the platform's own system font stack with
+no webfont and explicitly no serif, a near-black `#111111` primary button,
+6px/10px radii, a soft neutral-blue selected-row tint, and one diffuse
+`0 2px 8px` shadow on floating layers.
+
+It was not rejected — the chassis it built is what revision 3 stands on, and
+the following carried over unchanged: the audience research, the two sentences
+in §1, the air, the hairlines, the no-dark-patterns rule, tabular figures, the
+1024px floor, 40px rows, comfortable/compact density, the dark mode, the
+Phosphor icon set, the eight-hue stage ramp, the token architecture and the
+contract in `docs/CONTRACTS.md`.
+
+What revision 3 replaced, and why:
+
+- **The system font stack became two self-hosted webfonts.** Revision 2's rule
+  was "the platform's own face and nothing else, and no serif anywhere". The
+  brand guide specifies Zilla Slab and Poppins, so that rule is gone. The
+  offline constraint behind it is not: the fonts ship in the bundle and there
+  is no CDN.
+- **The near-black primary button became the brand primary.** A black button is
+  the absence of a decision. `#97B1C3` with `#141414` ink is the decision, and
+  it is the same block in both themes rather than inverting.
+- **The selected sidebar row became the primary block rather than a tint.**
+  The guide allows the primary once per view; this is where the application
+  spends it. Table rows, menu items and palette rows keep the quiet tint.
+- **Every radius went to zero.** Revision 2's 6px/10px pairing was a native
+  habit. The guide's corner language is explicit and absolute.
+- **The diffuse shadow became a hairline.** "Flat fills only" rules out a blur,
+  so a floating layer is lifted by a second hairline instead.
+- **The pill went away.** Badges, count tags and the search field were the last
+  rounded things in the product and are now rectangles.
 
 **Revision 1 (rejected, 2026-09-19).** The first direction was a light-first,
 high-density "ledger": a cool grey `#ECEFF3` canvas, a single equipment-orange
-accent (`#C1440E`) that meant "this needs you", 16px body, 48px rows, three
-levels of drop shadow, blue-black ink, an eight-hue saturated stage ramp solved
-against CVD simulation, and sentence-case 14px table headers.
-
-It was rejected by the owner as "still super sloppy", and the specific reasons
-are worth keeping so they are not rebuilt by accident:
-
-- **The orange did not read as a system, it read as a warning label.** One
-  saturated accent on an otherwise grey UI makes every screen look like a form
-  with an error on it.
-- **Three shadow levels plus a grey canvas plus white cards is the SaaS-card
-  kit.** It is the look the clearpath-frontend-direction skill names as a
-  generated-design default, and it is the opposite of native.
-- **The tables were dense to the point of being undesigned.** 48px rows with
-  16px body and a 2px totals rule read as a spreadsheet export, not as a list
-  view.
-- **Lucide's 2px hairline strokes are a web signature.** At 16 and 18px against
-  15px text they sit visually lighter than the type they label.
-- **Row rails, left accents and a 3px focus bar** are web-app devices; a native
-  list marks selection with a tint and heavier text and nothing else.
-
-What carried over unchanged: the audience research, the two sentences in §1,
-the no-dark-patterns rule, tabular figures, the 1024px floor, the token
-architecture and the contract in `docs/CONTRACTS.md`.
+accent (`#C1440E`), 16px body, 48px rows, three levels of drop shadow, and
+sentence-case 14px table headers. It was rejected by the owner as "still super
+sloppy". The specific reasons, kept so they are not rebuilt by accident: one
+saturated accent on an otherwise grey UI made every screen look like a form
+with an error on it; three shadow levels plus a grey canvas plus white cards is
+the generated-SaaS-card kit; 48px rows with 16px body read as a spreadsheet
+export; Lucide's 2px hairline strokes sat visually lighter than the type they
+labelled; and row rails, left accents and a 3px focus bar are web-app devices.

@@ -1,4 +1,5 @@
 export * from "./cn";
+export * from "./Brand";
 export * from "./Button";
 export * from "./IconButton";
 export * from "./Input";

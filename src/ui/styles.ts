@@ -36,10 +36,25 @@ export const noShrink = "flex-none";
 export const pressScale =
   "active:scale-[var(--press-scale)] motion-reduce:active:scale-100";
 
-/** The one uppercase type in the product: an 11px tracked section label in
- *  tertiary ink (docs/DESIGN.md section 4, "Type"). */
-export const sectionLabel =
-  "text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]";
+/** The one uppercase type in the product: the brand guide's caption step
+ *  (11px / 1.4) in Poppins, tracked out, in tertiary ink. It labels a group of
+ *  rows or a table column, never a paragraph (docs/DESIGN.md section 4). */
+export const sectionLabel = [
+  "font-[family-name:var(--font-body)]",
+  "text-[length:var(--text-caption)] font-semibold uppercase",
+  "leading-[var(--leading-caption)] tracking-[var(--tracking-label)]",
+  "text-[var(--color-text-faint)]",
+].join(" ");
+
+/** The slab. Every title in the product is set in it, in the near-black, with
+ *  the guide's -0.01em tracking. Zilla Slab ships at 600 and 700 only, so a
+ *  heading never asks for a weight that would have to be synthesised. */
+export const headingFont =
+  "font-[family-name:var(--font-heading)] tracking-[var(--tracking-title)] text-[var(--color-heading)]";
+
+/** Prose leading: the guide sets body copy at 15/1.65. Controls and rows keep
+ *  --leading-normal, where 1.65 would push a label off a 32px control. */
+export const proseLeading = "leading-[var(--leading-body)]";
 
 /** Disabled: muted, and the cursor says so. Never pointer-events: none, which
  *  would also kill the tooltip that explains why the control is disabled. */

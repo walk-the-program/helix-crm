@@ -15,6 +15,7 @@ import { CheckCircle2, Inbox, Phone, Plus, Search, Settings, Trash2 } from "@/ui
 
 import {
   Badge,
+  Brand,
   Button,
   Card,
   CardBody,
@@ -769,9 +770,15 @@ function buildSectionLabelSection(): Section {
 // Badge — every tone together, muted pastel
 // ---------------------------------------------------------------------------
 
-const BADGE_ALL_TONES: Array<{ tone: "neutral" | "accent" | "success" | "warning" | "danger"; label: string }> = [
+const BADGE_ALL_TONES: Array<{
+  tone: "neutral" | "accent" | "brand" | "secondary" | "highlight" | "success" | "warning" | "danger";
+  label: string;
+}> = [
   { tone: "neutral", label: "Draft" },
   { tone: "accent", label: "Needs you" },
+  { tone: "brand", label: "Primary tint" },
+  { tone: "secondary", label: "Secondary tint" },
+  { tone: "highlight", label: "Accent tint" },
   { tone: "success", label: "Won" },
   { tone: "warning", label: "Offline" },
   { tone: "danger", label: "Overdue" },
@@ -1279,6 +1286,39 @@ function buildVirtualListSection(): Section {
 }
 
 // ---------------------------------------------------------------------------
+// Brand lockup
+// ---------------------------------------------------------------------------
+
+function buildBrandSection(): Section {
+  return {
+    id: "brand",
+    title: "Brand lockup",
+    specimens: [
+      {
+        id: "brand.sm",
+        label: "Lockup, sidebar size",
+        html: mount(<Brand size="sm" />),
+      },
+      {
+        id: "brand.lg",
+        label: "Lockup, boot size",
+        html: mount(<Brand size="lg" />),
+      },
+      {
+        id: "brand.mark-only",
+        label: "Mark only",
+        html: mount(<Brand size="lg" wordmark={false} />),
+      },
+      {
+        id: "brand.no-sticker",
+        label: "Lockup without the sticker shadow",
+        html: mount(<Brand size="lg" sticker={false} />),
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Assembly
 // ---------------------------------------------------------------------------
 
@@ -1518,6 +1558,7 @@ export function renderGallery(): string {
   skippedOverlays.length = 0;
 
   const sections: Section[] = [
+    buildBrandSection(),
     buildButtonSection(),
     buildIconButtonSection(),
     buildInputSection(),

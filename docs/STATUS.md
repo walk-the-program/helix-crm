@@ -2524,3 +2524,50 @@ the pipeline board and the import mapping step) into
 Verified: typecheck clean, `npm test` 799 green, the three e2e specs 26 passed
 on port 4194, `vite build` succeeds, and the no-literals grep over the three
 features returns only `font-[family-name:var(...)]` utilities.
+
+---
+
+## 2026-09-19 — Brand foundation: tokens, fonts, component kit
+
+The brand guide (`assets/brand/guide/helix-crm-brand-guide.html`) turned into
+the foundation the three feature sweeps built on. `docs/DESIGN.md` is now
+revision 3, "Brand guide", with revision 2 kept under **Superseded**. Full
+write-up of what the screenshots caught: `design/brand/review.md`.
+
+- **Fonts, self-hosted.** Zilla Slab 600/700 and Poppins 400/500/600 as
+  latin-subset woff2 in `public/fonts/`, OFL 1.1 texts beside them, declared in
+  `globals.css` with `font-display: swap`, and the two faces the first frame
+  needs preloaded from `index.html`. Verified as real woff2 (`wOF2` magic) with
+  `OS/2.usWeightClass` matching each filename. No CDN: the built app requests
+  `/fonts/zilla-slab-700.woff2` and `/fonts/poppins-400.woff2` and nothing off
+  the machine.
+- **Tokens added, none renamed.** The five `--brand-*` colours plus
+  `--brand-primary-tint`; `--color-heading`; `--font-heading` / `--font-body`;
+  the guide's five-step scale `--text-display|heading|subhead|body|caption`
+  with a `--leading-*` for each; three `--color-brand-*-soft` / `-ink` tint
+  pairs; `--shadow-sticker`. Every `--radius-*` is now `0`, `--shadow-md` is a
+  hairline with no blur, and `--font-sans` resolves to `--font-body` so the
+  whole kit picked up Poppins without an edit. `docs/CONTRACTS.md` "Design
+  tokens" records the new names and what the mapping means.
+- **The one confident block.** `--color-accent` is the brand primary `#97B1C3`
+  with `#141414` ink (8.24:1, the guide's own pairing — white measures 2.24:1
+  and is never used). It is the selected sidebar row on every screen, plus the
+  primary button where a screen has a primary action. `--color-selected` stayed
+  a quiet tint so menus, palette rows and table rows do not each become a
+  block. The primary does not invert in dark mode.
+- **Kit.** New `src/ui/Brand.tsx` lockup — the mark in a hard square with the
+  accent sticker shadow and "Helix" in Zilla Slab — used in the sidebar header
+  and on every boot screen. `PageHeader`, `CardTitle`, `DialogTitle` and
+  `EmptyState` titles moved to the slab; `Badge` gained the three brand tint
+  tones; `NavItem`'s active row became the block. Every prop and export name is
+  unchanged.
+- **Accessibility.** `--color-text-faint` was darkened from `#6A7278` to
+  `#646B71` after the audit caught four real failures at 4.45:1 (three kbd
+  glyphs and a sidebar group label on the tint). Rendered-contrast audit now
+  reports **439 elements checked, 0 failures** in all four theme × density
+  combinations.
+
+Gallery captured at 1280 in light, dark and compact, plus 14 sections in both
+themes, into `design/brand/`. Verified: typecheck clean, `npm test` green
+(15 new tests for Brand, NavItem and Badge), `vite build` succeeds, zero
+console messages and zero failed requests.

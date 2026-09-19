@@ -4,7 +4,7 @@ import * as RadixDialog from "@radix-ui/react-dialog";
 import { X } from "@/ui/icons";
 import { cn } from "@/ui/cn";
 import { Button } from "@/ui/Button";
-import { focusRing, quietTransition } from "@/ui/styles";
+import { focusRing, headingFont, quietTransition } from "@/ui/styles";
 
 export const Dialog = RadixDialog.Root;
 export const DialogTrigger = RadixDialog.Trigger;
@@ -102,8 +102,9 @@ export const DialogTitle = forwardRef<
   <RadixDialog.Title
     ref={ref}
     className={cn(
-      "text-[length:var(--text-xl)] font-semibold text-[var(--color-text)]",
-      "leading-[var(--leading-tight)] tracking-[var(--tracking-title)]",
+      headingFont,
+      "text-[length:var(--text-subhead)] font-bold",
+      "leading-[var(--leading-subhead)]",
       className,
     )}
     {...props}

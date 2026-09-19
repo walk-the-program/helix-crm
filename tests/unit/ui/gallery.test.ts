@@ -58,13 +58,31 @@ describe("component gallery", () => {
     expect(withoutControlledDataAttrs).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
-  it("never references an <img> tag or an externally-loaded http(s) resource", () => {
+  it("never loads anything over the network", () => {
     // The offline-only rule (docs/DESIGN.md section 2) is about not fetching
     // anything over the network — not about the SVG spec's mandatory
-    // xmlns="http://www.w3.org/2000/svg" namespace URI, which every lucide
-    // icon carries and which is never dereferenced.
-    expect(html).not.toMatch(/<img\b/i);
-    expect(html).not.toMatch(/\b(?:src|href)\s*=\s*"https?:\/\//i);
+    // xmlns="http://www.w3.org/2000/svg" namespace URI, which every icon
+    // carries and which is never dereferenced.
+    //
+    // The Brand lockup does render one <img>, the mark at /helix-logo.png.
+    // It ships inside the bundle, so what this asserts is the real rule:
+    // every src and href is root-relative, and nothing points at a host.
+    const urls = [...html.matchAll(/\b(?:src|href)\s*=\s*"([^"]*)"/gi)].map((m) => m[1]);
+    expect(urls.length).toBeGreaterThan(0);
+    for (const url of urls) {
+      // Root-relative (the bundled mark), same-directory (gallery.css), or an
+      // inert `data:,` placeholder href. Anything with a host is a network
+      // fetch and is what this rule exists to catch.
+      expect(url).toMatch(/^(?:\.?\/(?!\/)|data:,$)/);
+    }
     expect(html).not.toMatch(/url\(\s*['"]?https?:\/\//i);
+  });
+
+  it("renders the brand lockup with the mark and the wordmark", () => {
+    expect(html).toContain('data-specimen-id="brand.lg"');
+    expect(html).toContain('src="/helix-logo.png"');
+    // The sticker shadow is the guide's signature and must actually be on the
+    // default lockup, not just available as a prop.
+    expect(html).toMatch(/shadow-\[var\(--shadow-sticker\)\]/);
   });
 });

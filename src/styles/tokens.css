@@ -219,15 +219,25 @@
      #5C6368 on #FFFFFF ............ 6.11:1  AAA
      #5C6368 on #FAFAFF ............ 5.87:1  AAA
      #5C6368 on #F2F4FA ............ 5.55:1  AAA
-     #6A7278 on #FFFFFF ............ 4.89:1  AA
-     #6A7278 on #FAFAFF ............ 4.70:1  AA
-     #6A7278 on #F2F4FA ............ 4.45:1  FAILS -> tertiary ink is not
-        allowed on a tint; a label on the sidebar or on a selected row steps
-        up to --color-text-muted.                                             */
+     #5C6368 on #EAEDF3 ............ 5.21:1  AAA
+     #646B71 on #FFFFFF ............ 5.41:1  AAA
+     #646B71 on #FAFAFF ............ 5.20:1  AAA
+     #646B71 on #F2F4FA ............ 4.92:1  AA   (sidebar, kbd, search field)
+     #646B71 on #EEF1F8 ............ 4.78:1  AA   (selected row)
+     #646B71 on #EAEDF3 ............ 4.61:1  AA   <- worst text pair, light
+     #646B71 on #F5F7F9 ............ 5.04:1  AAA
+     #646B71 on #F3F3F9 ............ 4.89:1  AA
+     #646B71 on #FDFEF6 ............ 5.33:1  AAA
+
+     Tertiary ink is #646B71 and not the #6A7278 the ramp first reached for:
+     that value measures 4.89:1 on white but only 4.45:1 on the sidebar tint,
+     and a kbd glyph and a sidebar group label both land exactly there. Rather
+     than carve out an exception nobody would remember, the whole step is dark
+     enough to clear AA on every surface in the product.                      */
   --color-heading:    #141414;
   --color-text:       #4E555A;
   --color-text-muted: #5C6368;
-  --color-text-faint: #6A7278;
+  --color-text-faint: #646B71;
 
   /* The one grey that carries no information: a disabled glyph, a scrollbar
      thumb, a placeholder. Never text the owner has to read.

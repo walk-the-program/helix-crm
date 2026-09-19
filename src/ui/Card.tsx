@@ -1,10 +1,12 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/ui/cn";
-import { sectionLabel } from "@/ui/styles";
+import { headingFont, sectionLabel } from "@/ui/styles";
 
 /**
  * A card is a grouped inset list (docs/DESIGN.md §9 "Cards"): white surface,
- * one hairline, --radius-lg, and no shadow at all. The grouped list is the
+ * one hairline, a hard edge (--radius-lg is 0), and no shadow at all. The
+ * corner language is the brand guide's: "Radius 0px for controls and cards,
+ * 0px for panels and full-bleed blocks." The grouped list is the
  * central structure of a native settings or detail pane — a panel of related
  * rows, separated by hairlines, under a small capitals label.
  *
@@ -50,8 +52,9 @@ export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingEle
   return (
     <h3
       className={cn(
-        "text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]",
-        "leading-[var(--leading-tight)] tracking-[var(--tracking-title)]",
+        headingFont,
+        "text-[length:var(--text-lg)] font-semibold",
+        "leading-[var(--leading-tight)]",
         className,
       )}
       {...props}

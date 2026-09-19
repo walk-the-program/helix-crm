@@ -3,9 +3,14 @@ import { cn } from "@/ui/cn";
 import { focusRing, quietTransition, sectionLabel } from "@/ui/styles";
 
 /**
- * The sidebar (docs/DESIGN.md §3): 240px, the warm --color-sidebar tint, a
- * single hairline right edge, and nothing else. It never collapses, it never
- * carries a shadow, and it is the only chrome that is not white.
+ * The sidebar (docs/DESIGN.md §3): 240px, the primary tint (#97B1C3 at 8%
+ * over the neutral light — the guide's own 8% ceiling), a single hairline
+ * right edge, and nothing else. It never collapses, it never carries a
+ * shadow, and it is the only chrome that is not white.
+ *
+ * The brand slot at the top has room under it for the lockup's accent sticker
+ * shadow, which overhangs the mark by 4px and would otherwise be clipped by
+ * the first nav group.
  */
 export function Sidebar(props: { children: ReactNode; brand?: ReactNode; footer?: ReactNode }) {
   return (
@@ -17,7 +22,7 @@ export function Sidebar(props: { children: ReactNode; brand?: ReactNode; footer?
       ].join(" ")}
     >
       {props.brand ? (
-        <div className="flex flex-none items-center px-[var(--space-2)] pt-[var(--space-3)]">
+        <div className="flex flex-none items-center px-[var(--space-2)] pb-[var(--space-2)] pt-[var(--space-4)]">
           {props.brand}
         </div>
       ) : null}
@@ -36,10 +41,10 @@ export function Sidebar(props: { children: ReactNode; brand?: ReactNode; footer?
 /**
  * A group of nav rows under an optional label.
  *
- * The label is the section-label style — 11px, uppercase, tracked 0.05em,
- * tertiary ink — which is how a native sidebar names a group. It is the only
- * place in the product where type is set in capitals, and it is never longer
- * than three words.
+ * The label is the section-label style — the guide's 11px caption step in
+ * Poppins, uppercase, tracked 0.05em, tertiary ink — which is how a native
+ * sidebar names a group. It is the only place in the product where type is set
+ * in capitals, and it is never longer than three words.
  */
 export function SidebarSection(props: { label?: string; children: ReactNode }) {
   return (
@@ -55,14 +60,22 @@ export function SidebarSection(props: { label?: string; children: ReactNode }) {
 }
 
 /**
- * A nav row. Selected is the --color-selected tint (system blue at 10%) with
- * full-strength ink and weight 500 — the soft neutral-blue tint a macOS
- * sidebar paints behind its selected row. Hover is the plain --color-hover
- * tint, one step quieter.
+ * A nav row.
+ *
+ * THE SELECTED ROW IS THE ONE CONFIDENT BLOCK. The brand guide allows the
+ * primary exactly once per view — "Primary appears once per view as a single
+ * confident block" — and this is where the application spends it: a flat
+ * #97B1C3 fill, square, with the near-black ink that measures 8.24:1 on it.
+ * It is the same block in light and dark, because the primary does not invert.
+ *
+ * Everything else stays quiet. Hover is --color-hover, one step off the
+ * sidebar tint, and a hovered selected row deepens the primary rather than
+ * losing it.
  *
  * The icon takes the row's ink rather than its own colour: a sidebar full of
  * coloured glyphs is the single loudest tell of a web app pretending to be a
- * desktop one.
+ * desktop one. On the selected row that ink is the near-black, so the glyph
+ * reads against the block without being given a colour of its own.
  */
 export function NavItem(props: {
   label: string;
@@ -82,7 +95,10 @@ export function NavItem(props: {
     "hover:no-underline",
     quietTransition,
     focusRing,
-    active && "bg-[var(--color-selected)] text-[var(--color-text)] font-medium",
+    active && [
+      "bg-[var(--color-accent)] text-[var(--color-accent-text)] font-medium",
+      "hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-accent-text)]",
+    ].join(" "),
   );
 
   const content = (

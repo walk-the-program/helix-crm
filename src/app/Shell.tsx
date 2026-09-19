@@ -50,6 +50,7 @@ import { useCommandShortcuts } from "@/app/shortcuts";
 import type { HelixRegistry, WorkspaceEntry } from "@/app/appSettings";
 import {
   Badge,
+  Brand,
   EmptyState,
   IconButton,
   Kbd,
@@ -247,11 +248,11 @@ export function Shell({ registry, workspace }: ShellProps) {
       <div className="flex h-full min-h-screen min-w-[1024px] bg-[var(--color-bg)] text-[var(--color-text)]">
         <Sidebar
           brand={
-            <div className="flex min-h-[var(--control-h)] w-full items-center gap-[var(--space-2)] px-[var(--space-3)]">
-              <img src="/helix-logo.png" alt="Helix" className="h-[22px] w-[22px] flex-none object-contain" />
-              <span className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-                Helix
-              </span>
+            /* The lockup: the mark with its accent sticker shadow and the
+               word in Zilla Slab. The one place in the running application
+               that wears --shadow-sticker. */
+            <div className="flex min-h-[var(--control-h)] w-full items-center px-[var(--space-3)]">
+              <Brand size="sm" />
             </div>
           }
           footer={

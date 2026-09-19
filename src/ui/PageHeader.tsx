@@ -1,13 +1,18 @@
 import type { ReactNode } from "react";
+import { headingFont } from "@/ui/styles";
 
 /**
- * The page title (docs/DESIGN.md §4): --text-2xl, semibold, tracked -0.01em,
- * truncated with a title attribute rather than wrapped — a 47-character company
- * name is the normal case, not the exception.
+ * The page title, set at the brand guide's Heading step: 32/1.1 in Zilla Slab
+ * bold, tracked -0.01em, in the near-black. It is the largest type on any
+ * screen and the only thing on the screen allowed to be that large.
  *
- * No bottom hairline. The toolbar above it already draws one, and a second rule
- * 24px below the first is the kind of detail that makes a window look assembled
- * rather than designed. Air separates the header from the content instead.
+ * It truncates with a title attribute rather than wrapping — a 47-character
+ * company name is the normal case, not the exception — and the breadcrumb and
+ * subtitle stay in Poppins, so the slab is doing one job in one place.
+ *
+ * No bottom hairline. The toolbar above it already draws one, and a second
+ * rule 24px below the first is the kind of detail that makes a window look
+ * assembled rather than designed. Air separates the header from the content.
  */
 export function PageHeader(props: {
   title: ReactNode;
@@ -31,13 +36,18 @@ export function PageHeader(props: {
           </div>
         ) : null}
         <h1
-          className="truncate text-[length:var(--text-2xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]"
+          className={[
+            "truncate",
+            headingFont,
+            "text-[length:var(--text-heading)] font-bold",
+            "leading-[var(--leading-heading)]",
+          ].join(" ")}
           title={typeof title === "string" ? title : undefined}
         >
           {title}
         </h1>
         {subtitle ? (
-          <div className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          <div className="mt-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             {subtitle}
           </div>
         ) : null}

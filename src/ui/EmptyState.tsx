@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/ui/cn";
+import { headingFont, proseLeading } from "@/ui/styles";
 
 /**
  * An empty screen is an invitation, and it is centred in air (docs/DESIGN.md
@@ -27,11 +28,21 @@ export function EmptyState(props: {
         className,
       )}
     >
-      <h3 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)] leading-[var(--leading-tight)] tracking-[var(--tracking-title)]">
+      <h3
+        className={cn(
+          headingFont,
+          "text-[length:var(--text-subhead)] font-bold leading-[var(--leading-subhead)]",
+        )}
+      >
         {title}
       </h3>
       {description ? (
-        <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+        <p
+          className={cn(
+            "text-[length:var(--text-base)] text-[var(--color-text-muted)]",
+            proseLeading,
+          )}
+        >
           {description}
         </p>
       ) : null}

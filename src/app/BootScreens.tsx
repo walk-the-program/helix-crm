@@ -8,7 +8,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, DatabaseZap, HardDriveDownload } from "@/ui/icons";
 import { MigrationError } from "@/db/migrator";
 import { DbOpenError, Fts5MissingError } from "@/db/client";
-import { Button, Card, CardBody, Spinner } from "@/ui";
+import { Brand, Button, Card, CardBody, Spinner } from "@/ui";
 
 function FullScreen({
   icon,
@@ -20,13 +20,17 @@ function FullScreen({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] p-[var(--space-8)] text-[var(--color-text)]">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-[var(--space-7)] bg-[var(--color-bg)] p-[var(--space-8)] text-[var(--color-text)]">
+      {/* The lockup sits above the message: a boot screen is the first thing
+          the owner sees when something has gone wrong, and the brand saying
+          who is talking is worth more there than on any other screen. */}
+      <Brand size="lg" />
       <Card className="w-full max-w-[560px]">
         <CardBody className="p-[var(--space-6)]">
           <div className="flex items-start gap-[var(--space-4)]">
             <div className="flex-none text-[var(--color-danger-ink)]">{icon}</div>
             <div className="min-w-0 flex-1">
-              <h1 className="m-0 text-[length:var(--text-xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)]">
+              <h1 className="m-0 font-[family-name:var(--font-heading)] text-[length:var(--text-subhead)] font-bold leading-[var(--leading-subhead)] tracking-[var(--tracking-title)] text-[var(--color-heading)]">
                 {title}
               </h1>
               <div className="mt-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
@@ -50,7 +54,8 @@ function Detail({ children }: { children: ReactNode }) {
 
 export function BootingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-muted)]">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-[var(--space-7)] bg-[var(--color-bg)] text-[var(--color-text-muted)]">
+      <Brand size="lg" />
       <Spinner size={24} label="Opening your data" />
     </div>
   );

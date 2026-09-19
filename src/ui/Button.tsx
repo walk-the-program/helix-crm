@@ -8,16 +8,21 @@ import { disabledState, focusRing, noShrink, pressScale, quietTransition } from 
 /**
  * Four variants and no more (docs/DESIGN.md §9).
  *
- *   primary     -> the solid near-black control. One per screen, for the thing
- *                  the owner came to do. Inverts to near-white in the dark
- *                  theme, which is what a native dark app does with its
- *                  default button.
- *   secondary   -> white, hairline, full-strength ink. The default. This is
- *                  the macOS push button.
+ *   primary     -> the brand primary #97B1C3 with the near-black ink that
+ *                  measures 8.24:1 on it. This is the brand guide's "single
+ *                  confident block", so there is at most ONE on a screen —
+ *                  the thing the owner came to that screen to do. The
+ *                  selected sidebar row is the same block; a screen with no
+ *                  primary action simply does not paint one here. It does not
+ *                  invert in dark: the primary is the primary in both themes.
+ *   secondary   -> surface fill, one hairline, full-strength ink. The default.
  *   ghost       -> no fill, no border, secondary ink. Toolbars and row
  *                  actions.
  *   destructive -> text-only red. It gets a fill only when it is the confirm
  *                  button inside a dialog, which is what `solid` is for.
+ *
+ * Every variant is square: --radius-md resolves to 0 under the guide's corner
+ * language, so the radius class below draws a hard edge.
  *
  * `danger` is kept as an alias of `destructive` because feature code passes it
  * today; both spell the same variant.
