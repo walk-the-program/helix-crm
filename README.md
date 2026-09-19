@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/brand/helix-logo.png" width="120" alt="Helix CRM"></p>
+
 # Helix CRM
 
 Helix CRM is a desktop CRM for people who run a trade or service business on

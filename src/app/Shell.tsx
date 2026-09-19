@@ -246,6 +246,14 @@ export function Shell({ registry, workspace }: ShellProps) {
     <TooltipProvider>
       <div className="flex h-full min-h-screen min-w-[1024px] bg-[var(--color-bg)] text-[var(--color-text)]">
         <Sidebar
+          brand={
+            <div className="flex min-h-[var(--control-h)] w-full items-center gap-[var(--space-2)] px-[var(--space-3)]">
+              <img src="/helix-logo.png" alt="Helix" className="h-[22px] w-[22px] flex-none object-contain" />
+              <span className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+                Helix
+              </span>
+            </div>
+          }
           footer={
             hasWorkspaceSwitcher ? (
               <button

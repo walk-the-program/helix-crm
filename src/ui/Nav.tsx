@@ -7,7 +7,7 @@ import { focusRing, quietTransition, sectionLabel } from "@/ui/styles";
  * single hairline right edge, and nothing else. It never collapses, it never
  * carries a shadow, and it is the only chrome that is not white.
  */
-export function Sidebar(props: { children: ReactNode; footer?: ReactNode }) {
+export function Sidebar(props: { children: ReactNode; brand?: ReactNode; footer?: ReactNode }) {
   return (
     <aside
       aria-label="Sidebar"
@@ -16,6 +16,11 @@ export function Sidebar(props: { children: ReactNode; footer?: ReactNode }) {
         "border-r border-[var(--color-border)] bg-[var(--color-sidebar)]",
       ].join(" ")}
     >
+      {props.brand ? (
+        <div className="flex flex-none items-center px-[var(--space-2)] pt-[var(--space-3)]">
+          {props.brand}
+        </div>
+      ) : null}
       <nav aria-label="Main" className="flex-1 overflow-y-auto py-[var(--space-2)]">
         {props.children}
       </nav>
