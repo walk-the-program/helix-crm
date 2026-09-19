@@ -1545,3 +1545,108 @@ Two smaller notes that were reported by wave 2 and are still open because they
 belong to whoever owns the file: `contacts.updateEmail` (changing an email's
 label loses the row id) and `tags.indexFor(entityType)` (the tag column on a
 list walks every tag today).
+
+---
+
+## 2026-09-18 — UI polish agent (`src/ui`, the component kit)
+
+### Did
+
+**Held every primitive in `src/ui/**` against `docs/DESIGN.md` and fixed 33
+defects.** The kit was written in parallel with the design direction, before
+`--control-h`, `--control-h-sm`, `--color-accent-ink`, `--color-hover`,
+`--color-selected`, `--color-sidebar`, `--color-overlay` and the `-ink` semantic
+tokens existed, so it had drifted in three systematic ways. Every finding, the
+measurement or screenshot that caught it, and the fix is in
+`design/ui-review.md`.
+
+1. **The accent was in the chrome, in five places.** The sidebar's active item,
+   every dropdown and select highlight, the selected table row, the active tab,
+   and the checkbox/switch "on" fill were all `--color-accent` or
+   `--color-accent-soft`. That is the defect `design/review.md` finding 1 fixed
+   in the comps, shipped again in the kit: with the sidebar and the menus
+   carrying it, the accent was on screen at all times and stopped meaning "this
+   needs you". All five are now `--color-selected` or ink.
+2. **Accent-coloured *text* used `--color-accent`** (4.44:1, fails AA) on
+   `Badge`, and every semantic tone used its fill colour as its label colour.
+   All tones are now `-soft` fill with `-ink` label — the feature code had
+   already worked around this from outside in `TaskRow.tsx`.
+3. **No control used the control tokens.** Every height came off the *spacing*
+   scale: buttons were 48 px where the contract says 36, small buttons 40 where
+   it says 32, and inputs, selects, tabs and nav items 48. Checkboxes were a
+   15 px hit target in compact. Everything now uses `--control-h` /
+   `--control-h-sm`, every button carries `flex: none`, and body type is
+   `--text-base` rather than 14 px.
+
+Also: `--color-overlay` for the dialog scrim (it was `--color-text` at 40 %
+opacity), resting surfaces off `--color-surface-raised`, `--color-sidebar` on
+the rail, radii onto their assigned steps, no all-caps labels, "Required" as a
+word, `--color-danger-ink` for error text with the 16 px alert icon, one shared
+focus ring at `--color-focus` / 1 px offset, tokenised durations plus
+`motion-reduce:transition-none`, `loadingLabel` on `Button`, non-dismissing
+error toasts with "Copy details", `data-numeric` on right-aligned cells, sticky
+`THead`, a `TFoot` totals row, and `TD primary` / `TD muted`.
+
+**`src/styles/app.css`: the Tailwind 4 `@theme` block.** `bg-surface`,
+`text-muted`, `border-strong`, `text-accent-ink` and the whole semantic set
+(including the stage ramp) now exist. Tailwind's colour namespace *is*
+`--color-*`, which collides with the token names, so each token is mirrored onto
+a private `--tok-*` alias that `@theme inline` reads; the aliases are declared on
+`:root` and on `[data-theme]` so a scoped theme re-derives them. Verified in the
+built CSS that the layer order still puts `tokens.css` (base) above the theme
+block, so the ~400 existing `bg-[var(--color-surface)]` usages across the
+features are untouched.
+
+**`design/ui-screens/gallery.html`** — 174 specimens across 22 sections,
+generated from the real components by `tests/unit/ui/gallery.test.ts`, with a
+theme/density toggle and `?theme=&density=` parameters. Four full-page
+screenshots at 1280 (light, dark, and both compact) and four contrast audits sit
+beside it.
+
+**`tests/unit/ui/`** — 32 tests: Dialog focus trap and Escape, DropdownMenu
+keyboard, VirtualList windowing over 10 000 rows, Field error wiring, Button
+disabled/loading semantics, and the gallery generator's own assertions.
+
+### Verified
+
+- `npm run typecheck` — clean.
+- `npm test` — 59 files, 738 tests, all passing.
+- `npx vite build --outDir dist-ui` — succeeds; `dist-ui` deleted.
+- `design/contrast-audit.js` against the gallery in all four modes —
+  **408 text elements measured per mode, 0 failures.**
+- Measured in the browser: 162 buttons, every one exactly 32 or 36 px
+  comfortable (28/32 compact); **0** interactive elements under the 32 × 32 /
+  28 × 28 hit-target floor; the same page 22 % shorter in compact with body type
+  unchanged at 15 px.
+- 0 console errors and 0 failed requests on all four gallery loads.
+- Screenshots looked at, not just captured: the first pass is what caught the
+  totals row covering the column header and the 47-character name wrapping a
+  table row to two lines.
+
+### Did not do
+
+- No feature screen was touched. Several changes are visible in feature UI
+  (buttons and inputs are 36 px rather than 48, the sidebar's active item is
+  blue-grey rather than orange, tables get sentence-case headers), but no call
+  signature changed and no prop was renamed — everything added is additive and
+  optional.
+- Did not run the e2e suites; other agents were using them. Some e2e screenshot
+  baselines will have moved.
+- Did not touch `tokens.css`, `globals.css`, `vitest.config.ts` or
+  `package.json`. The test files are `*.test.ts` with their JSX in `.tsx`
+  helpers precisely so `vitest.config.ts` did not have to change.
+
+### For other owners
+
+1. **`<Toaster>` in `src/app/Shell.tsx` needs `position="bottom-left"` and
+   `visibleToasts={3}`** to match `DESIGN.md` §9. `src/ui/toast.ts` can set
+   durations and actions but not placement or stack depth. (The missing `theme`
+   prop on the same element is already reported by the leads agent above.)
+2. **`src/features/records/components/TaskRow.tsx:130`** carries a
+   `className="text-[var(--color-accent-ink)]"` override that patched the Badge
+   defect from outside. It is redundant now.
+3. **Feature tables should adopt `TD primary` / `TD muted` and `TFoot`.** `TD`
+   still defaults to full-strength ink rather than the muted default §9 asks
+   for, because defaulting to muted would have greyed the name column in every
+   table already built.
+4. No contract change is needed. No token was added or renamed.

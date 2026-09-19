@@ -26,6 +26,7 @@ function formatKey(key: string, mac: boolean): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
+/** Shown next to the action it triggers, never on its own. */
 export function Kbd(props: { keys: string }) {
   const mac = isMac();
   const parts = props.keys.split("+").map((key) => formatKey(key.trim(), mac));
@@ -35,11 +36,13 @@ export function Kbd(props: { keys: string }) {
   return (
     <kbd
       className={[
-        "inline-flex items-center justify-center gap-[var(--space-1)]",
+        "inline-flex flex-none items-center justify-center",
         "min-w-[var(--space-5)] px-[var(--space-1)]",
-        "rounded-[var(--radius-sm)] border border-[var(--color-border-strong)]",
+        "rounded-[var(--radius-sm)] border border-[var(--color-border)] border-b-2",
         "bg-[var(--color-surface)] text-[var(--color-text-muted)]",
-        "font-[var(--font-mono)] text-[length:var(--text-xs)]",
+        // family-name: is required here — `font-[var(--font-mono)]` is
+        // ambiguous to Tailwind and compiles to a font-weight.
+        "font-[family-name:var(--font-mono)] text-[length:var(--text-xs)]",
         "leading-[var(--leading-tight)]",
       ].join(" ")}
     >

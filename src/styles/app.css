@@ -14,3 +14,160 @@
 
 @import "tailwindcss";
 @import "./globals.css" layer(base);
+
+/* ---------------------------------------------------------------------------
+ * Token aliases.
+ *
+ * Tailwind 4's colour namespace is `--color-*`, which is exactly what
+ * tokens.css already calls its colours. Feeding `--color-surface` back into
+ * `@theme` under its own name would be a self-reference, so every token is
+ * first mirrored onto a private `--tok-*` alias and the theme block reads
+ * that. Nothing in the product uses `--tok-*` directly.
+ *
+ * The aliases are declared on `:root` AND on any element carrying a
+ * `data-theme` attribute, so a theme scoped to a subtree (the component
+ * gallery does this) re-derives them instead of inheriting the root's values.
+ *
+ * No literal colour appears here: every value is a token. tokens.css stays the
+ * only file in the repo with a hex value in it.
+ * ------------------------------------------------------------------------ */
+
+:root,
+[data-theme] {
+  --tok-bg:             var(--color-bg);
+  --tok-surface:        var(--color-surface);
+  --tok-surface-raised: var(--color-surface-raised);
+  --tok-sidebar:        var(--color-sidebar);
+  --tok-hover:          var(--color-hover);
+  --tok-selected:       var(--color-selected);
+  --tok-overlay:        var(--color-overlay);
+
+  --tok-border:         var(--color-border);
+  --tok-border-strong:  var(--color-border-strong);
+
+  --tok-text:           var(--color-text);
+  --tok-text-muted:     var(--color-text-muted);
+  --tok-text-faint:     var(--color-text-faint);
+
+  --tok-accent:         var(--color-accent);
+  --tok-accent-hover:   var(--color-accent-hover);
+  --tok-accent-text:    var(--color-accent-text);
+  --tok-accent-soft:    var(--color-accent-soft);
+  --tok-accent-ink:     var(--color-accent-ink);
+
+  --tok-danger:         var(--color-danger);
+  --tok-danger-soft:    var(--color-danger-soft);
+  --tok-danger-ink:     var(--color-danger-ink);
+  --tok-success:        var(--color-success);
+  --tok-success-soft:   var(--color-success-soft);
+  --tok-success-ink:    var(--color-success-ink);
+  --tok-warning:        var(--color-warning);
+  --tok-warning-soft:   var(--color-warning-soft);
+  --tok-warning-ink:    var(--color-warning-ink);
+
+  --tok-focus:          var(--color-focus);
+
+  --tok-stage-1: var(--stage-1);
+  --tok-stage-2: var(--stage-2);
+  --tok-stage-3: var(--stage-3);
+  --tok-stage-4: var(--stage-4);
+  --tok-stage-5: var(--stage-5);
+  --tok-stage-6: var(--stage-6);
+  --tok-stage-7: var(--stage-7);
+  --tok-stage-8: var(--stage-8);
+
+  --tok-stage-1-soft: var(--stage-1-soft);
+  --tok-stage-2-soft: var(--stage-2-soft);
+  --tok-stage-3-soft: var(--stage-3-soft);
+  --tok-stage-4-soft: var(--stage-4-soft);
+  --tok-stage-5-soft: var(--stage-5-soft);
+  --tok-stage-6-soft: var(--stage-6-soft);
+  --tok-stage-7-soft: var(--stage-7-soft);
+  --tok-stage-8-soft: var(--stage-8-soft);
+}
+
+/* ---------------------------------------------------------------------------
+ * The Tailwind theme.
+ *
+ * `inline` makes each utility emit `var(--tok-…)` directly rather than a
+ * reference to a theme variable, which keeps the dark theme and the compact
+ * density working: the alias resolves at use time, on the element, under
+ * whatever `data-theme` is in force.
+ *
+ * This only ADDS utility names (`bg-surface`, `text-muted`, `border-strong`,
+ * `text-accent-ink`, `bg-stage-3-soft`, …). The arbitrary-value form the
+ * feature code already uses — `bg-[var(--color-surface)]` — is untouched by
+ * it and keeps working exactly as before.
+ *
+ * Sizes, radii, shadows, fonts and leading are NOT re-declared here: those
+ * token names (`--text-base`, `--radius-md`, `--shadow-lg`, `--font-sans`,
+ * `--leading-normal`) already sit in Tailwind's own namespaces, and because
+ * tokens.css lands in the base layer it out-ranks Tailwind's defaults. So
+ * `text-base`, `rounded-md`, `shadow-lg` and `leading-normal` resolve to the
+ * design tokens already.
+ * ------------------------------------------------------------------------ */
+
+@theme inline {
+  --color-bg:             var(--tok-bg);
+  --color-surface:        var(--tok-surface);
+  --color-surface-raised: var(--tok-surface-raised);
+  --color-sidebar:        var(--tok-sidebar);
+  --color-hover:          var(--tok-hover);
+  --color-selected:       var(--tok-selected);
+  --color-overlay:        var(--tok-overlay);
+
+  --color-border:         var(--tok-border);
+  --color-strong:         var(--tok-border-strong);
+
+  --color-text:           var(--tok-text);
+  --color-muted:          var(--tok-text-muted);
+  --color-faint:          var(--tok-text-faint);
+
+  --color-accent:         var(--tok-accent);
+  --color-accent-hover:   var(--tok-accent-hover);
+  --color-accent-text:    var(--tok-accent-text);
+  --color-accent-soft:    var(--tok-accent-soft);
+  --color-accent-ink:     var(--tok-accent-ink);
+
+  --color-danger:         var(--tok-danger);
+  --color-danger-soft:    var(--tok-danger-soft);
+  --color-danger-ink:     var(--tok-danger-ink);
+  --color-success:        var(--tok-success);
+  --color-success-soft:   var(--tok-success-soft);
+  --color-success-ink:    var(--tok-success-ink);
+  --color-warning:        var(--tok-warning);
+  --color-warning-soft:   var(--tok-warning-soft);
+  --color-warning-ink:    var(--tok-warning-ink);
+
+  --color-focus:          var(--tok-focus);
+
+  --color-stage-1: var(--tok-stage-1);
+  --color-stage-2: var(--tok-stage-2);
+  --color-stage-3: var(--tok-stage-3);
+  --color-stage-4: var(--tok-stage-4);
+  --color-stage-5: var(--tok-stage-5);
+  --color-stage-6: var(--tok-stage-6);
+  --color-stage-7: var(--tok-stage-7);
+  --color-stage-8: var(--tok-stage-8);
+
+  --color-stage-1-soft: var(--tok-stage-1-soft);
+  --color-stage-2-soft: var(--tok-stage-2-soft);
+  --color-stage-3-soft: var(--tok-stage-3-soft);
+  --color-stage-4-soft: var(--tok-stage-4-soft);
+  --color-stage-5-soft: var(--tok-stage-5-soft);
+  --color-stage-6-soft: var(--tok-stage-6-soft);
+  --color-stage-7-soft: var(--tok-stage-7-soft);
+  --color-stage-8-soft: var(--tok-stage-8-soft);
+}
+
+/* ---------------------------------------------------------------------------
+ * Tailwind only emits a utility it has seen used. The kit in src/ui writes its
+ * colours as `bg-[var(--color-surface)]` (and keeps doing so — those arbitrary
+ * values are independent of the theme above), so without this the semantic
+ * names would not exist for feature code to reach for. `@source inline` emits
+ * the whole set once, up front, so `bg-surface`, `text-muted`,
+ * `border-strong`, `text-accent-ink` and the stage ramp are always available.
+ * ------------------------------------------------------------------------ */
+
+@source inline("{bg,text,border}-{bg,surface,surface-raised,sidebar,hover,selected,overlay,border,strong,text,muted,faint,accent,accent-hover,accent-text,accent-soft,accent-ink,danger,danger-soft,danger-ink,success,success-soft,success-ink,warning,warning-soft,warning-ink,focus}");
+@source inline("{bg,text,border}-stage-{1,2,3,4,5,6,7,8}{,-soft}");

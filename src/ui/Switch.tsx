@@ -1,14 +1,24 @@
 import * as RadixSwitch from "@radix-ui/react-switch";
 import { cn } from "@/ui/cn";
+import { focusRing, quietTransform, quietTransition } from "@/ui/styles";
 
+/**
+ * A 36x20 track inside a --control-h-sm hit target, so the switch clears the
+ * 32/28px floor without drawing a 32px-tall pill.
+ *
+ * "On" is ink, not the accent. A setting that is switched on is not asking for
+ * the owner's attention, and the accent means exactly one thing
+ * (docs/DESIGN.md section 5).
+ */
 export function Switch(props: {
   checked: boolean;
   onCheckedChange: (c: boolean) => void;
   disabled?: boolean;
   id?: string;
   ariaLabel?: string;
+  className?: string;
 }) {
-  const { checked, onCheckedChange, disabled, id, ariaLabel } = props;
+  const { checked, onCheckedChange, disabled, id, ariaLabel, className } = props;
 
   return (
     <RadixSwitch.Root
@@ -18,19 +28,30 @@ export function Switch(props: {
       disabled={disabled}
       aria-label={ariaLabel}
       className={cn(
-        "relative inline-flex shrink-0 items-center",
-        "w-[var(--space-9)] h-[var(--space-5)] rounded-[var(--radius-full)]",
-        "bg-[var(--color-border-strong)] data-[state=checked]:bg-[var(--color-accent)]",
-        "transition-colors disabled:opacity-50 disabled:pointer-events-none",
-        "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
+        "group relative inline-flex flex-none items-center",
+        "w-[36px] h-[var(--control-h-sm)] rounded-[var(--radius-full)]",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        focusRing,
+        className,
       )}
     >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2",
+          "h-[20px] rounded-[var(--radius-full)]",
+          "bg-[var(--color-border-strong)]",
+          "group-data-[state=checked]:bg-[var(--color-text)]",
+          quietTransition,
+        )}
+      />
       <RadixSwitch.Thumb
         className={cn(
-          "block w-[var(--space-4)] h-[var(--space-4)] rounded-[var(--radius-full)]",
-          "bg-[var(--color-surface-raised)] shadow-[var(--shadow-sm)]",
-          "translate-x-[var(--space-1)] transition-transform",
-          "data-[state=checked]:translate-x-[var(--space-5)]",
+          "pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2",
+          "block w-[16px] h-[16px] rounded-[var(--radius-full)]",
+          "bg-[var(--color-surface)] shadow-[var(--shadow-sm)]",
+          "data-[state=checked]:translate-x-[16px]",
+          quietTransform,
         )}
       />
     </RadixSwitch.Root>

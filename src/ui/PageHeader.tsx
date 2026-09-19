@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
 
+/**
+ * Title at --text-xl, truncated with a title attribute rather than wrapped —
+ * a 47-character company name is the normal case, not the exception
+ * (docs/DESIGN.md sections 4 and 7).
+ */
 export function PageHeader(props: {
   title: ReactNode;
   subtitle?: ReactNode;
@@ -22,7 +27,10 @@ export function PageHeader(props: {
             {breadcrumb}
           </div>
         ) : null}
-        <h1 className="truncate text-[length:var(--text-xl)] font-semibold text-[var(--color-text)]">
+        <h1
+          className="truncate text-[length:var(--text-xl)] font-semibold leading-[var(--leading-tight)] text-[var(--color-text)]"
+          title={typeof title === "string" ? title : undefined}
+        >
           {title}
         </h1>
         {subtitle ? (
@@ -32,7 +40,7 @@ export function PageHeader(props: {
         ) : null}
       </div>
       {actions ? (
-        <div className="flex items-center gap-[var(--space-2)] shrink-0">{actions}</div>
+        <div className="flex flex-none items-center gap-[var(--space-2)]">{actions}</div>
       ) : null}
     </div>
   );

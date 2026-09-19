@@ -1,6 +1,7 @@
 import * as RadixSelect from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/ui/cn";
+import { disabledState, focusRing, quietTransition } from "@/ui/styles";
 
 export const SelectPrimitive = RadixSelect;
 
@@ -10,6 +11,15 @@ export type SelectOption = {
   disabled?: boolean;
 };
 
+/**
+ * The trigger matches Input exactly: --control-h, --radius-sm,
+ * --color-surface, 16px text.
+ *
+ * The highlighted item is --color-selected, NOT the accent. An open menu
+ * highlight is not "this needs you" (docs/DESIGN.md section 5), and
+ * --color-hover is within a point of --color-surface-raised in the dark theme,
+ * so it would have made the keyboard highlight invisible at 10pm.
+ */
 export function Select(props: {
   value: string | undefined;
   onValueChange: (v: string) => void;
@@ -31,20 +41,24 @@ export function Select(props: {
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
         className={cn(
-          "flex w-full min-h-[var(--space-9)] items-center justify-between gap-[var(--space-2)]",
-          "rounded-[var(--radius-md)] border border-[var(--color-border)]",
-          "bg-[var(--color-surface-raised)] text-[var(--color-text)]",
-          "px-[var(--space-3)] text-[length:var(--text-sm)]",
-          "disabled:opacity-50 disabled:pointer-events-none",
-          "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
+          "flex w-full h-[var(--control-h)] flex-none items-center justify-between gap-[var(--space-2)]",
+          "rounded-[var(--radius-sm)] border border-[var(--color-border)]",
+          "bg-[var(--color-surface)] text-[var(--color-text)]",
+          "px-[var(--space-3)] text-[length:var(--text-base)]",
+          "enabled:hover:bg-[var(--color-hover)]",
+          quietTransition,
+          disabledState,
+          focusRing,
           "data-[placeholder]:text-[var(--color-text-faint)]",
           invalid && "border-[var(--color-danger)]",
           className,
         )}
       >
-        <RadixSelect.Value placeholder={placeholder} />
-        <RadixSelect.Icon>
-          <ChevronDown className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />
+        <span className="truncate text-left">
+          <RadixSelect.Value placeholder={placeholder} />
+        </span>
+        <RadixSelect.Icon className="flex-none text-[var(--color-text-muted)]">
+          <ChevronDown className="w-[16px] h-[16px]" aria-hidden="true" />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
       <RadixSelect.Portal>
@@ -52,13 +66,13 @@ export function Select(props: {
           position="popper"
           sideOffset={4}
           className={cn(
-            "z-50 overflow-hidden rounded-[var(--radius-md)]",
+            "z-50 overflow-hidden rounded-[var(--radius-lg)]",
             "border border-[var(--color-border)] bg-[var(--color-surface-raised)]",
             "shadow-[var(--shadow-md)]",
           )}
         >
-          <RadixSelect.ScrollUpButton className="flex items-center justify-center h-[var(--space-6)]">
-            <ChevronUp className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />
+          <RadixSelect.ScrollUpButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
+            <ChevronUp className="w-[16px] h-[16px]" aria-hidden="true" />
           </RadixSelect.ScrollUpButton>
           <RadixSelect.Viewport className="p-[var(--space-1)]">
             {options.map((option) => (
@@ -67,22 +81,22 @@ export function Select(props: {
                 value={option.value}
                 disabled={option.disabled}
                 className={cn(
-                  "relative flex min-h-[var(--space-8)] cursor-pointer items-center",
+                  "relative flex min-h-[var(--control-h-sm)] cursor-default items-center",
                   "rounded-[var(--radius-sm)] pl-[var(--space-7)] pr-[var(--space-3)]",
-                  "text-[length:var(--text-sm)] text-[var(--color-text)]",
-                  "data-[highlighted]:bg-[var(--color-accent-soft)] data-[highlighted]:outline-none",
-                  "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",
+                  "text-[length:var(--text-base)] text-[var(--color-text)]",
+                  "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
+                  "data-[disabled]:opacity-50",
                 )}
               >
-                <RadixSelect.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center">
-                  <Check className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />
+                <RadixSelect.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center text-[var(--color-text-muted)]">
+                  <Check className="w-[16px] h-[16px]" aria-hidden="true" />
                 </RadixSelect.ItemIndicator>
                 <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
               </RadixSelect.Item>
             ))}
           </RadixSelect.Viewport>
-          <RadixSelect.ScrollDownButton className="flex items-center justify-center h-[var(--space-6)]">
-            <ChevronDown className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />
+          <RadixSelect.ScrollDownButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
+            <ChevronDown className="w-[16px] h-[16px]" aria-hidden="true" />
           </RadixSelect.ScrollDownButton>
         </RadixSelect.Content>
       </RadixSelect.Portal>

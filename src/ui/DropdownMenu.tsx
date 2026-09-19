@@ -16,7 +16,7 @@ export const DropdownMenuContent = forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-[180px] overflow-hidden rounded-[var(--radius-md)]",
+        "z-50 min-w-[200px] overflow-hidden rounded-[var(--radius-lg)]",
         "border border-[var(--color-border)] bg-[var(--color-surface-raised)]",
         "shadow-[var(--shadow-md)] p-[var(--space-1)]",
         className,
@@ -27,6 +27,19 @@ export const DropdownMenuContent = forwardRef<
 ));
 DropdownMenuContent.displayName = "DropdownMenuContent";
 
+/**
+ * The highlighted item is --color-selected.
+ *
+ * It was --color-accent-soft, which put "this needs you" orange under the
+ * pointer on every menu in the product — the accent means one thing, and a
+ * menu highlight is not it (docs/DESIGN.md section 5). --color-hover is the
+ * other candidate and it is wrong here: in the dark theme #232D37 against the
+ * raised surface #242F39 is a 1-point difference, so the keyboard highlight
+ * would be invisible.
+ *
+ * A destructive item is --color-danger-ink, which is the readable weight of
+ * danger on a surface; --color-danger is the fill.
+ */
 export const DropdownMenuItem = forwardRef<
   ElementRef<typeof RadixDropdownMenu.Item>,
   ComponentPropsWithoutRef<typeof RadixDropdownMenu.Item> & { destructive?: boolean }
@@ -34,12 +47,13 @@ export const DropdownMenuItem = forwardRef<
   <RadixDropdownMenu.Item
     ref={ref}
     className={cn(
-      "flex min-h-[var(--space-8)] cursor-pointer items-center gap-[var(--space-2)]",
+      "flex min-h-[var(--control-h-sm)] cursor-default items-center gap-[var(--space-2)]",
       "rounded-[var(--radius-sm)] px-[var(--space-3)]",
-      "text-[length:var(--text-sm)] text-[var(--color-text)]",
-      "data-[highlighted]:bg-[var(--color-accent-soft)] data-[highlighted]:outline-none",
+      "text-[length:var(--text-base)] text-[var(--color-text)]",
+      "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",
-      destructive && "text-[var(--color-danger)] data-[highlighted]:bg-[var(--color-danger-soft)]",
+      destructive &&
+        "text-[var(--color-danger-ink)] data-[highlighted]:bg-[var(--color-danger-soft)]",
       className,
     )}
     {...props}
@@ -54,17 +68,17 @@ export const DropdownMenuCheckboxItem = forwardRef<
   <RadixDropdownMenu.CheckboxItem
     ref={ref}
     className={cn(
-      "relative flex min-h-[var(--space-8)] cursor-pointer items-center gap-[var(--space-2)]",
+      "relative flex min-h-[var(--control-h-sm)] cursor-default items-center gap-[var(--space-2)]",
       "rounded-[var(--radius-sm)] pl-[var(--space-7)] pr-[var(--space-3)]",
-      "text-[length:var(--text-sm)] text-[var(--color-text)]",
-      "data-[highlighted]:bg-[var(--color-accent-soft)] data-[highlighted]:outline-none",
+      "text-[length:var(--text-base)] text-[var(--color-text)]",
+      "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",
       className,
     )}
     {...props}
   >
-    <RadixDropdownMenu.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center">
-      <Check className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />
+    <RadixDropdownMenu.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center text-[var(--color-text-muted)]">
+      <Check className="w-[16px] h-[16px]" aria-hidden="true" />
     </RadixDropdownMenu.ItemIndicator>
     {children}
   </RadixDropdownMenu.CheckboxItem>

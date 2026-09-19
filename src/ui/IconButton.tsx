@@ -2,25 +2,46 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/ui/cn";
+import { disabledState, focusRing, noShrink, quietTransition } from "@/ui/styles";
 
+/**
+ * An icon-only button. It exists only inside a row's action cluster, and it
+ * always carries an aria-label and a title (docs/DESIGN.md section 10).
+ *
+ * The box is --control-h-sm / --control-h, never a hard pixel, and it carries
+ * `flex: none` so a flex row cannot squeeze it under the hit-target floor —
+ * the 27px defect design/review.md finding 7 caught in the comps.
+ */
 const iconButtonVariants = cva(
   [
-    "inline-flex items-center justify-center shrink-0",
+    "inline-flex items-center justify-center",
+    noShrink,
     "rounded-[var(--radius-md)]",
-    "transition-colors disabled:opacity-50 disabled:pointer-events-none",
-    "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
+    quietTransition,
+    disabledState,
+    focusRing,
   ].join(" "),
   {
     variants: {
       variant: {
-        ghost: "bg-transparent text-[var(--color-text)] hover:bg-[var(--color-surface)]",
-        secondary:
-          "bg-[var(--color-surface-raised)] text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[var(--color-surface)]",
-        danger: "bg-transparent text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]",
+        ghost: [
+          "bg-transparent text-[var(--color-text-muted)]",
+          "enabled:hover:bg-[var(--color-hover)] enabled:hover:text-[var(--color-text)]",
+          "enabled:active:bg-[var(--color-selected)]",
+        ].join(" "),
+        secondary: [
+          "bg-[var(--color-surface)] text-[var(--color-text)]",
+          "border border-[var(--color-border)]",
+          "enabled:hover:bg-[var(--color-hover)] enabled:active:bg-[var(--color-selected)]",
+        ].join(" "),
+        danger: [
+          "bg-transparent text-[var(--color-danger-ink)]",
+          "enabled:hover:bg-[var(--color-danger-soft)] enabled:active:bg-[var(--color-danger-soft)]",
+        ].join(" "),
       },
       size: {
-        sm: "w-[var(--space-8)] h-[var(--space-8)]",
-        md: "w-[var(--space-9)] h-[var(--space-9)]",
+        sm: "w-[var(--control-h-sm)] h-[var(--control-h-sm)]",
+        md: "w-[var(--control-h)] h-[var(--control-h)]",
       },
     },
     defaultVariants: {

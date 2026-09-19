@@ -1,5 +1,6 @@
 import { cloneElement, isValidElement, useId } from "react";
 import type { ReactElement, ReactNode } from "react";
+import { AlertCircle } from "lucide-react";
 import { cn } from "@/ui/cn";
 
 export function FormRow(props: { children: ReactNode; className?: string }) {
@@ -16,6 +17,17 @@ type FieldControlProps = {
   "aria-invalid"?: boolean;
 };
 
+/**
+ * Label above the field, always visible, --text-sm, --color-text-muted.
+ * Required is marked with the word "Required", not an asterisk.
+ * Helper text sits under the field at --text-xs --color-text-faint; an error
+ * replaces it, in --color-danger-ink, with a 16px alert-circle beside it.
+ * (docs/DESIGN.md section 9, "Inputs".)
+ *
+ * Both the hint and the error are wired to the control through
+ * aria-describedby, so a screen reader reads the sentence that says what to
+ * fix rather than just "invalid".
+ */
 export function Field(props: {
   label: string;
   htmlFor?: string;
@@ -43,25 +55,40 @@ export function Field(props: {
     <div className="flex flex-col gap-[var(--space-1)]">
       <label
         htmlFor={controlId}
-        className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]"
+        className={cn(
+          "flex items-baseline gap-[var(--space-2)]",
+          "text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
+        )}
       >
-        {label}
+        <span>{label}</span>
         {required ? (
-          <span className="text-[var(--color-danger)]" aria-hidden="true">
-            {" "}
-            *
+          <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+            Required
           </span>
         ) : null}
       </label>
       {child as ReactElement}
-      {hint ? (
-        <p id={hintId} className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+      {hint && !error ? (
+        <p id={hintId} className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+          {hint}
+        </p>
+      ) : null}
+      {hint && error ? (
+        <p id={hintId} className="sr-only">
           {hint}
         </p>
       ) : null}
       {error ? (
-        <p id={errorId} role="alert" className="text-[length:var(--text-xs)] text-[var(--color-danger)]">
-          {error}
+        <p
+          id={errorId}
+          role="alert"
+          className={cn(
+            "flex items-start gap-[var(--space-1)]",
+            "text-[length:var(--text-xs)] text-[var(--color-danger-ink)]",
+          )}
+        >
+          <AlertCircle className="w-[16px] h-[16px] flex-none translate-y-[1px]" aria-hidden="true" />
+          <span>{error}</span>
         </p>
       ) : null}
     </div>
