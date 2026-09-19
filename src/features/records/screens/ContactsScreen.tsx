@@ -2,8 +2,16 @@
  * The contacts list: virtualised, searched as you type, sorted and filtered by
  * tag and source. Ten thousand rows scroll on a laptop because only the
  * visible ones are in the DOM (`VirtualList`).
+ *
+ * Saved views (wave 3): the filter row is the whole of this screen's state, so
+ * `queryFromState` turns it into a `ViewQuery` and `stateFromQuery` reads one
+ * back. Picking a view writes the controls; it does not run a query of its
+ * own, so everything below this point is unchanged. A pinned view is a link in
+ * the sidebar's Views group, and it arrives here as `?view=<id>`, which
+ * `useSavedViews` reads — hence the effect that applies the active view once
+ * the row has loaded.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Plus, Search, Users } from "lucide-react";
 import {
@@ -25,6 +33,14 @@ import {
   useTags,
 } from "@/features/records/lib/hooks";
 import { NewContactDialog } from "@/features/records/components/NewContactDialog";
+import {
+  queryFromState,
+  sortIdOf,
+  stateFromQuery,
+  useSavedViews,
+  ViewsToolbar,
+  type ViewQuery,
+} from "@/features/today/views";
 
 const SORTS = [
   { value: "name-asc", label: "Name A to Z" },
@@ -35,14 +51,48 @@ const SORTS = [
 
 const ALL = "__all__";
 
+const DEFAULT_SORT = "name-asc";
+
+/** The screen's filter state, and what "nothing filtered" looks like. */
+const FILTER_DEFAULTS = {
+  search: "",
+  tagId: ALL,
+  sourceId: ALL,
+  showArchived: false,
+};
+
 export function ContactsScreen() {
   const [, navigate] = useLocation();
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("name-asc");
-  const [tagId, setTagId] = useState(ALL);
-  const [sourceId, setSourceId] = useState(ALL);
-  const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState(FILTER_DEFAULTS.search);
+  const [sort, setSort] = useState(DEFAULT_SORT);
+  const [tagId, setTagId] = useState(FILTER_DEFAULTS.tagId);
+  const [sourceId, setSourceId] = useState(FILTER_DEFAULTS.sourceId);
+  const [showArchived, setShowArchived] = useState(FILTER_DEFAULTS.showArchived);
   const [creating, setCreating] = useState(false);
+
+  const currentView: ViewQuery = useMemo(
+    () => queryFromState({ search, tagId, sourceId, showArchived }, FILTER_DEFAULTS, sort),
+    [search, tagId, sourceId, showArchived, sort],
+  );
+
+  function applyView(query: ViewQuery | null) {
+    const next = stateFromQuery(query, FILTER_DEFAULTS);
+    setSearch(next.search);
+    setTagId(next.tagId);
+    setSourceId(next.sourceId);
+    setShowArchived(next.showArchived);
+    setSort(sortIdOf(query, DEFAULT_SORT));
+  }
+
+  // A link from the sidebar's Views group lands here with `?view=<id>` before
+  // the row itself has been read, so apply it when it arrives — once per view.
+  const { activeId, activeQuery } = useSavedViews("contact", currentView);
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeId || !activeQuery || appliedViewId === activeId) return;
+    setAppliedViewId(activeId);
+    applyView(activeQuery);
+  }, [activeId, activeQuery, appliedViewId]);
 
   const debouncedSearch = useDebounced(search, 200);
   const { data: tags } = useTags();
@@ -83,14 +133,21 @@ export function ContactsScreen() {
               }`
         }
         actions={
-          <Button
-            variant="primary"
-            iconLeft={<Plus size={20} aria-hidden="true" />}
-            className="min-h-[44px]"
-            onClick={() => setCreating(true)}
-          >
-            New contact
-          </Button>
+          <div className="flex items-end gap-[var(--space-2)]">
+            <ViewsToolbar
+              entityType="contact"
+              current={currentView}
+              onPick={(query) => applyView(query)}
+            />
+            <Button
+              variant="primary"
+              iconLeft={<Plus size={20} aria-hidden="true" />}
+              className="min-h-[44px]"
+              onClick={() => setCreating(true)}
+            >
+              New contact
+            </Button>
+          </div>
         }
       />
 

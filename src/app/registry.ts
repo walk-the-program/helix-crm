@@ -5,7 +5,13 @@
  * src/features/<area>/index.tsx, and their routes, sidebar items and commands
  * appear here automatically.
  */
-import type { FeatureCommand, FeatureModule, FeatureNavItem, FeatureRoute } from "@/app/feature";
+import type {
+  FeatureCommand,
+  FeatureModule,
+  FeatureNavItem,
+  FeatureNavSection,
+  FeatureRoute,
+} from "@/app/feature";
 import { feature as records } from "@/features/records";
 import { feature as today } from "@/features/today";
 import { feature as data } from "@/features/data";
@@ -34,7 +40,27 @@ export function allNavItems(): FeatureNavItem[] {
     .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
 }
 
+/**
+ * Every feature's `navProvider`, in registry order. The shell calls each one
+ * during its own render, so the list must be stable across renders: it is, the
+ * registry is fixed at module load.
+ */
+export function allNavProviders(): (() => FeatureNavSection[])[] {
+  return registry
+    .map((f) => f.navProvider)
+    .filter((provider): provider is () => FeatureNavSection[] => Boolean(provider));
+}
+
 /** Everything the command palette offers. */
 export function allCommands(): FeatureCommand[] {
   return registry.flatMap((f) => f.commands ?? []);
+}
+
+/** One command by id, looked up when it is needed rather than at mount. */
+export function findCommand(id: string): FeatureCommand | null {
+  for (const feature of registry) {
+    const found = (feature.commands ?? []).find((command) => command.id === id);
+    if (found) return found;
+  }
+  return null;
 }

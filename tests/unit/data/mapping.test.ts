@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readHeaders, sniffCsv } from "../../../src/features/data/lib/csv";
+import { readHeaders, sniffCsv } from "../../../src/lib/csv";
 import {
   applyMapping,
   applyRemembered,

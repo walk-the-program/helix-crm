@@ -5,12 +5,15 @@
  * filter and the final aggregation, because a period picker cannot be baked
  * into a view. Nothing here writes, so none of it goes near the write lock.
  *
- * Every column is aliased and there is no `SELECT *`, the same rule the
- * repositories follow: rows come back from the pipe as arrays in select order,
- * so the order of the select list is the contract.
+ * Every column is aliased and there is no `SELECT *`, the same rule the rest
+ * of this folder follows: rows come back from the pipe as arrays in select
+ * order, so the order of the select list is the contract.
+ *
+ * Written by the leads agent as src/features/leads/lib/reportQueries.ts and
+ * promoted here in wave 3.
  */
 import { raw } from "@/db/client";
-import type { Granularity, Period } from "@/features/leads/lib/periods";
+import type { Granularity, Period } from "@/lib/periods";
 
 /* -------------------------------------------------------------------------- */
 /* 1. pipeline value by stage                                                 */

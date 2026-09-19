@@ -21,10 +21,10 @@ import {
   DialogTitle,
   Spinner,
 } from "@/ui";
+import type { DuplicatePair } from "@/db/repos/_base";
 import {
   loadMergeFields,
   picksFor,
-  type DuplicatePair,
   type MergeField,
 } from "@/features/data/lib/duplicates";
 

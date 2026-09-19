@@ -25,6 +25,10 @@ import {
   parseOrThrow,
   type Col,
   type Page,
+  type Statement,
+  pairKey,
+  type DuplicatePair,
+  type MatchedOn,
 } from "@/db/repos/_base";
 
 export type Company = {
@@ -268,4 +272,92 @@ export async function counts(id: string): Promise<{
     openDeals: Number(row[1]),
     closedDeals: Number(row[2]),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/importWrite.ts. */
+/* -------------------------------------------------------------------------- */
+
+/** A new company with nothing but a name: the import links by exact name. */
+export function companyCreateStatement(
+  name: string,
+  options: { sourceId?: string | null } = {},
+): { id: string; statement: Statement } {
+  const s = stampNew();
+  return {
+    id: s.id,
+    statement: insertStatement("companies", {
+      ...s,
+      name: name.trim(),
+      website: null,
+      phoneRaw: null,
+      phoneE164: null,
+      addressJson: null,
+      sourceId: options.sourceId ?? null,
+      notes: null,
+      deletedAt: null,
+    }),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/duplicates.ts. */
+/* -------------------------------------------------------------------------- */
+
+/** Companies with the same name (case-insensitive) or the same phone. */
+export async function findCompanyPairs(limit = 200): Promise<DuplicatePair[]> {
+  const rows = await raw.query(
+    `SELECT x.matched_value AS m_value, x.kind AS m_kind,
+            a.id AS a_id, a.name AS a_name, a.created_at AS a_created,
+            b.id AS b_id, b.name AS b_name, b.created_at AS b_created
+     FROM (
+       SELECT lower(c1.name) AS matched_value, 'name' AS kind,
+              c1.id AS a_id, c2.id AS b_id
+       FROM companies c1
+       JOIN companies c2 ON lower(c2.name) = lower(c1.name) AND c2.id > c1.id
+       WHERE c1.deleted_at IS NULL AND c2.deleted_at IS NULL
+       UNION
+       SELECT c1.phone_e164 AS matched_value, 'phone' AS kind,
+              c1.id AS a_id, c2.id AS b_id
+       FROM companies c1
+       JOIN companies c2 ON c2.phone_e164 = c1.phone_e164 AND c2.id > c1.id
+       WHERE c1.deleted_at IS NULL AND c2.deleted_at IS NULL
+         AND c1.phone_e164 IS NOT NULL
+     ) x
+     JOIN companies a ON a.id = x.a_id AND a.deleted_at IS NULL
+     JOIN companies b ON b.id = x.b_id AND b.deleted_at IS NULL
+     ORDER BY x.kind ASC, a.created_at ASC
+     LIMIT ?`,
+    [limit],
+  );
+
+  const seen = new Set<string>();
+  const pairs: DuplicatePair[] = [];
+  for (const r of rows) {
+    const aId = String(r[2]);
+    const bId = String(r[5]);
+    const dedupe = `${aId}:${bId}`;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    const matchedOn = String(r[1]) as MatchedOn;
+    pairs.push({
+      entityType: "company",
+      matchedOn,
+      value: String(r[0]),
+      key: pairKey("company", matchedOn, aId, bId),
+      a: {
+        id: aId,
+        label: String(r[3]),
+        detail: "Company",
+        createdAt: String(r[4]),
+      },
+      b: {
+        id: bId,
+        label: String(r[6]),
+        detail: "Company",
+        createdAt: String(r[7]),
+      },
+    });
+  }
+  return pairs;
 }

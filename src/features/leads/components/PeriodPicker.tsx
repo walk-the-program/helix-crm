@@ -9,8 +9,8 @@
 import { useState } from "react";
 import { Field, Input, Select } from "@/ui";
 import type { SelectOption } from "@/ui";
-import { customPeriod, periodFor, toDateInputValue } from "@/features/leads/lib/periods";
-import type { Period, PeriodId } from "@/features/leads/lib/periods";
+import { customPeriod, periodFor, toDateInputValue } from "@/lib/periods";
+import type { Period, PeriodId } from "@/lib/periods";
 
 const PRESET_OPTIONS: SelectOption[] = [
   { value: "month", label: "This month" },

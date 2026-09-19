@@ -23,7 +23,6 @@ import { NewLeadsSection } from "@/features/today/sections/NewLeads";
 import { GoneQuietSection } from "@/features/today/sections/GoneQuiet";
 import { RecentActivitySection } from "@/features/today/sections/RecentActivity";
 import { ConnectSiteCard } from "@/features/today/sections/ConnectSite";
-import { PinnedViewsStrip } from "@/features/today/views/PinnedViewsStrip";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useWorkspaceIsEmpty } from "@/features/today/lib/useToday";
 
@@ -168,7 +167,6 @@ export function TodayScreen() {
       />
 
       <div className="max-w-[1100px]">
-        <PinnedViewsStrip />
         {isLoading ? (
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             Reading the database.

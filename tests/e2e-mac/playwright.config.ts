@@ -24,11 +24,23 @@ const PORT = Number(process.env.E2E_PORT ?? 4173);
 const OUT_DIR = process.env.E2E_OUT ?? "dist";
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
+// `tests/e2e-mac/.cache/results` is a single `outputDir` shared by every
+// agent's Playwright run; two runs at once collide there (Playwright fails at
+// browserContext.close with an ENOENT on its own trace file). Derive a
+// per-agent results folder from E2E_OUT the same way PORT is derived from
+// E2E_PORT, sanitised to a safe folder name. The CI html report folder gets
+// the same treatment so it never collides either.
+const RESULTS_SUFFIX = process.env.E2E_OUT
+  ? `-${process.env.E2E_OUT.replace(/[^a-zA-Z0-9._-]+/g, "-")}`
+  : "";
+const RESULTS_DIR = `./.cache/results${RESULTS_SUFFIX}`;
+const REPORT_DIR = `./.cache/report${RESULTS_SUFFIX}`;
+
 export default defineConfig({
   testDir: fileURLToPath(new URL("./specs", import.meta.url)),
   // Not *.spec.ts: Vitest's default glob would collect those as unit tests.
   testMatch: "**/*.e2e.ts",
-  outputDir: fileURLToPath(new URL("./.cache/results", import.meta.url)),
+  outputDir: fileURLToPath(new URL(RESULTS_DIR, import.meta.url)),
 
   // One worker. Every test drives its own SQLite file, but the app is a
   // single-window desktop app and the flows are stateful; parallel runs buy
@@ -41,7 +53,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
 
   reporter: process.env.CI
-    ? [["github"], ["html", { outputFolder: fileURLToPath(new URL("./.cache/report", import.meta.url)), open: "never" }]]
+    ? [["github"], ["html", { outputFolder: fileURLToPath(new URL(REPORT_DIR, import.meta.url)), open: "never" }]]
     : [["list"]],
 
   webServer: {

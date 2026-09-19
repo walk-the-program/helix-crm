@@ -5,183 +5,27 @@
  *   companies: two live companies with the same name (ignoring case), or the
  *              same E.164 phone
  *
- * docs/PLAN.md item 15 runs this on launch and every 24 hours. The repository
- * layer has `contacts.findDuplicates`, but that answers "does this one record
- * clash with anything" for the create form; a whole-workspace pair scan is a
- * different query, so it lives here until it is promoted (docs/STATUS.md,
- * "Contract changes needed").
+ * docs/PLAN.md item 15 runs this on launch and every 24 hours. The two pair
+ * queries were promoted into `contacts.findContactPairs` and
+ * `companies.findCompanyPairs` in wave 3 and are re-exported here; what is
+ * left is the schedule (when to scan, when it was last run) and the merge
+ * field picker, both of which are screen state, not repository reads.
  *
  * Reads only. The merge itself is `src/db/repos/merge.ts`.
  */
 import { raw } from "@/db/client";
 import { get as getSetting, set as setSetting } from "@/db/repos/settings";
+import { findContactPairs } from "@/db/repos/contacts";
+import { findCompanyPairs } from "@/db/repos/companies";
+import type {
+  DuplicateEntity,
+  DuplicatePair,
+} from "@/db/repos/_base";
 import { nowIso } from "@/lib/dates";
-
-export type DuplicateEntity = "contact" | "company";
-export type MatchedOn = "email" | "phone" | "name";
-
-export type DuplicateSide = {
-  id: string;
-  label: string;
-  /** What the merge screen shows beside the name: company, city, created. */
-  detail: string;
-  createdAt: string;
-};
-
-export type DuplicatePair = {
-  entityType: DuplicateEntity;
-  matchedOn: MatchedOn;
-  /** The shared value, highlighted in the list. */
-  value: string;
-  a: DuplicateSide;
-  b: DuplicateSide;
-  /** Stable key for React and for "I already dismissed this one". */
-  key: string;
-};
 
 const SCAN_EVERY_MS = 24 * 60 * 60 * 1000;
 
-function pairKey(
-  entityType: DuplicateEntity,
-  matchedOn: MatchedOn,
-  aId: string,
-  bId: string,
-): string {
-  const [first, second] = aId < bId ? [aId, bId] : [bId, aId];
-  return `${entityType}:${matchedOn}:${first}:${second}`;
-}
 
-function contactLabel(first: string, last: string): string {
-  const name = `${first} ${last}`.trim();
-  return name.length > 0 ? name : "(no name)";
-}
-
-/**
- * Contacts that share an email address, then contacts that share a phone
- * number. A pair already found on email is not reported again on phone.
- */
-export async function findContactPairs(limit = 200): Promise<DuplicatePair[]> {
-  const shared = `
-    SELECT x.matched_value AS m_value, x.kind AS m_kind,
-           a.id AS a_id, a.first_name AS a_first, a.last_name AS a_last,
-           a.created_at AS a_created, ca.name AS a_company,
-           b.id AS b_id, b.first_name AS b_first, b.last_name AS b_last,
-           b.created_at AS b_created, cb.name AS b_company
-    FROM (
-      SELECT e1.email_lower AS matched_value, 'email' AS kind,
-             e1.contact_id AS a_id, e2.contact_id AS b_id
-      FROM contact_emails e1
-      JOIN contact_emails e2
-        ON e2.email_lower = e1.email_lower AND e2.contact_id > e1.contact_id
-      WHERE e1.deleted_at IS NULL AND e2.deleted_at IS NULL
-        AND length(e1.email_lower) > 0
-      UNION
-      SELECT p1.e164 AS matched_value, 'phone' AS kind,
-             p1.contact_id AS a_id, p2.contact_id AS b_id
-      FROM contact_phones p1
-      JOIN contact_phones p2
-        ON p2.e164 = p1.e164 AND p2.contact_id > p1.contact_id
-      WHERE p1.deleted_at IS NULL AND p2.deleted_at IS NULL
-        AND p1.e164 IS NOT NULL
-    ) x
-    JOIN contacts a ON a.id = x.a_id AND a.deleted_at IS NULL
-    JOIN contacts b ON b.id = x.b_id AND b.deleted_at IS NULL
-    LEFT JOIN companies ca ON ca.id = a.company_id
-    LEFT JOIN companies cb ON cb.id = b.company_id
-    ORDER BY x.kind ASC, a.created_at ASC
-    LIMIT ?`;
-
-  const rows = await raw.query(shared, [limit]);
-  const seen = new Set<string>();
-  const pairs: DuplicatePair[] = [];
-
-  for (const r of rows) {
-    const value = String(r[0]);
-    const matchedOn = String(r[1]) as MatchedOn;
-    const aId = String(r[2]);
-    const bId = String(r[7]);
-    const dedupe = `${aId}:${bId}`;
-    if (seen.has(dedupe)) continue;
-    seen.add(dedupe);
-    pairs.push({
-      entityType: "contact",
-      matchedOn,
-      value,
-      key: pairKey("contact", matchedOn, aId, bId),
-      a: {
-        id: aId,
-        label: contactLabel(String(r[3] ?? ""), String(r[4] ?? "")),
-        detail: String(r[6] ?? "") || "No company",
-        createdAt: String(r[5]),
-      },
-      b: {
-        id: bId,
-        label: contactLabel(String(r[8] ?? ""), String(r[9] ?? "")),
-        detail: String(r[11] ?? "") || "No company",
-        createdAt: String(r[10]),
-      },
-    });
-  }
-  return pairs;
-}
-
-/** Companies with the same name (case-insensitive) or the same phone. */
-export async function findCompanyPairs(limit = 200): Promise<DuplicatePair[]> {
-  const rows = await raw.query(
-    `SELECT x.matched_value AS m_value, x.kind AS m_kind,
-            a.id AS a_id, a.name AS a_name, a.created_at AS a_created,
-            b.id AS b_id, b.name AS b_name, b.created_at AS b_created
-     FROM (
-       SELECT lower(c1.name) AS matched_value, 'name' AS kind,
-              c1.id AS a_id, c2.id AS b_id
-       FROM companies c1
-       JOIN companies c2 ON lower(c2.name) = lower(c1.name) AND c2.id > c1.id
-       WHERE c1.deleted_at IS NULL AND c2.deleted_at IS NULL
-       UNION
-       SELECT c1.phone_e164 AS matched_value, 'phone' AS kind,
-              c1.id AS a_id, c2.id AS b_id
-       FROM companies c1
-       JOIN companies c2 ON c2.phone_e164 = c1.phone_e164 AND c2.id > c1.id
-       WHERE c1.deleted_at IS NULL AND c2.deleted_at IS NULL
-         AND c1.phone_e164 IS NOT NULL
-     ) x
-     JOIN companies a ON a.id = x.a_id AND a.deleted_at IS NULL
-     JOIN companies b ON b.id = x.b_id AND b.deleted_at IS NULL
-     ORDER BY x.kind ASC, a.created_at ASC
-     LIMIT ?`,
-    [limit],
-  );
-
-  const seen = new Set<string>();
-  const pairs: DuplicatePair[] = [];
-  for (const r of rows) {
-    const aId = String(r[2]);
-    const bId = String(r[5]);
-    const dedupe = `${aId}:${bId}`;
-    if (seen.has(dedupe)) continue;
-    seen.add(dedupe);
-    const matchedOn = String(r[1]) as MatchedOn;
-    pairs.push({
-      entityType: "company",
-      matchedOn,
-      value: String(r[0]),
-      key: pairKey("company", matchedOn, aId, bId),
-      a: {
-        id: aId,
-        label: String(r[3]),
-        detail: "Company",
-        createdAt: String(r[4]),
-      },
-      b: {
-        id: bId,
-        label: String(r[6]),
-        detail: "Company",
-        createdAt: String(r[7]),
-      },
-    });
-  }
-  return pairs;
-}
 
 export async function scanDuplicates(limit = 200): Promise<DuplicatePair[]> {
   const [contacts, companies] = await Promise.all([

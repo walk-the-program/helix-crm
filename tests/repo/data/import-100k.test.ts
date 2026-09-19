@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHarness, type Harness } from "../harness";
 import { raw } from "../../../src/db/client";
-import { readHeaders } from "../../../src/features/data/lib/csv";
+import { readHeaders } from "../../../src/lib/csv";
 import { guessMapping } from "../../../src/features/data/lib/mapping";
 import { runImport } from "../../../src/features/data/lib/importRun";
 

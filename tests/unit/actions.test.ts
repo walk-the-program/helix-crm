@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hrefFor, mailtoHref, smsHref, telHref } from "@/features/records/lib/links";
+import { hrefFor, mailtoHref, smsHref, telHref } from "@/lib/actions";
 
 describe("telHref", () => {
   it("keeps digits and a leading plus and drops the rest", () => {

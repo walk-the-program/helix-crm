@@ -15,7 +15,7 @@ import { getDriver, raw, setDriver } from "../../../src/db/client";
 import * as contacts from "../../../src/db/repos/contacts";
 import * as companies from "../../../src/db/repos/companies";
 import * as tags from "../../../src/db/repos/tags";
-import { ImportParseError, readHeaders, sniffCsv } from "../../../src/features/data/lib/csv";
+import { ImportParseError, readHeaders, sniffCsv } from "../../../src/lib/csv";
 import { guessMapping, type ColumnMapping } from "../../../src/features/data/lib/mapping";
 import {
   ImportWriteError,

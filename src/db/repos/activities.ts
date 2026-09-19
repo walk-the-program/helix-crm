@@ -321,3 +321,120 @@ export async function purge(
     "Purging a timeline entry",
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/today/lib/todayData.ts.             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The newest activity timestamp per deal, for a known set of deal ids.
+ *
+ * Gone quiet needs "no activity for 21 days" on every row. `deals.goneQuiet()`
+ * already decided *which* deals qualify using the same `max()` in SQL; this
+ * fetches the number the row has to print, in one query rather than one per
+ * row. Returns a map keyed by deal id; a deal with no activity is absent.
+ */
+export async function lastActivityFor(
+  dealIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (dealIds.length === 0) return out;
+
+  // Chunked because SQLite's default SQLITE_MAX_VARIABLE_NUMBER is 999 on
+  // older builds, and Today can legitimately show a long quiet list.
+  const chunkSize = 400;
+  for (let i = 0; i < dealIds.length; i += chunkSize) {
+    const chunk = dealIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = await raw.query(
+      `SELECT a.deal_id AS a_deal_id, max(a.occurred_at) AS a_last_at
+       FROM activities a
+       WHERE a.deleted_at IS NULL AND a.deal_id IN (${placeholders})
+       GROUP BY a.deal_id`,
+      chunk,
+    );
+    for (const row of rows) {
+      if (row[0] === null || row[1] === null) continue;
+      out.set(String(row[0]), String(row[1]));
+    }
+  }
+  return out;
+}
+
+/**
+ * The last N timeline entries across every record, each already carrying the
+ * name of the thing it happened to and where that thing lives.
+ *
+ * `activities.recent()` returns the rows but only the foreign keys, and Today's
+ * "Recent activity" section is useless without a name to click. Resolving the
+ * names here in one join beats twenty `contacts.get()` round trips through the
+ * IPC pipe.
+ */
+export type RecentEntry = {
+  id: string;
+  kind: string;
+  body: string;
+  occurredAt: string;
+  isSystem: boolean;
+  /** The record the entry hangs off, closest-first: deal, then contact, then company. */
+  linkLabel: string | null;
+  linkHref: string | null;
+};
+
+export async function recentWithLinks(limit = 20): Promise<RecentEntry[]> {
+  const rows = await raw.query(
+    `SELECT a.id          AS a_id,
+            a.kind        AS a_kind,
+            a.body        AS a_body,
+            a.occurred_at AS a_occurred_at,
+            a.is_system   AS a_is_system,
+            a.deal_id     AS a_deal_id,
+            d.title       AS d_title,
+            a.contact_id  AS a_contact_id,
+            c.first_name  AS c_first_name,
+            c.last_name   AS c_last_name,
+            a.company_id  AS a_company_id,
+            co.name       AS co_name
+     FROM activities a
+     LEFT JOIN deals d ON d.id = a.deal_id AND d.deleted_at IS NULL
+     LEFT JOIN contacts c ON c.id = a.contact_id AND c.deleted_at IS NULL
+     LEFT JOIN companies co ON co.id = a.company_id AND co.deleted_at IS NULL
+     WHERE a.deleted_at IS NULL
+     ORDER BY a.occurred_at DESC, a.created_at DESC
+     LIMIT ?`,
+    [limit],
+  );
+
+  return rows.map((r) => {
+    const dealId = r[5] === null || r[5] === undefined ? null : String(r[5]);
+    const dealTitle = r[6] === null || r[6] === undefined ? null : String(r[6]);
+    const contactId = r[7] === null || r[7] === undefined ? null : String(r[7]);
+    const first = r[8] === null || r[8] === undefined ? "" : String(r[8]);
+    const last = r[9] === null || r[9] === undefined ? "" : String(r[9]);
+    const companyId = r[10] === null || r[10] === undefined ? null : String(r[10]);
+    const companyName = r[11] === null || r[11] === undefined ? null : String(r[11]);
+
+    let linkLabel: string | null = null;
+    let linkHref: string | null = null;
+    if (dealId && dealTitle) {
+      linkLabel = dealTitle;
+      linkHref = `/deals/${dealId}`;
+    } else if (contactId && (first || last)) {
+      linkLabel = `${first} ${last}`.trim();
+      linkHref = `/contacts/${contactId}`;
+    } else if (companyId && companyName) {
+      linkLabel = companyName;
+      linkHref = `/companies/${companyId}`;
+    }
+
+    return {
+      id: String(r[0]),
+      kind: String(r[1]),
+      body: String(r[2] ?? ""),
+      occurredAt: String(r[3]),
+      isSystem: Number(r[4]) === 1,
+      linkLabel,
+      linkHref,
+    };
+  });
+}

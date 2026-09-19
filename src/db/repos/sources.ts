@@ -25,6 +25,7 @@ import {
   parseOrThrow,
   type Col,
   type Page,
+  type Statement,
 } from "@/db/repos/_base";
 
 export type Source = {
@@ -197,4 +198,21 @@ export async function ensure(name: string, kind?: string): Promise<Source> {
   const existing = await findByName(name);
   if (existing) return existing;
   return create({ name, kind: kind ?? "manual" });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/importWrite.ts. */
+/* -------------------------------------------------------------------------- */
+
+export function sourceCreateStatement(name: string): { id: string; statement: Statement } {
+  const s = stampNew();
+  return {
+    id: s.id,
+    statement: insertStatement("sources", {
+      ...s,
+      name: name.trim(),
+      kind: "import",
+      deletedAt: null,
+    }),
+  };
 }

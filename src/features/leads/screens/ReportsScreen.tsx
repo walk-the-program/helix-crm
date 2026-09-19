@@ -29,8 +29,8 @@ import {
   defaultGranularity,
   formatBucket,
   periodFor,
-} from "@/features/leads/lib/periods";
-import type { Granularity, Period } from "@/features/leads/lib/periods";
+} from "@/lib/periods";
+import type { Granularity, Period } from "@/lib/periods";
 import { toCsv, useReports } from "@/features/leads/lib/reportKeys";
 import type {
   ConversionRow,
@@ -38,7 +38,7 @@ import type {
   PipelineStageRow,
   SourceRow,
   WonLostRow,
-} from "@/features/leads/lib/reportQueries";
+} from "@/db/repos/reports";
 import { PeriodPicker } from "@/features/leads/components/PeriodPicker";
 import { ReportCard } from "@/features/leads/components/ReportCard";
 import { DataTable } from "@/features/leads/components/DataTable";

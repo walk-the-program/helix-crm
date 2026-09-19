@@ -3,14 +3,11 @@
  *
  * WHY THIS IS NOT IN src/app/CommandPalette.tsx
  * ---------------------------------------------
- * The palette already exists, already owns Cmd/Ctrl+K, and its header comment
- * says "search results are wired in by the today feature" — but it exposes no
- * hook for a feature to register a results provider, and `src/app` belongs to
- * the foundations agent. So this ships as its own cmdk dialog on **Cmd/Ctrl+/**
- * plus a "Search records" entry in the palette's own command list, and the
- * missing provider hook is recorded in docs/STATUS.md under "Contract changes
- * needed". Merging the two is a small job once that hook exists: everything
- * below the input is already a pure function of `searchRows()`.
+ * It is still its own cmdk dialog, but it is no longer a second search box.
+ * Wave 3 made the shell delegate: Cmd/Ctrl+K looks up the registered "search"
+ * command and runs it, which opens this, and the palette moved to
+ * Cmd/Ctrl+Shift+K. The footer below links back to it, so the command list is
+ * one keystroke or one click away and neither panel is a dead end.
  *
  * Behaviour: types are debounced 80 ms, results are grouped by entity type in
  * a fixed order, arrows move and Enter opens (cmdk owns that), Escape closes,
@@ -25,13 +22,15 @@ import { navigate } from "wouter/use-browser-location";
 import { Building2, FileText, Handshake, Search, User } from "lucide-react";
 import type { ComponentType } from "react";
 import { qk } from "@/app/queryClient";
-import type { SearchEntityType } from "@/db/repos/search";
+import { openCommandPalette, PALETTE_SHORTCUT } from "@/app/CommandPalette";
+import { Kbd } from "@/ui";
 import {
   GROUP_HEADINGS,
   recentRecords,
   searchRows,
+  type SearchEntityType,
   type SearchRow,
-} from "@/features/today/lib/searchRows";
+} from "@/db/repos/search";
 
 /** PLAN item 7's budget is 50 ms per query; 80 ms of debounce sits under a keystroke. */
 export const SEARCH_DEBOUNCE_MS = 80;
@@ -201,6 +200,28 @@ export function SearchDialog(props: {
             ))
           )}
         </Command.List>
+
+        {/*
+          The way back to the command list. Cmd/Ctrl+K reaches search, so the
+          palette needs a door that is visible from in here as well as its own
+          Cmd/Ctrl+Shift+K.
+        */}
+        <div className="flex items-center justify-between border-t border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-2)]">
+          <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+            Searching contacts, companies, deals and notes
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              onOpenChange(false);
+              openCommandPalette();
+            }}
+            className="inline-flex items-center gap-[var(--space-2)] rounded-[var(--radius-md)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+          >
+            Commands
+            <Kbd keys={PALETTE_SHORTCUT} />
+          </button>
+        </div>
       </Command>
     </div>
   );

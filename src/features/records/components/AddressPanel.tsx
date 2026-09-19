@@ -13,7 +13,7 @@ import {
   stringifyAddress,
   type Address,
 } from "@/features/records/lib/address";
-import { oneTap, type RecordLink } from "@/features/records/lib/oneTap";
+import { oneTap, type RecordLink } from "@/lib/actions";
 
 export function AddressPanel(props: {
   addressJson: string | null;

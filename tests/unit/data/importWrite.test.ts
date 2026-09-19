@@ -2,19 +2,24 @@
  * The statement builders the import folds into its batches. These are pure,
  * and they are the part that decides whether 500 rows arrive as 500 round
  * trips or as a handful of multi-row inserts.
+ *
+ * They were promoted out of src/features/data/lib/importWrite.ts in wave 3:
+ * the batch planner into src/db/repos/_base.ts and each builder into the
+ * repository for the table it writes.
  */
 import { describe, expect, it } from "vitest";
 import {
   MAX_BOUND_PARAMS,
   coalesceInserts,
   planBatch,
-  companyCreateStatement,
+} from "../../../src/db/repos/_base";
+import {
   contactPhoneStatement,
   contactUpdateStatement,
-  customFieldCreateStatement,
-  tagCreateStatement,
-  tagLinkStatement,
-} from "../../../src/features/data/lib/importWrite";
+} from "../../../src/db/repos/contacts";
+import { companyCreateStatement } from "../../../src/db/repos/companies";
+import { customFieldCreateStatement } from "../../../src/db/repos/customFields";
+import { tagCreateStatement, tagLinkStatement } from "../../../src/db/repos/tags";
 
 describe("coalesceInserts", () => {
   it("folds inserts into the same table into one statement", () => {

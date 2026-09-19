@@ -38,7 +38,7 @@ import {
   invalidateRecords,
   reportError,
 } from "@/features/records/lib/mutations";
-import { oneTap } from "@/features/records/lib/oneTap";
+import { oneTap } from "@/lib/actions";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { CompanyPicker, SourcePicker } from "@/features/records/components/Pickers";
@@ -48,6 +48,7 @@ import { TagEditor } from "@/features/records/components/TagEditor";
 import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPanel";
 import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
+import { AttachmentList } from "@/features/data/attachments/AttachmentList";
 
 export function ContactPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -340,6 +341,8 @@ export function ContactPage() {
               />
             </CardBody>
           </Card>
+
+          <AttachmentList entityType="contact" entityId={id} />
         </div>
       </div>
 

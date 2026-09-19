@@ -4,7 +4,7 @@
  * "Not worked yet" means no activity the owner wrote. The website poller
  * always writes a system entry when a lead lands, so counting system rows
  * would empty this section before he ever saw it — see
- * `lib/todayData.ts#newLeads`.
+ * `deals.newLeads()`.
  *
  * Every row shows where the lead came from, because that is the one fact that
  * changes how he opens the call, and carries a single obvious action: log the
@@ -26,8 +26,8 @@ import {
   useLogCall,
   useNewLeads,
 } from "@/features/today/lib/useToday";
-import type { NewLead } from "@/features/today/lib/todayData";
-import { openTel } from "@/features/today/actions";
+import type { NewLead } from "@/db/repos/deals";
+import { openTel } from "@/lib/actions";
 import { formatMoney } from "@/lib/money";
 import { formatRelative } from "@/lib/dates";
 

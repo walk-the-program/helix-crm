@@ -41,7 +41,51 @@ type ViewSort = { field: string; direction: "asc" | "desc" };
 - **`columns`** — an ordered list of visible column ids, in the screen's own
   vocabulary. Empty means "the screen's default set."
 
-## Wiring up a list screen
+## The short way (wave 3)
+
+Four screens adopted this library and they all needed the same two things: a
+place to put the controls, and a translation between "my filter row" and a
+`ViewQuery`. Both now ship with the library, and
+`src/features/records/screens/ContactsScreen.tsx` is the reference:
+
+```tsx
+import {
+  queryFromState, sortIdOf, stateFromQuery, useSavedViews, ViewsToolbar, type ViewQuery,
+} from "@/features/today/views";
+
+const DEFAULT_SORT = "name-asc";
+const FILTER_DEFAULTS = { search: "", tagId: ALL, sourceId: ALL, showArchived: false };
+
+const currentView: ViewQuery = useMemo(
+  () => queryFromState({ search, tagId, sourceId, showArchived }, FILTER_DEFAULTS, sort),
+  [search, tagId, sourceId, showArchived, sort],
+);
+
+function applyView(query: ViewQuery | null) {
+  const next = stateFromQuery(query, FILTER_DEFAULTS);
+  setSearch(next.search);   // ...one setter per key...
+  setSort(sortIdOf(query, DEFAULT_SORT));
+}
+
+<ViewsToolbar entityType="contact" current={currentView} onPick={(q) => applyView(q)} />
+```
+
+- **`queryFromState(filters, defaults, sortId, columns?)`** — a flat record of
+  strings and booleans becomes a normalised `ViewQuery`. A value still at its
+  default is left out, and the filters are sorted by field, so "nothing
+  filtered" round-trips as an empty list and `dirty` means what it says.
+- **`stateFromQuery(query, defaults)`** — the reverse. A field the screen no
+  longer has, or a value of the wrong type, falls back to the default: a saved
+  view is a row that can outlive the screen that wrote it.
+- **`sortIdOf(query, fallback)`** — the screen's own sort id out of a view.
+  These screens bake the direction into the id (`"name-desc"`), so the id is the
+  whole sort and `ViewSort.direction` carries no information for them.
+- **`<ViewsToolbar>`** — the "Views" popover and "Save view", the pair below,
+  in one line. It goes in the screen's `PageHeader` actions.
+
+A screen with no natural sort passes `null` and saves no `sort` entry.
+
+## Wiring up a list screen (the long way, if the short one does not fit)
 
 ```tsx
 import { useState } from "react";
@@ -129,7 +173,16 @@ export const ENTITY_ROUTES: Record<ViewEntityType, string> = {
 ```
 
 `viewRoute(view)` turns a `SavedView` into `"<route>?view=<id>"` — a link that
-opens the right screen with that view already picked. Any screen using
+opens the right screen with that view already picked. Since wave 3 that link is
+what the sidebar's "Views" group renders: `pinnedNav.tsx` exports
+`usePinnedViewsNav()`, which the Today feature hands to the shell as
+`FeatureModule.navProvider`, so a pinned view is a real sidebar item that
+appears and disappears live. (It used to be a strip at the top of the Today
+screen; that strip is gone.)
+
+A screen reached this way gets `?view=<id>` before the row itself has been
+read, so it applies the active view once, when `useSavedViews` resolves it —
+see the effect in `ContactsScreen`. Any screen using
 `useSavedViews` reads the active view from that same `?view=` param via
 wouter's `useSearchParams`, so a `ViewPicker`/`SaveViewPopover` pair on one
 screen agree on "the active view" for free, and a pinned-view link from the

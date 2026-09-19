@@ -17,7 +17,7 @@ import { Badge, Button, IconButton, Input, Select, Tooltip } from "@/ui";
 import * as contactsRepo from "@/db/repos/contacts";
 import type { ContactEmail, ContactPhone } from "@/db/repos/contacts";
 import { formatPhone } from "@/lib/phone";
-import { oneTap } from "@/features/records/lib/oneTap";
+import { oneTap } from "@/lib/actions";
 import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
 
 const PHONE_LABELS = ["mobile", "office", "home", "other"];

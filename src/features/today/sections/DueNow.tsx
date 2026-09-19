@@ -31,7 +31,7 @@ import {
   useUncompleteTask,
   type DueNowRow,
 } from "@/features/today/lib/useToday";
-import { openTel } from "@/features/today/actions";
+import { openTel } from "@/lib/actions";
 
 function RowActions({ row }: { row: DueNowRow }) {
   const complete = useCompleteTask();

@@ -5,7 +5,7 @@ import {
   formatBucket,
   defaultGranularity,
   toDateInputValue,
-} from "@/features/leads/lib/periods";
+} from "@/lib/periods";
 
 describe("periods", () => {
   describe("periodFor", () => {

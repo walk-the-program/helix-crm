@@ -10,8 +10,10 @@
  *
  * This is the one genuinely awkward thing in the Today feature, and it is
  * awkward on purpose rather than by accident: the alternative was editing the
- * shell. The clean fix is a `overlays?: ReactNode[]` field on FeatureModule, or
- * a search-provider hook on the palette; both are written up in docs/STATUS.md.
+ * shell. Wave 3 left it alone — the shell now delegates Cmd/Ctrl+K to the
+ * "search" command, which opens this dialog, so there is one search in the
+ * product without the shell having to own the dialog. An `overlays?:
+ * ReactNode[]` slot on FeatureModule would still be tidier.
  *
  * The root gets its own `QueryClientProvider` around the *same* shared
  * `queryClient`, so the cache, the query keys and `resetQueryCache()` on a
@@ -30,11 +32,21 @@ import { SearchDialog } from "@/features/today/search/SearchDialog";
 const OVERLAY_ID = "helix-today-overlay";
 
 /**
- * The shortcut the dialog answers to. Cmd/Ctrl+K is already taken by the
- * shell's command palette, which registers it in Shell.tsx; claiming it here
- * too would give the owner two panels on one keypress.
+ * The shortcut the dialog answers to.
+ *
+ * Since wave 3 there is one search key: the shell binds Cmd/Ctrl+K and runs
+ * the registered "search" command, which is this dialog, and the command
+ * palette moved to Cmd/Ctrl+Shift+K. This constant is the label the palette
+ * and the Today header print next to "Search records".
  */
-export const SEARCH_SHORTCUT = "mod+/";
+export const SEARCH_SHORTCUT = "mod+k";
+
+/**
+ * The key this overlay binds for itself. Cmd/Ctrl+K already reaches the dialog
+ * through the shell, so this is only an alias, kept because it shipped and
+ * because it still works on a screen where the shell is not mounted.
+ */
+export const SEARCH_SHORTCUT_ALIAS = "mod+/";
 
 /** Fired on `window` to open the dialog from a palette command or a button. */
 export const OPEN_SEARCH_EVENT = "helix:open-search";
@@ -49,7 +61,7 @@ function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const show = useCallback(() => setOpen(true), []);
 
-  useShortcut(SEARCH_SHORTCUT, show);
+  useShortcut(SEARCH_SHORTCUT_ALIAS, show);
 
   useEffect(() => {
     const handler = () => setOpen(true);

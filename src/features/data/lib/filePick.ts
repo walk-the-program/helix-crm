@@ -15,7 +15,7 @@ import {
   readFileBytes,
   FileAccessError,
 } from "@/features/data/lib/fsBridge";
-import { sniffCsv, type CsvSniff } from "@/features/data/lib/csv";
+import { sniffCsv, type CsvSniff } from "@/lib/csv";
 
 export type LoadedCsv = CsvSniff & {
   /** null when the bytes came from a browser File with no real path. */

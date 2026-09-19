@@ -41,6 +41,7 @@ import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPan
 import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
+import { AttachmentList } from "@/features/data/attachments/AttachmentList";
 
 export function DealPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -329,6 +330,8 @@ export function DealPage() {
               </div>
             </CardBody>
           </Card>
+
+          <AttachmentList entityType="deal" entityId={id} />
         </div>
       </div>
 

@@ -5,9 +5,8 @@
  *         --> papaparse (row by row, never the whole file as objects)
  *
  * Everything in this file is pure: bytes in, data out, no filesystem and no
- * database. `docs/CONTRACTS.md` lists `src/lib/csv.ts` as a shared helper, but
- * foundations left it unwritten, so it lives here until the orchestrator
- * promotes it (see docs/STATUS.md, "Contract changes needed").
+ * database. Written by the data agent as `src/features/data/lib/csv.ts` and
+ * promoted here in wave 3, where docs/CONTRACTS.md always said it belonged.
  *
  * The parse is deliberately strict about ragged rows: docs/PLAN.md wants an
  * ImportParseError naming the row and the column, not a silent half-import.

@@ -3,7 +3,7 @@
  * filters, virtualised rows — because the owner should not have to learn two
  * lists.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Building2, Plus, Search } from "lucide-react";
 import {
@@ -40,6 +40,14 @@ import {
   offerUndoCreate,
   reportError,
 } from "@/features/records/lib/mutations";
+import {
+  queryFromState,
+  sortIdOf,
+  stateFromQuery,
+  useSavedViews,
+  ViewsToolbar,
+  type ViewQuery,
+} from "@/features/today/views";
 
 const SORTS = [
   { value: "name-asc", label: "Name A to Z" },
@@ -49,14 +57,48 @@ const SORTS = [
 
 const ALL = "__all__";
 
+const DEFAULT_SORT = "name-asc";
+
+/** The screen's filter state, and what "nothing filtered" looks like. */
+const FILTER_DEFAULTS = {
+  search: "",
+  tagId: ALL,
+  sourceId: ALL,
+  showArchived: false,
+};
+
 export function CompaniesScreen() {
   const [, navigate] = useLocation();
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("name-asc");
-  const [tagId, setTagId] = useState(ALL);
-  const [sourceId, setSourceId] = useState(ALL);
-  const [showArchived, setShowArchived] = useState(false);
+  const [search, setSearch] = useState(FILTER_DEFAULTS.search);
+  const [sort, setSort] = useState(DEFAULT_SORT);
+  const [tagId, setTagId] = useState(FILTER_DEFAULTS.tagId);
+  const [sourceId, setSourceId] = useState(FILTER_DEFAULTS.sourceId);
+  const [showArchived, setShowArchived] = useState(FILTER_DEFAULTS.showArchived);
   const [creating, setCreating] = useState(false);
+
+  const currentView: ViewQuery = useMemo(
+    () => queryFromState({ search, tagId, sourceId, showArchived }, FILTER_DEFAULTS, sort),
+    [search, tagId, sourceId, showArchived, sort],
+  );
+
+  function applyView(query: ViewQuery | null) {
+    const next = stateFromQuery(query, FILTER_DEFAULTS);
+    setSearch(next.search);
+    setTagId(next.tagId);
+    setSourceId(next.sourceId);
+    setShowArchived(next.showArchived);
+    setSort(sortIdOf(query, DEFAULT_SORT));
+  }
+
+  // A link from the sidebar's Views group lands here with `?view=<id>` before
+  // the row itself has been read, so apply it when it arrives — once per view.
+  const { activeId, activeQuery } = useSavedViews("company", currentView);
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeId || !activeQuery || appliedViewId === activeId) return;
+    setAppliedViewId(activeId);
+    applyView(activeQuery);
+  }, [activeId, activeQuery, appliedViewId]);
 
   const debouncedSearch = useDebounced(search, 200);
   const { data: tags } = useTags();
@@ -97,14 +139,21 @@ export function CompaniesScreen() {
             : `${rows.length.toLocaleString()} ${rows.length === 1 ? "company" : "companies"}`
         }
         actions={
-          <Button
-            variant="primary"
-            className="min-h-[44px]"
-            iconLeft={<Plus size={20} aria-hidden="true" />}
-            onClick={() => setCreating(true)}
-          >
-            New company
-          </Button>
+          <div className="flex items-end gap-[var(--space-2)]">
+            <ViewsToolbar
+              entityType="company"
+              current={currentView}
+              onPick={(query) => applyView(query)}
+            />
+            <Button
+              variant="primary"
+              className="min-h-[44px]"
+              iconLeft={<Plus size={20} aria-hidden="true" />}
+              onClick={() => setCreating(true)}
+            >
+              New company
+            </Button>
+          </div>
         }
       />
 

@@ -131,6 +131,10 @@ export async function softDeleteRow(
     entityType,
     entityId: id,
     op: "delete",
+    // A soft delete logs the one column it changed, so `undoBatch` can put it
+    // back. The absence of an `id` in `before` is what tells undoBatch this
+    // was a soft delete and not a purge (docs/CONTRACTS.md, "Undo").
+    before: { deletedAt: null },
     after: { deletedAt: at },
     batchId,
   });
@@ -245,4 +249,172 @@ export function trimmed(value: string | null | undefined): string {
 export function trimmedOrNull(value: string | null | undefined): string | null {
   const t = trimmed(value);
   return t.length > 0 ? t : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Batch planning (promoted in wave 3 from the data feature's importWrite.ts). */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One statement in a `raw.batch`. `insertStatement` and `updateStatement`
+ * above both produce this shape.
+ */
+export type Statement = { sql: string; params: unknown[] };
+
+const SINGLE_INSERT = /^INSERT INTO (\w+) \(([^)]+)\) VALUES \(([^)]*)\)$/;
+
+/**
+ * Fold consecutive one-row inserts into the same table into one multi-row
+ * insert, which is what docs/PLAN.md item 9 asks for: 500 rows arrive as a
+ * handful of statements rather than several thousand.
+ *
+ * SQLite's default limit is 32766 bound parameters per statement, so a group
+ * is split before it gets there.
+ */
+export const MAX_BOUND_PARAMS = 30_000;
+
+export function coalesceInserts(statements: Statement[]): Statement[] {
+  const out: Statement[] = [];
+
+  type Group = { table: string; columns: string; tuple: string; rows: number; params: unknown[] };
+  let group: Group | null = null;
+
+  const flush = () => {
+    if (!group) return;
+    const values = Array.from({ length: group.rows }, () => `(${group!.tuple})`).join(", ");
+    out.push({
+      sql: `INSERT INTO ${group.table} (${group.columns}) VALUES ${values}`,
+      params: group.params,
+    });
+    group = null;
+  };
+
+  for (const statement of statements) {
+    const match = SINGLE_INSERT.exec(statement.sql);
+    if (!match) {
+      flush();
+      out.push(statement);
+      continue;
+    }
+    const [, table, columns, tuple] = match;
+    const params = statement.params ?? [];
+    if (
+      group &&
+      (group.table !== table ||
+        group.columns !== columns ||
+        group.params.length + params.length > MAX_BOUND_PARAMS)
+    ) {
+      flush();
+    }
+    if (!group) {
+      group = { table, columns, tuple, rows: 0, params: [] };
+    }
+    group.rows += 1;
+    group.params.push(...params);
+  }
+  flush();
+
+  return out;
+}
+
+/**
+ * Insert order between tables, so a batch can be regrouped without tripping a
+ * foreign key: a company exists before the contact that points at it, a
+ * contact before its phones, a tag before its link. Anything not listed
+ * (and every statement that is not a plain insert, such as the update half of
+ * the dedupe policy) goes last, in the order it was built.
+ */
+const TABLE_ORDER = [
+  "sources",
+  "companies",
+  "tags",
+  "custom_fields",
+  "contacts",
+  "contact_phones",
+  "contact_emails",
+  "tag_links",
+  "custom_values",
+];
+
+/**
+ * Regroup a batch so `coalesceInserts` can actually do its job.
+ *
+ * The import builds statements row by row - contact, phones, emails, tags -
+ * so two inserts into the same table are almost never next to each other, and
+ * a coalescer that only merges neighbours merges nothing: 100k rows went out
+ * as ~400k statements and took 35 s. Bucketing by table first turns the same
+ * work into a few multi-row inserts per batch.
+ */
+export function planBatch(statements: Statement[]): Statement[] {
+  const buckets = new Map<string, { table: string; seen: number; rows: Statement[] }>();
+  const others: Statement[] = [];
+
+  statements.forEach((statement, index) => {
+    const match = SINGLE_INSERT.exec(statement.sql);
+    if (!match) {
+      others.push(statement);
+      return;
+    }
+    const [, table, columns] = match;
+    const key = `${table}\u0000${columns}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.rows.push(statement);
+    else buckets.set(key, { table, seen: index, rows: [statement] });
+  });
+
+  const ordered = [...buckets.values()].sort((a, b) => {
+    const ai = TABLE_ORDER.indexOf(a.table);
+    const bi = TABLE_ORDER.indexOf(b.table);
+    const aRank = ai === -1 ? TABLE_ORDER.length : ai;
+    const bRank = bi === -1 ? TABLE_ORDER.length : bi;
+    return aRank - bRank || a.seen - b.seen;
+  });
+
+  const out: Statement[] = [];
+  for (const bucket of ordered) out.push(...coalesceInserts(bucket.rows));
+  out.push(...others);
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The whole-workspace duplicate pair scan (promoted in wave 3). */
+/* -------------------------------------------------------------------------- */
+/*
+ * The pair queries themselves live in contacts.ts and companies.ts; the shapes
+ * both of them return live here. `contacts.findDuplicates` stays what it
+ * always was - "does this one record clash with anything", for the create
+ * form - which is a different question from "list every candidate pair".
+ */
+
+export type DuplicateEntity = "contact" | "company";
+export type MatchedOn = "email" | "phone" | "name";
+
+export type DuplicateSide = {
+  id: string;
+  label: string;
+  /** What the merge screen shows beside the name: company, city, created. */
+  detail: string;
+  createdAt: string;
+};
+
+export type DuplicatePair = {
+  entityType: DuplicateEntity;
+  matchedOn: MatchedOn;
+  /** The shared value, highlighted in the list. */
+  value: string;
+  a: DuplicateSide;
+  b: DuplicateSide;
+  /** Stable key for React and for "I already dismissed this one". */
+  key: string;
+};
+
+/** Stable, order-independent key for a candidate pair. */
+export function pairKey(
+  entityType: DuplicateEntity,
+  matchedOn: MatchedOn,
+  aId: string,
+  bId: string,
+): string {
+  const [first, second] = aId < bId ? [aId, bId] : [bId, aId];
+  return `${entityType}:${matchedOn}:${first}:${second}`;
 }

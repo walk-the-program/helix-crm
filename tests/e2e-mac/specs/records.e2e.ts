@@ -48,7 +48,8 @@ function quickAddDialog(page: Page) {
  * harness's headless Chromium reports on this machine. Cmd+N can also be
  * read as a browser accelerator, so this falls back to the Cmd+K command
  * palette's "Quick add" entry (index.tsx's `quick-add` command) if the
- * dialog does not show up from the shortcut alone.
+ * dialog does not show up from the shortcut alone. The palette is on
+ * Cmd/Ctrl+Shift+K: Cmd/Ctrl+K belongs to search (docs/CONTRACTS.md).
  */
 async function openQuickAdd(page: Page): Promise<void> {
   await waitForShell(page);
@@ -57,7 +58,8 @@ async function openQuickAdd(page: Page): Promise<void> {
   try {
     await dialog.waitFor({ state: "visible", timeout: 3000 });
   } catch {
-    await page.keyboard.press("Meta+k");
+    // The palette is on Cmd+Shift+K since wave 3; Cmd+K is search.
+    await page.keyboard.press("Meta+Shift+k");
     await page.getByPlaceholder("Search, or type a command").fill("Quick add");
     await page.keyboard.press("Enter");
     await dialog.waitFor({ state: "visible", timeout: 5000 });

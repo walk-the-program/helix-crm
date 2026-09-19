@@ -2,9 +2,13 @@
  * Undo, as the records screens actually use it.
  *
  * Quick add's Undo replays `changeLog.undoBatch`, which deletes the rows a
- * batch inserted. A delete's Undo calls the entity's `restore`, because a soft
- * delete logs no `before` for undoBatch to re-insert — the gap recorded in
- * STATUS under "Contract changes needed". Both paths are proved here.
+ * batch inserted. A delete's Undo calls the entity's `restore()` — one
+ * statement instead of a replay, and the path the screens use.
+ *
+ * Since wave 3 `undoBatch` covers a soft delete as well: `softDeleteRow` logs
+ * `before: { deletedAt: null }`, and undoBatch writes that back rather than
+ * re-inserting a row that never left. Both paths are proved here, and both
+ * still work, which is the point — the screens were not changed.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createSeededHarness, type Harness } from "../harness";
@@ -83,6 +87,67 @@ describe("undo on a quick-add create", () => {
 
     expect(await dealsRepo.get(undone.id)).toBeNull();
     expect(await dealsRepo.get(keeper.id)).not.toBeNull();
+  });
+});
+
+describe("undoBatch on a soft delete", () => {
+  it("brings a soft-deleted contact back, without re-inserting the row", async () => {
+    const contact = await contactsRepo.create({
+      firstName: "Marta",
+      lastName: "Reyes",
+      phones: [{ raw: "(801) 555-0147", label: "mobile", isPrimary: true }],
+    });
+
+    const batchId = newId();
+    await contactsRepo.softDelete(contact.id, { batchId });
+    expect(await contactsRepo.list({}).then((r) => r.rows)).toHaveLength(0);
+    expect(await trash.list("contact")).toHaveLength(1);
+
+    await undoBatch(batchId);
+
+    const back = await contactsRepo.getOrThrow(contact.id);
+    // The row was never deleted, so its id, its timestamps and its child rows
+    // all survive: an undone soft delete is the same row, not a copy.
+    expect(back.id).toBe(contact.id);
+    expect(back.createdAt).toBe(contact.createdAt);
+    expect(back.phones).toHaveLength(1);
+    expect(await trash.list("contact")).toHaveLength(0);
+  });
+
+  it("undoes a whole batch of soft deletes together", async () => {
+    const contact = await contactsRepo.create({ firstName: "Marta", lastName: "Reyes" });
+    const note = await activitiesRepo.create({
+      kind: "call",
+      body: "Talked about the fence.",
+      contactId: contact.id,
+    });
+    const task = await tasksRepo.create({ title: "Send the quote", contactId: contact.id });
+
+    const batchId = newId();
+    await activitiesRepo.softDelete(note.id, { batchId });
+    await tasksRepo.softDelete(task.id, { batchId });
+
+    await undoBatch(batchId);
+
+    expect(await activitiesRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(1);
+    expect(await tasksRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(1);
+  });
+
+  it("leaves restore() as the path the screens use, and the two agree", async () => {
+    const a = await contactsRepo.create({ firstName: "Marta", lastName: "Reyes" });
+    const b = await contactsRepo.create({ firstName: "Dale", lastName: "Okafor" });
+
+    const batchId = newId();
+    await contactsRepo.softDelete(a.id, { batchId });
+    await contactsRepo.softDelete(b.id);
+
+    expect(await contactsRepo.list({}).then((r) => r.rows)).toHaveLength(0);
+
+    await undoBatch(batchId);
+    await contactsRepo.restore(b.id);
+
+    expect(await contactsRepo.list({}).then((r) => r.rows)).toHaveLength(2);
+    expect(await trash.list("contact")).toHaveLength(0);
   });
 });
 

@@ -28,6 +28,7 @@ import {
   updateStatement,
   parseOrThrow,
   type Col,
+  type Statement,
 } from "@/db/repos/_base";
 
 /* -------------------------------------------------------------------------- */
@@ -319,4 +320,44 @@ export async function clearValue(
     ]);
     await logWrite("custom_value", existing.id, "delete", existing, null, options.batchId);
   }, "Clearing a custom value");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/importWrite.ts. */
+/* -------------------------------------------------------------------------- */
+
+export function customFieldCreateStatement(
+  entityType: string,
+  name: string,
+  position: number,
+): { id: string; statement: Statement } {
+  const s = stampNew();
+  return {
+    id: s.id,
+    statement: insertStatement("custom_fields", {
+      ...s,
+      entityType,
+      name: name.trim(),
+      kind: "text",
+      optionsJson: null,
+      position,
+      deletedAt: null,
+    }),
+  };
+}
+
+export function customValueStatement(
+  fieldId: string,
+  entityId: string,
+  value: string,
+): Statement {
+  return insertStatement("custom_values", {
+    ...stampNew(),
+    fieldId,
+    entityId,
+    valueText: value,
+    valueNum: null,
+    valueDate: null,
+    deletedAt: null,
+  });
 }

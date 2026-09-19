@@ -20,8 +20,8 @@ import {
   pipelineByStage,
   stageConversion,
   wonLost,
-} from "../../../src/features/leads/lib/reportQueries";
-import { customPeriod, type Period } from "../../../src/features/leads/lib/periods";
+} from "../../../src/db/repos/reports";
+import { customPeriod, type Period } from "../../../src/lib/periods";
 
 let h: Harness | null = null;
 let stageIds: Record<string, string> = {};

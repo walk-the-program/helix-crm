@@ -9,9 +9,9 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { loadReports } from "@/features/leads/lib/reportQueries";
-import type { ReportBundle } from "@/features/leads/lib/reportQueries";
-import type { Granularity, Period } from "@/features/leads/lib/periods";
+import { loadReports } from "@/db/repos/reports";
+import type { ReportBundle } from "@/db/repos/reports";
+import type { Granularity, Period } from "@/lib/periods";
 
 export const reportKeys = {
   /** The prefix the poller invalidates against. Not queried on its own. */

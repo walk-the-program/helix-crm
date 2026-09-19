@@ -118,6 +118,7 @@ test.describe("data", () => {
 
   test("imports a HubSpot export, merges a duplicate, undoes it, and exports", async ({
     page,
+    helix: _helix,
   }) => {
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
@@ -228,6 +229,7 @@ test.describe("data", () => {
 
   test("a file with headers and no rows says so instead of importing nothing", async ({
     page,
+    helix: _helix,
   }) => {
     await page.goto("/import");
     await offerFile(
@@ -242,7 +244,7 @@ test.describe("data", () => {
     await shoot(page, "import-empty-light");
   });
 
-  test("a ragged file names the row it stopped on", async ({ page }) => {
+  test("a ragged file names the row it stopped on", async ({ page, helix: _helix }) => {
     await page.goto("/import");
     await offerFile(page, "/tmp/helix-e2e/ragged.csv", fixture("malformed", "ragged.csv"));
     await page.getByRole("button", { name: "Choose a file" }).click();
@@ -253,7 +255,7 @@ test.describe("data", () => {
     await shoot(page, "import-parse-error-light");
   });
 
-  test("every screen is designed in the dark too", async ({ page }) => {
+  test("every screen is designed in the dark too", async ({ page, helix: _helix }) => {
     await page.goto("/import");
     await setTheme(page, "dark");
     await expect(page.getByText("Drop a spreadsheet here")).toBeVisible();

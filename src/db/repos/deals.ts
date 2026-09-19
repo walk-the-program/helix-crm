@@ -37,6 +37,7 @@ import {
   parseOrThrow,
   type Col,
   type Page,
+  type Statement,
 } from "@/db/repos/_base";
 
 export type Deal = {
@@ -233,17 +234,39 @@ export async function list(
   return { rows: mapRows(DEAL_COLS, rows), total };
 }
 
-/** Every open deal grouped by stage, in board order. */
+/**
+ * Every open deal grouped by stage: one entry per live stage of the pipeline,
+ * in stage position order, including the stages that hold nothing.
+ *
+ * Both of those are load-bearing. A board with an empty column still has to
+ * draw the column - it is the drop target for the first deal that gets there -
+ * and the column order is the pipeline, not whichever stage happened to hold
+ * the first row. Before wave 3 this grouped `list()` into a Map, so callers
+ * had to drive the columns from `stages.list()` themselves and look each group
+ * up; they no longer have to.
+ */
 export async function board(
   pipelineId: string,
 ): Promise<{ stageId: string; deals: Deal[] }[]> {
-  const { rows } = await list({ pipelineId }, { limit: 5000 });
+  const stageRows = await raw.query(
+    `SELECT s.id AS s_id FROM stages s
+     WHERE s.pipeline_id = ? AND s.deleted_at IS NULL
+     ORDER BY s.position ASC, s.created_at ASC`,
+    [pipelineId],
+  );
+
   const byStage = new Map<string, Deal[]>();
+  for (const row of stageRows) byStage.set(String(row[0]), []);
+
+  const { rows } = await list({ pipelineId }, { limit: 5000 });
   for (const deal of rows) {
     const bucket = byStage.get(deal.stageId);
+    // A deal whose stage was deleted underneath it keeps its column rather
+    // than vanishing from the board.
     if (bucket) bucket.push(deal);
     else byStage.set(deal.stageId, [deal]);
   }
+
   return [...byStage.entries()].map(([stageId, deals]) => ({ stageId, deals }));
 }
 
@@ -322,6 +345,72 @@ export async function create(
     await logWrite("deal", stamps.id, "create", null, row, options.batchId);
     return getOrThrow(stamps.id);
   }, "Saving a deal");
+}
+
+/**
+ * The same write as `create`, as statements instead of a write.
+ *
+ * `contacts.createStatements` is the pattern and the reason: the write lock is
+ * not reentrant, so anything that runs inside a `withTransaction` - the lead
+ * poller applying a page, a CSV import - cannot call a repository write. It
+ * needs the statements so it can fold them into its own batch. The caller owns
+ * the change-log entry (`changeLogStatement`), which is why `row` comes back:
+ * it is exactly what belongs in the entry's `after`.
+ *
+ * `position` is required here. `create()` can look the next one up because it
+ * holds the lock; a caller inside a transaction already knows it, and a query
+ * from in here would read through the same connection mid-batch.
+ */
+export function createStatements(input: {
+  title: string;
+  valueCents?: number;
+  currency: string;
+  stageId: string;
+  position: number;
+  contactId?: string | null;
+  companyId?: string | null;
+  sourceId?: string | null;
+  externalId?: string | null;
+  expectedOn?: string | null;
+  /** Defaults to now; the stage-event row uses the same instant. */
+  at?: string;
+}): { id: string; row: Record<string, unknown>; statements: Statement[] } {
+  const at = input.at ?? nowIso();
+  const stamps = { id: newId(), createdAt: at, updatedAt: at };
+  const row = {
+    ...stamps,
+    title: trimmed(input.title),
+    valueCents: input.valueCents ?? 0,
+    currency: input.currency,
+    stageId: input.stageId,
+    stageEnteredAt: at,
+    position: input.position,
+    contactId: input.contactId ?? null,
+    companyId: input.companyId ?? null,
+    sourceId: input.sourceId ?? null,
+    externalId: input.externalId ?? null,
+    expectedOn: input.expectedOn ?? null,
+    closedAt: null,
+    outcomeReason: null,
+    deletedAt: null,
+  };
+  return {
+    id: stamps.id,
+    row,
+    statements: [
+      insertStatement("deals", row),
+      insertStatement("deal_stage_events", {
+        id: newId(),
+        createdAt: at,
+        updatedAt: at,
+        dealId: stamps.id,
+        fromStageId: null,
+        toStageId: input.stageId,
+        at,
+        deletedAt: null,
+      }),
+    ],
+  };
 }
 
 export type DealPatch = Partial<
@@ -592,4 +681,94 @@ export async function goneQuiet(nowAt: string = nowIso()): Promise<Deal[]> {
     [nowAt],
   );
   return mapRows(DEAL_COLS, rows);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/today/lib/todayData.ts.             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A deal created in the last N days that nobody has worked yet.
+ *
+ * "No activity yet" means no activity the *owner* created. System entries are
+ * excluded deliberately: the website lead poller writes one ("Lead received",
+ * carrying the original message) the instant a lead arrives, so counting
+ * system rows would empty this section before the owner ever saw it. The point
+ * of the section is "nobody has called these people".
+ */
+export type NewLead = {
+  dealId: string;
+  title: string;
+  valueCents: number;
+  currency: string;
+  createdAt: string;
+  stageId: string;
+  stageName: string;
+  sourceName: string | null;
+  contactId: string | null;
+  contactFirstName: string | null;
+  contactLastName: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  companyId: string | null;
+  companyName: string | null;
+};
+
+export async function newLeads(
+  options: { sinceIso: string; limit?: number } = { sinceIso: "" },
+): Promise<NewLead[]> {
+  const limit = options.limit ?? 25;
+  const rows = await raw.query(
+    `SELECT d.id            AS d_id,
+            d.title         AS d_title,
+            d.value_cents   AS d_value_cents,
+            d.currency      AS d_currency,
+            d.created_at    AS d_created_at,
+            d.stage_id      AS d_stage_id,
+            s.name          AS s_name,
+            src.name        AS src_name,
+            d.contact_id    AS d_contact_id,
+            c.first_name    AS c_first_name,
+            c.last_name     AS c_last_name,
+            (SELECT p.raw FROM contact_phones p
+              WHERE p.contact_id = c.id
+              ORDER BY p.is_primary DESC, p.created_at ASC LIMIT 1) AS c_phone,
+            (SELECT e.email_lower FROM contact_emails e
+              WHERE e.contact_id = c.id
+              ORDER BY e.is_primary DESC, e.created_at ASC LIMIT 1) AS c_email,
+            d.company_id    AS d_company_id,
+            co.name         AS co_name
+     FROM deals d
+     JOIN stages s ON s.id = d.stage_id
+     LEFT JOIN contacts c ON c.id = d.contact_id
+     LEFT JOIN companies co ON co.id = d.company_id
+     LEFT JOIN sources src ON src.id = d.source_id
+     WHERE d.deleted_at IS NULL
+       AND s.is_won = 0 AND s.is_lost = 0
+       AND d.created_at >= ?
+       AND NOT EXISTS (
+             SELECT 1 FROM activities a
+             WHERE a.deal_id = d.id AND a.deleted_at IS NULL AND a.is_system = 0)
+     ORDER BY d.created_at DESC
+     LIMIT ?`,
+    [options.sinceIso, limit],
+  );
+
+  return rows.map((r) => ({
+    dealId: String(r[0]),
+    title: String(r[1]),
+    valueCents: Number(r[2] ?? 0),
+    currency: String(r[3] ?? "USD"),
+    createdAt: String(r[4]),
+    stageId: String(r[5]),
+    stageName: String(r[6]),
+    sourceName: r[7] === null || r[7] === undefined ? null : String(r[7]),
+    contactId: r[8] === null || r[8] === undefined ? null : String(r[8]),
+    contactFirstName: r[9] === null || r[9] === undefined ? null : String(r[9]),
+    contactLastName: r[10] === null || r[10] === undefined ? null : String(r[10]),
+    contactPhone: r[11] === null || r[11] === undefined ? null : String(r[11]),
+    contactEmail: r[12] === null || r[12] === undefined ? null : String(r[12]),
+    companyId: r[13] === null || r[13] === undefined ? null : String(r[13]),
+    companyName: r[14] === null || r[14] === undefined ? null : String(r[14]),
+  }));
 }

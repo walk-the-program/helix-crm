@@ -17,16 +17,14 @@ import * as stagesRepo from "@/db/repos/stages";
 import * as activitiesRepo from "@/db/repos/activities";
 import * as settingsRepo from "@/db/repos/settings";
 import { nowIso, todayLocal } from "@/lib/dates";
+import { newLeads, type NewLead } from "@/db/repos/deals";
 import {
   lastActivityFor,
-  newLeads,
   recentWithLinks,
-  taskLinks,
-  workspaceIsEmpty,
-  type NewLead,
   type RecentEntry,
-  type TaskLink,
-} from "@/features/today/lib/todayData";
+} from "@/db/repos/activities";
+import { taskLinks, type TaskLink } from "@/db/repos/tasks";
+import { workspaceIsEmpty } from "@/db/repos/seed";
 import {
   compareQuiet,
   describeQuiet,

@@ -1403,3 +1403,145 @@ recharts animation issue above), an axis mixing compact and full money, and
    contrast check and only the two-series won/lost chart uses it — but if the
    design agent ever revisits the ramp, that is the slot with the least chroma to
    spend.
+
+---
+
+## 2026-09-18 — Wave 3 reconciliation agent (shared layers, cross-feature seams)
+
+### Did
+
+**1. Promoted the feature-local shared code and repointed every import.** The
+table of what moved where is in docs/CONTRACTS.md under "Wave 3 reconciliation";
+the short version:
+
+- Six reads out of `features/today/lib/` into the repositories they belonged
+  to (`deals.newLeads`, `activities.lastActivityFor`/`recentWithLinks`,
+  `tasks.taskLinks`, `seed.workspaceIsEmpty`) plus `searchRows`/`recentRecords`
+  into `db/repos/search.ts`, beside the `searchGrouped` they are the second
+  pass over. `todayData.ts` and `searchRows.ts` are gone.
+- `features/data/lib/csv.ts` → `src/lib/csv.ts`, where CONTRACTS always said it
+  lived.
+- The data agent's ten statement builders out of `importWrite.ts` and into the
+  repository for the table each one writes; `planBatch`, `coalesceInserts`,
+  `MAX_BOUND_PARAMS` and the `Statement` type into `db/repos/_base.ts`.
+  `importWrite.ts` is gone and `importRun.ts` imports from five repositories.
+- The whole-workspace duplicate scan: `findContactPairs` → `contacts.ts`,
+  `findCompanyPairs` → `companies.ts`, the shared `DuplicatePair` shapes and
+  `pairKey` → `_base.ts`. What is left in `features/data/lib/duplicates.ts` is
+  the 24-hour schedule and the merge-field picker, which are screen state.
+- `features/leads/lib/reportQueries.ts` → `db/repos/reports.ts`, and with it
+  `features/leads/lib/periods.ts` → `src/lib/periods.ts`, because a repository
+  may not import a feature.
+- **`deals.createStatements`** added, and `applyLeads.ts` now uses it instead
+  of building the deal and its first `deal_stage_events` row by hand.
+- The two copies of the one-tap action helpers (`features/today/actions.ts` and
+  `features/records/lib/{oneTap,links}.ts`) merged into **`src/lib/actions.ts`**.
+  Both offer styles survived because they are two moments, not two opinions:
+  `oneTap()` opens and toasts a "Log it" button (record screens), `openTel()`
+  opens and hands back a `logThis` callback (Today's rows render their own).
+  `tests/unit/records/links.test.ts` moved to `tests/unit/actions.test.ts`.
+
+**2. `undoBatch` can undo a soft delete.** `_base.softDeleteRow` now logs
+`before: { deletedAt: null }`. `undoBatch`'s `delete` branch tells the two kinds
+of delete apart by whether `before` carries an `id`: no `id` means a soft delete
+and the columns are written back (which clears `deleted_at`, keeping the row's
+id, timestamps and children); an `id` means a hard delete and the row is
+re-inserted. `restore()` is untouched and is still what the delete toasts call.
+Three new cases in `tests/repo/records/undoFlow.test.ts` prove both paths and
+that they agree. The rule is in CONTRACTS.
+
+**3. `deals.board()`** returns one entry per live stage in stage-position order,
+empty stages included. `PipelineBoard` and the `boardMoves` test helper no
+longer drive the columns from `stages.list()` and look each group up. Two new
+cases in `tests/repo/deals.test.ts`, including a reorder.
+
+**4. Shell.** The sonner `<Toaster>` gets `theme` from the appearance hook
+("auto" maps to sonner's "system"), so toasts are no longer light on a dark app.
+The sidebar footer runs the `"switch-workspace"` command when the registry has
+one — looked up at click time, so it degrades to plain text while Settings is
+still being built. `FeatureModule.navProvider?: () => FeatureNavSection[]` is
+new: a hook slot the shell calls every render, whose sections are spliced into
+the static nav at their `order`. Today uses it for pinned saved views
+(`views/pinnedNav.tsx`, order 15), so there is a real "Views" group in the
+sidebar and `PinnedViewsStrip` is deleted.
+
+**5. One search.** Cmd/Ctrl+K runs the registered `"search"` command if there is
+one and opens the palette if there is not; the palette moved to
+Cmd/Ctrl+Shift+K; the search dialog carries a "Commands" button back to it
+(`openCommandPalette()` fires `helix:open-palette`, since the dialog renders in
+its own React root). The topbar's "Search everything" button runs the same
+lookup. Cmd/Ctrl+/ stays as an alias. Two e2e tests updated and one added.
+
+**6. Harness.** `fixtures.ts`'s page-side `invoke` takes the request `options`
+and reads the path out of `options.headers.path` the way plugin-fs v2 sends it,
+so a `write_text_file` no longer lands under the key `"undefined"`; the payload
+is decoded from bytes. New stubs for `read_dir`, `copy_file`, `remove`,
+`stat`/`lstat` and `size`, all derived from the same flat `state.files` map,
+with directories implied by key prefixes, plus `db_backup` registering its path
+so the backups list has something to read. `playwright.config.ts` derives
+`outputDir` (and the CI report folder) from `E2E_OUT`. Every spec in scope
+destructures `helix`, and the rule is now in the fixture's header comment.
+
+**7. `TIME_BUDGET_MS`** is used (someone had already fixed it); `npm run
+typecheck` is clean across the repo.
+
+**8. Saved views** are wired into Contacts, Companies, the pipeline's deals list
+and Data's duplicates list. Two new pieces make that one screen's worth of work
+rather than four: `views/screenState.ts` (`queryFromState`, `stateFromQuery`,
+`sortIdOf` — pure, unit-tested) and `views/ViewsToolbar.tsx` (the Views popover
+and Save view as one control). `ContactsScreen` is the reference implementation
+and `views/README.md` documents the pattern. Pinned views land in the sidebar
+group from item 4 and their `?view=<id>` deep link is applied once when the row
+loads.
+
+**9. Data's `AttachmentList`** is mounted on the contact, company and deal
+pages, in the details column, as its own card below the Details panel. The AI
+buttons were deliberately not mounted.
+
+### Verified
+
+- `npm run typecheck` — clean.
+- `npm test` — 58 files, 731 tests, all passing.
+- `npx vite build` — succeeds.
+- `E2E_PORT=4186 E2E_OUT=dist-recon npx playwright test -c tests/e2e-mac/playwright.config.ts`
+  over `{smoke,records,today,data,leads}.e2e.ts` — **37 passed** in 45.7s.
+  Settings and AI were not run: that agent is still working.
+
+### Not done
+
+- `src/features/settings/**`, `src/features/ai/**` and their tests: another
+  agent owns them and was running throughout. The AI buttons on record pages,
+  the `/settings/site` duplicate route and moving `/backups` under
+  `/settings/backups` are all still open, and all three need that agent to land
+  first.
+- `src/ui/**` and `src/styles/app.css`: the design agent owns them and was
+  editing them throughout. Nothing here touched either.
+- The remaining ORCHESTRATION wave-3 items that are not seams: the real Tauri
+  launch, the release checklist, customer zero, the template port, the README.
+
+### Contract changes needed
+
+Nothing blocking. Three things the next agent should know:
+
+1. **The e2e fs stubs are an in-memory map, not a filesystem.** A restore under
+   the harness copies a placeholder string between keys in `state.files`; the
+   real backup file that `DbBridge.backup()` writes to the temp directory is
+   never copied over the real database. So the backups list and the restore
+   *flow* can now be exercised end to end, but "the restored database has the
+   old rows in it" cannot be. Making that real means giving the Node side
+   (`page.exposeFunction("__helixInvoke")`, which currently throws) a small
+   real-fs handler for `copyFile`/`readDir`/`stat`. Until then, restore stays on
+   the manual Tauri checklist.
+2. **`src/lib/actions.ts` is the one impure module in `src/lib`** — it reaches
+   the OS opener, the activities repository, the query client and the toaster.
+   That is deliberate and written into CONTRACTS; do not "fix" it by splitting
+   it, which is what produced two copies in the first place.
+3. **`navProvider` is a React hook slot.** It is called during the shell's
+   render, so it must obey the rules of hooks, and the provider list has to stay
+   stable — which it is, because the registry is fixed at module load. A feature
+   that wants a dynamic nav section adds one; it must not call it conditionally.
+
+Two smaller notes that were reported by wave 2 and are still open because they
+belong to whoever owns the file: `contacts.updateEmail` (changing an email's
+label loses the row id) and `tags.indexFor(entityType)` (the tag column on a
+list walks every tag today).

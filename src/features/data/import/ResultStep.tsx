@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Download, Users } from "lucide-react";
 import { Button, Card, CardBody, toast } from "@/ui";
-import { rowsToCsv } from "@/features/data/lib/csv";
+import { rowsToCsv } from "@/lib/csv";
 import { pickSavePath, writeTextFileAt } from "@/features/data/lib/fsBridge";
 import type { ImportResult } from "@/features/data/lib/importRun";
 

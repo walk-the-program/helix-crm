@@ -29,6 +29,7 @@ import {
   parseOrThrow,
   type Col,
   type Page,
+  type Statement,
 } from "@/db/repos/_base";
 
 export type Tag = {
@@ -352,4 +353,35 @@ export async function counts(): Promise<{ tagId: string; count: number }[]> {
      GROUP BY tl.tag_id`,
   );
   return rows.map((r) => ({ tagId: String(r[0]), count: Number(r[1]) }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/importWrite.ts. */
+/* -------------------------------------------------------------------------- */
+
+export function tagCreateStatement(name: string): { id: string; statement: Statement } {
+  const s = stampNew();
+  return {
+    id: s.id,
+    statement: insertStatement("tags", {
+      ...s,
+      name: name.trim(),
+      color: "var(--stage-1)",
+      deletedAt: null,
+    }),
+  };
+}
+
+export function tagLinkStatement(
+  tagId: string,
+  entityType: string,
+  entityId: string,
+): Statement {
+  return insertStatement("tag_links", {
+    ...stampNew(),
+    tagId,
+    entityType,
+    entityId,
+    deletedAt: null,
+  });
 }

@@ -20,7 +20,7 @@ import {
   rowsToCsv,
   sniffCsv,
   stripBom,
-} from "../../../src/features/data/lib/csv";
+} from "../../../src/lib/csv";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, "..", "..", "fixtures");

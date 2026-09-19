@@ -15,17 +15,15 @@ let pipelineId: string;
 let stages: { id: string; name: string; isLost: boolean }[];
 
 /**
- * The board as the screen assembles it. `deals.board()` returns only the
- * stages that hold something, in map order, so the screen (and this helper)
- * drives the columns from the stage list instead. Noted in STATUS.
+ * The board as the screen assembles it. Since wave 3 `deals.board()` returns
+ * one entry per stage in stage-position order, empty stages included, so this
+ * is a straight map over what the repository gives back.
  */
 async function boardColumns(): Promise<BoardColumn[]> {
   const grouped = await dealsRepo.board(pipelineId);
-  return stages.map((stage) => ({
-    stageId: stage.id,
-    dealIds: (grouped.find((column) => column.stageId === stage.id)?.deals ?? []).map(
-      (deal) => deal.id,
-    ),
+  return grouped.map((column) => ({
+    stageId: column.stageId,
+    dealIds: column.deals.map((deal) => deal.id),
   }));
 }
 

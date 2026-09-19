@@ -114,3 +114,20 @@ export async function seedWorkspace(): Promise<SeedResult> {
 
   return result;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/today/lib/todayData.ts.             */
+/* -------------------------------------------------------------------------- */
+
+/** True when the workspace has nothing in it at all — the first-run screen. */
+export async function workspaceIsEmpty(): Promise<boolean> {
+  const rows = await raw.query(
+    `SELECT (SELECT count(*) FROM contacts WHERE deleted_at IS NULL) AS contact_count,
+            (SELECT count(*) FROM companies WHERE deleted_at IS NULL) AS company_count,
+            (SELECT count(*) FROM deals WHERE deleted_at IS NULL) AS deal_count,
+            (SELECT count(*) FROM tasks WHERE deleted_at IS NULL) AS task_count,
+            (SELECT count(*) FROM activities WHERE deleted_at IS NULL) AS activity_count`,
+  );
+  if (rows.length === 0) return true;
+  return rows[0].every((value) => Number(value ?? 0) === 0);
+}

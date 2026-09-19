@@ -23,6 +23,14 @@
  *
  *   import { test, expect } from "../fixtures";
  *   test("...", async ({ page, helix }) => { ... });
+ *
+ * Every `test(...)` callback in this suite must destructure `helix`, even
+ * when the test body never touches it. Playwright only builds a fixture a
+ * test (or one of its hooks) actually asks for, and `helix` is what installs
+ * the database bridge and the Tauri invoke shim below. A spec that writes
+ * `async ({ page }) => { ... }` and calls `page.goto("/")` gets a bare
+ * `window.__TAURI_INTERNALS__` with nothing behind it — "Cannot read
+ * properties of undefined (reading 'invoke')" and the boot error screen.
  */
 import { test as base, expect } from "@playwright/test";
 import Database from "better-sqlite3";
@@ -318,8 +326,10 @@ function installShim(seed: { appData: string; workspacesDir: string; files?: Rec
     files: { ...(seed.files ?? {}) } as Record<string, string>,
     /** Everything the app opened through the OS opener. */
     opened: [] as string[],
-    /** Every invoke, in order, for assertions. */
-    calls: [] as { cmd: string; args: unknown }[],
+    /** Every invoke, in order, for assertions. `path` is the resolved fs
+     *  target (header-decoded when present, else `args.path`); for a
+     *  non-fs command it is just `String(args?.path)`, harmless and unused. */
+    calls: [] as { cmd: string; args: unknown; path: string }[],
   };
   w.__helixE2E = state;
 
@@ -327,8 +337,124 @@ function installShim(seed: { appData: string; workspacesDir: string; files?: Rec
     return state.dialogQueue.length ? (state.dialogQueue.shift() ?? null) : null;
   }
 
-  async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
-    state.calls.push({ cmd, args: args ?? null });
+  // ---------------------------------------------------------------------
+  // plugin:fs -- `state.files` is a flat `path -> text` map. There is no
+  // real filesystem underneath it: a "directory" only exists because some
+  // other file's path uses it as a prefix, split on `/` or `\`. That is
+  // enough for `read_dir` to derive children, `stat`/`lstat`/`exists` to
+  // tell a file from a directory, and `mkdir`/`create` to be no-ops (there
+  // is nothing that needs to exist ahead of time).
+  // ---------------------------------------------------------------------
+
+  /** Tauri v2 sends a write's path as a request header, not an argument. */
+  function resolvePath(args: unknown, options?: { headers?: Record<string, string> }): string {
+    const headerPath = options?.headers?.path;
+    if (typeof headerPath === "string") {
+      try {
+        return decodeURIComponent(headerPath);
+      } catch {
+        return headerPath;
+      }
+    }
+    const a = args as Record<string, unknown> | null | undefined;
+    return String(a?.path);
+  }
+
+  /** The payload for write_text_file/write_file: a Uint8Array, or that same
+   *  data after crossing the shim as a plain array of byte numbers. */
+  function decodeBytes(payload: unknown): string {
+    if (payload instanceof Uint8Array) return new TextDecoder().decode(payload);
+    if (Array.isArray(payload)) return new TextDecoder().decode(new Uint8Array(payload));
+    if (payload && typeof payload === "object") {
+      return new TextDecoder().decode(new Uint8Array(Object.values(payload as Record<string, number>)));
+    }
+    return String(payload ?? "");
+  }
+
+  function stripTrailingSep(p: string): string {
+    return p.replace(/[\\/]+$/, "");
+  }
+
+  function isKnownFile(path: string): boolean {
+    return Object.prototype.hasOwnProperty.call(state.files, path);
+  }
+
+  /** True when some file's path uses `dir` (plus a separator) as a prefix. */
+  function isKnownDir(dirRaw: string): boolean {
+    const dir = stripTrailingSep(dirRaw);
+    return Object.keys(state.files).some((key) => childSegment(key, dir) !== null);
+  }
+
+  /** The first path segment of `key` under `dir`, or null when `key` is not under `dir`. */
+  function childSegment(key: string, dir: string): string | null {
+    if (!key.startsWith(dir)) return null;
+    const rest = key.slice(dir.length);
+    if (rest.length === 0) return null;
+    const sep = rest[0];
+    if (sep !== "/" && sep !== "\\") return null;
+    return rest.slice(1);
+  }
+
+  type DirEntry = { name: string; isDirectory: boolean; isFile: boolean; isSymlink: boolean };
+
+  function listDir(dirRaw: string): DirEntry[] {
+    const dir = stripTrailingSep(dirRaw);
+    const seen = new Map<string, boolean>(); // name -> isDirectory
+    for (const key of Object.keys(state.files)) {
+      const rest = childSegment(key, dir);
+      if (rest === null) continue;
+      const sepIdx = rest.search(/[\\/]/);
+      const isLeaf = sepIdx === -1;
+      const name = isLeaf ? rest : rest.slice(0, sepIdx);
+      seen.set(name, (seen.get(name) ?? false) || !isLeaf);
+    }
+    return Array.from(seen, ([name, isDirectory]) => ({
+      name,
+      isDirectory,
+      isFile: !isDirectory,
+      isSymlink: false,
+    }));
+  }
+
+  function byteLength(text: string): number {
+    return new TextEncoder().encode(text).length;
+  }
+
+  function fileInfo(path: string) {
+    const isFile = isKnownFile(path);
+    const isDirectory = !isFile && isKnownDir(path);
+    if (!isFile && !isDirectory) {
+      throw new Error(`e2e: no such file or directory "${path}"`);
+    }
+    return {
+      isFile,
+      isDirectory,
+      isSymlink: false,
+      size: isFile ? byteLength(state.files[path]) : 0,
+      mtime: null,
+      atime: null,
+      birthtime: null,
+      readonly: false,
+      fileAttributes: null,
+      dev: null,
+      ino: null,
+      mode: null,
+      nlink: null,
+      uid: null,
+      gid: null,
+      rdev: null,
+      blksize: null,
+      blocks: null,
+    };
+  }
+
+  async function invoke(
+    cmd: string,
+    args?: unknown,
+    options?: { headers?: Record<string, string> },
+  ): Promise<unknown> {
+    const path = resolvePath(args, options);
+    state.calls.push({ cmd, args: args ?? null, path });
     const a = (args ?? {}) as Record<string, any>;
 
     // The database pipe, in case anything reaches for invoke directly.
@@ -351,7 +477,16 @@ function installShim(seed: { appData: string; workspacesDir: string; files?: Rec
       if (method === "query") return { rows: value };
       if (method === "execute" || method === "batch") return { changes: value };
       if (method === "open") return { path: a.path };
-      if (method === "backup") return { path: value };
+      if (method === "backup") {
+        // The real backup lands on the real temp filesystem, not in
+        // `state.files` (better-sqlite3's VACUUM INTO on the Node side has
+        // no way to reach into this page's state). Registering the path
+        // here with a placeholder is what lets `read_dir` over the backups
+        // directory see it, so listBackups()/restore have something to work
+        // with under this harness.
+        state.files[String(value)] = "e2e-backup-placeholder";
+        return { path: value };
+      }
       return value ?? null;
     }
 
@@ -370,17 +505,55 @@ function installShim(seed: { appData: string; workspacesDir: string; files?: Rec
       case "plugin:fs|read_text_file":
       case "plugin:fs|readTextFile":
         // The plugin decodes bytes, not a string.
-        return Array.from(new TextEncoder().encode(state.files[String(a.path)] ?? ""));
+        return Array.from(new TextEncoder().encode(state.files[path] ?? ""));
       case "plugin:fs|write_text_file":
       case "plugin:fs|writeTextFile":
-        state.files[String(a.path)] = String(a.data ?? a.contents ?? "");
+      case "plugin:fs|write_file":
+      case "plugin:fs|writeFile":
+        // The payload is the raw bytes (args itself), not `args.data`: the
+        // path travels as a request header (see resolvePath above).
+        state.files[path] = decodeBytes(args);
         return null;
       case "plugin:fs|exists":
-        return Object.prototype.hasOwnProperty.call(state.files, String(a.path));
+        return isKnownFile(path) || isKnownDir(path);
       case "plugin:fs|mkdir":
       case "plugin:fs|create":
-      case "plugin:fs|remove":
         return null;
+      case "plugin:fs|remove": {
+        const recursive = Boolean(a.options?.recursive);
+        const existed = isKnownFile(path);
+        if (existed) delete state.files[path];
+        let removedNested = false;
+        if (recursive) {
+          const dir = path.replace(/[\\/]+$/, "");
+          for (const key of Object.keys(state.files)) {
+            if (childSegment(key, dir) !== null) {
+              delete state.files[key];
+              removedNested = true;
+            }
+          }
+        }
+        if (!existed && !removedNested) {
+          return Promise.reject(new Error(`e2e: no such file or directory "${path}"`));
+        }
+        return null;
+      }
+      case "plugin:fs|copy_file": {
+        const from = String(a.fromPath ?? "");
+        const to = String(a.toPath ?? "");
+        if (!isKnownFile(from)) {
+          return Promise.reject(new Error(`e2e: copy_file source "${from}" does not exist`));
+        }
+        state.files[to] = state.files[from];
+        return null;
+      }
+      case "plugin:fs|read_dir":
+        return listDir(path);
+      case "plugin:fs|stat":
+      case "plugin:fs|lstat":
+        return fileInfo(path);
+      case "plugin:fs|size":
+        return fileInfo(path).size;
 
       // --- opener -----------------------------------------------------------
       case "plugin:opener|open_url":

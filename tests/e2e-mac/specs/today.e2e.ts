@@ -472,13 +472,31 @@ test.describe("search", () => {
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
+  test("Cmd+K opens search, and the palette is one keystroke away", async ({
+    page,
+    helix,
+  }) => {
+    await bootTodayWithData(page, helix);
+
+    // Wave 3: there is one search key. The shell runs the registered "search"
+    // command on Cmd/Ctrl+K rather than opening the palette.
+    await page.keyboard.press("Meta+k");
+    await expect(page.getByTestId("today-search")).toBeVisible();
+
+    // And the command list is reachable from inside it.
+    await page.getByRole("button", { name: /Commands/ }).click();
+    await expect(page.getByPlaceholder("Search, or type a command")).toBeVisible();
+    await expect(page.getByTestId("today-search")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+
   test("the palette's Search records command opens the same dialog", async ({
     page,
     helix,
   }) => {
     await bootTodayWithData(page, helix);
 
-    await page.keyboard.press("Meta+k");
+    await page.keyboard.press("Meta+Shift+k");
     // The shell's palette and this dialog are both cmdk; scope to the item so
     // the topbar button of the same name cannot be picked instead.
     const command = page.locator("[cmdk-item]", { hasText: "Search records" });

@@ -4,18 +4,15 @@
  * Owns: the Today screen at "/" and "/today", instant search, the saved-views
  * library, the one-tap action helpers and the gone-quiet rule.
  *
- * Two things worth knowing before reading further, both written up properly in
- * docs/STATUS.md under "Contract changes needed":
+ * Two seams wave 3 closed, both now in docs/CONTRACTS.md:
  *
- * 1. `commands[].shortcut` is a label, not a binding. Only the shell binds keys
- *    (Shell.tsx calls `useShortcut("mod+k")` for the palette), so a feature's
- *    shortcut string is shown next to the command and nothing more. Search
- *    therefore binds its own key from the overlay it mounts, on Cmd/Ctrl+/,
- *    because Cmd/Ctrl+K already belongs to the palette.
- * 2. `nav` is a static array, read once when the shell mounts and before any
- *    row exists. Pinned saved views cannot be sidebar items until a feature can
- *    contribute nav items asynchronously, so they surface as a strip at the top
- *    of Today instead. Sidebar order 15 is reserved for them.
+ * 1. `commands[].shortcut` is still a label rather than a binding, but the
+ *    shell binds Cmd/Ctrl+K to whatever command is registered with the id
+ *    "search" — this one. The palette moved to Cmd/Ctrl+Shift+K. The overlay
+ *    keeps Cmd/Ctrl+/ as an alias.
+ * 2. `navProvider` lets a feature contribute sidebar items that only exist
+ *    after a database read, so pinned saved views are a real "Views" group in
+ *    the sidebar (order 15) instead of a strip on Today.
  */
 
 import type { FeatureModule } from "@/app/feature";
@@ -27,6 +24,7 @@ import {
   openSearch,
   SEARCH_SHORTCUT,
 } from "@/features/today/search/overlay";
+import { usePinnedViewsNav } from "@/features/today/views/pinnedNav";
 
 export const feature: FeatureModule = {
   id: "today",
@@ -35,6 +33,8 @@ export const feature: FeatureModule = {
     { path: "/today", element: <TodayScreen /> },
   ],
   nav: [{ label: "Today", to: "/", icon: Sun, order: NAV_ORDER.today }],
+  /** The sidebar's "Views" group: every pinned saved view, live. */
+  navProvider: usePinnedViewsNav,
   commands: [
     {
       id: "search",

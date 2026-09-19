@@ -254,3 +254,45 @@ describe("deals: goneQuiet", () => {
     expect(quiet.map((d) => d.id)).not.toContain(deal.id);
   });
 });
+
+describe("deals: board", () => {
+  it("returns one column per stage, in stage position order, empty ones included", async () => {
+    h = await createSeededHarness();
+    const pipeline = await pipelines.getDefaultOrThrow();
+    const ordered = await stages.list(pipeline.id);
+    const byName = await seededStages();
+
+    // One deal, in the third stage: every other column must still be there.
+    await deals.create({ title: "Fence quote", stageId: byName.Quoted.id });
+
+    const board = await deals.board(pipeline.id);
+
+    expect(board.map((column) => column.stageId)).toEqual(ordered.map((s) => s.id));
+    expect(board.find((c) => c.stageId === byName.Quoted.id)?.deals).toHaveLength(1);
+    expect(board.find((c) => c.stageId === byName.New.id)?.deals).toEqual([]);
+  });
+
+  it("follows the stages when they are reordered, not the order deals arrived", async () => {
+    h = await createSeededHarness();
+    const pipeline = await pipelines.getDefaultOrThrow();
+    const byName = await seededStages();
+
+    await deals.create({ title: "Older, later stage", stageId: byName.Scheduled.id });
+    await deals.create({ title: "Newer, first stage", stageId: byName.New.id });
+
+    const before = await deals.board(pipeline.id);
+    expect(before[0].stageId).toBe(byName.New.id);
+
+    // Move "Scheduled" to the front; the board follows.
+    const current = await stages.list(pipeline.id);
+    await stages.reorder([
+      byName.Scheduled.id,
+      ...current.filter((s) => s.id !== byName.Scheduled.id).map((s) => s.id),
+    ]);
+
+    const after = await deals.board(pipeline.id);
+    expect(after[0].stageId).toBe(byName.Scheduled.id);
+    expect(after[0].deals).toHaveLength(1);
+    expect(after.map((c) => c.stageId)).toHaveLength(before.length);
+  });
+});

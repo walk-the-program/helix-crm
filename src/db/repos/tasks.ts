@@ -351,3 +351,103 @@ export async function purge(
     "Purging a task",
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/today/lib/todayData.ts.             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Who a task is about, and how to reach them.
+ *
+ * `tasks.today()` gives the three buckets but only foreign keys, and DESIGN.md
+ * is explicit that a Today row without the customer's name and a direct action
+ * does not belong on Today. One query for the whole list, keyed by task id.
+ * Absent from the map means a standalone task with no record attached, which
+ * is legitimate ("Order sod").
+ */
+export type TaskLink = {
+  label: string;
+  href: string;
+  /** The primary phone of whoever the task is about, if there is one. */
+  phone: string | null;
+  email: string | null;
+  contactId: string | null;
+  companyId: string | null;
+  dealId: string | null;
+};
+
+export async function taskLinks(
+  taskIds: string[],
+): Promise<Map<string, TaskLink>> {
+  const out = new Map<string, TaskLink>();
+  if (taskIds.length === 0) return out;
+
+  const chunkSize = 400;
+  for (let i = 0; i < taskIds.length; i += chunkSize) {
+    const chunk = taskIds.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = await raw.query(
+      `SELECT t.id         AS t_id,
+              t.deal_id    AS t_deal_id,
+              d.title      AS d_title,
+              t.contact_id AS t_contact_id,
+              c.first_name AS c_first_name,
+              c.last_name  AS c_last_name,
+              t.company_id AS t_company_id,
+              co.name      AS co_name,
+              (SELECT p.raw FROM contact_phones p
+                WHERE p.contact_id = coalesce(t.contact_id, d.contact_id)
+                ORDER BY p.is_primary DESC, p.created_at ASC LIMIT 1) AS t_phone,
+              (SELECT e.email_lower FROM contact_emails e
+                WHERE e.contact_id = coalesce(t.contact_id, d.contact_id)
+                ORDER BY e.is_primary DESC, e.created_at ASC LIMIT 1) AS t_email,
+              d.contact_id AS d_contact_id
+       FROM tasks t
+       LEFT JOIN deals d ON d.id = t.deal_id AND d.deleted_at IS NULL
+       LEFT JOIN contacts c ON c.id = t.contact_id AND c.deleted_at IS NULL
+       LEFT JOIN companies co ON co.id = t.company_id AND co.deleted_at IS NULL
+       WHERE t.id IN (${placeholders})`,
+      chunk,
+    );
+
+    for (const r of rows) {
+      const taskId = String(r[0]);
+      const dealId = r[1] === null || r[1] === undefined ? null : String(r[1]);
+      const dealTitle = r[2] === null || r[2] === undefined ? null : String(r[2]);
+      const contactId = r[3] === null || r[3] === undefined ? null : String(r[3]);
+      const first = r[4] === null || r[4] === undefined ? "" : String(r[4]);
+      const last = r[5] === null || r[5] === undefined ? "" : String(r[5]);
+      const companyId = r[6] === null || r[6] === undefined ? null : String(r[6]);
+      const companyName = r[7] === null || r[7] === undefined ? null : String(r[7]);
+      const phone = r[8] === null || r[8] === undefined ? null : String(r[8]);
+      const email = r[9] === null || r[9] === undefined ? null : String(r[9]);
+      const dealContactId = r[10] === null || r[10] === undefined ? null : String(r[10]);
+
+      const contactName = `${first} ${last}`.trim();
+      let label: string | null = null;
+      let href: string | null = null;
+      if (contactId && contactName) {
+        label = contactName;
+        href = `/contacts/${contactId}`;
+      } else if (companyId && companyName) {
+        label = companyName;
+        href = `/companies/${companyId}`;
+      } else if (dealId && dealTitle) {
+        label = dealTitle;
+        href = `/deals/${dealId}`;
+      }
+      if (!label || !href) continue;
+
+      out.set(taskId, {
+        label,
+        href,
+        phone,
+        email,
+        contactId: contactId ?? dealContactId,
+        companyId,
+        dealId,
+      });
+    }
+  }
+  return out;
+}

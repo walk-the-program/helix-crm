@@ -66,16 +66,19 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
     return map;
   }, [board]);
 
-  const serverColumns: BoardColumn[] = useMemo(
-    () =>
-      stages.map((stage) => ({
-        stageId: stage.id,
-        dealIds: (board.find((column) => column.stageId === stage.id)?.deals ?? []).map(
-          (deal) => deal.id,
-        ),
-      })),
-    [stages, board],
-  );
+  // `deals.board()` already returns one entry per stage in position order
+  // (empty ones included), so the columns are its shape, not the stage list's.
+  // `stages` is still what the headers render from, and a stage the board has
+  // not heard of yet - one added in another window - gets an empty column.
+  const serverColumns: BoardColumn[] = useMemo(() => {
+    const dealIdsByStage = new Map(
+      board.map((column) => [column.stageId, column.deals.map((deal) => deal.id)]),
+    );
+    return stages.map((stage) => ({
+      stageId: stage.id,
+      dealIds: dealIdsByStage.get(stage.id) ?? [],
+    }));
+  }, [stages, board]);
 
   // Optimistic copy: the board redraws the moment the card lands, and the
   // refetch after the write replaces it.

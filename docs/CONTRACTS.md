@@ -275,6 +275,125 @@ without a real site.
   would otherwise leak into Diagnostics).
 - `reqwest` is pinned to 0.12 to match `tauri-plugin-http`.
 
+## Wave 3 reconciliation (binding)
+
+The five feature areas were built in parallel and each wrote what it needed inside its
+own folder. Wave 3 promoted that code into the shared layers and closed the seams
+between the features. Everything in this section is now the contract.
+
+### Where the promoted code went
+
+| Was | Is |
+| --- | --- |
+| `features/today/lib/todayData.ts#newLeads` | `db/repos/deals.ts#newLeads` |
+| `todayData.ts#lastActivityFor`, `#recentWithLinks` | `db/repos/activities.ts` |
+| `todayData.ts#taskLinks` | `db/repos/tasks.ts` |
+| `todayData.ts#workspaceIsEmpty` | `db/repos/seed.ts` (the first-run check lives with the first-run seed) |
+| `features/today/lib/searchRows.ts` | `db/repos/search.ts` (`searchRows`, `recentRecords`, `GROUP_HEADINGS`) |
+| `features/data/lib/csv.ts` | `lib/csv.ts` |
+| `features/data/lib/importWrite.ts` statement builders | the repository for the table each one writes: `contacts.ts` (`importContactStatements`, `contactEmailStatement`, `contactPhoneStatement`, `contactUpdateStatement`), `companies.ts`, `sources.ts`, `tags.ts`, `customFields.ts` |
+| `importWrite.ts#planBatch`, `#coalesceInserts`, `Statement` | `db/repos/_base.ts` |
+| `features/data/lib/duplicates.ts#findContactPairs` / `#findCompanyPairs` | `db/repos/contacts.ts` / `db/repos/companies.ts`; the shared `DuplicatePair` shapes and `pairKey` are in `_base.ts`. What stays in the feature is the schedule and the merge-field picker. |
+| `features/leads/lib/reportQueries.ts` | `db/repos/reports.ts` |
+| `features/leads/lib/periods.ts` | `lib/periods.ts` (a repository may not import a feature) |
+| `features/today/actions.ts` + `features/records/lib/{oneTap,links}.ts` | `lib/actions.ts`, one module |
+
+Two names were added rather than moved:
+
+- **`deals.createStatements(input)`** returns `{ id, row, statements }` — the deal insert
+  and its first `deal_stage_events` row, for a caller already inside a
+  `withTransaction` (the lead poller, and an import if deals ever become importable).
+  `position` is required, because a caller inside a transaction already knows it. The
+  caller owns the change-log entry, which is why `row` comes back: it is the `after`.
+- **`src/lib/actions.ts`** is the one member of `src/lib` that is not pure. A one-tap
+  action is the sum of the OS opener, the activities repository, the query client and
+  the toaster, and splitting it is what produced two copies. Everything else in
+  `src/lib` stays pure.
+
+### Undo and soft delete
+
+`change_log.op` is `"delete"` for both kinds of delete. What tells them apart is whether
+`before` carries an `id`:
+
+- **Soft delete** (`_base.softDeleteRow`) logs `before: { deletedAt: null }`,
+  `after: { deletedAt: <at> }` and no `id`, because the row never left. `undoBatch`
+  writes those columns back, which clears `deleted_at`. The row keeps its id, its
+  `created_at` and every child row.
+- **Hard delete** logs the whole row, `id` included, and `undoBatch` re-inserts it.
+  `purgeRow` logs no `before` at all, so a purge is not undoable — by design.
+
+`restore(id)` is unchanged and is still what the delete toasts call: one statement
+instead of a replay. Both paths now work and they agree; `tests/repo/records/undoFlow.test.ts`
+proves it.
+
+### `deals.board()`
+
+Returns one entry per live stage of the pipeline, in stage position order, including
+stages that hold nothing. A caller no longer drives the columns from `stages.list()` and
+looks each group up. A deal whose stage was deleted underneath it still gets a column
+rather than vanishing.
+
+### One search, and the keys the shell binds
+
+There is one search in the product.
+
+- **Cmd/Ctrl+K** — the shell looks up the registered command with the id `"search"` at
+  press time and runs it. Today's feature registers it, so Cmd/Ctrl+K opens the search
+  dialog. With no such command registered, the same key opens the command palette, so
+  the shell never depends on a feature being present.
+- **Cmd/Ctrl+Shift+K** — the command palette, always. The search dialog also carries a
+  "Commands" button that opens it, so neither panel is a dead end. The palette exports
+  `openCommandPalette()`, which fires `helix:open-palette` on `window`, for anything
+  rendering outside the shell's React tree.
+- **Cmd/Ctrl+/** — an alias for search, kept because it shipped and because it still
+  works on a screen where the shell is not mounted.
+- The topbar's "Search everything" button runs the same lookup as Cmd/Ctrl+K.
+
+`FeatureCommand.shortcut` is still a label, not a binding. The shell binds keys; a
+feature declares the string that gets printed next to the command.
+
+### `FeatureModule.navProvider`
+
+```ts
+navProvider?: () => FeatureNavSection[];
+type FeatureNavSection = { label?: string; order: number; items: FeatureNavItem[] };
+```
+
+For sidebar items that do not exist until something has been read from the database.
+`nav` is still a static array flattened once at mount; `navProvider` is called by the
+shell on every render, once per feature, in registry order, and its sections are spliced
+into the static items at their `order` — so a section with order 15 renders between
+Today (10) and Contacts (20).
+
+It is a React hook slot: it may call hooks, and it must obey the rules of hooks. The
+registry is fixed at module load, so the set of providers never changes between renders.
+Return `[]` to contribute nothing, and an empty section is not rendered.
+
+`NAV_ORDER.views` is 15 and belongs to Today's pinned saved views, which is why the strip
+at the top of the Today screen is gone.
+
+### The workspace footer
+
+The sidebar footer runs the registered command with the id `"switch-workspace"` if there
+is one, looked up at click time. With no such command it renders the workspace name as
+plain text, exactly as before.
+
+### Saved views on a list screen
+
+`src/features/today/views` is the library; `screenState.ts` and `ViewsToolbar.tsx` are
+the adoption pattern, and `src/features/records/screens/ContactsScreen.tsx` is the
+reference implementation. A screen keeps its own filter state, turns it into a
+`ViewQuery` with `queryFromState(filters, defaults, sortId)`, reads one back with
+`stateFromQuery(query, defaults)` and `sortIdOf(query, fallback)`, and renders
+`<ViewsToolbar>` in its `PageHeader` actions. A filter equal to the screen's default is
+left out of the query, so "nothing filtered" round-trips as an empty filter list. The
+sort is `[{ field: <the screen's own sort id>, direction: "asc" }]` — the id is opaque to
+the library, as its README says.
+
+A pinned view is a link in the sidebar's Views group and arrives at the screen as
+`?view=<id>`, which `useSavedViews` reads; the screen applies it once, when the row
+loads.
+
 ## Status reporting
 
 Each agent appends a dated entry to `docs/STATUS.md` when it finishes: what it built,

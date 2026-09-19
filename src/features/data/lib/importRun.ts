@@ -22,7 +22,7 @@ import { pauseTimers, withTransaction } from "@/db/writeLock";
 import { changeLogStatement } from "@/db/changeLog";
 import { newBatchId } from "@/lib/ids";
 import { nowIso } from "@/lib/dates";
-import { walkCsv, type Delimiter } from "@/features/data/lib/csv";
+import { walkCsv, type Delimiter } from "@/lib/csv";
 import {
   addressJsonFor,
   applyMapping,
@@ -30,20 +30,20 @@ import {
   type ColumnMapping,
   type MappedRow,
 } from "@/features/data/lib/mapping";
+import { planBatch, type Statement } from "@/db/repos/_base";
 import {
-  companyCreateStatement,
   contactEmailStatement,
   contactPhoneStatement,
   contactUpdateStatement,
+  importContactStatements,
+} from "@/db/repos/contacts";
+import { companyCreateStatement } from "@/db/repos/companies";
+import { sourceCreateStatement } from "@/db/repos/sources";
+import { tagCreateStatement, tagLinkStatement } from "@/db/repos/tags";
+import {
   customFieldCreateStatement,
   customValueStatement,
-  importContactStatements,
-  planBatch,
-  sourceCreateStatement,
-  tagCreateStatement,
-  tagLinkStatement,
-  type Statement,
-} from "@/features/data/lib/importWrite";
+} from "@/db/repos/customFields";
 
 export type DedupePolicy = "skip" | "update" | "duplicate";
 

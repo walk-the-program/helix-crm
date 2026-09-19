@@ -16,7 +16,7 @@ import {
   ImportParseError,
   delimiterLabel,
   parseCsvText,
-} from "@/features/data/lib/csv";
+} from "@/lib/csv";
 import type { LoadedCsv } from "@/features/data/lib/filePick";
 import { applyMapping, type ColumnMapping, type MappedRow } from "@/features/data/lib/mapping";
 import {

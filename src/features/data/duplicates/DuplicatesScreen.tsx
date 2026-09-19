@@ -6,7 +6,7 @@
  * 10-second Undo toast is the first line of defence - the history tab is the
  * second, for 30 days.
  */
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, RefreshCw, Users } from "lucide-react";
@@ -17,6 +17,7 @@ import {
   CardBody,
   EmptyState,
   PageHeader,
+  Select,
   Tabs,
   TabsContent,
   TabsList,
@@ -25,16 +26,37 @@ import {
 } from "@/ui";
 import { formatDateDisplay } from "@/lib/dates";
 import { dqk } from "@/features/data/lib/queries";
+import type { DuplicatePair } from "@/db/repos/_base";
 import {
   markScanned,
   scanDuplicates,
-  type DuplicatePair,
 } from "@/features/data/lib/duplicates";
 import { merge as mergeRecords, reverse as reverseMerge } from "@/db/repos/merge";
 import { MergeDialog } from "@/features/data/duplicates/MergeDialog";
 import { MergesHistory } from "@/features/data/duplicates/MergesHistory";
+import {
+  queryFromState,
+  stateFromQuery,
+  useSavedViews,
+  ViewsToolbar,
+  type ViewQuery,
+} from "@/features/today/views";
 
 const UNDO_MS = 10_000;
+const ALL = "__all__";
+
+/**
+ * The pairs list has no filters of its own today, so this adds the minimum
+ * needed to give saved views something real to capture: which entity type a
+ * pair is (contact or company) and what it matched on. Both are client-side
+ * filters over the already-scanned `pairs.data` — no new repository call.
+ * There is no sort concept here, so saved views for this screen carry no
+ * `sort` entry.
+ */
+const FILTER_DEFAULTS = {
+  entityType: ALL,
+  matchedOn: ALL,
+};
 
 function matchLabel(pair: DuplicatePair): string {
   if (pair.matchedOn === "email") return "Same email";
@@ -95,6 +117,29 @@ export function DuplicatesScreen() {
   const queryClient = useQueryClient();
   const [active, setActive] = useState<DuplicatePair | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [entityType, setEntityType] = useState(FILTER_DEFAULTS.entityType);
+  const [matchedOn, setMatchedOn] = useState(FILTER_DEFAULTS.matchedOn);
+
+  const currentView: ViewQuery = useMemo(
+    () => queryFromState({ entityType, matchedOn }, FILTER_DEFAULTS, null),
+    [entityType, matchedOn],
+  );
+
+  function applyView(query: ViewQuery | null) {
+    const next = stateFromQuery(query, FILTER_DEFAULTS);
+    setEntityType(next.entityType);
+    setMatchedOn(next.matchedOn);
+  }
+
+  // A link from the sidebar's Views group lands here with `?view=<id>` before
+  // the row itself has been read, so apply it when it arrives — once per view.
+  const { activeId, activeQuery } = useSavedViews("contact", currentView);
+  const [appliedViewId, setAppliedViewId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!activeId || !activeQuery || appliedViewId === activeId) return;
+    setAppliedViewId(activeId);
+    applyView(activeQuery);
+  }, [activeId, activeQuery, appliedViewId]);
 
   const pairs = useQuery({
     queryKey: dqk.duplicatePairs("all"),
@@ -141,8 +186,12 @@ export function DuplicatesScreen() {
     }
   }
 
-  const found = (pairs.data ?? []).filter((p) => !dismissed.has(p.key));
-  const hidden = (pairs.data ?? []).filter((p) => dismissed.has(p.key));
+  const matchesFilters = (p: DuplicatePair) =>
+    (entityType === ALL || p.entityType === entityType) &&
+    (matchedOn === ALL || p.matchedOn === matchedOn);
+
+  const found = (pairs.data ?? []).filter((p) => !dismissed.has(p.key) && matchesFilters(p));
+  const hidden = (pairs.data ?? []).filter((p) => dismissed.has(p.key) && matchesFilters(p));
 
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
@@ -150,16 +199,66 @@ export function DuplicatesScreen() {
         title="Duplicates"
         subtitle="People and companies that look like the same record twice."
         actions={
-          <Button
-            variant="secondary"
-            onClick={() => void pairs.refetch()}
-            loading={pairs.isFetching}
-            iconLeft={<RefreshCw size={16} aria-hidden="true" />}
-          >
-            Scan again
-          </Button>
+          <div className="flex items-end gap-[var(--space-2)]">
+            <ViewsToolbar
+              entityType="contact"
+              current={currentView}
+              onPick={(query) => applyView(query)}
+            />
+            <Button
+              variant="secondary"
+              onClick={() => void pairs.refetch()}
+              loading={pairs.isFetching}
+              iconLeft={<RefreshCw size={16} aria-hidden="true" />}
+            >
+              Scan again
+            </Button>
+          </div>
         }
       />
+
+      <div className="flex flex-wrap items-end gap-[var(--space-3)]">
+        <div className="w-[170px]">
+          <label
+            htmlFor="duplicate-entity-type"
+            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
+          >
+            Type
+          </label>
+          <Select
+            id="duplicate-entity-type"
+            ariaLabel="Filter by record type"
+            value={entityType}
+            options={[
+              { value: ALL, label: "Contacts and companies" },
+              { value: "contact", label: "Contacts" },
+              { value: "company", label: "Companies" },
+            ]}
+            onValueChange={setEntityType}
+          />
+        </div>
+
+        <div className="w-[170px]">
+          <label
+            htmlFor="duplicate-matched-on"
+            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
+          >
+            Matched on
+          </label>
+          <Select
+            id="duplicate-matched-on"
+            ariaLabel="Filter by what matched"
+            value={matchedOn}
+            options={[
+              { value: ALL, label: "Any match" },
+              { value: "email", label: "Same email" },
+              { value: "phone", label: "Same phone number" },
+              { value: "name", label: "Same name" },
+            ]}
+            onValueChange={setMatchedOn}
+          />
+        </div>
+      </div>
 
       <Tabs defaultValue="pairs">
         <TabsList>

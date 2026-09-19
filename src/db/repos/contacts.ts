@@ -32,6 +32,10 @@ import {
   parseOrThrow,
   type Col,
   type Page,
+  type Statement,
+  pairKey,
+  type DuplicatePair,
+  type MatchedOn,
 } from "@/db/repos/_base";
 
 export type ContactPhone = {
@@ -616,4 +620,236 @@ export function createStatements(
     ),
   ];
   return { id: stamps.id, statements };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/importWrite.ts. */
+/* -------------------------------------------------------------------------- */
+
+export type ImportedContact = {
+  firstName: string;
+  lastName: string;
+  companyId: string | null;
+  sourceId: string | null;
+  notes: string | null;
+  addressJson: string | null;
+  phones: { raw: string; label: string }[];
+  emails: { email: string; label: string }[];
+};
+
+/**
+ * A contact and its child rows, modelled on `contacts.createStatements` but
+ * with `address_json` written in the same insert. The repository version does
+ * not take an address, and an import that followed every contact with an
+ * `UPDATE contacts SET address_json` would put a statement between each pair
+ * of inserts, which is exactly what stops a batch coalescing (see planBatch).
+ * Listed in docs/STATUS.md for promotion into the repository.
+ */
+export function importContactStatements(
+  input: ImportedContact,
+  region?: string,
+): { id: string; statements: Statement[] } {
+  const s = stampNew();
+  const statements: Statement[] = [
+    insertStatement("contacts", {
+      ...s,
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      companyId: input.companyId,
+      addressJson: input.addressJson,
+      sourceId: input.sourceId,
+      notes: trimmedOrNull(input.notes),
+      deletedAt: null,
+    }),
+  ];
+  input.phones.forEach((phone, i) => {
+    if (phone.raw.trim().length === 0) return;
+    statements.push(
+      contactPhoneStatement(s.id, phone.raw, phone.label, {
+        region,
+        isPrimary: i === 0,
+      }),
+    );
+  });
+  input.emails.forEach((email, i) => {
+    if (email.email.trim().length === 0) return;
+    statements.push(contactEmailStatement(s.id, email.email, email.label, i === 0));
+  });
+  return { id: s.id, statements };
+}
+
+/* -------------------------------------------------------------------------- */
+/* child rows on an existing contact (the "update" dedupe policy)             */
+/* -------------------------------------------------------------------------- */
+
+export function contactEmailStatement(
+  contactId: string,
+  email: string,
+  label = "work",
+  isPrimary = false,
+): Statement {
+  return insertStatement("contact_emails", {
+    ...stampNew(),
+    contactId,
+    emailLower: email.trim().toLowerCase(),
+    label,
+    isPrimary,
+    deletedAt: null,
+  });
+}
+
+export function contactPhoneStatement(
+  contactId: string,
+  rawPhone: string,
+  label = "phone",
+  options: { region?: string; isPrimary?: boolean } = {},
+): Statement {
+  const normalized = normalizePhone(rawPhone, options.region);
+  return insertStatement("contact_phones", {
+    ...stampNew(),
+    contactId,
+    raw: normalized.raw,
+    e164: normalized.e164,
+    label,
+    isPrimary: options.isPrimary ?? false,
+    deletedAt: null,
+  });
+}
+
+/**
+ * The fields an "update" import may fill in. Only values the CSV actually
+ * carries are written, and only over a column that is empty today: an import
+ * must never quietly overwrite something the owner typed.
+ */
+export type ContactUpdate = {
+  firstName?: string;
+  lastName?: string;
+  companyId?: string | null;
+  addressJson?: string | null;
+  sourceId?: string | null;
+  notes?: string | null;
+};
+
+export function contactUpdateStatement(
+  contactId: string,
+  patch: ContactUpdate,
+): Statement | null {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+
+  const add = (column: string, value: unknown) => {
+    // COALESCE(NULLIF(col, ''), ?) keeps whatever is already there.
+    sets.push(`${column} = COALESCE(NULLIF(${column}, ''), ?)`);
+    params.push(value);
+  };
+
+  if (patch.firstName !== undefined && patch.firstName.length > 0) {
+    add("first_name", patch.firstName);
+  }
+  if (patch.lastName !== undefined && patch.lastName.length > 0) {
+    add("last_name", patch.lastName);
+  }
+  if (patch.companyId !== undefined && patch.companyId !== null) {
+    add("company_id", patch.companyId);
+  }
+  if (patch.addressJson !== undefined && patch.addressJson !== null) {
+    add("address_json", patch.addressJson);
+  }
+  if (patch.sourceId !== undefined && patch.sourceId !== null) {
+    add("source_id", patch.sourceId);
+  }
+  const notes = trimmedOrNull(patch.notes ?? null);
+  if (notes !== null) {
+    // Notes append rather than replace: nothing the owner wrote is lost.
+    sets.push(
+      `notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END`,
+    );
+    params.push(notes, notes);
+  }
+
+  if (sets.length === 0) return null;
+  sets.push("updated_at = ?");
+  params.push(nowIso(), contactId);
+  return {
+    sql: `UPDATE contacts SET ${sets.join(", ")} WHERE id = ?`,
+    params,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Promoted in wave 3 from src/features/data/lib/duplicates.ts. */
+/* -------------------------------------------------------------------------- */
+
+function contactLabel(first: string, last: string): string {
+  const name = `${first} ${last}`.trim();
+  return name.length > 0 ? name : "(no name)";
+}
+
+/**
+ * Contacts that share an email address, then contacts that share a phone
+ * number. A pair already found on email is not reported again on phone.
+ */
+export async function findContactPairs(limit = 200): Promise<DuplicatePair[]> {
+  const shared = `
+    SELECT x.matched_value AS m_value, x.kind AS m_kind,
+           a.id AS a_id, a.first_name AS a_first, a.last_name AS a_last,
+           a.created_at AS a_created, ca.name AS a_company,
+           b.id AS b_id, b.first_name AS b_first, b.last_name AS b_last,
+           b.created_at AS b_created, cb.name AS b_company
+    FROM (
+      SELECT e1.email_lower AS matched_value, 'email' AS kind,
+             e1.contact_id AS a_id, e2.contact_id AS b_id
+      FROM contact_emails e1
+      JOIN contact_emails e2
+        ON e2.email_lower = e1.email_lower AND e2.contact_id > e1.contact_id
+      WHERE e1.deleted_at IS NULL AND e2.deleted_at IS NULL
+        AND length(e1.email_lower) > 0
+      UNION
+      SELECT p1.e164 AS matched_value, 'phone' AS kind,
+             p1.contact_id AS a_id, p2.contact_id AS b_id
+      FROM contact_phones p1
+      JOIN contact_phones p2
+        ON p2.e164 = p1.e164 AND p2.contact_id > p1.contact_id
+      WHERE p1.deleted_at IS NULL AND p2.deleted_at IS NULL
+        AND p1.e164 IS NOT NULL
+    ) x
+    JOIN contacts a ON a.id = x.a_id AND a.deleted_at IS NULL
+    JOIN contacts b ON b.id = x.b_id AND b.deleted_at IS NULL
+    LEFT JOIN companies ca ON ca.id = a.company_id
+    LEFT JOIN companies cb ON cb.id = b.company_id
+    ORDER BY x.kind ASC, a.created_at ASC
+    LIMIT ?`;
+
+  const rows = await raw.query(shared, [limit]);
+  const seen = new Set<string>();
+  const pairs: DuplicatePair[] = [];
+
+  for (const r of rows) {
+    const value = String(r[0]);
+    const matchedOn = String(r[1]) as MatchedOn;
+    const aId = String(r[2]);
+    const bId = String(r[7]);
+    const dedupe = `${aId}:${bId}`;
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    pairs.push({
+      entityType: "contact",
+      matchedOn,
+      value,
+      key: pairKey("contact", matchedOn, aId, bId),
+      a: {
+        id: aId,
+        label: contactLabel(String(r[3] ?? ""), String(r[4] ?? "")),
+        detail: String(r[6] ?? "") || "No company",
+        createdAt: String(r[5]),
+      },
+      b: {
+        id: bId,
+        label: contactLabel(String(r[8] ?? ""), String(r[9] ?? "")),
+        detail: String(r[11] ?? "") || "No company",
+        createdAt: String(r[10]),
+      },
+    });
+  }
+  return pairs;
 }

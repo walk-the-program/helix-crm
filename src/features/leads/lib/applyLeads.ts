@@ -16,23 +16,20 @@
  * TypeScript agent, note 2). A repository write inside `withTransaction` would
  * queue behind the transaction that is already holding the lock and both would
  * wait forever. So everything inside the transaction is a statement builder -
- * `contacts.createStatements`, `activities.systemStatement`,
- * `changeLogStatement`, `insertStatement` - and only reads call into the
- * repositories. The statements the repositories do not expose (the deal and its
- * first `deal_stage_events` row) are built here and listed under "Contract
- * changes needed" in docs/STATUS.md.
+ * `contacts.createStatements`, `deals.createStatements`,
+ * `activities.systemStatement`, `changeLogStatement` - and only reads call
+ * into the repositories. (`deals.createStatements` was added in wave 3; this
+ * file used to build the deal and its first `deal_stage_events` row by hand.)
  */
 import { raw } from "@/db/client";
 import { withTransaction } from "@/db/writeLock";
 import { changeLogStatement } from "@/db/changeLog";
-import { insertStatement } from "@/db/repos/_base";
+import type { Statement } from "@/db/repos/_base";
 import * as contacts from "@/db/repos/contacts";
 import * as deals from "@/db/repos/deals";
 import * as activities from "@/db/repos/activities";
 import * as sources from "@/db/repos/sources";
 import * as settings from "@/db/repos/settings";
-import { newId } from "@/lib/ids";
-import { nowIso } from "@/lib/dates";
 import { mapLead, WEBSITE_SOURCE } from "@/features/leads/lib/leadMapping";
 import type { Lead } from "@/features/leads/lib/types";
 
@@ -46,8 +43,6 @@ export type ApplyResult = {
   /** The ids of the deals created, newest last. Used by tests and by Today. */
   dealIds: string[];
 };
-
-type Statement = { sql: string; params: unknown[] };
 
 /** Everything that must be read or created before the transaction opens. */
 export type ApplyContext = {
@@ -171,46 +166,25 @@ export async function applyLeadPage(
         );
       }
 
-      const at = nowIso();
-      const dealId = newId();
-      const dealRow = {
-        id: dealId,
-        createdAt: at,
-        updatedAt: at,
+      const deal = deals.createStatements({
         title: mapped.dealTitle,
         valueCents: 0,
         currency: context.currency,
         stageId: context.stageId,
-        stageEnteredAt: at,
         position: position++,
         contactId,
         companyId: null,
         sourceId: context.sourceId,
         externalId: mapped.externalId,
-        expectedOn: null,
-        closedAt: null,
-        outcomeReason: null,
-        deletedAt: null,
-      };
-      statements.push(insertStatement("deals", dealRow));
-      statements.push(
-        insertStatement("deal_stage_events", {
-          id: newId(),
-          createdAt: at,
-          updatedAt: at,
-          dealId,
-          fromStageId: null,
-          toStageId: context.stageId,
-          at,
-          deletedAt: null,
-        }),
-      );
+      });
+      const dealId = deal.id;
+      statements.push(...deal.statements);
       statements.push(
         changeLogStatement({
           entityType: "deal",
           entityId: dealId,
           op: "create",
-          after: dealRow,
+          after: deal.row,
         }),
       );
 

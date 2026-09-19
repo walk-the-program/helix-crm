@@ -169,7 +169,8 @@ function bindable(value: unknown): unknown {
  * Reverse every row change in a batch, newest first.
  *
  *   create -> delete the row        update -> write `before` back
- *   delete -> re-insert `before`    restore -> soft-delete again
+ *   delete -> soft: clear deleted_at; hard: re-insert `before`
+ *   restore -> soft-delete again
  *   merge  -> handled by the merge repository, which knows how to re-point rows
  *
  * The undo itself is not logged: a batch is undone once, and re-logging would
@@ -205,6 +206,28 @@ export async function undoBatch(batchId: string): Promise<void> {
     if (entry.op === "delete") {
       const keys = Object.keys(before);
       if (keys.length === 0) continue;
+
+      // Two kinds of delete share one op. A soft delete logs only the columns
+      // it touched (`{ deletedAt: null }`) and never an `id`, because the row
+      // is still there; undoing it writes those columns back, which is what
+      // clears deleted_at. A hard delete logs the whole row, `id` included,
+      // and undoing it re-inserts the row. See docs/CONTRACTS.md, "Undo".
+      if (!("id" in before)) {
+        const cols = keys.filter((k) => k !== "updatedAt");
+        if (cols.length === 0) continue;
+        statements.push({
+          sql: `UPDATE ${table} SET ${cols
+            .map((k) => `${columnName(k)} = ?`)
+            .join(", ")}, updated_at = ? WHERE id = ?`,
+          params: [
+            ...cols.map((k) => bindable(before[k])),
+            nowIso(),
+            entry.entityId,
+          ],
+        });
+        continue;
+      }
+
       const cols = keys.map(columnName);
       statements.push({
         sql: `INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${cols
