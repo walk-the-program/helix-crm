@@ -8,7 +8,7 @@
  * that turns a `ViewQuery` into a repository call — see `screenState.ts` for
  * the two functions that do the translating.
  */
-import { Bookmark } from "lucide-react";
+import { Bookmark } from "@/ui/icons";
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@/ui";
 import type { SavedView } from "@/db/repos/savedViews";
 import { SaveViewPopover } from "@/features/today/views/SaveViewPopover";
@@ -30,8 +30,7 @@ export function ViewsToolbar({ entityType, current, onPick }: ViewsToolbarProps)
         <PopoverTrigger asChild>
           <Button
             variant="secondary"
-            className="min-h-[44px]"
-            iconLeft={<Bookmark size={16} aria-hidden="true" />}
+            iconLeft={<Bookmark size={16} weight="bold" aria-hidden="true" />}
           >
             Views
           </Button>
@@ -44,11 +43,7 @@ export function ViewsToolbar({ entityType, current, onPick }: ViewsToolbarProps)
       <SaveViewPopover
         entityType={entityType}
         current={current}
-        trigger={
-          <Button variant="secondary" className="min-h-[44px]">
-            Save view
-          </Button>
-        }
+        trigger={<Button variant="secondary">Save view</Button>}
       />
     </div>
   );

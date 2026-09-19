@@ -15,7 +15,6 @@ import { useState } from "react";
 import type { ReactElement } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
 import {
   Badge,
   Button,
@@ -101,7 +100,6 @@ export function TrashScreen(): ReactElement {
       <div className="flex-1 overflow-auto py-[var(--space-4)]">
         {totalCount === 0 ? (
           <EmptyState
-            icon={<Trash2 size={24} aria-hidden="true" />}
             title="Trash is empty"
             description="Nothing has been deleted in the last 30 days."
             action={
@@ -172,7 +170,6 @@ function TrashTypeTable(props: {
   if (items.length === 0) {
     return (
       <EmptyState
-        icon={<Trash2 size={24} aria-hidden="true" />}
         title="Nothing deleted"
         description={`Deleted ${lowerPlural} land here for 30 days so you can change your mind.`}
         // No action: once this list is empty there is nothing to do here.
@@ -272,12 +269,12 @@ function TrashTypeTable(props: {
                   {item.label}
                 </TD>
                 <TD
-                  className="tabular-nums"
+                  className="tabular"
                   title={formatDateTimeDisplay(item.deletedAt)}
                 >
                   {formatRelative(item.deletedAt)}
                 </TD>
-                <TD className="tabular-nums">
+                <TD className="tabular">
                   <div className="flex items-center gap-[var(--space-2)]">
                     {formatDateDisplay(purgeDateOnly)}
                     {purgingSoon ? <Badge tone="warning">Purging soon</Badge> : null}

@@ -6,16 +6,16 @@
  */
 import { useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Building2, RotateCcw, Trash2, User } from "lucide-react";
+import { ArrowCounterClockwise, ArrowLeft, Buildings, Trash, User } from "@/ui/icons";
 import {
   Badge,
   Button,
   Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
+  CardGroupLabel,
+  CardRow,
   ConfirmDialog,
   EmptyState,
+  PageHeader,
   Spinner,
 } from "@/ui";
 import * as dealsRepo from "@/db/repos/deals";
@@ -23,12 +23,13 @@ import { contactName } from "@/db/repos/contacts";
 import { useVocabulary } from "@/app/vocabulary";
 import { centsToDecimalString, formatMoney, parseMoneyToCents } from "@/lib/money";
 import { formatDateDisplay, formatRelative } from "@/lib/dates";
-import { useContact, useDeal, useStages, usePipeline } from "@/features/records/lib/hooks";
+import { useContact, useDeal, useStages, usePipeline, useTasks } from "@/features/records/lib/hooks";
 import {
   deleteWithUndo,
   invalidateRecords,
   reportError,
 } from "@/features/records/lib/mutations";
+import { dueLabel } from "@/features/records/lib/taskGroups";
 import { InlineText } from "@/features/records/components/InlineEdit";
 import {
   CompanyPicker,
@@ -42,6 +43,7 @@ import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
+import { DraftFollowUpButton, SummarizeButton } from "@/features/ai";
 
 export function DealPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -51,6 +53,7 @@ export function DealPage() {
   const { data: pipeline } = usePipeline();
   const { data: stages } = useStages(pipeline?.id);
   const { data: contact } = useContact(deal?.contactId ?? "");
+  const { data: openTasks } = useTasks({ dealId: id, openOnly: true }, 20);
   const [pendingLostStage, setPendingLostStage] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -58,6 +61,7 @@ export function DealPage() {
     () => (stages ?? []).filter((stage) => !stage.isWon && !stage.isLost),
     [stages],
   );
+  const nextTask = useMemo(() => (openTasks?.rows ?? [])[0] ?? null, [openTasks]);
 
   if (isLoading) {
     return (
@@ -101,49 +105,28 @@ export function DealPage() {
   }
 
   const closed = deal.stageIsWon || deal.stageIsLost;
+  const primaryEmail = contact
+    ? (contact.emails.find((email) => email.isPrimary) ?? contact.emails[0] ?? null)
+    : null;
 
   return (
-    <div className="flex flex-col gap-[var(--space-5)]">
-      <Link
-        href="/pipeline"
-        className="inline-flex w-fit items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-      >
-        <ArrowLeft size={16} aria-hidden="true" /> {vocabulary.many}
-      </Link>
-
-      <section
-        aria-label={`${vocabulary.one} summary`}
-        className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-[var(--space-4)]">
-          <div className="min-w-0 flex-1">
-            <h1
-              className="truncate text-[length:var(--text-xl)] font-semibold text-[var(--color-text)]"
-              title={deal.title}
-            >
-              {deal.title}
-            </h1>
-            <div className="mt-[var(--space-2)] flex flex-wrap items-center gap-[var(--space-3)]">
-              <Badge dotColor={(stages ?? []).find((s) => s.id === deal.stageId)?.color}>
-                {deal.stageName}
-              </Badge>
-              {deal.stageIsWon ? <Badge tone="success">Won</Badge> : null}
-              {deal.stageIsLost ? <Badge tone="danger">Lost</Badge> : null}
-              <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                In this stage {formatRelative(deal.stageEnteredAt)}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-[var(--space-3)]">
-            <span className="money text-[length:var(--text-2xl)] font-semibold text-[var(--color-text)]">
-              {formatMoney(deal.valueCents, deal.currency)}
-            </span>
+    <div className="flex flex-col gap-[var(--space-6)]">
+      <PageHeader
+        breadcrumb={
+          <Link
+            href="/pipeline"
+            className="inline-flex w-fit items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-faint)] no-underline hover:text-[var(--color-text)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+          >
+            <ArrowLeft size={14} weight="bold" aria-hidden="true" /> {vocabulary.many}
+          </Link>
+        }
+        title={deal.title}
+        actions={
+          <>
             {closed && openStages.length > 0 ? (
               <Button
                 variant="secondary"
-                className="min-h-[44px]"
-                iconLeft={<RotateCcw size={20} aria-hidden="true" />}
+                iconLeft={<ArrowCounterClockwise size={16} weight="bold" aria-hidden="true" />}
                 onClick={() => {
                   void dealsRepo
                     .reopen(id, openStages[0].id)
@@ -155,23 +138,60 @@ export function DealPage() {
               </Button>
             ) : null}
             <Button
-              variant="secondary"
-              className="min-h-[44px]"
-              iconLeft={<Trash2 size={20} aria-hidden="true" />}
+              variant="destructive"
+              iconLeft={<Trash size={16} weight="bold" aria-hidden="true" />}
               onClick={() => setConfirmingDelete(true)}
             >
               Delete
             </Button>
-          </div>
+          </>
+        }
+      />
+
+      <div className="flex flex-col gap-[var(--space-2)]">
+        <div className="flex flex-wrap items-center gap-[var(--space-3)]">
+          <span className="money text-[length:var(--text-2xl)] font-semibold tabular-nums text-[var(--color-text)]">
+            {formatMoney(deal.valueCents, deal.currency)}
+          </span>
+          <Badge dotColor={(stages ?? []).find((s) => s.id === deal.stageId)?.color}>
+            {deal.stageName}
+          </Badge>
+          {deal.stageIsWon ? <Badge tone="success">Won</Badge> : null}
+          {deal.stageIsLost ? <Badge tone="danger">Lost</Badge> : null}
+          <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            In this stage {formatRelative(deal.stageEnteredAt)}
+          </span>
         </div>
 
-        <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-4)]">
+        {/* The two AI actions, together and out of the header. Each renders its
+            own disabled reason; the cluster shows the first one only, because
+            the same sentence twice in a row is noise. */}
+        <div className="flex flex-wrap items-center gap-[var(--space-2)] [&>*:not(:first-child)_[data-testid=ai-disabled-reason]]:hidden">
+          <DraftFollowUpButton dealId={id} email={primaryEmail?.emailLower ?? null} />
+          <SummarizeButton entityType="deal" entityId={id} />
+        </div>
+
+        <p className="text-[length:var(--text-base)]">
+          <span className="text-[var(--color-text-muted)]">Next step: </span>
+          {nextTask ? (
+            <span className="text-[var(--color-text)]">
+              {nextTask.title}{" "}
+              <span className="tabular text-[var(--color-text-muted)]">
+                · {dueLabel(nextTask)}
+              </span>
+            </span>
+          ) : (
+            <span className="text-[var(--color-text-faint)]">none yet</span>
+          )}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-[var(--space-4)]">
           {deal.contactId ? (
             <Link
               href={`/contacts/${deal.contactId}`}
               className="inline-flex items-center gap-[var(--space-1)] text-[length:var(--text-base)] text-[var(--color-text)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
             >
-              <User size={16} aria-hidden="true" />
+              <User size={16} weight="regular" aria-hidden="true" />
               <span className="max-w-[240px] truncate">
                 {contact ? contactName(contact) : "Contact"}
               </span>
@@ -182,7 +202,7 @@ export function DealPage() {
               href={`/companies/${deal.companyId}`}
               className="inline-flex items-center gap-[var(--space-1)] text-[length:var(--text-base)] text-[var(--color-text)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
             >
-              <Building2 size={16} aria-hidden="true" />
+              <Buildings size={16} weight="regular" aria-hidden="true" />
               <span className="max-w-[240px] truncate" title={deal.companyName}>
                 {deal.companyName}
               </span>
@@ -196,140 +216,165 @@ export function DealPage() {
         </div>
 
         {deal.outcomeReason ? (
-          <p className="mt-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+          <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
             <span className="font-medium text-[var(--color-text)]">Reason: </span>
             {deal.outcomeReason}
           </p>
         ) : null}
-      </section>
+      </div>
 
       <div className="grid grid-cols-1 gap-[var(--space-5)] xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0">
-          <Timeline fill dealId={id} />
+        {/* self-start: the grid row is as tall as the details column, and a
+            timeline stretched to 1900px with one empty state in the middle
+            of it is a void, not a layout. */}
+        <div className="min-w-0 xl:self-start">
+          <Timeline dealId={id} />
         </div>
 
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
           <TaskRail dealId={id} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardBody className="flex flex-col gap-[var(--space-5)]">
-              <InlineText
-                label="Title"
-                value={deal.title}
-                onSave={(value) => patch({ title: value })}
-              />
-
-              <InlineText
-                label="Value"
-                value={centsToDecimalString(deal.valueCents)}
-                inputClassName="money"
-                onSave={(value) => {
-                  const cents = parseMoneyToCents(value);
-                  if (cents === null) {
-                    return Promise.reject(new Error("Enter an amount, for example 1500."));
-                  }
-                  return patch({ valueCents: cents });
-                }}
-              />
-
-              <div>
-                <label
-                  htmlFor="deal-stage"
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Stage
-                </label>
-                <StagePicker
-                  id="deal-stage"
-                  label="Stage"
-                  pipelineId={pipeline?.id}
-                  value={deal.stageId}
-                  onChange={(stageId) => void changeStage(stageId)}
+          <div>
+            <CardGroupLabel>Identity</CardGroupLabel>
+            <Card>
+              <CardRow className="items-stretch">
+                <InlineText
+                  className="w-full"
+                  label="Title"
+                  value={deal.title}
+                  onSave={(value) => patch({ title: value })}
                 />
-              </div>
-
-              <InlineText
-                label="Expected date"
-                type="date"
-                value={deal.expectedOn ?? ""}
-                onSave={(value) => patch({ expectedOn: value.trim().length > 0 ? value : null })}
-              />
-
-              <div>
-                <label
-                  htmlFor="deal-contact"
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Contact
-                </label>
-                <ContactPicker
-                  id="deal-contact"
-                  label="Contact"
-                  value={deal.contactId}
-                  onChange={(contactId) => {
-                    void patch({ contactId }).catch((err: unknown) =>
-                      reportError(err, "That did not save."),
-                    );
+              </CardRow>
+              <CardRow className="items-stretch">
+                <InlineText
+                  className="w-full"
+                  label="Value"
+                  value={centsToDecimalString(deal.valueCents)}
+                  inputClassName="money"
+                  onSave={(value) => {
+                    const cents = parseMoneyToCents(value);
+                    if (cents === null) {
+                      return Promise.reject(new Error("Enter an amount, for example 1500."));
+                    }
+                    return patch({ valueCents: cents });
                   }}
                 />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="deal-company"
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Company
-                </label>
-                <CompanyPicker
-                  id="deal-company"
-                  label="Company"
-                  value={deal.companyId}
-                  onChange={(companyId) => {
-                    void patch({ companyId }).catch((err: unknown) =>
-                      reportError(err, "That did not save."),
-                    );
-                  }}
+              </CardRow>
+              <CardRow className="items-stretch">
+                <InlineText
+                  className="w-full"
+                  label="Expected date"
+                  type="date"
+                  value={deal.expectedOn ?? ""}
+                  onSave={(value) => patch({ expectedOn: value.trim().length > 0 ? value : null })}
                 />
-              </div>
+              </CardRow>
+            </Card>
+          </div>
 
-              <div>
-                <label
-                  htmlFor="deal-source"
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Source
-                </label>
-                <SourcePicker
-                  id="deal-source"
-                  label="Source"
-                  value={deal.sourceId}
-                  onChange={(sourceId) => {
-                    void patch({ sourceId }).catch((err: unknown) =>
-                      reportError(err, "That did not save."),
-                    );
-                  }}
-                />
-              </div>
+          <div>
+            <CardGroupLabel>Classification</CardGroupLabel>
+            <Card>
+              <CardRow className="items-stretch">
+                <div className="w-full">
+                  <label
+                    htmlFor="deal-stage"
+                    className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                  >
+                    Stage
+                  </label>
+                  <StagePicker
+                    id="deal-stage"
+                    label="Stage"
+                    pipelineId={pipeline?.id}
+                    value={deal.stageId}
+                    onChange={(stageId) => void changeStage(stageId)}
+                  />
+                </div>
+              </CardRow>
+              <CardRow className="items-stretch">
+                <div className="w-full">
+                  <label
+                    htmlFor="deal-contact"
+                    className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                  >
+                    Contact
+                  </label>
+                  <ContactPicker
+                    id="deal-contact"
+                    label="Contact"
+                    value={deal.contactId}
+                    onChange={(contactId) => {
+                      void patch({ contactId }).catch((err: unknown) =>
+                        reportError(err, "That did not save."),
+                      );
+                    }}
+                  />
+                </div>
+              </CardRow>
+              <CardRow className="items-stretch">
+                <div className="w-full">
+                  <label
+                    htmlFor="deal-company"
+                    className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                  >
+                    Company
+                  </label>
+                  <CompanyPicker
+                    id="deal-company"
+                    label="Company"
+                    value={deal.companyId}
+                    onChange={(companyId) => {
+                      void patch({ companyId }).catch((err: unknown) =>
+                        reportError(err, "That did not save."),
+                      );
+                    }}
+                  />
+                </div>
+              </CardRow>
+              <CardRow className="items-stretch">
+                <div className="w-full">
+                  <label
+                    htmlFor="deal-source"
+                    className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                  >
+                    Source
+                  </label>
+                  <SourcePicker
+                    id="deal-source"
+                    label="Source"
+                    value={deal.sourceId}
+                    onChange={(sourceId) => {
+                      void patch({ sourceId }).catch((err: unknown) =>
+                        reportError(err, "That did not save."),
+                      );
+                    }}
+                  />
+                </div>
+              </CardRow>
+              <CardRow className="items-stretch">
+                <div className="w-full">
+                  <span className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                    Tags
+                  </span>
+                  <div className="mt-[var(--space-1)]">
+                    <TagEditor entityType="deal" entityId={id} />
+                  </div>
+                </div>
+              </CardRow>
+            </Card>
+          </div>
 
-              <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Tags
-                </h3>
-                <TagEditor entityType="deal" entityId={id} />
-              </div>
-
-              <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Custom fields
-                </h3>
-                <CustomFieldsPanel entityType="deal" entityId={id} />
-              </div>
-            </CardBody>
-          </Card>
+          <div>
+            <CardGroupLabel>Custom fields</CardGroupLabel>
+            <Card>
+              <CardRow className="items-stretch">
+                <div className="w-full">
+                  <CustomFieldsPanel entityType="deal" entityId={id} />
+                </div>
+              </CardRow>
+            </Card>
+          </div>
 
           <AttachmentList entityType="deal" entityId={id} />
         </div>

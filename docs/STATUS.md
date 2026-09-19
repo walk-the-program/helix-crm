@@ -2287,3 +2287,80 @@ and what each screenshot caught: `design/apple/sweep-settings.md`.
    work around it by putting the border on the wrapper. If `src/ui` ever grows a
    `CardRow` variant that takes the hairline as a prop, three files here can drop
    the workaround.
+
+## 2026-09-19 — Records + Today sweep (Apple-like minimalist direction)
+
+Scope: `src/features/records/**`, `src/features/today/**`,
+`tests/e2e-mac/specs/{records,today}.e2e.ts`, `tests/unit/{records,today}/**`,
+and the AI buttons mounted on the three record pages. Contract:
+`docs/DESIGN.md` revision 2. Full write-up, per screen and per screenshot:
+`design/apple/sweep-records.md`.
+
+### What changed
+
+Five defects were on every screen and are the reason the first pass read as a
+web form in a window:
+
+1. A `variant="primary"` black button on **every row** of Today's New leads and
+   Gone quiet. Row actions are `ghost` now, the one that matters is `secondary`,
+   and a record page's only filled control is the phone number.
+2. `className="min-h-[44px]"` on 31 controls, which broke compact outright.
+   Every height is a token; the hit-target floor is `--control-h-sm`, per §6,
+   and a bare glyph is wrapped in `IconButton`.
+3. Attention drawn in colour — a 3px accent rail on overdue rows, a filled black
+   count pill, "No next step" in `--color-accent-ink`, an accent badge on
+   website leads. All gone. Position and weight carry it, and the one tint left
+   is a muted pastel that spells out the number of days.
+4. `shadow-[var(--shadow-sm)]` on six panels, where the token is now `none`.
+5. List rows set at `--text-lg` against `--text-sm`. One size down a column,
+   weight and colour do the hierarchy.
+
+Structurally: Today's sections moved to the `--text-xl` heading step with more
+air between them; the two list screens got a one-line toolbar, `--row-h` rows
+and an 11px column-header strip; the three record pages lost their bordered
+summary card for a `PageHeader` in open air with the phone as the one black
+button and the details column rebuilt as grouped inset lists; the pipeline
+board's columns lost their boxes and fills for a dotted header on one hairline
+with hairline cards under it; the timeline became a quiet log on a hairline
+rail; the search dialog became the Spotlight panel from §9.
+
+`DraftFollowUpButton` is mounted on the deal page and `SummarizeButton` on the
+contact, company and deal pages — on each record's own action row rather than in
+the page header, because `AiActionButton` renders its disabled sentence beside
+itself and two of them in a header printed the same sentence twice.
+
+### Verification
+
+- `npm run typecheck` clean; `npm test` 64 files / 799 tests passing.
+- `E2E_PORT=4187 E2E_OUT=dist-sweep-records` on `records.e2e.ts` and
+  `today.e2e.ts`: 19 tests passing. No assertion was changed — only the
+  screenshot plumbing (output folder, a `shootCompact` helper, three added
+  captures).
+- `npx vite build --outDir dist-sweep-records` succeeds; directory deleted.
+- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|lucide-react|shadow-\[var\(--shadow-sm\)\]"`
+  over both features returns nothing, and so does a grep for `min-h-[44px]`.
+- 41 screenshots at 1280 in `tests/e2e-mac/.cache/screens/sweep-records/` —
+  every screen light and dark, plus Today, the contact page and the pipeline
+  board in compact — reviewed and re-captured three times. The 13 defects only
+  a screenshot could show are listed in the sweep doc; the ones worth naming
+  here are ragged row titles on Today (the tag column had no fixed width), a
+  1900px empty timeline, a Spotlight panel stretched to the window, doubled
+  hairlines under every filter toolbar, and the stage manager printing its three
+  column labels eighteen times.
+
+### Contract changes needed
+
+1. **`AiActionButton` should not repeat its reason per button.** A page that
+   mounts two AI actions prints "AI is off. Turn it on in Settings." twice.
+   The deal page hides the duplicate with a CSS selector on the feature's own
+   `data-testid="ai-disabled-reason"`; the right fix is a grouping component in
+   `src/features/ai` that renders the sentence once for a cluster.
+2. **`TD primary` needs a width hint to be usable.** It is `max-w-0 truncate`,
+   which is correct for truncation but gives the column almost nothing in an
+   auto-layout table — the pipeline list truncated a 23-character deal title to
+   120px until percentage widths were put on the `TH`s. Either `TD primary`
+   should carry a sensible default share or `Table` should document that the
+   header row owns the widths.
+3. **`EmptyState` is very tall inside a narrow panel.** Its `--space-10` padding
+   is right for a full pane and makes a 300px-tall box out of one sentence
+   inside a 380px details column. A `compact` prop would let a panel opt down.

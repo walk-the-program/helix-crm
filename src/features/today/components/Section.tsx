@@ -1,11 +1,18 @@
 /**
  * Today's section chrome: a heading with a count, and a panel of rows.
  *
- * DESIGN.md section 3 fixes the order and the anatomy — heading, count pill, a
- * quiet one-line explanation on the right — and section 9 fixes the panel
- * (a card: surface, hairline border, modest radius, one shadow level, and
- * never a card inside a card). Everything here is tokens and `src/ui`; there
- * is not a colour value in the file.
+ * DESIGN.md §3 fixes the order and §4 fixes the type. A section heading is
+ * `--text-xl` semibold and tracked, which is the contract's "section heading"
+ * step and the thing that gives Today real hierarchy against a `--text-base`
+ * row. The count beside it is plain tabular text in secondary ink, and the
+ * one-line explanation is tertiary — a count is not an alarm.
+ *
+ * There is no attention colour on this screen any more (§5). "Needs you" is
+ * carried by position and weight: Due now is first, its rows are in full ink,
+ * and an overdue row's own badge says the number of days out loud. The old
+ * black count pill and the 3px accent left rail on a row are both gone — a
+ * rail on the first cell is a web-app device, and a native list separates rows
+ * with one hairline and nothing else.
  */
 
 import type { ReactNode } from "react";
@@ -15,30 +22,20 @@ export function SectionHeading(props: {
   id: string;
   title: string;
   count?: number;
-  /** Accent the count when it is the thing asking for attention. */
-  needsYou?: boolean;
   note?: ReactNode;
   action?: ReactNode;
 }) {
-  const { id, title, count, needsYou, note, action } = props;
+  const { id, title, count, note, action } = props;
   return (
-    <div className="mb-[var(--space-3)] flex flex-wrap items-center gap-[var(--space-3)]">
+    <div className="mb-[var(--space-3)] flex flex-wrap items-baseline gap-[var(--space-3)]">
       <h2
         id={id}
-        className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]"
+        className="text-[length:var(--text-xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]"
       >
         {title}
       </h2>
-      {typeof count === "number" ? (
-        <span
-          className={[
-            "inline-flex min-w-[24px] items-center justify-center rounded-[var(--radius-full)]",
-            "px-[var(--space-2)] py-[2px] text-[length:var(--text-xs)] font-semibold tabular-nums",
-            needsYou && count > 0
-              ? "bg-[var(--color-accent)] text-[var(--color-accent-text)]"
-              : "bg-[var(--color-border)] text-[var(--color-text-muted)]",
-          ].join(" ")}
-        >
+      {typeof count === "number" && count > 0 ? (
+        <span className="tabular text-[length:var(--text-base)] text-[var(--color-text-muted)]">
           {count}
         </span>
       ) : null}
@@ -47,18 +44,22 @@ export function SectionHeading(props: {
           {note}
         </span>
       ) : null}
-      {action ? <div className="ml-auto">{action}</div> : null}
+      {action ? <div className="ml-auto self-center">{action}</div> : null}
     </div>
   );
 }
 
-/** The bordered container every Today section's rows sit in. */
+/**
+ * The grouped inset list every Today section's rows sit in: white surface, one
+ * hairline, `--radius-lg`, and no shadow at all — only a floating layer casts
+ * one (DESIGN.md §6).
+ */
 export function Panel(props: { children: ReactNode; className?: string }) {
   return (
     <div
       className={[
         "overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)]",
-        "bg-[var(--color-surface)] shadow-[var(--shadow-sm)]",
+        "bg-[var(--color-surface)]",
         props.className ?? "",
       ].join(" ")}
     >
@@ -68,22 +69,21 @@ export function Panel(props: { children: ReactNode; className?: string }) {
 }
 
 /**
- * One whole section: heading, then either the rows or its designed empty
- * state. The empty state is not an afterthought — DESIGN.md section 9 asks for
- * an icon, a heading in the owner's words, a sentence about how the list
- * fills, and at most one action. A cleared list and a first-run list read
- * differently and each section says which it is.
+ * One whole section: heading, then either the rows or its empty state.
+ *
+ * The empty state is the kit's: a title, one sentence, and at most one action.
+ * It still accepts an icon and deliberately does not draw one (DESIGN.md §9),
+ * so the call sites here pass none.
  */
 export function Section(props: {
   id: string;
   title: string;
   count?: number;
-  needsYou?: boolean;
   note?: ReactNode;
   headerAction?: ReactNode;
   isLoading?: boolean;
   isEmpty: boolean;
-  empty: { icon?: ReactNode; title: string; description: ReactNode; action?: ReactNode };
+  empty: { title: string; description: ReactNode; action?: ReactNode };
   children: ReactNode;
 }) {
   const headingId = `today-${props.id}-heading`;
@@ -93,18 +93,16 @@ export function Section(props: {
         id={headingId}
         title={props.title}
         count={props.count}
-        needsYou={props.needsYou}
         note={props.note}
         action={props.headerAction}
       />
       <Panel>
         {props.isLoading ? (
-          <p className="px-[var(--space-5)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          <p className="px-[var(--space-4)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             Reading the database.
           </p>
         ) : props.isEmpty ? (
           <EmptyState
-            icon={props.empty.icon}
             title={props.empty.title}
             description={props.empty.description}
             action={props.empty.action}
@@ -118,12 +116,13 @@ export function Section(props: {
 }
 
 /**
- * A Today row. Fixed anatomy left to right: a status badge, the name and a
- * sub-line, money on the right in tabular figures, then the actions.
+ * A Today row. Fixed anatomy left to right: a tag, the name and a sub-line,
+ * money on the right in tabular figures, then the actions.
  *
- * `needsYou` draws the 3 px accent left rail from DESIGN.md section 9 — the
- * row keeps its normal background; only the rail changes, so the accent stays
- * under 2% of the pixels.
+ * Two lines of type, so the height comes from the padding rather than from
+ * `--row-h`: `--space-3` top and bottom puts a comfortable row at 52px and a
+ * compact one at 42px, which is the native two-line list metric. One hairline
+ * under every row but the last, and a calm `--color-hover` on hover.
  */
 export function Row(props: {
   badge?: ReactNode;
@@ -140,23 +139,23 @@ export function Row(props: {
   subtitleClassName?: string;
   money?: ReactNode;
   actions?: ReactNode;
-  needsYou?: boolean;
 }) {
   return (
     <li
       className={[
-        "flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] last:border-b-0",
+        "flex items-center gap-[var(--space-3)]",
+        "border-b border-[var(--color-border)] last:border-b-0",
         "px-[var(--space-4)] py-[var(--space-3)] hover:bg-[var(--color-hover)]",
-        props.needsYou
-          ? "border-l-[3px] border-l-[var(--color-accent)]"
-          : "border-l-[3px] border-l-transparent",
       ].join(" ")}
     >
-      {props.badge ? <div className="shrink-0">{props.badge}</div> : null}
+      {/* A fixed column, so every title down the section starts at the same
+          x. Badges are different widths and a ragged left edge on the one
+          thing the owner reads is the definition of sloppy. */}
+      {props.badge ? <div className="w-[116px] flex-none">{props.badge}</div> : null}
 
       <div className="min-w-0 flex-1">
         <div
-          className="truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
+          className="truncate text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)]"
           title={props.titleText}
         >
           {props.title}
@@ -165,7 +164,7 @@ export function Row(props: {
           <div
             className={[
               props.subtitleClassName ?? "truncate",
-              "text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
+              "mt-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
             ].join(" ")}
             title={props.subtitleText}
           >
@@ -175,13 +174,13 @@ export function Row(props: {
       </div>
 
       {props.money ? (
-        <div className="shrink-0 text-right text-[length:var(--text-base)] tabular-nums text-[var(--color-text-muted)]">
+        <div className="money flex-none text-right text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
           {props.money}
         </div>
       ) : null}
 
       {props.actions ? (
-        <div className="flex shrink-0 items-center gap-[var(--space-2)]">
+        <div className="flex flex-none items-center gap-[var(--space-1)]">
           {props.actions}
         </div>
       ) : null}

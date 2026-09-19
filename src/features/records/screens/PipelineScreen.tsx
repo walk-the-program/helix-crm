@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { KanbanSquare, LayoutList, Plus, Search, Settings2, Table2 } from "lucide-react";
+import { ListDashes, Plus, SlidersHorizontal, Table as TableIcon } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -137,7 +137,6 @@ export function PipelineScreen() {
   if (!pipeline || !stages || stages.length === 0) {
     return (
       <EmptyState
-        icon={<KanbanSquare size={24} aria-hidden="true" />}
         title="No stages yet"
         description="A pipeline needs at least one stage before it can hold anything."
         action={
@@ -161,7 +160,7 @@ export function PipelineScreen() {
           </span>
         }
         actions={
-          <div className="flex items-end gap-[var(--space-2)]">
+          <div className="flex items-center gap-[var(--space-2)]">
             <ViewsToolbar
               entityType="deal"
               current={currentView}
@@ -171,28 +170,25 @@ export function PipelineScreen() {
               variant="ghost"
               iconLeft={
                 view === "board" ? (
-                  <Table2 size={20} aria-hidden="true" />
+                  <TableIcon size={16} weight="bold" aria-hidden="true" />
                 ) : (
-                  <LayoutList size={20} aria-hidden="true" />
+                  <ListDashes size={16} weight="bold" aria-hidden="true" />
                 )
               }
-              className="min-h-[44px]"
               onClick={() => setView((current) => (current === "board" ? "list" : "board"))}
             >
               {view === "board" ? "List view" : "Board view"}
             </Button>
             <Button
               variant="secondary"
-              className="min-h-[44px]"
-              iconLeft={<Settings2 size={20} aria-hidden="true" />}
+              iconLeft={<SlidersHorizontal size={16} weight="bold" aria-hidden="true" />}
               onClick={() => setManagingStages(true)}
             >
               Stages
             </Button>
             <Button
               variant="primary"
-              className="min-h-[44px]"
-              iconLeft={<Plus size={20} aria-hidden="true" />}
+              iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
               onClick={() => setCreating(true)}
             >
               {vocabulary.newOne}
@@ -203,7 +199,6 @@ export function PipelineScreen() {
 
       {empty ? (
         <EmptyState
-          icon={<KanbanSquare size={24} aria-hidden="true" />}
           title={`No ${vocabulary.lowerMany} yet`}
           description={`Every quote you give somebody is one of these. Add the one you promised this week and it lands in ${stages[0].name}.`}
           action={
@@ -213,8 +208,8 @@ export function PipelineScreen() {
           }
         />
       ) : view === "board" ? (
-        <div className="mt-[var(--space-4)] flex min-h-0 flex-1 flex-col">
-          <p className="mb-[var(--space-2)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="pb-[var(--space-4)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
             Drag a card, or focus one and hold shift with an arrow key to move it.
           </p>
           <PipelineBoard
@@ -224,72 +219,59 @@ export function PipelineScreen() {
           />
         </div>
       ) : (
-        <div className="mt-[var(--space-4)] flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-end gap-[var(--space-3)] pb-[var(--space-4)]">
-            <div className="min-w-[260px] flex-1">
-              <label
-                htmlFor="deal-search"
-                className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-              >
-                Search
-              </label>
-              <div className="relative">
-                <Search
-                  size={16}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-[var(--space-3)] top-1/2 -translate-y-1/2 text-[var(--color-text-faint)]"
-                />
-                <Input
-                  id="deal-search"
-                  value={search}
-                  placeholder="Title or company"
-                  className="pl-[var(--space-8)]"
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="w-[170px]">
-              <label
-                htmlFor="deal-source"
-                className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-              >
-                Source
-              </label>
-              <Select
-                id="deal-source"
-                ariaLabel="Filter by source"
-                value={sourceId}
-                options={[
-                  { value: ALL, label: "Any source" },
-                  ...(sources ?? []).map((source) => ({ value: source.id, label: source.name })),
-                ]}
-                onValueChange={setSourceId}
-              />
-            </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* A toolbar, not a form: the macOS search field and one pop-up
+              button, separated from the list by one hairline. */}
+          <div className="flex flex-wrap items-center gap-[var(--space-2)] pb-[var(--space-4)]">
+            <label htmlFor="deal-search" className="sr-only">
+              Search
+            </label>
+            <Input
+              search
+              id="deal-search"
+              aria-label="Search deals"
+              value={search}
+              placeholder="Title or company"
+              className="w-[280px] flex-none"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <label htmlFor="deal-source" className="sr-only">
+              Source
+            </label>
+            <Select
+              id="deal-source"
+              ariaLabel="Filter by source"
+              className="w-[170px] flex-none"
+              value={sourceId}
+              options={[
+                { value: ALL, label: "Any source" },
+                ...(sources ?? []).map((source) => ({ value: source.id, label: source.name })),
+              ]}
+              onValueChange={setSourceId}
+            />
           </div>
 
-          <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+          <div className="mt-[var(--space-4)] overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
             <Table>
               <THead>
                 <TR>
-                  <TH>{vocabulary.one}</TH>
-                  <TH>Company</TH>
-                  <TH>Stage</TH>
-                  <TH align="right">Value</TH>
-                  <TH>Expected</TH>
+                  <TH className="w-[34%]">{vocabulary.one}</TH>
+                  <TH className="w-[22%]">Company</TH>
+                  <TH className="w-[18%]">Stage</TH>
+                  <TH align="right" className="w-[13%]">
+                    Value
+                  </TH>
+                  <TH className="w-[13%]">Expected</TH>
                 </TR>
               </THead>
               <TBody>
                 {(listDeals?.rows ?? []).map((deal) => (
                   <TR key={deal.id} onClick={() => navigate(`/deals/${deal.id}`)}>
-                    <TD>
-                      <span className="block max-w-[320px] truncate text-[length:var(--text-lg)] font-medium" title={deal.title}>
-                        {deal.title}
-                      </span>
+                    <TD primary title={deal.title}>
+                      {deal.title}
                     </TD>
-                    <TD>
-                      <span className="block max-w-[220px] truncate text-[var(--color-text-muted)]" title={deal.companyName ?? ""}>
+                    <TD muted>
+                      <span className="block max-w-[220px] truncate" title={deal.companyName ?? ""}>
                         {deal.companyName ?? "—"}
                       </span>
                     </TD>
@@ -301,8 +283,8 @@ export function PipelineScreen() {
                     <TD align="right">
                       <span className="money">{formatMoney(deal.valueCents, deal.currency)}</span>
                     </TD>
-                    <TD>
-                      <span className="tabular text-[var(--color-text-muted)]">
+                    <TD muted>
+                      <span className="tabular">
                         {deal.expectedOn ? formatDateDisplay(deal.expectedOn) : "—"}
                       </span>
                     </TD>

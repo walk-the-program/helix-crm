@@ -19,8 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { useQuery } from "@tanstack/react-query";
 import { navigate } from "wouter/use-browser-location";
-import { Building2, FileText, Handshake, Search, User } from "lucide-react";
-import type { ComponentType } from "react";
+import { MagnifyingGlass } from "@/ui/icons";
 import { qk } from "@/app/queryClient";
 import { openCommandPalette, PALETTE_SHORTCUT } from "@/app/CommandPalette";
 import { Kbd } from "@/ui";
@@ -28,22 +27,21 @@ import {
   GROUP_HEADINGS,
   recentRecords,
   searchRows,
-  type SearchEntityType,
   type SearchRow,
 } from "@/db/repos/search";
 
 /** PLAN item 7's budget is 50 ms per query; 80 ms of debounce sits under a keystroke. */
 export const SEARCH_DEBOUNCE_MS = 80;
 
-const TYPE_ICON: Record<
-  SearchEntityType,
-  ComponentType<{ size?: number; "aria-hidden"?: boolean }>
-> = {
-  contact: User,
-  company: Building2,
-  deal: Handshake,
-  activity: FileText,
-};
+/** The section-label style, hand-matched: cmdk owns the heading's markup, so
+ *  this is passed as the `heading` node rather than through `className`. */
+function GroupHeading(props: { children: string }) {
+  return (
+    <span className="block px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]">
+      {props.children}
+    </span>
+  );
+}
 
 /** Debounce a value, so a fast typist fires one query rather than nine. */
 export function useDebounced<T>(value: T, delayMs: number): T {
@@ -57,18 +55,16 @@ export function useDebounced<T>(value: T, delayMs: number): T {
 
 function ResultItem(props: { row: SearchRow; onPick: (row: SearchRow) => void }) {
   const { row, onPick } = props;
-  const Icon = TYPE_ICON[row.entityType];
   return (
     <Command.Item
       value={`${row.entityType}:${row.entityId}`}
       keywords={[row.label, row.subtitle ?? ""]}
       onSelect={() => onPick(row)}
-      className="flex min-h-[44px] cursor-pointer items-center gap-[var(--space-3)] rounded-[var(--radius-md)] px-[var(--space-3)] data-[selected=true]:bg-[var(--color-accent-soft)]"
+      className="flex min-h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] rounded-[var(--radius-md)] px-[var(--space-3)] data-[selected=true]:bg-[var(--color-selected)]"
     >
-      <Icon size={16} aria-hidden />
       <span className="min-w-0 flex-1">
         <span
-          className="block truncate text-[length:var(--text-base)] text-[var(--color-text)]"
+          className="block truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
           title={row.label}
         >
           {row.label}
@@ -126,7 +122,7 @@ export function SearchDialog(props: {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--color-overlay)] p-[var(--space-8)]"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--color-overlay)] px-[var(--space-4)] pt-[14vh]"
       data-testid="today-search"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onOpenChange(false);
@@ -136,7 +132,7 @@ export function SearchDialog(props: {
         label="Search records"
         shouldFilter={false}
         loop
-        className="w-full max-w-[640px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
+        className="w-full max-w-[600px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]"
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
@@ -144,24 +140,26 @@ export function SearchDialog(props: {
           }
         }}
       >
-        <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-4)]">
-          <Search size={16} aria-hidden className="text-[var(--color-text-faint)]" />
+        <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-3)]">
+          <MagnifyingGlass
+            size={18}
+            weight="regular"
+            aria-hidden="true"
+            className="flex-none text-[var(--color-text-faint)]"
+          />
           <Command.Input
             ref={inputRef}
             autoFocus
             value={value}
             onValueChange={setValue}
             placeholder="Search contacts, companies, deals and notes"
-            className="min-h-[52px] w-full border-0 bg-transparent text-[length:var(--text-base)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
+            className="w-full border-0 bg-transparent text-[length:var(--text-lg)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
           />
         </div>
 
         <Command.List className="max-h-[420px] overflow-y-auto p-[var(--space-2)]">
           {trimmed.length === 0 ? (
-            <Command.Group
-              heading="Recent"
-              className="px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
-            >
+            <Command.Group heading={<GroupHeading>Recent</GroupHeading>}>
               {(recent.data ?? []).map((row) => (
                 <ResultItem key={`${row.entityType}-${row.entityId}`} row={row} onPick={pick} />
               ))}
@@ -190,8 +188,7 @@ export function SearchDialog(props: {
             groups.map((group) => (
               <Command.Group
                 key={group.entityType}
-                heading={GROUP_HEADINGS[group.entityType]}
-                className="px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
+                heading={<GroupHeading>{GROUP_HEADINGS[group.entityType]}</GroupHeading>}
               >
                 {group.rows.map((row) => (
                   <ResultItem key={`${row.entityType}-${row.entityId}`} row={row} onPick={pick} />

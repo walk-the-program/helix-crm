@@ -164,7 +164,7 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveId(null)}
       >
-        <div className="flex min-h-0 flex-1 gap-[var(--space-4)] overflow-x-auto pb-[var(--space-4)]">
+        <div className="flex min-h-0 flex-1 gap-[var(--space-6)] overflow-x-auto pb-[var(--space-4)]">
           {stages.map((stage) => {
             const column = columns.find((candidate) => candidate.stageId === stage.id);
             const deals = (column?.dealIds ?? [])
@@ -231,26 +231,29 @@ function StageColumn(props: {
     <section
       aria-label={stage.name}
       data-stage-id={stage.id}
-      className="flex w-[300px] shrink-0 flex-col rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)]"
+      className="flex w-[280px] flex-none flex-col"
     >
-      <header className="flex flex-col gap-[var(--space-1)] border-b border-[var(--color-border)] p-[var(--space-4)]">
-        <div className="flex items-center gap-[var(--space-2)]">
+      {/* No border and no fill: a coloured or boxed column is the loudest tell
+          of a web kanban. The stage is named, dotted in its own colour, and
+          separated from its cards by one hairline (DESIGN.md §5, §6). */}
+      <header className="flex flex-col gap-[var(--space-1)] border-b border-[var(--color-border)] px-[var(--space-1)] pb-[var(--space-2)]">
+        <div className="flex items-baseline gap-[var(--space-2)]">
           <span
-            className="h-[var(--space-2)] w-[var(--space-2)] shrink-0 rounded-[var(--radius-full)]"
+            className="h-[7px] w-[7px] flex-none translate-y-[-1px] rounded-[var(--radius-full)]"
             style={{ background: stage.color }}
             aria-hidden="true"
           />
           <h2
-            className="min-w-0 flex-1 truncate text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]"
+            className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)]"
             title={stage.name}
           >
             {stage.name}
           </h2>
-          <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          <span className="tabular flex-none text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             {deals.length}
           </span>
         </div>
-        <div className="money text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
+        <div className="money text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
           {formatMoney(total, currency)}
         </div>
       </header>
@@ -258,8 +261,10 @@ function StageColumn(props: {
       <div
         ref={setNodeRef}
         className={[
-          "flex min-h-[120px] flex-1 flex-col gap-[var(--space-3)] p-[var(--space-3)]",
-          isOver ? "outline outline-2 outline-[var(--color-focus)]" : "",
+          "flex min-h-[120px] flex-1 flex-col gap-[var(--space-2)]",
+          "rounded-[var(--radius-lg)] p-[var(--space-2)]",
+          "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+          isOver ? "bg-[var(--color-selected)]" : "",
         ].join(" ")}
       >
         <SortableContext
@@ -278,8 +283,8 @@ function StageColumn(props: {
         </SortableContext>
 
         {deals.length === 0 ? (
-          <p className="px-[var(--space-2)] py-[var(--space-4)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Nothing in {stage.name}. Drag a card here, or press shift and an arrow on one.
+          <p className="px-[var(--space-2)] py-[var(--space-4)] text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+            Nothing in {stage.name}
           </p>
         ) : null}
       </div>

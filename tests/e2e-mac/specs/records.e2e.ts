@@ -400,7 +400,7 @@ test.describe("records", () => {
 test.describe("records screens", () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  const OUT = "tests/e2e-mac/.cache/screens/records";
+  const OUT = "tests/e2e-mac/.cache/screens/sweep-records";
 
   async function setTheme(page: Page, theme: "light" | "dark"): Promise<void> {
     await page.evaluate((value) => {
@@ -422,6 +422,24 @@ test.describe("records screens", () => {
       await settle(page);
       await page.screenshot({ path: `${OUT}/${name}-${theme}.png`, fullPage: true });
     }
+    await setTheme(page, "light");
+  }
+
+  /**
+   * The same screen at `data-density="compact"`. Compact is what catches a
+   * hard-coded height or font size: every size in the product is a token, so a
+   * compact screen is 25% denser and not a broken one (DESIGN.md §7).
+   */
+  async function shootCompact(page: Page, name: string): Promise<void> {
+    await page.evaluate(() => {
+      document.documentElement.setAttribute("data-density", "compact");
+    });
+    await settle(page);
+    await page.screenshot({ path: `${OUT}/${name}-compact.png`, fullPage: true });
+    await page.evaluate(() => {
+      document.documentElement.setAttribute("data-density", "comfortable");
+    });
+    await settle(page);
   }
 
   test("captures every screen, light and dark", async ({ page, helix }) => {
@@ -511,6 +529,12 @@ test.describe("records screens", () => {
     await expect(page.getByRole("list", { name: "Contacts" })).toBeVisible();
     await shoot(page, "contacts-list");
 
+    // The saved-views toolbar, open: a popover is a floating layer and is the
+    // one thing on a list screen allowed to cast a shadow.
+    await page.getByRole("button", { name: "Views" }).click();
+    await shoot(page, "saved-views");
+    await page.keyboard.press("Escape");
+
     const [[contactId]] = helix.bridge.query(
       "SELECT id FROM contacts WHERE first_name = ?",
       ["Brent"],
@@ -518,6 +542,7 @@ test.describe("records screens", () => {
     await page.goto(`/contacts/${contactId}`);
     await expect(page.getByRole("heading", { name: "Brent Hendrickson", level: 1 })).toBeVisible();
     await shoot(page, "contact-page");
+    await shootCompact(page, "contact-page");
 
     await page.goto("/companies");
     await expect(page.getByRole("list", { name: "Companies" })).toBeVisible();
@@ -541,6 +566,7 @@ test.describe("records screens", () => {
       page.locator(`[data-stage-id="${stages[1][0]}"]`).getByTestId("deal-card"),
     ).toHaveCount(1);
     await shoot(page, "pipeline-board");
+    await shootCompact(page, "pipeline-board");
 
     await page.getByRole("button", { name: "List view" }).click();
     await expect(page.getByRole("table")).toBeVisible();

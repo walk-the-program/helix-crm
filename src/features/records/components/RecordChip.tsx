@@ -6,7 +6,7 @@
  */
 import type { ReactElement, MouseEvent } from "react";
 import { Link } from "wouter";
-import { Building2, Handshake, User } from "lucide-react";
+import { Buildings, Handshake, User } from "@/ui/icons";
 import { cn } from "@/ui/cn";
 
 export type RecordChipTarget = {
@@ -17,7 +17,7 @@ export type RecordChipTarget = {
 
 const ICON_FOR: Record<RecordChipTarget["kind"], typeof User> = {
   contact: User,
-  company: Building2,
+  company: Buildings,
   deal: Handshake,
 };
 
@@ -53,7 +53,7 @@ export function RecordChip(props: { target: RecordChipTarget; className?: string
         className,
       )}
     >
-      <Icon className="h-[var(--space-4)] w-[var(--space-4)] shrink-0" aria-hidden="true" />
+      <Icon size={16} weight="regular" className="shrink-0" aria-hidden="true" />
       <span className="truncate">{target.label}</span>
     </Link>
   );

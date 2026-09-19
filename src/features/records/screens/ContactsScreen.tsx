@@ -12,8 +12,8 @@
  * the row has loaded.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
-import { Plus, Search, Users } from "lucide-react";
+import { useLocation } from "wouter";
+import { Plus } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -141,8 +141,7 @@ export function ContactsScreen() {
             />
             <Button
               variant="primary"
-              iconLeft={<Plus size={20} aria-hidden="true" />}
-              className="min-h-[44px]"
+              iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
               onClick={() => setCreating(true)}
             >
               New contact
@@ -151,46 +150,31 @@ export function ContactsScreen() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-[var(--space-3)] py-[var(--space-4)]">
+      <div className="flex flex-wrap items-center gap-[var(--space-3)] py-[var(--space-4)]">
         <div className="min-w-[260px] flex-1">
-          <label
-            htmlFor="contact-search"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Search
+          <label htmlFor="contact-search" className="sr-only">
+            Search contacts
           </label>
-          <div className="relative">
-            <Search
-              size={16}
-              aria-hidden="true"
-              className="pointer-events-none absolute left-[var(--space-3)] top-1/2 -translate-y-1/2 text-[var(--color-text-faint)]"
-            />
-            <Input
-              id="contact-search"
-              value={search}
-              placeholder="Name or company"
-              className="pl-[var(--space-8)]"
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
+          <Input
+            id="contact-search"
+            search
+            value={search}
+            placeholder="Name or company"
+            aria-label="Search contacts"
+            onChange={(event) => setSearch(event.target.value)}
+          />
         </div>
 
         <div className="w-[190px]">
-          <label
-            htmlFor="contact-sort"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
+          <label htmlFor="contact-sort" className="sr-only">
             Sort
           </label>
           <Select id="contact-sort" ariaLabel="Sort" value={sort} options={SORTS} onValueChange={setSort} />
         </div>
 
         <div className="w-[170px]">
-          <label
-            htmlFor="contact-tag"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Tag
+          <label htmlFor="contact-tag" className="sr-only">
+            Filter by tag
           </label>
           <Select
             id="contact-tag"
@@ -205,11 +189,8 @@ export function ContactsScreen() {
         </div>
 
         <div className="w-[170px]">
-          <label
-            htmlFor="contact-source"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Source
+          <label htmlFor="contact-source" className="sr-only">
+            Filter by source
           </label>
           <Select
             id="contact-source"
@@ -223,7 +204,7 @@ export function ContactsScreen() {
           />
         </div>
 
-        <label className="flex min-h-[44px] items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        <label className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
           <Checkbox
             checked={showArchived}
             onCheckedChange={setShowArchived}
@@ -236,7 +217,6 @@ export function ContactsScreen() {
       {rows.length === 0 && !isLoading ? (
         filtered ? (
           <EmptyState
-            icon={<Search size={24} aria-hidden="true" />}
             title={`Nothing matches "${search.trim() || "those filters"}"`}
             description="Clear the filters to see everyone, or add this person now."
             action={
@@ -259,7 +239,6 @@ export function ContactsScreen() {
           />
         ) : (
           <EmptyState
-            icon={<Users size={24} aria-hidden="true" />}
             title={showArchived ? "Nothing archived" : "No contacts yet"}
             description={
               showArchived
@@ -280,12 +259,18 @@ export function ContactsScreen() {
           />
         )
       ) : (
-        <div className="min-h-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+          {/* The column strip: the one uppercase type in the product, which is
+              how a native list view labels a column (DESIGN.md §4). */}
+          <div className="flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]" aria-hidden="true">
+            <span className="min-w-0 flex-1">Name</span>
+            <span className="w-[200px] flex-none">Company</span>
+            <span className="hidden w-[180px] flex-none text-right md:block">Tags</span>
+          </div>
           <VirtualList
             items={rows}
-            estimateSize={68}
             ariaLabel="Contacts"
-            className="h-full max-h-[calc(100vh-280px)]"
+            className="min-h-0 flex-1 max-h-[calc(100vh-280px)]"
             getKey={(contact) => contact.id}
             renderRow={(contact) => (
               <ContactRow
@@ -323,28 +308,26 @@ function ContactRow(props: { contact: Contact; tagNames: string[]; onOpen: () =>
         }
       }}
       className={[
-        "flex min-h-[68px] w-full cursor-pointer items-center gap-[var(--space-4)]",
+        "flex min-h-[var(--row-h)] w-full cursor-default items-center gap-[var(--space-4)]",
         "border-b border-[var(--color-border)] px-[var(--space-4)]",
         "hover:bg-[var(--color-hover)]",
         "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]",
       ].join(" ")}
     >
-      <div className="min-w-0 flex-1">
-        <div
-          className="truncate text-[length:var(--text-lg)] font-medium text-[var(--color-text)]"
-          title={name}
-        >
-          {name}
-        </div>
-        <div
-          className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-          title={contact.companyName ?? ""}
-        >
-          {contact.companyName ?? "No company"}
-        </div>
+      <div
+        className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
+        title={name}
+      >
+        {name}
+      </div>
+      <div
+        className="w-[200px] shrink-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+        title={contact.companyName ?? ""}
+      >
+        {contact.companyName ?? "No company"}
       </div>
 
-      <div className="hidden w-[180px] shrink-0 items-center gap-[var(--space-1)] md:flex">
+      <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] md:flex">
         {tagNames.slice(0, 2).map((tag) => (
           <Badge key={tag}>
             <span className="max-w-[70px] truncate" title={tag}>
@@ -354,14 +337,6 @@ function ContactRow(props: { contact: Contact; tagNames: string[]; onOpen: () =>
         ))}
         {tagNames.length > 2 ? <Badge>+{tagNames.length - 2}</Badge> : null}
       </div>
-
-      <Link
-        href={`/contacts/${contact.id}`}
-        onClick={(event) => event.stopPropagation()}
-        className="shrink-0 text-[length:var(--text-sm)] text-[var(--color-text-muted)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-      >
-        Open
-      </Link>
     </div>
   );
 }

@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { Building2, Plus, Search } from "lucide-react";
+import { Plus } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -147,8 +147,7 @@ export function CompaniesScreen() {
             />
             <Button
               variant="primary"
-              className="min-h-[44px]"
-              iconLeft={<Plus size={20} aria-hidden="true" />}
+              iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
               onClick={() => setCreating(true)}
             >
               New company
@@ -157,38 +156,31 @@ export function CompaniesScreen() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-[var(--space-3)] py-[var(--space-4)]">
+      <div className="flex flex-wrap items-center gap-[var(--space-3)] py-[var(--space-4)]">
         <div className="min-w-[260px] flex-1">
-          <label
-            htmlFor="company-search"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Search
+          <label htmlFor="company-search" className="sr-only">
+            Search companies
           </label>
           <Input
             id="company-search"
+            search
             value={search}
             placeholder="Company name"
+            aria-label="Search companies"
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
 
         <div className="w-[190px]">
-          <label
-            htmlFor="company-sort"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
+          <label htmlFor="company-sort" className="sr-only">
             Sort
           </label>
           <Select id="company-sort" ariaLabel="Sort" value={sort} options={SORTS} onValueChange={setSort} />
         </div>
 
         <div className="w-[170px]">
-          <label
-            htmlFor="company-tag"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Tag
+          <label htmlFor="company-tag" className="sr-only">
+            Filter by tag
           </label>
           <Select
             id="company-tag"
@@ -203,11 +195,8 @@ export function CompaniesScreen() {
         </div>
 
         <div className="w-[170px]">
-          <label
-            htmlFor="company-source"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Source
+          <label htmlFor="company-source" className="sr-only">
+            Filter by source
           </label>
           <Select
             id="company-source"
@@ -221,7 +210,7 @@ export function CompaniesScreen() {
           />
         </div>
 
-        <label className="flex min-h-[44px] items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        <label className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
           <Checkbox
             checked={showArchived}
             onCheckedChange={setShowArchived}
@@ -234,7 +223,6 @@ export function CompaniesScreen() {
       {rows.length === 0 && !isLoading ? (
         filtered ? (
           <EmptyState
-            icon={<Search size={24} aria-hidden="true" />}
             title={`Nothing matches "${search.trim() || "those filters"}"`}
             description="Clear the filters to see every company, or add this one now."
             action={
@@ -257,7 +245,6 @@ export function CompaniesScreen() {
           />
         ) : (
           <EmptyState
-            icon={<Building2 size={24} aria-hidden="true" />}
             title={showArchived ? "Nothing archived" : "No companies yet"}
             description={
               showArchived
@@ -278,12 +265,18 @@ export function CompaniesScreen() {
           />
         )
       ) : (
-        <div className="min-h-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+          {/* The column strip: the one uppercase type in the product, which is
+              how a native list view labels a column (DESIGN.md §4). */}
+          <div className="flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]" aria-hidden="true">
+            <span className="min-w-0 flex-1">Name</span>
+            <span className="w-[200px] flex-none">Phone</span>
+            <span className="hidden w-[180px] flex-none text-right md:block">Tags</span>
+          </div>
           <VirtualList
             items={rows}
-            estimateSize={68}
             ariaLabel="Companies"
-            className="h-full max-h-[calc(100vh-280px)]"
+            className="min-h-0 flex-1 max-h-[calc(100vh-280px)]"
             getKey={(company) => company.id}
             renderRow={(company) => (
               <CompanyRow
@@ -319,24 +312,22 @@ function CompanyRow(props: { company: Company; tagNames: string[]; onOpen: () =>
         }
       }}
       className={[
-        "flex min-h-[68px] w-full cursor-pointer items-center gap-[var(--space-4)]",
+        "flex min-h-[var(--row-h)] w-full cursor-default items-center gap-[var(--space-4)]",
         "border-b border-[var(--color-border)] px-[var(--space-4)]",
         "hover:bg-[var(--color-hover)]",
         "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]",
       ].join(" ")}
     >
-      <div className="min-w-0 flex-1">
-        <div
-          className="truncate text-[length:var(--text-lg)] font-medium text-[var(--color-text)]"
-          title={company.name}
-        >
-          {company.name}
-        </div>
-        <div className="truncate text-[length:var(--text-sm)] tabular text-[var(--color-text-muted)]">
-          {company.phoneRaw ? formatPhone(company.phoneRaw) || company.phoneRaw : "No phone"}
-        </div>
+      <div
+        className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
+        title={company.name}
+      >
+        {company.name}
       </div>
-      <div className="hidden w-[180px] shrink-0 items-center gap-[var(--space-1)] md:flex">
+      <div className="w-[200px] shrink-0 truncate tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        {company.phoneRaw ? formatPhone(company.phoneRaw) || company.phoneRaw : "No phone"}
+      </div>
+      <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] md:flex">
         {tagNames.slice(0, 2).map((tag) => (
           <Badge key={tag}>
             <span className="max-w-[70px] truncate" title={tag}>

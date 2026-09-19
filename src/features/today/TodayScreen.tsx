@@ -3,19 +3,21 @@
  * in docs/PLAN.md — the owner does not want a CRM, he wants to not lose a lead
  * and to remember what he promised.
  *
- * The order is fixed by DESIGN.md section 3 and is not a preference: Due now,
- * New leads, Gone quiet, Recent activity, then the one card that asks for
- * something. Each section renders its own designed empty state, so a workspace
- * with three contacts in it still looks finished.
+ * The order is fixed by DESIGN.md §3 and is not a preference: Due now, New
+ * leads, Gone quiet, Recent activity, then the one card that asks for
+ * something. Due now is first because it is what needs him, and that position
+ * plus full-strength ink is the whole of the emphasis — there is no attention
+ * colour on this screen (§5).
  *
- * A brand-new workspace gets a different screen entirely — four empty panels
+ * A brand-new workspace gets a different screen entirely. Four empty panels
  * stacked up is not a first impression, it is a failure. That screen shows the
- * three things that fill Today, and nothing else.
+ * three things that fill Today and nothing else, with one black button on it.
  */
 
+import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { navigate } from "wouter/use-browser-location";
-import { FileSpreadsheet, Globe, Search, UserPlus } from "lucide-react";
+import { MagnifyingGlass } from "@/ui/icons";
 import { Button, Kbd, PageHeader } from "@/ui";
 import { allCommands } from "@/app/registry";
 import { DueNowSection } from "@/features/today/sections/DueNow";
@@ -53,10 +55,14 @@ function todayLabel(): string {
   }
 }
 
-/** The four-panel screen, for a workspace with anything at all in it. */
+/**
+ * The four-panel screen. `--space-8` between sections rather than a tighter
+ * gap: air is what separates a native pane from a web page, and a section
+ * heading needs room above it to read as a heading.
+ */
 function TodayPanels() {
   return (
-    <div className="flex flex-col gap-[var(--space-7)]">
+    <div className="flex flex-col gap-[var(--space-8)]">
       <DueNowSection />
       <NewLeadsSection />
       <GoneQuietSection />
@@ -66,12 +72,59 @@ function TodayPanels() {
   );
 }
 
+/**
+ * One of the three first-run panels. A grouped inset list with a title, a
+ * sentence and its own control — no spot glyph, because a decorative icon in
+ * the middle of an empty pane is the thing that makes a desktop app look like
+ * a marketing page (DESIGN.md §11).
+ */
+function StarterCard(props: {
+  title: string;
+  description: string;
+  action: ReactNode;
+}) {
+  return (
+    <li className="flex flex-col gap-[var(--space-2)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]">
+      <h3 className="text-[length:var(--text-lg)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
+        {props.title}
+      </h3>
+      <p className="flex-1 text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+        {props.description}
+      </p>
+      <div className="mt-[var(--space-2)] flex">{props.action}</div>
+    </li>
+  );
+}
+
+/** A link drawn as the one black button on the screen. */
+const primaryLinkClasses = [
+  "inline-flex h-[var(--control-h)] flex-none items-center justify-center",
+  "rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--space-4)] no-underline",
+  "text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-accent-text)]",
+  "hover:bg-[var(--color-accent-hover)] hover:no-underline",
+  "active:scale-[var(--press-scale)] motion-reduce:active:scale-100",
+  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
+].join(" ");
+
+/** A link drawn as a macOS push button: white fill, one hairline, full ink. */
+const secondaryLinkClasses = [
+  "inline-flex h-[var(--control-h)] flex-none items-center justify-center",
+  "rounded-[var(--radius-md)] border border-[var(--color-border-strong)]",
+  "bg-[var(--color-surface)] px-[var(--space-4)] no-underline",
+  "text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)]",
+  "hover:bg-[var(--color-hover)] hover:no-underline",
+  "active:scale-[var(--press-scale)] motion-reduce:active:scale-100",
+  "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
+].join(" ");
+
 /** The first-run screen: the three actions that put something on Today. */
 function FirstRun() {
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
       <div className="max-w-[var(--content-max)]">
-        <h2 className="text-[length:var(--text-xl)] font-semibold text-[var(--color-text)]">
+        <h2 className="text-[length:var(--text-xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
           Nothing here yet, and that is the right place to start
         </h2>
         <p className="mt-[var(--space-2)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
@@ -82,63 +135,33 @@ function FirstRun() {
       </div>
 
       <ul className="m-0 grid list-none grid-cols-1 gap-[var(--space-4)] p-0 lg:grid-cols-3">
-        <li className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)] shadow-[var(--shadow-sm)]">
-          <FileSpreadsheet
-            size={24}
-            className="text-[var(--color-text-faint)]"
-            aria-hidden
-          />
-          <h3 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
-            Import a spreadsheet
-          </h3>
-          <p className="flex-1 text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-            A CSV from your old CRM, your accountant, or a sheet you keep
-            yourself. Five minutes, and you keep every column you care about.
-          </p>
-          <Link
-            href="/import"
-            className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--space-4)] text-[length:var(--text-sm)] font-medium text-[var(--color-accent-text)] hover:bg-[var(--color-accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-          >
-            Import a CSV
-          </Link>
-        </li>
-
-        <li className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)] shadow-[var(--shadow-sm)]">
-          <UserPlus size={24} className="text-[var(--color-text-faint)]" aria-hidden />
-          <h3 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
-            Add one contact
-          </h3>
-          <p className="flex-1 text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-            The customer you spoke to this morning. A name is enough; everything
-            else can wait until you need it.
-          </p>
-          <Button
-            type="button"
-            variant="secondary"
-            size="lg"
-            className="min-h-[44px]"
-            onClick={runQuickAdd}
-          >
-            Add a contact
-          </Button>
-        </li>
-
-        <li className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)] shadow-[var(--shadow-sm)]">
-          <Globe size={24} className="text-[var(--color-text-faint)]" aria-hidden />
-          <h3 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
-            Connect your website
-          </h3>
-          <p className="flex-1 text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-            Quote requests from your site land here by themselves, with the
-            message the customer typed.
-          </p>
-          <Link
-            href="/settings/site"
-            className="inline-flex min-h-[44px] items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-[var(--space-4)] text-[length:var(--text-sm)] font-medium text-[var(--color-text)] hover:bg-[var(--color-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-          >
-            Connect website
-          </Link>
-        </li>
+        <StarterCard
+          title="Import a spreadsheet"
+          description="A CSV from your old CRM, your accountant, or a sheet you keep yourself. Five minutes, and you keep every column you care about."
+          action={
+            <Link href="/import" className={primaryLinkClasses}>
+              Import a CSV
+            </Link>
+          }
+        />
+        <StarterCard
+          title="Add one contact"
+          description="The customer you spoke to this morning. A name is enough; everything else can wait until you need it."
+          action={
+            <Button type="button" variant="secondary" onClick={runQuickAdd}>
+              Add a contact
+            </Button>
+          }
+        />
+        <StarterCard
+          title="Connect your website"
+          description="Quote requests from your site land here by themselves, with the message the customer typed."
+          action={
+            <Link href="/settings/site" className={secondaryLinkClasses}>
+              Connect website
+            </Link>
+          }
+        />
       </ul>
     </div>
   );
@@ -148,7 +171,7 @@ export function TodayScreen() {
   const { data: isEmpty, isLoading } = useWorkspaceIsEmpty();
 
   return (
-    <div className="flex flex-col gap-[var(--space-6)]">
+    <div className="flex flex-col">
       <PageHeader
         title="Today"
         subtitle={todayLabel()}
@@ -156,9 +179,9 @@ export function TodayScreen() {
           <Button
             type="button"
             variant="secondary"
-            size="lg"
-            className="min-h-[44px]"
-            iconLeft={<Search size={16} aria-hidden />}
+            iconLeft={
+              <MagnifyingGlass size={16} weight="bold" aria-hidden="true" />
+            }
             onClick={openSearch}
           >
             Search records <Kbd keys={SEARCH_SHORTCUT} />

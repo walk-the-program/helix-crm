@@ -3,7 +3,7 @@
  * one-tap "Directions" that hands the whole address to the OS map handler and
  * then offers to log the lookup.
  */
-import { MapPin } from "lucide-react";
+import { MapPin } from "@/ui/icons";
 import { Button } from "@/ui";
 import { InlineText } from "@/features/records/components/InlineEdit";
 import {
@@ -62,8 +62,7 @@ export function AddressPanel(props: {
         <div>
           <Button
             variant="secondary"
-            iconLeft={<MapPin size={20} aria-hidden="true" />}
-            className="min-h-[44px]"
+            iconLeft={<MapPin size={16} weight="bold" aria-hidden="true" />}
             onClick={() =>
               void oneTap("map", formatAddressOneLine(address), props.link, {
                 href,

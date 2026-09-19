@@ -14,7 +14,7 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { Inbox, Phone, PhoneCall } from "lucide-react";
+import { Phone, PhoneCall } from "@/ui/icons";
 import { Badge, Button, toast } from "@/ui";
 import { Row, Section } from "@/features/today/components/Section";
 import {
@@ -66,12 +66,10 @@ export function NewLeadsSection() {
         id="new-leads"
         title="New leads"
         count={leads.length}
-        needsYou
         note={`Last ${NEW_LEAD_WINDOW_DAYS} days, nobody has called them yet`}
         isLoading={isLoading}
         isEmpty={leads.length === 0}
         empty={{
-          icon: <Inbox size={24} aria-hidden />,
           title: "No new leads waiting",
           description:
             "A lead lands here when a deal is created and nobody has logged a call, an email or a note against it yet. Quote requests from a connected website arrive here on their own.",
@@ -90,16 +88,13 @@ export function NewLeadsSection() {
           return (
             <Row
               key={lead.dealId}
-              needsYou
               badge={
-                <Badge tone={lead.sourceName === "Website" ? "accent" : "neutral"}>
-                  {lead.sourceName ?? "No source"}
-                </Badge>
+                <Badge tone="neutral">{lead.sourceName ?? "No source"}</Badge>
               }
               title={
                 <Link
                   href={lead.contactId ? `/contacts/${lead.contactId}` : `/deals/${lead.dealId}`}
-                  className="underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                  className="text-[var(--color-text)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
                 >
                   {name}
                 </Link>
@@ -117,10 +112,9 @@ export function NewLeadsSection() {
                   {lead.contactPhone ? (
                     <Button
                       type="button"
-                      variant="secondary"
-                      size="lg"
-                      className="min-h-[44px]"
-                      iconLeft={<Phone size={16} aria-hidden />}
+                      variant="ghost"
+                      size="sm"
+                      iconLeft={<Phone size={16} weight="bold" aria-hidden="true" />}
                       onClick={() => void call(lead)}
                     >
                       Call
@@ -128,10 +122,9 @@ export function NewLeadsSection() {
                   ) : null}
                   <Button
                     type="button"
-                    variant="primary"
-                    size="lg"
-                    className="min-h-[44px]"
-                    iconLeft={<PhoneCall size={16} aria-hidden />}
+                    variant="secondary"
+                    size="sm"
+                    iconLeft={<PhoneCall size={16} weight="bold" aria-hidden="true" />}
                     onClick={() => {
                       setTarget({
                         name,

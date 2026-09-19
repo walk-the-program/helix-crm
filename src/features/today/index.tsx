@@ -17,7 +17,7 @@
 
 import type { FeatureModule } from "@/app/feature";
 import { NAV_ORDER } from "@/app/feature";
-import { Sun } from "lucide-react";
+import { Sun } from "@/ui/icons";
 import { TodayScreen } from "@/features/today/TodayScreen";
 import {
   mountSearchOverlay,

@@ -6,7 +6,7 @@
  */
 import { useId, useRef, useState } from "react";
 import type { ReactElement } from "react";
-import { Plus } from "lucide-react";
+import { Plus } from "@/ui/icons";
 import { Button, Field, Input } from "@/ui";
 import * as tasksRepo from "@/db/repos/tasks";
 import { dueFromForm } from "@/features/records/lib/taskGroups";
@@ -113,7 +113,7 @@ export function TaskComposer(props: {
 
         <Button
           variant={emphasis}
-          iconLeft={<Plus size={16} aria-hidden="true" />}
+          iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
           loading={saving}
           onClick={() => void save()}
           className="shrink-0"

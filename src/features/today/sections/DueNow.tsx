@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { AlarmClock, CheckCircle2, Clock, Phone } from "lucide-react";
+import { Alarm, CheckCircle, Clock, Phone } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -70,10 +70,9 @@ function RowActions({ row }: { row: DueNowRow }) {
       {phone ? (
         <Button
           type="button"
-          variant="secondary"
-          size="lg"
-          className="min-h-[44px]"
-          iconLeft={<Phone size={16} aria-hidden />}
+          variant="ghost"
+          size="sm"
+          iconLeft={<Phone size={16} weight="bold" aria-hidden="true" />}
           loading={calling}
           onClick={() => void call()}
         >
@@ -84,9 +83,8 @@ function RowActions({ row }: { row: DueNowRow }) {
       <Button
         type="button"
         variant="secondary"
-        size="lg"
-        className="min-h-[44px]"
-        iconLeft={<CheckCircle2 size={16} aria-hidden />}
+        size="sm"
+        iconLeft={<CheckCircle size={16} weight="bold" aria-hidden="true" />}
         loading={complete.isPending}
         onClick={() => {
           complete.mutate(row.task.id, {
@@ -107,9 +105,8 @@ function RowActions({ row }: { row: DueNowRow }) {
           <Button
             type="button"
             variant="ghost"
-            size="lg"
-            className="min-h-[44px]"
-            iconLeft={<Clock size={16} aria-hidden />}
+            size="sm"
+            iconLeft={<Clock size={16} weight="bold" aria-hidden="true" />}
             aria-label={`Snooze ${row.task.title}`}
           >
             Snooze
@@ -117,7 +114,6 @@ function RowActions({ row }: { row: DueNowRow }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            className="min-h-[44px]"
             onSelect={() =>
               snooze.mutate(
                 { id: row.task.id, when: "tomorrow" },
@@ -128,7 +124,6 @@ function RowActions({ row }: { row: DueNowRow }) {
             Tomorrow
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="min-h-[44px]"
             onSelect={() =>
               snooze.mutate(
                 { id: row.task.id, when: "next-week" },
@@ -154,7 +149,6 @@ export function DueNowSection() {
       id="due-now"
       title="Due now"
       count={rows.length}
-      needsYou
       note={
         overdue > 0
           ? overdue === 1
@@ -167,14 +161,13 @@ export function DueNowSection() {
       isLoading={isLoading}
       isEmpty={rows.length === 0}
       empty={{
-        icon: <CheckCircle2 size={24} className="text-[var(--color-success)]" aria-hidden />,
         title: "Nothing is due today",
         description:
           "Follow-ups you set on a contact, a company or a deal show up here on the day they are due, and stay until they are done.",
         action: (
           <Link
             href="/tasks"
-            className="inline-flex min-h-[44px] items-center rounded-[var(--radius-md)] px-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] underline underline-offset-4 hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+            className="inline-flex h-[var(--control-h)] flex-none items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-[var(--space-4)] text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)] no-underline hover:bg-[var(--color-hover)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
           >
             See every task
           </Link>
@@ -184,11 +177,10 @@ export function DueNowSection() {
       {rows.map((row) => (
         <Row
           key={row.task.id}
-          needsYou={row.overdue}
           badge={
             row.overdue ? (
-              <Badge tone="accent">
-                <AlarmClock size={13} aria-hidden /> {row.when}
+              <Badge tone="warning">
+                <Alarm size={14} weight="regular" aria-hidden="true" /> {row.when}
               </Badge>
             ) : (
               <Badge tone="neutral">{row.when}</Badge>
@@ -200,7 +192,7 @@ export function DueNowSection() {
             row.link ? (
               <Link
                 href={row.link.href}
-                className="underline underline-offset-2 hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                className="text-[var(--color-text-muted)] no-underline underline-offset-2 hover:text-[var(--color-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
               >
                 {row.link.label}
               </Link>

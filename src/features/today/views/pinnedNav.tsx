@@ -14,7 +14,7 @@
  * An empty result contributes no group at all, so an owner who has pinned
  * nothing sees no empty heading.
  */
-import { Bookmark } from "lucide-react";
+import { Bookmark } from "@/ui/icons";
 import type { FeatureNavSection } from "@/app/feature";
 import { NAV_ORDER } from "@/app/feature";
 import { usePinnedViews, viewRoute } from "@/features/today/views/useSavedViews";

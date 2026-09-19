@@ -7,7 +7,7 @@
  * `stages.remove`, which moves them inside one transaction.
  */
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "@/ui/icons";
 import {
   Button,
   Dialog,
@@ -127,26 +127,31 @@ export function StageManagerDialog(props: {
         <DialogHeader>
           <DialogTitle>Stages</DialogTitle>
           <DialogDescription>
-            The columns on the board, in order. Quiet days is how long a {props.vocabularyMany.toLowerCase()}{" "}
+            The columns on the board, in order. Quiet days is how long one{" "}
             can sit here before Today asks about it — 0 turns that off.
           </DialogDescription>
         </DialogHeader>
+
+        <div
+          aria-hidden="true"
+          className="flex flex-wrap items-end gap-[var(--space-2)] pb-[var(--space-2)] text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]"
+        >
+          <span className="min-w-[180px] flex-1">Name</span>
+          <span className="w-[160px]">Colour</span>
+          <span className="w-[110px]">Quiet days</span>
+          <span className="w-[108px]" />
+        </div>
 
         <ul className="flex flex-col gap-[var(--space-3)]">
           {ordered.map((stage, index) => (
             <li
               key={stage.id}
-              className="flex flex-wrap items-end gap-[var(--space-2)] border-b border-[var(--color-border)] pb-[var(--space-3)] last:border-0"
+              className="flex flex-wrap items-center gap-[var(--space-2)] border-b border-[var(--color-border)] pb-[var(--space-3)] last:border-0"
             >
               <div className="min-w-[180px] flex-1">
-                <label
-                  htmlFor={`stage-name-${stage.id}`}
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Name
-                </label>
                 <Input
                   id={`stage-name-${stage.id}`}
+                  aria-label={`Name of the ${stage.name} stage`}
                   defaultValue={stage.name}
                   onBlur={(event) => {
                     const next = event.target.value.trim();
@@ -160,15 +165,9 @@ export function StageManagerDialog(props: {
               </div>
 
               <div className="w-[160px]">
-                <label
-                  htmlFor={`stage-colour-${stage.id}`}
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Colour
-                </label>
                 <div className="flex items-center gap-[var(--space-2)]">
                   <span
-                    className="h-[var(--space-5)] w-[var(--space-5)] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)]"
+                    className="h-[7px] w-[7px] shrink-0 rounded-[var(--radius-full)]"
                     style={{ background: stage.color }}
                     aria-hidden="true"
                   />
@@ -192,14 +191,9 @@ export function StageManagerDialog(props: {
               </div>
 
               <div className="w-[110px]">
-                <label
-                  htmlFor={`stage-quiet-${stage.id}`}
-                  className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                >
-                  Quiet days
-                </label>
                 <Input
                   id={`stage-quiet-${stage.id}`}
+                  aria-label={`Quiet days for ${stage.name}`}
                   type="number"
                   min={0}
                   defaultValue={stage.quietDays}
@@ -219,14 +213,14 @@ export function StageManagerDialog(props: {
                   label={`Move ${stage.name} earlier`}
                   size="sm"
                   disabled={index === 0 || busy}
-                  icon={<ArrowUp size={16} aria-hidden="true" />}
+                  icon={<ArrowUp size={16} weight="bold" aria-hidden="true" />}
                   onClick={() => void move(stage, -1)}
                 />
                 <IconButton
                   label={`Move ${stage.name} later`}
                   size="sm"
                   disabled={index === ordered.length - 1 || busy}
-                  icon={<ArrowDown size={16} aria-hidden="true" />}
+                  icon={<ArrowDown size={16} weight="bold" aria-hidden="true" />}
                   onClick={() => void move(stage, 1)}
                 />
                 <IconButton
@@ -234,7 +228,7 @@ export function StageManagerDialog(props: {
                   size="sm"
                   variant="danger"
                   disabled={ordered.length <= 1 || busy}
-                  icon={<Trash2 size={16} aria-hidden="true" />}
+                  icon={<Trash2 size={16} weight="bold" aria-hidden="true" />}
                   onClick={() => {
                     setDeleting(stage);
                     setMoveTarget("");
@@ -304,7 +298,7 @@ export function StageManagerDialog(props: {
           <Button
             variant="secondary"
             loading={busy}
-            iconLeft={<Plus size={16} aria-hidden="true" />}
+            iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
             onClick={() => void addStage()}
           >
             Add stage

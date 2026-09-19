@@ -1,30 +1,38 @@
 /**
  * One contact.
  *
- * The header block is fixed by DESIGN.md §3 and does not negotiate: the name,
- * then the phone as a real control, then the next step, then at most two more
+ * The hierarchy is fixed by DESIGN.md §3 and does not negotiate: the name, then
+ * the phone as a real control, then the next step, then at most two more
  * actions. Everything else — tags, the company link, the address, custom
- * fields, the source, the notes — lives below it, and the timeline scrolls.
+ * fields, the notes — lives below it in grouped inset lists, and the timeline
+ * scrolls beside them.
  *
- * Nothing on this page has a save button. Every field autosaves.
+ * The summary block is not a card. A bordered panel sitting directly under the
+ * toolbar was the thing that made this page read as a web dashboard; a native
+ * record pane puts its title in the open air, with space rather than a rule
+ * separating it from what follows (DESIGN.md §9 "Page header").
+ *
+ * "Call" is the one filled button on the page, and its label is the number
+ * itself in tabular figures, because dialling is what the owner opened this
+ * record to do. Nothing on this page has a save button — every field autosaves.
  */
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import {
-  ArchiveRestore,
+  Archive,
   ArrowLeft,
-  Building2,
+  Buildings,
+  Envelope,
   PhoneCall,
-  Mail,
-  Trash2,
-} from "lucide-react";
+  Trash,
+} from "@/ui/icons";
 import {
   Badge,
   Button,
   Card,
   CardBody,
-  CardHeader,
-  CardTitle,
+  CardGroupLabel,
   ConfirmDialog,
   EmptyState,
   Spinner,
@@ -32,6 +40,7 @@ import {
 import * as contactsRepo from "@/db/repos/contacts";
 import type { ActivityKind } from "@/db/repos/activities";
 import { formatPhone } from "@/lib/phone";
+import { SummarizeButton } from "@/features/ai";
 import { useContact, useTasks } from "@/features/records/lib/hooks";
 import {
   deleteWithUndo,
@@ -49,6 +58,20 @@ import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPan
 import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
+
+/** One labelled group of fields: the small-capitals label, then the panel. */
+function Group(props: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <CardGroupLabel>{props.label}</CardGroupLabel>
+      <Card>{props.children}</Card>
+    </div>
+  );
+}
+
+/** A picker's label, matching the kit's field label exactly. */
+const fieldLabel =
+  "block pb-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]";
 
 export function ContactPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -86,6 +109,9 @@ export function ContactPage() {
   const primaryPhone = contact.phones.find((phone) => phone.isPrimary) ?? contact.phones[0] ?? null;
   const primaryEmail = contact.emails.find((email) => email.isPrimary) ?? contact.emails[0] ?? null;
   const archived = contact.deletedAt !== null;
+  const phoneLabel = primaryPhone
+    ? formatPhone(primaryPhone.raw) || primaryPhone.raw
+    : null;
 
   async function patch(values: contactsRepo.ContactPatch) {
     await contactsRepo.update(id, values);
@@ -93,51 +119,47 @@ export function ContactPage() {
   }
 
   return (
-    <div className="flex flex-col gap-[var(--space-5)]">
-      <Link
-        href="/contacts"
-        className="inline-flex w-fit items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-      >
-        <ArrowLeft size={16} aria-hidden="true" /> Contacts
-      </Link>
-
-      {/* The fixed top block: name, phone, next step, two actions. */}
-      <section
+    <div className="flex flex-col">
+      {/* The header block: breadcrumb, name, where he works, the actions. */}
+      <header
         aria-label="Contact summary"
-        className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-5)]"
+        className="flex flex-col gap-[var(--space-4)] pb-[var(--space-6)]"
       >
-        <div className="flex flex-wrap items-start justify-between gap-[var(--space-4)]">
+        <div className="flex flex-wrap items-end justify-between gap-[var(--space-3)]">
           <div className="min-w-0 flex-1">
+            <Link
+              href="/contacts"
+              className="inline-flex w-fit items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-faint)] no-underline hover:text-[var(--color-text)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+            >
+              <ArrowLeft size={14} weight="bold" aria-hidden="true" /> Contacts
+            </Link>
             <h1
-              className="truncate text-[length:var(--text-xl)] font-semibold text-[var(--color-text)]"
+              className="truncate text-[length:var(--text-2xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]"
               title={name}
             >
               {name}
             </h1>
-            {contact.companyId && contact.companyName ? (
-              <Link
-                href={`/companies/${contact.companyId}`}
-                className="mt-[var(--space-1)] inline-flex max-w-full items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-              >
-                <Building2 size={16} aria-hidden="true" />
-                <span className="truncate" title={contact.companyName}>
-                  {contact.companyName}
-                </span>
-              </Link>
-            ) : null}
-            {archived ? (
-              <div className="mt-[var(--space-2)]">
-                <Badge tone="warning">Archived</Badge>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+              {contact.companyId && contact.companyName ? (
+                <Link
+                  href={`/companies/${contact.companyId}`}
+                  className="inline-flex min-w-0 max-w-full items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] no-underline underline-offset-2 hover:text-[var(--color-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+                >
+                  <Buildings size={16} weight="regular" aria-hidden="true" />
+                  <span className="truncate" title={contact.companyName}>
+                    {contact.companyName}
+                  </span>
+                </Link>
+              ) : null}
+              {archived ? <Badge tone="warning">Archived</Badge> : null}
+            </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-[var(--space-2)]">
+          <div className="flex flex-none items-center gap-[var(--space-2)]">
             {archived ? (
               <Button
                 variant="secondary"
-                iconLeft={<ArchiveRestore size={20} aria-hidden="true" />}
-                className="min-h-[44px]"
+                iconLeft={<Archive size={16} weight="bold" aria-hidden="true" />}
                 onClick={() => {
                   void contactsRepo
                     .restore(id)
@@ -149,9 +171,8 @@ export function ContactPage() {
               </Button>
             ) : (
               <Button
-                variant="secondary"
-                iconLeft={<Trash2 size={20} aria-hidden="true" />}
-                className="min-h-[44px]"
+                variant="destructive"
+                iconLeft={<Trash size={16} weight="bold" aria-hidden="true" />}
                 onClick={() => setConfirmingDelete(true)}
               >
                 Delete
@@ -160,29 +181,24 @@ export function ContactPage() {
           </div>
         </div>
 
-        <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-3)]">
-          {primaryPhone ? (
-            <button
-              type="button"
+        {/* The phone first, as the one filled control on the page. */}
+        <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+          {primaryPhone && phoneLabel ? (
+            <Button
+              variant="primary"
               data-testid="header-call"
+              className="tabular"
+              iconLeft={<PhoneCall size={16} weight="bold" aria-hidden="true" />}
               onClick={() =>
                 void oneTap("call", primaryPhone.e164 ?? primaryPhone.raw, { contactId: id }, {
-                  label: formatPhone(primaryPhone.raw) || primaryPhone.raw,
+                  label: phoneLabel,
                 })
               }
-              className={[
-                "inline-flex min-h-[44px] items-center gap-[var(--space-2)]",
-                "rounded-[var(--radius-md)] border border-[var(--color-border-strong)]",
-                "bg-[var(--color-surface-raised)] px-[var(--space-4)]",
-                "tabular text-[length:var(--text-2xl)] font-medium text-[var(--color-text)]",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-              ].join(" ")}
             >
-              <PhoneCall size={20} aria-hidden="true" />
-              {formatPhone(primaryPhone.raw) || primaryPhone.raw}
-            </button>
+              {phoneLabel}
+            </Button>
           ) : (
-            <span className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+            <span className="text-[length:var(--text-base)] text-[var(--color-text-faint)]">
               No phone number yet
             </span>
           )}
@@ -190,8 +206,7 @@ export function ContactPage() {
           {primaryEmail ? (
             <Button
               variant="secondary"
-              className="min-h-[44px]"
-              iconLeft={<Mail size={20} aria-hidden="true" />}
+              iconLeft={<Envelope size={16} weight="bold" aria-hidden="true" />}
               onClick={() => void oneTap("email", primaryEmail.emailLower, { contactId: id })}
             >
               Email
@@ -199,16 +214,22 @@ export function ContactPage() {
           ) : null}
 
           <Button
-            variant="secondary"
-            className="min-h-[44px]"
-            iconLeft={<PhoneCall size={20} aria-hidden="true" />}
+            variant="ghost"
+            iconLeft={<PhoneCall size={16} weight="bold" aria-hidden="true" />}
             onClick={() => setComposing("call")}
           >
             Log a call
           </Button>
+
+          {/* The AI action sits with the record's other actions rather than in
+              the header: it renders its own "AI is off" sentence beside itself,
+              and that sentence needs a line it can wrap onto. */}
+          <SummarizeButton entityType="contact" entityId={id} />
         </div>
 
-        <p className="mt-[var(--space-4)] text-[length:var(--text-base)]">
+        {/* Then the promise. Never in an accent colour: "needs you" on this
+            page is the fact that the sentence is third from the top. */}
+        <p className="text-[length:var(--text-base)]">
           <span className="text-[var(--color-text-muted)]">Next step: </span>
           {nextTask ? (
             <span className="text-[var(--color-text)]">
@@ -218,15 +239,17 @@ export function ContactPage() {
               </span>
             </span>
           ) : (
-            <span className="font-medium text-[var(--color-accent-ink)]">No next step</span>
+            <span className="text-[var(--color-text-faint)]">none yet</span>
           )}
         </p>
-      </section>
+      </header>
 
-      <div className="grid grid-cols-1 gap-[var(--space-5)] xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0">
+      <div className="grid grid-cols-1 gap-[var(--space-6)] xl:grid-cols-[minmax(0,1fr)_380px]">
+        {/* self-start: the grid row is as tall as the details column, and a
+            timeline stretched to 1900px with one empty state in the middle
+            of it is a void, not a layout. */}
+        <div className="min-w-0 xl:self-start">
           <Timeline
-            fill
             contactId={id}
             composingKind={composing}
             onComposingKindChange={setComposing}
@@ -236,11 +259,8 @@ export function ContactPage() {
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
           <TaskRail contactId={id} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardBody className="flex flex-col gap-[var(--space-5)]">
+          <Group label="Details">
+            <CardBody className="flex flex-col gap-[var(--space-4)]">
               <div className="grid grid-cols-2 gap-[var(--space-4)]">
                 <InlineText
                   label="First name"
@@ -253,94 +273,82 @@ export function ContactPage() {
                   onSave={(value) => patch({ lastName: value })}
                 />
               </div>
-
               <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Phones
-                </h3>
-                <PhoneList contactId={id} phones={contact.phones} />
-              </div>
-
-              <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Emails
-                </h3>
-                <EmailList contactId={id} emails={contact.emails} />
-              </div>
-
-              <div className="flex flex-col gap-[var(--space-4)]">
-                <div>
-                  <label
-                    htmlFor="contact-company"
-                    className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                  >
-                    Company
-                  </label>
-                  <CompanyPicker
-                    id="contact-company"
-                    label="Company"
-                    value={contact.companyId}
-                    onChange={(companyId) => {
-                      void patch({ companyId }).catch((err: unknown) =>
-                        reportError(err, "That did not save."),
-                      );
-                    }}
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="contact-source"
-                    className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-                  >
-                    Source
-                  </label>
-                  <SourcePicker
-                    id="contact-source"
-                    label="Source"
-                    value={contact.sourceId}
-                    onChange={(sourceId) => {
-                      void patch({ sourceId }).catch((err: unknown) =>
-                        reportError(err, "That did not save."),
-                      );
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Tags
-                </h3>
-                <TagEditor entityType="contact" entityId={id} />
-              </div>
-
-              <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Address
-                </h3>
-                <AddressPanel
-                  addressJson={contact.addressJson}
-                  link={{ contactId: id }}
-                  onSave={(addressJson) => patch({ addressJson })}
+                <label htmlFor="contact-company" className={fieldLabel}>
+                  Company
+                </label>
+                <CompanyPicker
+                  id="contact-company"
+                  label="Company"
+                  value={contact.companyId}
+                  onChange={(companyId) => {
+                    void patch({ companyId }).catch((err: unknown) =>
+                      reportError(err, "That did not save."),
+                    );
+                  }}
                 />
               </div>
-
               <div>
-                <h3 className="mb-[var(--space-2)] text-[length:var(--text-sm)] font-semibold text-[var(--color-text)]">
-                  Custom fields
-                </h3>
-                <CustomFieldsPanel entityType="contact" entityId={id} />
+                <label htmlFor="contact-source" className={fieldLabel}>
+                  Source
+                </label>
+                <SourcePicker
+                  id="contact-source"
+                  label="Source"
+                  value={contact.sourceId}
+                  onChange={(sourceId) => {
+                    void patch({ sourceId }).catch((err: unknown) =>
+                      reportError(err, "That did not save."),
+                    );
+                  }}
+                />
               </div>
+            </CardBody>
+          </Group>
 
+          <div>
+            <CardGroupLabel>Phones</CardGroupLabel>
+            <PhoneList contactId={id} phones={contact.phones} />
+          </div>
+
+          <div>
+            <CardGroupLabel>Emails</CardGroupLabel>
+            <EmailList contactId={id} emails={contact.emails} />
+          </div>
+
+          <Group label="Tags">
+            <CardBody>
+              <TagEditor entityType="contact" entityId={id} />
+            </CardBody>
+          </Group>
+
+          <Group label="Address">
+            <CardBody>
+              <AddressPanel
+                addressJson={contact.addressJson}
+                link={{ contactId: id }}
+                onSave={(addressJson) => patch({ addressJson })}
+              />
+            </CardBody>
+          </Group>
+
+          <Group label="Custom fields">
+            <CardBody>
+              <CustomFieldsPanel entityType="contact" entityId={id} />
+            </CardBody>
+          </Group>
+
+          <Group label="Notes">
+            <CardBody>
               <InlineTextarea
-                label="Notes"
+                label="What to remember"
                 rows={5}
                 value={contact.notes ?? ""}
                 placeholder="What you need to remember about this person."
                 onSave={(value) => patch({ notes: value })}
               />
             </CardBody>
-          </Card>
+          </Group>
 
           <AttachmentList entityType="contact" entityId={id} />
         </div>

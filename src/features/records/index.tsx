@@ -13,7 +13,7 @@
  */
 import type { FeatureModule } from "@/app/feature";
 import { NAV_ORDER } from "@/app/feature";
-import { Building2, KanbanSquare, ListTodo, Trash2, Users } from "lucide-react";
+import { Building2, KanbanSquare, ListTodo, Trash2, Users } from "@/ui/icons";
 import { ContactsScreen } from "@/features/records/screens/ContactsScreen";
 import { ContactPage } from "@/features/records/screens/ContactPage";
 import { CompaniesScreen } from "@/features/records/screens/CompaniesScreen";

@@ -11,8 +11,8 @@
  * `select` so a `SaveViewPopover` on the same screen sees the same active
  * view.
  */
-import { Bookmark, Pin, PinOff } from "lucide-react";
-import { cn, EmptyState, IconButton, Spinner } from "@/ui";
+import { PushPin, PushPinSlash } from "@/ui/icons";
+import { CardGroupLabel, cn, EmptyState, IconButton, Spinner } from "@/ui";
 import type { SavedView } from "@/db/repos/savedViews";
 import * as savedViewsRepo from "@/db/repos/savedViews";
 import { deserialiseQuery, describeQuery, emptyQuery } from "@/features/today/views/serialise";
@@ -26,10 +26,10 @@ export type ViewPickerProps = {
 };
 
 const rowClass = cn(
-  "flex min-h-[44px] flex-1 flex-col items-start justify-center rounded-[var(--radius-md)]",
-  "px-[var(--space-3)] py-[var(--space-2)] text-left",
-  "hover:bg-[var(--color-surface)]",
-  "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
+  "flex min-h-[var(--row-h)] flex-1 flex-col items-start justify-center",
+  "px-[var(--space-3)] py-[var(--space-1)] text-left",
+  "hover:bg-[var(--color-hover)]",
+  "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1",
 );
 
 export function ViewPicker(props: ViewPickerProps) {
@@ -50,14 +50,25 @@ export function ViewPicker(props: ViewPickerProps) {
   }
 
   return (
-    <div className="flex flex-col gap-[var(--space-1)]">
+    <div className="flex flex-col">
+      <CardGroupLabel>Views</CardGroupLabel>
+
       <button
         type="button"
         aria-current={activeId === null ? "true" : undefined}
         onClick={() => pick(emptyQuery(), null)}
-        className={cn(rowClass, "w-full", activeId === null && "bg-[var(--color-accent-soft)]")}
+        className={cn(
+          rowClass,
+          "w-full border-b border-[var(--color-border)]",
+          activeId === null && "bg-[var(--color-selected)]",
+        )}
       >
-        <span className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
+        <span
+          className={cn(
+            "text-[length:var(--text-sm)] text-[var(--color-text)]",
+            activeId === null ? "font-semibold" : "font-medium",
+          )}
+        >
           All records
         </span>
         <span className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
@@ -67,20 +78,20 @@ export function ViewPicker(props: ViewPickerProps) {
 
       {views.length === 0 ? (
         <EmptyState
-          icon={<Bookmark size={24} aria-hidden="true" />}
           title="No saved views yet"
           description="Filter this list the way you want it, then choose Save view to put it here."
         />
       ) : (
-        views.map((view) => {
+        views.map((view, index) => {
           const query = deserialiseQuery(savedViewsRepo.parseQuery(view));
           const isActive = view.id === activeId;
           return (
             <div
               key={view.id}
               className={cn(
-                "flex items-center gap-[var(--space-1)] rounded-[var(--radius-md)]",
-                isActive && "bg-[var(--color-accent-soft)]",
+                "flex items-center gap-[var(--space-1)]",
+                isActive && "bg-[var(--color-selected)]",
+                index < views.length - 1 && "border-b border-[var(--color-border)]",
               )}
             >
               <button
@@ -89,7 +100,12 @@ export function ViewPicker(props: ViewPickerProps) {
                 onClick={() => pick(query, view)}
                 className={rowClass}
               >
-                <span className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
+                <span
+                  className={cn(
+                    "text-[length:var(--text-sm)] text-[var(--color-text)]",
+                    isActive ? "font-semibold" : "font-medium",
+                  )}
+                >
                   {view.name}
                 </span>
                 <span className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
@@ -100,17 +116,19 @@ export function ViewPicker(props: ViewPickerProps) {
                 label={view.pinned ? `Unpin ${view.name}` : `Pin ${view.name} to the sidebar`}
                 variant="ghost"
                 size="sm"
+                className="mr-[var(--space-2)]"
+                icon={
+                  view.pinned ? (
+                    <PushPinSlash size={16} weight="bold" aria-hidden="true" />
+                  ) : (
+                    <PushPin size={16} weight="bold" aria-hidden="true" />
+                  )
+                }
                 onClick={(event) => {
                   event.stopPropagation();
                   void setPinned(view.id, !view.pinned);
                 }}
-              >
-                {view.pinned ? (
-                  <PinOff size={16} aria-hidden="true" />
-                ) : (
-                  <Pin size={16} aria-hidden="true" />
-                )}
-              </IconButton>
+              />
             </div>
           );
         })

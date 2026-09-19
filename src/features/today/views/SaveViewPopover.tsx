@@ -82,7 +82,6 @@ export function SaveViewPopover(props: SaveViewPopoverProps) {
           <Field label="Name" htmlFor="save-view-name">
             <Input
               id="save-view-name"
-              className="min-h-[44px]"
               placeholder="e.g. Overdue, high value"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -96,7 +95,7 @@ export function SaveViewPopover(props: SaveViewPopoverProps) {
             />
           </Field>
 
-          <label className="flex min-h-[44px] items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text)]">
+          <label className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text)]">
             <Checkbox checked={pinned} onCheckedChange={setPinned} />
             Also pin to the sidebar
           </label>
@@ -104,7 +103,6 @@ export function SaveViewPopover(props: SaveViewPopoverProps) {
           <div className="flex flex-col gap-[var(--space-2)]">
             <Button
               variant="primary"
-              className="min-h-[44px]"
               disabled={trimmedName === ""}
               loading={saving}
               onClick={() => void handleSaveAs()}
@@ -112,12 +110,7 @@ export function SaveViewPopover(props: SaveViewPopoverProps) {
               Save view
             </Button>
             {offerUpdate && active ? (
-              <Button
-                variant="secondary"
-                className="min-h-[44px]"
-                loading={saving}
-                onClick={() => void handleUpdate()}
-              >
+              <Button variant="secondary" loading={saving} onClick={() => void handleUpdate()}>
                 {`Update ${active.name}`}
               </Button>
             ) : null}

@@ -7,7 +7,7 @@
  */
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, TriangleAlert } from "lucide-react";
+import { WarningCircle } from "@/ui/icons";
 import { Input, Textarea, Select, Spinner, type SelectOption } from "@/ui";
 import { useAutosave, type SaveState } from "@/features/records/lib/hooks";
 import { reportError } from "@/features/records/lib/mutations";
@@ -30,7 +30,7 @@ export function SaveIndicator({ state }: { state: SaveState }) {
         role="status"
         className="inline-flex items-center gap-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-danger-ink)]"
       >
-        <TriangleAlert size={14} aria-hidden="true" />
+        <WarningCircle size={14} aria-hidden="true" />
         Not saved
       </span>
     );
@@ -40,9 +40,8 @@ export function SaveIndicator({ state }: { state: SaveState }) {
     <span
       role="status"
       data-testid="saved-indicator"
-      className="inline-flex items-center gap-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]"
+      className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
     >
-      <Check size={14} aria-hidden="true" />
       Saved
     </span>
   );
@@ -98,7 +97,7 @@ export function InlineText(props: BaseProps & { type?: "text" | "tel" | "email" 
           className={
             hideLabel
               ? "sr-only"
-              : "text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
+              : "text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
           }
         >
           {label}
@@ -150,7 +149,7 @@ export function InlineTextarea(props: BaseProps & { rows?: number }) {
           className={
             hideLabel
               ? "sr-only"
-              : "text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
+              : "text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
           }
         >
           {label}
@@ -199,7 +198,7 @@ export function InlineSelect(props: {
       <div className="flex items-center justify-between gap-[var(--space-2)]">
         <label
           htmlFor={id}
-          className="text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
+          className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
         >
           {label}
         </label>

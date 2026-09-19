@@ -92,20 +92,13 @@ export function LogCallDialog(props: {
         </Field>
 
         <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            size="lg"
-            className="min-h-[44px]"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button type="button" variant="ghost" size="lg" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="primary"
             size="lg"
-            className="min-h-[44px]"
             loading={saving}
             onClick={() => void save()}
           >

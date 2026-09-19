@@ -6,9 +6,8 @@
  */
 import { useState } from "react";
 import type { ReactElement } from "react";
-import { Clock, Trash2 } from "lucide-react";
+import { Clock, Trash } from "@/ui/icons";
 import {
-  Badge,
   Checkbox,
   DropdownMenu,
   DropdownMenuContent,
@@ -85,7 +84,7 @@ export function TaskRow(props: {
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-[var(--space-3)]",
+        "group/task-row flex w-full items-center gap-[var(--space-3)]",
         "min-h-[var(--row-h)]",
         compact ? "py-[var(--space-1)]" : "py-[var(--space-2)]",
       )}
@@ -119,31 +118,34 @@ export function TaskRow(props: {
       </div>
 
       <div className="flex shrink-0 items-center gap-[var(--space-2)]">
+        {/* Overdue is carried by weight and full ink, not by a colour
+            (DESIGN.md §5, §2 "'Needs you' is position and weight"). */}
         <span
           className={cn(
             "tabular whitespace-nowrap text-[length:var(--text-sm)]",
-            overdue ? "text-[var(--color-accent-ink)]" : "text-[var(--color-text-muted)]",
+            overdue ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-muted)]",
           )}
         >
           {dueLabel(task, reference)}
         </span>
-        {/* Accent-coloured TEXT must be --color-accent-ink: the shared Badge's
-            accent tone paints the label in --color-accent, which DESIGN.md §5
-            records as failing AA on this background. */}
-        {overdue ? (
-          <Badge tone="accent" className="text-[var(--color-accent-ink)]">
-            Overdue
-          </Badge>
-        ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-[var(--space-1)]">
+      {/* Revealed on hover or focus. A snooze and a red trash glyph beside
+          every row turns a task list into a column of icons; the row is about
+          the promise, not about its controls (DESIGN.md §10). */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-[var(--space-1)]",
+          "opacity-0 group-hover/task-row:opacity-100 group-focus-within/task-row:opacity-100",
+          "transition-opacity duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+        )}
+      >
         {!done ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <IconButton
                 label="Snooze"
-                icon={<Clock size={16} aria-hidden="true" />}
+                icon={<Clock size={16} weight="bold" aria-hidden="true" />}
                 disabled={snoozePending}
               />
             </DropdownMenuTrigger>
@@ -157,7 +159,7 @@ export function TaskRow(props: {
         <IconButton
           label={`Delete "${task.title}"`}
           variant="danger"
-          icon={<Trash2 size={16} aria-hidden="true" />}
+          icon={<Trash size={16} weight="bold" aria-hidden="true" />}
           onClick={() => void handleDelete()}
         />
       </div>

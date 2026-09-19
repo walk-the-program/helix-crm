@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { test, expect, type HelixHarness } from "../fixtures";
 import type { Page } from "@playwright/test";
 
-const SCREENS = fileURLToPath(new URL("../.cache/screens/today/", import.meta.url));
+const SCREENS = fileURLToPath(new URL("../.cache/screens/sweep-records/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
 
 // ---------------------------------------------------------------------------
@@ -247,6 +247,27 @@ async function shoot(page: Page, name: string): Promise<void> {
   });
 }
 
+/**
+ * The same screen at `data-density="compact"`, which is where a hard-coded
+ * height or font size shows up: every size in the product is a token, so
+ * compact is a 25% denser screen and not a broken one (DESIGN.md §7).
+ */
+async function shootCompact(page: Page, name: string): Promise<void> {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-density", "compact");
+  });
+  await page.waitForTimeout(400);
+  await page.screenshot({
+    path: `${SCREENS}${name}-compact.png`,
+    fullPage: true,
+  });
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-density", "comfortable");
+  });
+  await page.waitForTimeout(150);
+}
+
 // ---------------------------------------------------------------------------
 // The tests
 // ---------------------------------------------------------------------------
@@ -287,7 +308,7 @@ test.describe("Today", () => {
     const contacts = helix.bridge.query("SELECT count(*) FROM contacts", []);
     expect(Number(contacts[0][0])).toBe(0);
 
-    await shoot(page, "empty");
+    await shoot(page, "today-empty");
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
@@ -339,7 +360,8 @@ test.describe("Today", () => {
     // The connect-your-website card, because no site is configured.
     await expect(section(page, "connect-site")).toBeVisible();
 
-    await shoot(page, "populated");
+    await shoot(page, "today");
+    await shootCompact(page, "today");
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
@@ -461,7 +483,7 @@ test.describe("search", () => {
     await expect(search.getByText("Contacts")).toBeVisible();
     await expect(search.getByText("Brent Hendrickson")).toBeVisible();
 
-    await shoot(page, "search");
+    await shoot(page, "search-dialog");
 
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");

@@ -7,17 +7,7 @@
  * the repository refuses to change them.
  */
 import { useState } from "react";
-import type { ReactNode } from "react";
-import {
-  CalendarDays,
-  MessageSquare,
-  Mail,
-  Phone,
-  Settings2,
-  StickyNote,
-  Trash2,
-  Pencil,
-} from "lucide-react";
+import { PencilSimple, Trash } from "@/ui/icons";
 import {
   Button,
   Card,
@@ -40,22 +30,13 @@ import {
 } from "@/features/records/lib/mutations";
 import { formatDateTimeDisplay, formatRelative } from "@/lib/dates";
 
-const USER_KINDS: { kind: ActivityKind; label: string; icon: ReactNode }[] = [
-  { kind: "note", label: "Note", icon: <StickyNote size={16} aria-hidden="true" /> },
-  { kind: "call", label: "Call", icon: <Phone size={16} aria-hidden="true" /> },
-  { kind: "email", label: "Email", icon: <Mail size={16} aria-hidden="true" /> },
-  { kind: "meeting", label: "Meeting", icon: <CalendarDays size={16} aria-hidden="true" /> },
-  { kind: "text", label: "Text", icon: <MessageSquare size={16} aria-hidden="true" /> },
+const USER_KINDS: { kind: ActivityKind; label: string }[] = [
+  { kind: "note", label: "Note" },
+  { kind: "call", label: "Call" },
+  { kind: "email", label: "Email" },
+  { kind: "meeting", label: "Meeting" },
+  { kind: "text", label: "Text" },
 ];
-
-const KIND_ICON: Record<ActivityKind, ReactNode> = {
-  note: <StickyNote size={16} aria-hidden="true" />,
-  call: <Phone size={16} aria-hidden="true" />,
-  email: <Mail size={16} aria-hidden="true" />,
-  meeting: <CalendarDays size={16} aria-hidden="true" />,
-  text: <MessageSquare size={16} aria-hidden="true" />,
-  system: <Settings2 size={16} aria-hidden="true" />,
-};
 
 const KIND_LABEL: Record<ActivityKind, string> = {
   note: "Note",
@@ -152,8 +133,12 @@ export function Timeline(props: TimelineProps) {
             <Button
               key={option.kind}
               size="sm"
-              variant={composing === option.kind ? "primary" : "ghost"}
-              iconLeft={option.icon}
+              variant="ghost"
+              className={
+                composing === option.kind
+                  ? "bg-[var(--color-selected)] text-[var(--color-text)]"
+                  : undefined
+              }
               aria-pressed={composing === option.kind}
               onClick={() => {
                 setComposing((current) => (current === option.kind ? null : option.kind));
@@ -225,20 +210,25 @@ export function Timeline(props: TimelineProps) {
 
         {entries.length === 0 && !query.isLoading ? (
           <EmptyState
-            icon={<StickyNote size={24} aria-hidden="true" />}
             title="Nothing logged yet"
             description="Every call, text and note you record here shows up in date order, newest first."
             action={
-              <Button variant="primary" onClick={() => setComposing("note")}>
+              <Button variant="secondary" onClick={() => setComposing("note")}>
                 Add the first note
               </Button>
             }
           />
         ) : null}
 
-        <ol className="flex flex-col gap-[var(--space-3)]">
+        {/* A quiet log: one hairline rail down the left, entries separated by
+            hairlines and by space. No boxes, no chips, no icon per row — a
+            native log is type on a rule (DESIGN.md §6, §11). */}
+        <ol className="m-0 flex list-none flex-col border-l border-[var(--color-border)] p-0">
           {entries.map((entry) => (
-            <li key={entry.id}>
+            <li
+              key={entry.id}
+              className="border-b border-[var(--color-border)] last:border-b-0"
+            >
               {editing?.id === entry.id ? (
                 <TimelineEditor
                   entry={entry}
@@ -312,77 +302,82 @@ function TimelineRow(props: {
     <div
       data-kind={entry.kind}
       data-system={system ? "true" : "false"}
-      className={[
-        "group flex gap-[var(--space-3)] rounded-[var(--radius-md)] border p-[var(--space-3)]",
-        system
-          ? "border-dashed border-[var(--color-border)] bg-[var(--color-bg)]"
-          : "border-[var(--color-border)] bg-[var(--color-surface)]",
-      ].join(" ")}
+      className="group relative py-[var(--space-3)] pl-[var(--space-4)] pr-[var(--space-1)]"
     >
+      {/* The marker on the rail. A written entry is solid, one Helix wrote is
+          hollow, so the owner's own trail reads as the darker line. */}
       <span
-        className={[
-          "mt-[2px] inline-flex h-[var(--space-6)] w-[var(--space-6)] shrink-0 items-center justify-center",
-          "rounded-[var(--radius-full)]",
-          system
-            ? "bg-[var(--color-bg)] text-[var(--color-text-faint)]"
-            : "bg-[var(--color-surface-raised)] text-[var(--color-text-muted)]",
-        ].join(" ")}
         aria-hidden="true"
-      >
-        {KIND_ICON[entry.kind]}
-      </span>
+        className={[
+          "absolute left-[-3px] top-[calc(var(--space-3)+0.55em)]",
+          "h-[5px] w-[5px] rounded-[var(--radius-full)]",
+          system
+            ? "border border-[var(--color-border-strong)] bg-[var(--color-surface)]"
+            : "bg-[var(--color-border-strong)]",
+        ].join(" ")}
+      />
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-[var(--space-2)]">
-          <span
+      <div className="flex items-start gap-[var(--space-3)]">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-[var(--space-2)]">
+            <span
+              className={[
+                "text-[length:var(--text-sm)] font-medium",
+                system ? "text-[var(--color-text-faint)]" : "text-[var(--color-text)]",
+              ].join(" ")}
+            >
+              {KIND_LABEL[entry.kind]}
+            </span>
+            <Tooltip content={formatDateTimeDisplay(entry.occurredAt)}>
+              <time
+                dateTime={entry.occurredAt}
+                className="tabular text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
+              >
+                {formatRelative(entry.occurredAt)}
+              </time>
+            </Tooltip>
+            {system ? (
+              <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+                written by Helix
+              </span>
+            ) : null}
+          </div>
+          <p
             className={[
-              "text-[length:var(--text-sm)] font-medium",
-              system ? "text-[var(--color-text-faint)]" : "text-[var(--color-text)]",
+              "mt-[var(--space-1)] whitespace-pre-wrap break-words text-[length:var(--text-base)]",
+              system ? "text-[var(--color-text-muted)]" : "text-[var(--color-text)]",
             ].join(" ")}
           >
-            {KIND_LABEL[entry.kind]}
-          </span>
-          <Tooltip content={formatDateTimeDisplay(entry.occurredAt)}>
-            <time
-              dateTime={entry.occurredAt}
-              className="tabular text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
-            >
-              {formatRelative(entry.occurredAt)}
-            </time>
-          </Tooltip>
-          {system ? (
-            <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-              written by Helix
-            </span>
-          ) : null}
+            {entry.body}
+          </p>
         </div>
-        <p
-          className={[
-            "mt-[var(--space-1)] whitespace-pre-wrap break-words text-[length:var(--text-base)]",
-            system ? "text-[var(--color-text-muted)]" : "text-[var(--color-text)]",
-          ].join(" ")}
-        >
-          {entry.body}
-        </p>
-      </div>
 
-      {system ? null : (
-        <div className="flex shrink-0 items-start gap-[var(--space-1)]">
-          <IconButton
-            label="Edit entry"
-            size="sm"
-            icon={<Pencil size={16} aria-hidden="true" />}
-            onClick={onEdit}
-          />
-          <IconButton
-            label="Delete entry"
-            size="sm"
-            variant="danger"
-            icon={<Trash2 size={16} aria-hidden="true" />}
-            onClick={onDelete}
-          />
-        </div>
-      )}
+        {/* The row's own controls, revealed on hover or focus: a column of
+            glyphs beside every entry turns a log into a toolbar. */}
+        {system ? null : (
+          <div
+            className={[
+              "flex flex-none items-start gap-[var(--space-1)]",
+              "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+              "transition-opacity duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+            ].join(" ")}
+          >
+            <IconButton
+              label="Edit entry"
+              size="sm"
+              icon={<PencilSimple size={16} weight="bold" aria-hidden="true" />}
+              onClick={onEdit}
+            />
+            <IconButton
+              label="Delete entry"
+              size="sm"
+              variant="danger"
+              icon={<Trash size={16} weight="bold" aria-hidden="true" />}
+              onClick={onDelete}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -395,7 +390,7 @@ function TimelineEditor(props: {
   const [text, setText] = useState(props.entry.body);
 
   return (
-    <div className="flex flex-col gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-3)]">
+    <div className="flex flex-col gap-[var(--space-2)] py-[var(--space-3)] pl-[var(--space-4)] pr-[var(--space-1)]">
       <label htmlFor={`edit-${props.entry.id}`} className="sr-only">
         Edit entry
       </label>

@@ -2,8 +2,8 @@
  * Phones and emails on a contact.
  *
  * The phone number is the single most important thing on a record page
- * (DESIGN.md §3), so it is set large and it is a real control: one tap dials
- * through the OS opener and then offers a one-click "Log it" entry.
+ * (DESIGN.md §3), so it is a real control: one tap dials through the OS
+ * opener and then offers a one-click "Log it" entry.
  *
  * Labels and the primary flag are edited in place. There is no
  * `updateEmail` in the emails repository, so changing an email's label or
@@ -12,8 +12,21 @@
  * recorded in STATUS under "Contract changes needed".
  */
 import { useState } from "react";
-import { Mail, MessageSquare, Phone, Plus, Star, Trash2 } from "lucide-react";
-import { Badge, Button, IconButton, Input, Select, Tooltip } from "@/ui";
+import {
+  Card,
+  cn,
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  IconButton,
+  Input,
+  Select,
+  Tooltip,
+} from "@/ui";
+import { ChatText, Envelope, Phone, Plus, Star, Trash } from "@/ui/icons";
 import * as contactsRepo from "@/db/repos/contacts";
 import type { ContactEmail, ContactPhone } from "@/db/repos/contacts";
 import { formatPhone } from "@/lib/phone";
@@ -23,9 +36,13 @@ import { invalidateRecords, reportError } from "@/features/records/lib/mutations
 const PHONE_LABELS = ["mobile", "office", "home", "other"];
 const EMAIL_LABELS = ["work", "personal", "billing", "other"];
 
+function cap(label: string): string {
+  return label.length === 0 ? label : label[0].toUpperCase() + label.slice(1);
+}
+
 function labelOptions(labels: string[], current: string) {
   const known = labels.includes(current) ? labels : [...labels, current];
-  return known.map((label) => ({ value: label, label: label[0].toUpperCase() + label.slice(1) }));
+  return known.map((label) => ({ value: label, label: cap(label) }));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -99,96 +116,122 @@ export function PhoneList(props: { contactId: string; phones: ContactPhone[] }) 
         </p>
       ) : null}
 
-      {phones.map((phone) => (
-        <div
-          key={phone.id}
-          data-testid="phone-row"
-          className="flex flex-col gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--space-2)]"
-        >
-          <button
-            type="button"
-            data-testid="call-button"
-            onClick={() =>
-              void oneTap("call", phone.e164 ?? phone.raw, { contactId }, {
-                label: formatPhone(phone.raw) || phone.raw,
-              })
-            }
-            className={[
-              "inline-flex min-h-[44px] w-full items-center gap-[var(--space-2)]",
-              "rounded-[var(--radius-sm)] bg-[var(--color-surface-raised)] px-[var(--space-3)]",
-              "tabular text-[length:var(--text-lg)] font-medium text-[var(--color-text)]",
-              "hover:bg-[var(--color-hover)]",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-            ].join(" ")}
-          >
-            <Phone size={20} aria-hidden="true" />
-            {formatPhone(phone.raw) || phone.raw}
-          </button>
-
-          <div className="flex items-center gap-[var(--space-2)]">
-            <div className="w-[108px] shrink-0">
-              <label htmlFor={`phone-label-${phone.id}`} className="sr-only">
-                Label for {formatPhone(phone.raw) || phone.raw}
-              </label>
-              <Select
-                id={`phone-label-${phone.id}`}
-                ariaLabel="Phone label"
-                value={phone.label}
-                options={labelOptions(PHONE_LABELS, phone.label)}
-                onValueChange={(next) => void setLabel(phone.id, next)}
-              />
-            </div>
-
-            {phone.e164 === null ? (
-              <Tooltip content="Helix could not read this as a phone number, so it is stored exactly as typed.">
-                <span>
-                  <Badge tone="warning">Unverified</Badge>
-                </span>
-              </Tooltip>
-            ) : null}
-
-            {phone.isPrimary ? <Badge tone="neutral">Primary</Badge> : null}
-
-            {/* A row's action cluster is the one place icon-only buttons are
-                allowed, and each carries a label and a tooltip (DESIGN.md §10). */}
-            <div className="ml-auto flex shrink-0 items-center gap-[var(--space-1)]">
-              <Tooltip content="Send a text">
-                <IconButton
-                  label={`Text ${formatPhone(phone.raw) || phone.raw}`}
-                  size="sm"
-                  icon={<MessageSquare size={16} aria-hidden="true" />}
+      {phones.length > 0 ? (
+        <Card>
+          {phones.map((phone, index) => {
+            const display = formatPhone(phone.raw) || phone.raw;
+            return (
+              <div
+                key={phone.id}
+                data-testid="phone-row"
+                className={cn(
+                  "flex min-h-[var(--row-h)] items-center gap-[var(--space-2)]",
+                  "px-[var(--space-4)]",
+                  index < phones.length - 1 && "border-b border-[var(--color-border)]",
+                )}
+              >
+                <button
+                  type="button"
+                  data-testid="call-button"
                   onClick={() =>
-                    void oneTap("text", phone.e164 ?? phone.raw, { contactId }, {
-                      label: formatPhone(phone.raw) || phone.raw,
-                    })
+                    void oneTap("call", phone.e164 ?? phone.raw, { contactId }, { label: display })
                   }
-                />
-              </Tooltip>
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center gap-[var(--space-2)] rounded-[var(--radius-md)]",
+                    "py-[var(--space-1)] text-left",
+                    "hover:bg-[var(--color-hover)]",
+                    "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1",
+                  )}
+                >
+                  <Phone size={18} weight="regular" className="flex-none text-[var(--color-text-muted)]" aria-hidden="true" />
+                  <span className="tabular truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
+                    {display}
+                  </span>
+                </button>
 
-              {phone.isPrimary ? null : (
-                <Tooltip content="Make this the primary number">
-                  <IconButton
-                    label={`Make ${formatPhone(phone.raw) || phone.raw} the primary number`}
-                    size="sm"
-                    icon={<Star size={16} aria-hidden="true" />}
-                    onClick={() => void makePrimary(phone.id)}
-                  />
-                </Tooltip>
-              )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Change the label for ${display}, currently ${phone.label}`}
+                      className="rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1"
+                    >
+                      <Badge tone="neutral">{cap(phone.label)}</Badge>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {PHONE_LABELS.includes(phone.label)
+                      ? PHONE_LABELS.map((label) => (
+                          <DropdownMenuCheckboxItem
+                            key={label}
+                            checked={phone.label === label}
+                            onCheckedChange={() => void setLabel(phone.id, label)}
+                          >
+                            {cap(label)}
+                          </DropdownMenuCheckboxItem>
+                        ))
+                      : [phone.label, ...PHONE_LABELS].map((label) => (
+                          <DropdownMenuCheckboxItem
+                            key={label}
+                            checked={phone.label === label}
+                            onCheckedChange={() => void setLabel(phone.id, label)}
+                          >
+                            {cap(label)}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-              <Tooltip content="Remove this number">
-                <IconButton
-                  label={`Remove ${formatPhone(phone.raw) || phone.raw}`}
-                  size="sm"
-                  variant="danger"
-                  icon={<Trash2 size={16} aria-hidden="true" />}
-                  onClick={() => void remove(phone.id)}
-                />
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-      ))}
+                {phone.e164 === null ? (
+                  <Tooltip content="Helix could not read this as a phone number, so it is stored exactly as typed.">
+                    <span>
+                      <Badge tone="warning">Unverified</Badge>
+                    </span>
+                  </Tooltip>
+                ) : null}
+
+                {phone.isPrimary ? <Badge tone="neutral">Primary</Badge> : null}
+
+                {/* A row's action cluster is the one place icon-only buttons are
+                    allowed, and each carries a label and a tooltip (DESIGN.md §10). */}
+                <div className="ml-auto flex flex-none items-center gap-[var(--space-1)]">
+                  <Tooltip content="Send a text">
+                    <IconButton
+                      label={`Text ${display}`}
+                      size="sm"
+                      icon={<ChatText size={16} weight="bold" aria-hidden="true" />}
+                      onClick={() =>
+                        void oneTap("text", phone.e164 ?? phone.raw, { contactId }, { label: display })
+                      }
+                    />
+                  </Tooltip>
+
+                  {phone.isPrimary ? null : (
+                    <Tooltip content="Make this the primary number">
+                      <IconButton
+                        label={`Make ${display} the primary number`}
+                        size="sm"
+                        icon={<Star size={16} weight="bold" aria-hidden="true" />}
+                        onClick={() => void makePrimary(phone.id)}
+                      />
+                    </Tooltip>
+                  )}
+
+                  <Tooltip content="Remove this number">
+                    <IconButton
+                      label={`Remove ${display}`}
+                      size="sm"
+                      variant="danger"
+                      icon={<Trash size={16} weight="bold" aria-hidden="true" />}
+                      onClick={() => void remove(phone.id)}
+                    />
+                  </Tooltip>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      ) : null}
 
       {adding ? (
         <div className="flex flex-wrap items-end gap-[var(--space-2)]">
@@ -245,7 +288,7 @@ export function PhoneList(props: { contactId: string; phones: ContactPhone[] }) 
           <Button
             size="sm"
             variant="ghost"
-            iconLeft={<Plus size={16} aria-hidden="true" />}
+            iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
             onClick={() => setAdding(true)}
           >
             Add a phone
@@ -334,69 +377,88 @@ export function EmailList(props: { contactId: string; emails: ContactEmail[] }) 
         </p>
       ) : null}
 
-      {emails.map((email) => (
-        <div
-          key={email.id}
-          data-testid="email-row"
-          className="flex flex-col gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--space-2)]"
-        >
-          <button
-            type="button"
-            onClick={() => void oneTap("email", email.emailLower, { contactId })}
-            className={[
-              "inline-flex min-h-[44px] w-full items-center gap-[var(--space-2)]",
-              "rounded-[var(--radius-sm)] bg-[var(--color-surface-raised)] px-[var(--space-3)]",
-              "text-[length:var(--text-base)] text-[var(--color-text)]",
-              "hover:bg-[var(--color-hover)]",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-            ].join(" ")}
-            title={email.emailLower}
-          >
-            <Mail size={20} aria-hidden="true" className="shrink-0" />
-            <span className="truncate">{email.emailLower}</span>
-          </button>
+      {emails.length > 0 ? (
+        <Card>
+          {emails.map((email, index) => (
+            <div
+              key={email.id}
+              data-testid="email-row"
+              className={cn(
+                "flex min-h-[var(--row-h)] items-center gap-[var(--space-2)]",
+                "px-[var(--space-4)]",
+                index < emails.length - 1 && "border-b border-[var(--color-border)]",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => void oneTap("email", email.emailLower, { contactId })}
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-[var(--space-2)] rounded-[var(--radius-md)]",
+                  "py-[var(--space-1)] text-left",
+                  "hover:bg-[var(--color-hover)]",
+                  "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1",
+                )}
+                title={email.emailLower}
+              >
+                <Envelope size={18} weight="regular" className="flex-none text-[var(--color-text-muted)]" aria-hidden="true" />
+                <span className="truncate text-[length:var(--text-base)] text-[var(--color-text)]">
+                  {email.emailLower}
+                </span>
+              </button>
 
-          <div className="flex items-center gap-[var(--space-2)]">
-            <div className="w-[108px] shrink-0">
-              <label htmlFor={`email-label-${email.id}`} className="sr-only">
-                Label for {email.emailLower}
-              </label>
-              <Select
-                id={`email-label-${email.id}`}
-                ariaLabel="Email label"
-                value={email.label}
-                options={labelOptions(EMAIL_LABELS, email.label)}
-                onValueChange={(next) => void replace(email, { label: next })}
-              />
-            </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Change the label for ${email.emailLower}, currently ${email.label}`}
+                    className="rounded-[var(--radius-full)] focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1"
+                  >
+                    <Badge tone="neutral">{cap(email.label)}</Badge>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {(EMAIL_LABELS.includes(email.label) ? EMAIL_LABELS : [email.label, ...EMAIL_LABELS]).map(
+                    (label) => (
+                      <DropdownMenuCheckboxItem
+                        key={label}
+                        checked={email.label === label}
+                        onCheckedChange={() => void replace(email, { label })}
+                      >
+                        {cap(label)}
+                      </DropdownMenuCheckboxItem>
+                    ),
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-            {email.isPrimary ? <Badge tone="neutral">Primary</Badge> : null}
+              {email.isPrimary ? <Badge tone="neutral">Primary</Badge> : null}
 
-            <div className="ml-auto flex shrink-0 items-center gap-[var(--space-1)]">
-              {email.isPrimary ? null : (
-                <Tooltip content="Make this the primary email">
+              <div className="ml-auto flex flex-none items-center gap-[var(--space-1)]">
+                {email.isPrimary ? null : (
+                  <Tooltip content="Make this the primary email">
+                    <IconButton
+                      label={`Make ${email.emailLower} the primary email`}
+                      size="sm"
+                      icon={<Star size={16} weight="bold" aria-hidden="true" />}
+                      onClick={() => void replace(email, { isPrimary: true })}
+                    />
+                  </Tooltip>
+                )}
+
+                <Tooltip content="Remove this address">
                   <IconButton
-                    label={`Make ${email.emailLower} the primary email`}
+                    label={`Remove ${email.emailLower}`}
                     size="sm"
-                    icon={<Star size={16} aria-hidden="true" />}
-                    onClick={() => void replace(email, { isPrimary: true })}
+                    variant="danger"
+                    icon={<Trash size={16} weight="bold" aria-hidden="true" />}
+                    onClick={() => void remove(email.id)}
                   />
                 </Tooltip>
-              )}
-
-              <Tooltip content="Remove this address">
-                <IconButton
-                  label={`Remove ${email.emailLower}`}
-                  size="sm"
-                  variant="danger"
-                  icon={<Trash2 size={16} aria-hidden="true" />}
-                  onClick={() => void remove(email.id)}
-                />
-              </Tooltip>
+              </div>
             </div>
-          </div>
-        </div>
-      ))}
+          ))}
+        </Card>
+      ) : null}
 
       {adding ? (
         <div className="flex flex-wrap items-end gap-[var(--space-2)]">
@@ -454,7 +516,7 @@ export function EmailList(props: { contactId: string; emails: ContactEmail[] }) 
           <Button
             size="sm"
             variant="ghost"
-            iconLeft={<Plus size={16} aria-hidden="true" />}
+            iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
             onClick={() => setAdding(true)}
           >
             Add an email

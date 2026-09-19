@@ -4,7 +4,7 @@
  * the kind of friction this product exists to remove.
  */
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X } from "@/ui/icons";
 import { Badge, Button, IconButton, Input } from "@/ui";
 import * as tagsRepo from "@/db/repos/tags";
 import type { TaggedEntityType } from "@/db/repos/tags";
@@ -60,8 +60,8 @@ export function TagEditor(props: {
             <IconButton
               label={`Remove tag ${tag.name}`}
               size="sm"
-              className="ml-[var(--space-1)] h-[var(--space-5)] w-[var(--space-5)]"
-              icon={<X size={12} aria-hidden="true" />}
+              className="ml-[var(--space-1)]"
+              icon={<X size={14} weight="bold" aria-hidden="true" />}
               onClick={() => void remove(tag.id)}
             />
           </Badge>
@@ -100,7 +100,7 @@ export function TagEditor(props: {
         <Button
           size="sm"
           variant="ghost"
-          iconLeft={<Plus size={16} aria-hidden="true" />}
+          iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
           onClick={() => setAdding(true)}
         >
           {(tags ?? []).length === 0 ? "Add a tag" : "Add"}

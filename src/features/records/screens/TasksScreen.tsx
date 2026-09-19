@@ -6,8 +6,7 @@
  */
 import { useId, useMemo, useRef, useState } from "react";
 import type { ReactElement } from "react";
-import { CheckCircle2, ListTodo, Search } from "lucide-react";
-import { Button, EmptyState, Input, PageHeader, Switch, VirtualList } from "@/ui";
+import { Button, CardGroupLabel, EmptyState, Input, PageHeader, Switch, VirtualList } from "@/ui";
 import { contactName } from "@/db/repos/contacts";
 import type { Task } from "@/db/repos/tasks";
 import {
@@ -102,7 +101,7 @@ export function TasksScreen(): ReactElement {
         title="Tasks"
         subtitle={subtitle}
         actions={
-          <Button variant="secondary" className="min-h-[44px]" onClick={focusComposer}>
+          <Button variant="secondary" onClick={focusComposer}>
             New task
           </Button>
         }
@@ -113,33 +112,24 @@ export function TasksScreen(): ReactElement {
           <TaskComposer />
         </div>
 
-        <div className="flex flex-wrap items-end gap-[var(--space-4)]">
+        <div className="flex flex-wrap items-center gap-[var(--space-4)]">
           <div className="min-w-[260px] flex-1">
-            <label
-              htmlFor={searchId}
-              className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-            >
-              Search
+            <label htmlFor={searchId} className="sr-only">
+              Search tasks
             </label>
-            <div className="relative">
-              <Search
-                size={16}
-                aria-hidden="true"
-                className="pointer-events-none absolute left-[var(--space-3)] top-1/2 -translate-y-1/2 text-[var(--color-text-faint)]"
-              />
-              <Input
-                id={searchId}
-                value={search}
-                placeholder="Search by title"
-                className="pl-[var(--space-8)]"
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
+            <Input
+              id={searchId}
+              search
+              value={search}
+              placeholder="Search by title"
+              aria-label="Search tasks"
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </div>
 
           <label
             htmlFor="tasks-show-done"
-            className="flex min-h-[44px] items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+            className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
           >
             <Switch
               id="tasks-show-done"
@@ -154,7 +144,6 @@ export function TasksScreen(): ReactElement {
 
       {allTasks.length === 0 && !tasksQuery.isLoading ? (
         <EmptyState
-          icon={<ListTodo size={24} aria-hidden="true" />}
           title="Nothing to do yet"
           description="Tasks are the promises you made. Add the first one and it shows up on Today."
           action={
@@ -165,7 +154,6 @@ export function TasksScreen(): ReactElement {
         />
       ) : query.length > 0 && visible.length === 0 ? (
         <EmptyState
-          icon={<Search size={24} aria-hidden="true" />}
           title={`Nothing matches "${search.trim()}"`}
           description="Clear the search to see every task again."
           action={
@@ -181,16 +169,12 @@ export function TasksScreen(): ReactElement {
               if (group.id === "overdue" && visible.length > 0) {
                 return (
                   <section key={group.id}>
-                    <div className="flex items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-4)] py-[var(--space-3)]">
-                      <CheckCircle2
-                        size={20}
-                        aria-hidden="true"
-                        className="text-[var(--color-success)]"
-                      />
-                      <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                        Nothing overdue. You are caught up.
-                      </p>
-                    </div>
+                    {/* A sentence, not a panel. A green tick in a box is a
+                        coloured glyph and a card that holds one line — neither
+                        belongs here (DESIGN.md §10, §11). */}
+                    <p className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+                      Nothing overdue. You are caught up.
+                    </p>
                   </section>
                 );
               }
@@ -199,21 +183,18 @@ export function TasksScreen(): ReactElement {
 
             return (
               <section key={group.id}>
-                <div className="sticky top-0 z-10 mb-[var(--space-2)] flex items-baseline gap-[var(--space-2)] bg-[var(--color-bg)] py-[var(--space-1)]">
-                  <h2 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
-                    {group.label}
-                  </h2>
-                  <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                    {group.tasks.length}
-                  </span>
+                <div className="sticky top-0 z-10 bg-[var(--color-bg)] py-[var(--space-1)]">
+                  <CardGroupLabel className="flex items-baseline gap-[var(--space-2)]">
+                    <span>{group.label}</span>
+                    <span className="tabular">{group.tasks.length}</span>
+                  </CardGroupLabel>
                 </div>
 
                 {group.tasks.length > VIRTUALIZE_THRESHOLD ? (
                   <VirtualList
                     items={group.tasks}
-                    estimateSize={56}
                     ariaLabel={group.label}
-                    className="max-h-[520px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)]"
+                    className="max-h-[520px] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]"
                     getKey={(task) => task.id}
                     renderRow={(task) => (
                       <div className="border-b border-[var(--color-border)] px-[var(--space-4)] last:border-b-0">
@@ -222,7 +203,7 @@ export function TasksScreen(): ReactElement {
                     )}
                   />
                 ) : (
-                  <div className="flex flex-col divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-4)]">
+                  <div className="flex flex-col divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-4)]">
                     {group.tasks.map((task) => (
                       <TaskRow key={task.id} task={task} chips={chipsFor(task)} />
                     ))}

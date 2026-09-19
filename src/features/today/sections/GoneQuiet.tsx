@@ -15,7 +15,7 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { CalendarClock, MoonStar, PhoneCall } from "lucide-react";
+import { CalendarDots, PhoneCall } from "@/ui/icons";
 import { Badge, Button, toast } from "@/ui";
 import { Row, Section } from "@/features/today/components/Section";
 import {
@@ -53,7 +53,6 @@ export function GoneQuietSection() {
         isLoading={isLoading}
         isEmpty={rows.length === 0}
         empty={{
-          icon: <MoonStar size={24} aria-hidden />,
           title: "Every open deal is moving",
           description:
             "A deal lands here when nothing has happened on it for longer than its stage allows. Change a stage's limit in Settings, or set it to zero to switch the rule off for that stage.",
@@ -73,7 +72,7 @@ export function GoneQuietSection() {
               title={
                 <Link
                   href={`/deals/${row.deal.id}`}
-                  className="underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                  className="text-[var(--color-text)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
                 >
                   {name}
                 </Link>
@@ -98,10 +97,9 @@ export function GoneQuietSection() {
                 <>
                   <Button
                     type="button"
-                    variant="primary"
-                    size="lg"
-                    className="min-h-[44px]"
-                    iconLeft={<PhoneCall size={16} aria-hidden />}
+                    variant="secondary"
+                    size="sm"
+                    iconLeft={<PhoneCall size={16} weight="bold" aria-hidden="true" />}
                     onClick={() => {
                       setTarget({
                         name,
@@ -116,10 +114,9 @@ export function GoneQuietSection() {
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
-                    size="lg"
-                    className="min-h-[44px]"
-                    iconLeft={<CalendarClock size={16} aria-hidden />}
+                    variant="ghost"
+                    size="sm"
+                    iconLeft={<CalendarDots size={16} weight="bold" aria-hidden="true" />}
                     loading={snooze.isPending}
                     onClick={() =>
                       snooze.mutate(

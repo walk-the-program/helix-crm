@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { TriangleAlert } from "lucide-react";
+import { WarningCircle } from "@/ui/icons";
 import {
   Button,
   Dialog,
@@ -39,13 +39,9 @@ export function DuplicateNotice(props: {
     <div
       role="status"
       data-testid="duplicate-warning"
-      className={[
-        "flex items-start gap-[var(--space-2)] rounded-[var(--radius-md)]",
-        "border border-[var(--color-warning)] bg-[var(--color-warning-soft)]",
-        "p-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-warning-ink)]",
-      ].join(" ")}
+      className="flex items-start gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-warning-ink)]"
     >
-      <TriangleAlert size={16} aria-hidden="true" className="mt-[2px] shrink-0" />
+      <WarningCircle size={14} aria-hidden="true" className="mt-[3px] shrink-0" />
       <div className="min-w-0">
         <p>
           <span className="font-medium">{first.label}</span> already has that{" "}
