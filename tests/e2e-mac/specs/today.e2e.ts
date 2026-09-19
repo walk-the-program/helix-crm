@@ -1,0 +1,508 @@
+/**
+ * Today, end to end: the built app in Chromium, driving a real SQLite file
+ * through the harness bridge.
+ *
+ * What this proves: the four sections pick the right rows out of real SQL, the
+ * two one-tap actions actually write and the row leaves the section, the empty
+ * screens render, and search finds a record by name and navigates to it.
+ *
+ * What it cannot prove: anything that is Rust. `tel:` goes to the opener stub,
+ * not to a phone.
+ *
+ * Run it on this agent's own port and build folder:
+ *   E2E_PORT=4182 E2E_OUT=dist-today npx playwright test \
+ *     -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/today.e2e.ts
+ */
+import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { test, expect, type HelixHarness } from "../fixtures";
+import type { Page } from "@playwright/test";
+
+const SCREENS = fileURLToPath(new URL("../.cache/screens/today/", import.meta.url));
+mkdirSync(SCREENS, { recursive: true });
+
+// ---------------------------------------------------------------------------
+// Seeding
+// ---------------------------------------------------------------------------
+
+function iso(msFromNow: number): string {
+  return new Date(Date.now() + msFromNow).toISOString();
+}
+
+const DAY = 24 * 60 * 60 * 1000;
+
+function dateOnly(msFromNow: number): string {
+  const d = new Date(Date.now() + msFromNow);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+type Seeded = {
+  overdueTaskTitle: string;
+  todayTaskTitle: string;
+  leadName: string;
+  quietCompany: string;
+  quietDealId: string;
+};
+
+/**
+ * Arranged straight through the bridge rather than through the UI, because
+ * these rows exist to test Today, not to test whatever screen creates them.
+ * The app has already booted once by this point, so the migrations have run
+ * and the seed's stages and sources exist.
+ */
+function seed(helix: HelixHarness): Seeded {
+  const db = helix.bridge;
+
+  const stageId = (name: string): string => {
+    const rows = db.query("SELECT id FROM stages WHERE name = ?", [name]);
+    if (rows.length === 0) throw new Error(`the seed did not create a "${name}" stage`);
+    return String(rows[0][0]);
+  };
+  const sourceId = (name: string): string => {
+    const rows = db.query("SELECT id FROM sources WHERE name = ?", [name]);
+    if (rows.length === 0) throw new Error(`the seed did not create a "${name}" source`);
+    return String(rows[0][0]);
+  };
+
+  const stageNew = stageId("New");
+  const stageContacted = stageId("Contacted");
+  const website = sourceId("Website");
+  const referral = sourceId("Referral");
+
+  // --- the customer the overdue task is about ------------------------------
+  db.execute(
+    `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    ["c-brent", "Brent", "Hendrickson", iso(-40 * DAY), iso(-40 * DAY)],
+  );
+  db.execute(
+    `INSERT INTO contact_phones (id, contact_id, raw, e164, label, is_primary, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    ["p-brent", "c-brent", "(801) 555-0147", "+18015550147", "mobile", iso(-40 * DAY), iso(-40 * DAY)],
+  );
+
+  // --- the new lead nobody has called --------------------------------------
+  db.execute(
+    `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    ["c-rosalind", "Rosalind", "Whitaker", iso(-2 * DAY), iso(-2 * DAY)],
+  );
+  db.execute(
+    `INSERT INTO contact_phones (id, contact_id, raw, e164, label, is_primary, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    ["p-rosalind", "c-rosalind", "(801) 555-0163", "+18015550163", "mobile", iso(-2 * DAY), iso(-2 * DAY)],
+  );
+  db.execute(
+    `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at,
+                        position, contact_id, source_id, created_at, updated_at)
+     VALUES (?, ?, ?, 'USD', ?, ?, 0, ?, ?, ?, ?)`,
+    [
+      "d-lead",
+      "Xeriscape conversion, front yard",
+      450000,
+      stageNew,
+      iso(-2 * DAY),
+      "c-rosalind",
+      website,
+      iso(-2 * DAY),
+      iso(-2 * DAY),
+    ],
+  );
+  // The poller's system entry. It must NOT take the lead off the section: the
+  // owner has still not called anybody.
+  db.execute(
+    `INSERT INTO activities (id, kind, body, occurred_at, deal_id, contact_id, is_system, created_at, updated_at)
+     VALUES (?, 'system', ?, ?, ?, ?, 1, ?, ?)`,
+    [
+      "a-lead-received",
+      "Lead received from alpineridgelandscape.com/xeriscape",
+      iso(-2 * DAY),
+      "d-lead",
+      "c-rosalind",
+      iso(-2 * DAY),
+      iso(-2 * DAY),
+    ],
+  );
+
+  // --- the deal that has gone quiet ----------------------------------------
+  db.execute(
+    `INSERT INTO companies (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+    ["co-quiet", "Mountain Shadows Assisted Living", iso(-90 * DAY), iso(-90 * DAY)],
+  );
+  db.execute(
+    `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at,
+                        position, company_id, source_id, created_at, updated_at)
+     VALUES (?, ?, ?, 'USD', ?, ?, 0, ?, ?, ?, ?)`,
+    [
+      "d-quiet",
+      "Fall cleanup contract, 32 units",
+      678000,
+      stageContacted,
+      iso(-30 * DAY),
+      "co-quiet",
+      referral,
+      iso(-45 * DAY),
+      iso(-30 * DAY),
+    ],
+  );
+
+  // --- what is due ----------------------------------------------------------
+  db.execute(
+    `INSERT INTO tasks (id, title, due_on, contact_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      "t-overdue",
+      "Send revised estimate to Brent Hendrickson",
+      dateOnly(-6 * DAY),
+      "c-brent",
+      iso(-6 * DAY),
+      iso(-6 * DAY),
+    ],
+  );
+  db.execute(
+    `INSERT INTO tasks (id, title, due_on, deal_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      "t-today",
+      "Order 4,200 sq ft of Kentucky bluegrass sod",
+      dateOnly(0),
+      "d-quiet",
+      iso(-1 * DAY),
+      iso(-1 * DAY),
+    ],
+  );
+
+  // --- recent activity ------------------------------------------------------
+  db.execute(
+    `INSERT INTO activities (id, kind, body, occurred_at, contact_id, is_system, created_at, updated_at)
+     VALUES (?, 'call', ?, ?, ?, 0, ?, ?)`,
+    [
+      "a-call",
+      "Brent wants the wall dropped to 4 ft and a revised number by Friday.",
+      iso(-3 * 60 * 60 * 1000),
+      "c-brent",
+      iso(-3 * 60 * 60 * 1000),
+      iso(-3 * 60 * 60 * 1000),
+    ],
+  );
+  db.execute(
+    `INSERT INTO activities (id, kind, body, occurred_at, company_id, is_system, created_at, updated_at)
+     VALUES (?, 'note', ?, ?, ?, 0, ?, ?)`,
+    [
+      "a-note",
+      "Left a voicemail with the facilities manager.",
+      iso(-1 * DAY),
+      "co-quiet",
+      iso(-1 * DAY),
+      iso(-1 * DAY),
+    ],
+  );
+
+  return {
+    overdueTaskTitle: "Send revised estimate to Brent Hendrickson",
+    todayTaskTitle: "Order 4,200 sq ft of Kentucky bluegrass sod",
+    leadName: "Rosalind Whitaker",
+    quietCompany: "Mountain Shadows Assisted Living",
+    quietDealId: "d-quiet",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function section(page: Page, id: string) {
+  return page.locator(`[data-today-section="${id}"]`);
+}
+
+async function bootTodayWithData(page: Page, helix: HelixHarness): Promise<Seeded> {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Today", exact: true, level: 1 }),
+  ).toBeVisible();
+  const seeded = seed(helix);
+  await page.reload();
+  await expect(section(page, "due-now")).toBeVisible();
+  return seeded;
+}
+
+/** Light and dark, at the width DESIGN.md's review pass asks for. */
+async function shoot(page: Page, name: string): Promise<void> {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((t) => {
+      document.documentElement.setAttribute("data-theme", t);
+    }, theme);
+    // Buttons carry `transition-colors`, so a capture taken the instant the
+    // attribute flips catches them mid-fade and every screenshot lies.
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: `${SCREENS}${name}-${theme}.png`,
+      fullPage: true,
+    });
+  }
+  await page.evaluate(() => {
+    document.documentElement.setAttribute("data-theme", "light");
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The tests
+// ---------------------------------------------------------------------------
+
+test.describe("Today", () => {
+  // `helix` must be destructured even where the test does not touch it: that
+  // fixture is what installs the database bridge and the Tauri invoke shim, and
+  // Playwright only builds a fixture a test actually asks for.
+  test("a brand-new workspace gets the first-run screen, not four empty panels", async ({
+    page,
+    helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Today", exact: true, level: 1 }),
+    ).toBeVisible();
+
+    await expect(
+      page.getByRole("heading", { name: /Nothing here yet/ }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "Import a CSV" })).toHaveAttribute(
+      "href",
+      "/import",
+    );
+    await expect(page.getByRole("button", { name: "Add a contact" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Connect website" }),
+    ).toHaveAttribute("href", "/settings/site");
+
+    // No section panels while the workspace is empty.
+    await expect(section(page, "due-now")).toHaveCount(0);
+
+    // And the workspace really is empty: the seed creates stages and sources,
+    // never a contact.
+    const contacts = helix.bridge.query("SELECT count(*) FROM contacts", []);
+    expect(Number(contacts[0][0])).toBe(0);
+
+    await shoot(page, "empty");
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
+  test("every section shows the rows it owns", async ({ page, helix }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    const seeded = await bootTodayWithData(page, helix);
+
+    // Due now: the overdue task first, then today's. The next seven days are
+    // deliberately absent.
+    const dueNow = section(page, "due-now");
+    await expect(dueNow.getByText(seeded.overdueTaskTitle)).toBeVisible();
+    await expect(dueNow.getByText(seeded.todayTaskTitle)).toBeVisible();
+    await expect(dueNow.getByText(/Overdue \d+ days/)).toBeVisible();
+    await expect(dueNow.getByText("Due today")).toBeVisible();
+    await expect(dueNow.getByRole("link", { name: "Brent Hendrickson" })).toHaveAttribute(
+      "href",
+      "/contacts/c-brent",
+    );
+
+    // New leads: the website lead, with its source badge. The system "lead
+    // received" entry must not have taken it off the list.
+    const newLeads = section(page, "new-leads");
+    await expect(newLeads.getByRole("link", { name: seeded.leadName })).toBeVisible();
+    await expect(newLeads.getByText("Website")).toBeVisible();
+    await expect(
+      newLeads.getByRole("button", { name: "Log a call" }),
+    ).toBeVisible();
+    // The 45-day-old quiet deal is not a new lead.
+    await expect(newLeads.getByText(seeded.quietCompany)).toHaveCount(0);
+
+    // Gone quiet: 30 days in a stage whose limit is 14.
+    const quiet = section(page, "gone-quiet");
+    await expect(quiet.getByRole("link", { name: seeded.quietCompany })).toBeVisible();
+    await expect(quiet.getByText(/No activity for 30 days · Limit 14 days/)).toBeVisible();
+    await expect(quiet.getByText("Contacted")).toBeVisible();
+    // The two-day-old lead is not quiet.
+    await expect(quiet.getByText(seeded.leadName)).toHaveCount(0);
+
+    // Recent activity: newest first, each linked to its record.
+    const recent = section(page, "recent-activity");
+    await expect(recent.getByText(/Brent wants the wall dropped/)).toBeVisible();
+    await expect(recent.getByText(/Left a voicemail/)).toBeVisible();
+    await expect(
+      recent.getByRole("link", { name: "Brent Hendrickson" }),
+    ).toHaveAttribute("href", "/contacts/c-brent");
+
+    // The connect-your-website card, because no site is configured.
+    await expect(section(page, "connect-site")).toBeVisible();
+
+    await shoot(page, "populated");
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
+  test("completing a task from Due now takes it off the list and writes it through", async ({
+    page,
+    helix,
+  }) => {
+    const seeded = await bootTodayWithData(page, helix);
+
+    const dueNow = section(page, "due-now");
+    const row = dueNow.locator("li", { hasText: seeded.overdueTaskTitle });
+    await row.getByRole("button", { name: "Done" }).click();
+
+    await expect(dueNow.getByText(seeded.overdueTaskTitle)).toHaveCount(0);
+    // Today's task is still there: only the one row moved.
+    await expect(dueNow.getByText(seeded.todayTaskTitle)).toBeVisible();
+
+    const done = helix.bridge.query("SELECT done_at FROM tasks WHERE id = ?", [
+      "t-overdue",
+    ]);
+    expect(done[0][0], "the task should be completed in the database").not.toBeNull();
+  });
+
+  test("snoozing a quiet deal drops it off Today and leaves a trail", async ({
+    page,
+    helix,
+  }) => {
+    const seeded = await bootTodayWithData(page, helix);
+
+    const quiet = section(page, "gone-quiet");
+    await expect(quiet.getByRole("link", { name: seeded.quietCompany })).toBeVisible();
+    await quiet.getByRole("button", { name: "Snooze a week" }).click();
+
+    await expect(quiet.getByRole("link", { name: seeded.quietCompany })).toHaveCount(0);
+    await expect(quiet.getByText("Every open deal is moving")).toBeVisible();
+
+    // The snooze is an activity, not a hidden column: the rule keys off it and
+    // the timeline shows it.
+    const rows = helix.bridge.query(
+      `SELECT kind, is_system, body FROM activities WHERE deal_id = ? ORDER BY occurred_at DESC`,
+      [seeded.quietDealId],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(String(rows[0][0])).toBe("system");
+    expect(Number(rows[0][1])).toBe(1);
+    expect(String(rows[0][2])).toMatch(/Snoozed on Today/);
+  });
+
+  test("logging a call on a new lead takes it off the section", async ({
+    page,
+    helix,
+  }) => {
+    const seeded = await bootTodayWithData(page, helix);
+
+    const newLeads = section(page, "new-leads");
+    await newLeads.getByRole("button", { name: "Log a call" }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(`Log a call with ${seeded.leadName}`)).toBeVisible();
+    await dialog
+      .getByLabel("What was said")
+      .fill("Wants a quote for the front yard by Tuesday.");
+    await dialog.getByRole("button", { name: "Save the call" }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(newLeads.getByRole("link", { name: seeded.leadName })).toHaveCount(0);
+    await expect(newLeads.getByText("No new leads waiting")).toBeVisible();
+
+    const rows = helix.bridge.query(
+      `SELECT kind, body FROM activities WHERE deal_id = ? AND is_system = 0`,
+      ["d-lead"],
+    );
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0][0])).toBe("call");
+    expect(String(rows[0][1])).toMatch(/front yard by Tuesday/);
+  });
+
+  test("dismissing the website card stores the dismissal", async ({ page, helix }) => {
+    await bootTodayWithData(page, helix);
+
+    const card = section(page, "connect-site");
+    await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "Not now" }).click();
+    await expect(card).toHaveCount(0);
+
+    await page.reload();
+    await expect(section(page, "due-now")).toBeVisible();
+    await expect(section(page, "connect-site")).toHaveCount(0);
+
+    const rows = helix.bridge.query(
+      "SELECT value_json FROM settings WHERE key = ?",
+      ["connectCardDismissed"],
+    );
+    expect(String(rows[0][0])).toBe("true");
+  });
+});
+
+test.describe("search", () => {
+  test("the shortcut opens it, typing finds a record, and Enter lands on its route", async ({
+    page,
+    helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await bootTodayWithData(page, helix);
+
+    // Cmd/Ctrl+/ — the shell's palette already owns Cmd/Ctrl+K, so search has
+    // its own key until the palette exposes a results provider.
+    await page.keyboard.press("Meta+Slash");
+    const search = page.getByTestId("today-search");
+    await expect(search).toBeVisible();
+
+    // Empty box: the records touched most recently.
+    await expect(search.getByText("Recent")).toBeVisible();
+
+    await page.keyboard.type("Hendrickson");
+    await expect(search.getByText("Contacts")).toBeVisible();
+    await expect(search.getByText("Brent Hendrickson")).toBeVisible();
+
+    await shoot(page, "search");
+
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+
+    await expect(search).toHaveCount(0);
+    await expect(page).toHaveURL(/\/contacts\/c-brent$/);
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
+  test("the palette's Search records command opens the same dialog", async ({
+    page,
+    helix,
+  }) => {
+    await bootTodayWithData(page, helix);
+
+    await page.keyboard.press("Meta+k");
+    // The shell's palette and this dialog are both cmdk; scope to the item so
+    // the topbar button of the same name cannot be picked instead.
+    const command = page.locator("[cmdk-item]", { hasText: "Search records" });
+    await expect(command).toBeVisible();
+    await command.click();
+
+    await expect(page.getByTestId("today-search")).toBeVisible();
+  });
+
+  test("a query that matches nothing says so and repeats the query back", async ({
+    page,
+    helix,
+  }) => {
+    await bootTodayWithData(page, helix);
+
+    await page.keyboard.press("Meta+Slash");
+    const search = page.getByTestId("today-search");
+    await expect(search).toBeVisible();
+
+    await page.keyboard.type("zzzznobody");
+    await expect(search.getByText(/Nothing matches/)).toBeVisible();
+    await expect(search.getByText(/zzzznobody/)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(search).toHaveCount(0);
+  });
+});

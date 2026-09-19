@@ -604,3 +604,200 @@ the component builders:
    They are what makes a control shrink correctly under `[data-density="compact"]`, and
    they are the hit-target floor. Also give buttons `flex: none` — without it a flex row
    squeezes an icon button to 27 px, which this review caught.
+
+---
+
+## 2026-09-18 — Today agent (Today screen, search, saved views, gone-quiet, one-tap actions)
+
+### Did
+
+**Today screen** (`src/features/today/TodayScreen.tsx`, `sections/`, `components/`) at
+`/` and `/today`, in DESIGN.md's fixed order:
+
+- **Due now** — overdue tasks then today's, from `tasks.today()`. Overdue rows carry the
+  3 px accent left rail and an "Overdue N days" badge; every row carries the customer's
+  name as a link, and three controls: Call (when the record has a number), Done, and a
+  Snooze menu (Tomorrow / Next week). Completing leaves a ten-second Undo toast that
+  calls `tasks.uncomplete`. The next seven days are deliberately **not** on Today —
+  DESIGN.md's rule is that every row here is one he can act on now; they stay on /tasks.
+- **New leads** — deals created in the last 7 days with no owner-written activity, with
+  the source badge, the value, Call, and a one-tap "Log a call" that opens a note box.
+  Saving takes the row off the section. System activities are excluded from the "no
+  activity yet" test on purpose: the lead poller writes one the instant a lead lands, so
+  counting them would empty the section before the owner ever saw it.
+- **Gone quiet** — `deals.goneQuiet()` for the selection, then the pure rule in
+  `lib/goneQuiet.ts` for the explanation each row prints ("No activity for 30 days ·
+  Limit 14 days") and a second opinion on the verdict. Stage badge with the stage's
+  colour, "Log a call", and "Snooze a week".
+- **Recent activity** — the last 20 entries across every record, each with the name of
+  the thing it happened to and a link to it, resolved in one join rather than twenty
+  round trips. System entries are included and marked.
+- **Connect your website** — one dismissible card, shown until `settings.site_origin` is
+  set or `settings.connect_card_dismissed` is true (both keys already existed in
+  `settings.ts`). Links to `/settings/site`, which the leads agent owns.
+- Every section has its own designed empty state. A **brand-new workspace** gets a
+  different screen entirely rather than four empty panels: three cards for the three
+  things that fill Today — import a CSV (`/import`), add a contact (runs the registry's
+  `quick-add` command, falling back to `/contacts` until records ships it), connect a
+  website (`/settings/site`).
+
+**Search** (`src/features/today/search/`) — a cmdk dialog on **Cmd/Ctrl+/**, plus a
+"Search records" command in the palette and a button in the page header. It debounces
+80 ms, queries `search.searchGrouped()`, resolves each hit to a real name and subtitle
+(`lib/searchRows.ts`), groups by contacts / companies / deals / notes, navigates on
+Enter, and shows the most recently touched records when the box is empty. A
+zero-result state repeats the query back in quotes and says what search looks at.
+**It is not on Cmd/Ctrl+K** — see "Contract changes needed" item 1.
+
+**Saved views** (`src/features/today/views/`, with `README.md` as the adoption doc) —
+`ViewQuery` (filters, sort, columns, version); pure `serialiseQuery` /
+`deserialiseQuery` / `queryEquals` / `describeQuery` that never throw on a corrupted
+`query_json`; `useSavedViews(entityType, current)` on the shared `qk.savedViews` keys
+with the active view held in the `?view=<id>` search param so a picker and a save
+popover agree without a parent threading state; `usePinnedViews()`; `SaveViewPopover`;
+`ViewPicker`. Pinned views render as a strip at the top of Today
+(`views/PinnedViewsStrip.tsx`) rather than in the sidebar — see item 2 below.
+
+**One-tap actions** (`src/features/today/actions.ts`) — `openTel` / `openSms` /
+`openMailto` / `openMaps` through `@tauri-apps/plugin-opener`, each returning a
+`logThis` callback and a label rather than writing the activity itself, because tapping
+a number is not proof a conversation happened. Maps is an https URL, not a platform
+scheme, because the opener capability only allows https/mailto/tel/sms. Kept small and
+documented for reconciliation with the records agent's copy.
+
+**Gone-quiet rule** (`src/features/today/lib/goneQuiet.ts`) — `lastTouch`, `daysSince`,
+`quietVerdict`, `describeQuiet`, `compareQuiet`, `snoozeActivityBody`. Whole days,
+floored, never negative; a won or lost stage is never quiet; `quiet_days = 0`, a
+negative value or `NaN` switches the rule off; unparseable dates never produce a
+verdict.
+
+**Tests** — `tests/unit/today/goneQuiet.test.ts` (25), `tests/unit/today/viewSerialise.test.ts`
+(29), `tests/repo/today/search10k.test.ts`, `tests/e2e-mac/specs/today.e2e.ts` (9).
+
+### Verified
+
+```
+$ npx vitest run tests/unit/today tests/repo/today
+ Test Files  3 passed (3)
+      Tests  54 passed (54)
+
+$ E2E_PORT=4182 E2E_OUT=dist-today npx playwright test \
+    -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/today.e2e.ts
+  9 passed (8.8s)
+
+$ npx vite build --outDir dist-today
+  built, no errors
+```
+
+The 10k search test seeds 10,000 contacts and 20 companies (29,020 statements) through
+`contacts.createStatements` in batches of 500 inside one transaction — the CSV import's
+shape — in ~1.4 s, asserts `indexCounts()` reports at least 10,000 contact documents so
+the timing is not measuring an empty index, then takes the median of 7 timed runs after
+a discarded warm-up. Medians over three runs: rare surname 0.031–0.037 ms, common first
+name 0.181–0.196 ms, two-token "first last" 0.073–0.078 ms, phone fragment
+0.030–0.036 ms, prefix "joh" 0.243–0.254 ms. PLAN item 7's 50 ms bar is not marginal;
+there is more than 150x of headroom. It does not prove the Rust pipe's IPC round trip,
+only the SQL and the index.
+
+The e2e spec seeds an overdue task, a task due today, a website lead with its system
+"lead received" entry, a 30-day-quiet deal in a 14-day stage, and two activities — then
+asserts each section picks the right rows and that the near-misses stay out (the
+45-day-old deal is not a new lead; the two-day-old lead is not quiet; the system entry
+does not clear the lead). It completes a task and checks `done_at` in the database,
+snoozes a quiet deal and checks the section empties and a system activity was written,
+logs a call on a lead and checks the row leaves and the activity landed, dismisses the
+website card and checks the setting survives a reload, and drives search with the
+keyboard from shortcut to typed query to arrow to Enter to `/contacts/c-brent`.
+
+Six screenshots at 1280 in `tests/e2e-mac/.cache/screens/today/` (full, empty and
+search, light and dark), looked at. Two things they caught and that are now fixed:
+
+- Every button rendered mid-fade in the dark captures, because `src/ui/Button`'s
+  `transition-colors` was still running when the shot was taken. The theme flip now
+  settles before the capture. Worth knowing for any other agent screenshotting themes.
+- The Gone quiet row truncated its own explanation ("…Limit 14 …") because the deal
+  title, the money and two buttons shared one truncating line. The deal title truncates
+  now and the number — the reason the row is on screen at all — stays whole.
+
+### Not done
+
+- **Pinned views are not in the sidebar.** They are a strip at the top of Today. See
+  item 2 below; this is a shell limitation, not an oversight.
+- **No saved-view consumer.** The library is built, documented and unit-tested, but no
+  list screen adopts it yet — Contacts, Pipeline and Tasks belong to the records agent.
+  `ViewPicker` and `SaveViewPopover` have therefore never been driven by a person, only
+  typechecked and read.
+- **No repo test for the Today queries themselves.** `newLeads`, `lastActivityFor`,
+  `recentWithLinks` and `taskLinks` are covered end to end by the e2e spec against real
+  SQL, but they have no direct repo test. They should get one when they are promoted
+  into `src/db/repos` (see item 3), where the harness is already set up for it.
+- **`openSms` / `openMailto` / `openMaps` are unused by Today.** Only `openTel` has a
+  caller. They are written and documented for the records agent's record screens.
+- The 44 px floor is enforced with `min-h-[44px]` on Today's own controls rather than by
+  changing `src/ui/Button`'s `lg` size, which is 48 px of `--space-9` and not mine to
+  change.
+
+### Contract changes needed
+
+1. **The command palette has no search-results provider, and a feature cannot bind a
+   key.** `src/app/CommandPalette.tsx` says in its own header that "search results are
+   wired in by the today feature", but it exposes no hook to do that, and `src/app`
+   belongs to foundations. Separately, `FeatureCommand.shortcut` is only ever *rendered*
+   next to a command — the shell binds `mod+k` for the palette in `Shell.tsx` and
+   nothing binds a feature's string. So search ships on **Cmd/Ctrl+/** with a palette
+   command and a header button. The fix is either of:
+   - a `registerSearchProvider(fn)` on the palette, so Today feeds results into the
+     existing Cmd/Ctrl+K panel and the two search entry points collapse into one; or
+   - the shell binding `FeatureCommand.shortcut` for every registered command, so a
+     feature's declared key actually works.
+   The first is better: two search boxes on one screen ("Search everything" in the top
+   bar, "Search records" in the page header) is the visible cost of not having it.
+
+2. **`FeatureModule.nav` is static, so pinned saved views cannot reach the sidebar.**
+   `allNavItems()` is flattened once inside a `useMemo(..., [])` when the shell mounts,
+   before any row is read. DESIGN.md asks for a "Views" group under Pipeline; PLAN item
+   13 asks for pinned views in the sidebar. Neither is possible today. Needs either
+   `nav?: () => FeatureNavItem[]` re-read on a signal, or — cleaner — a shell-owned
+   "Views" section that subscribes to `savedViews.listPinned()` through the shared
+   `qk.savedViews()` key. **Sidebar order 15 is reserved for it.** Until then the strip
+   at the top of Today stands in, and `views/viewRoute()` already produces the
+   `/<screen>?view=<id>` deep link such a section would use.
+
+3. **Four repository functions are living in `src/features/today/lib/`** because a
+   feature agent may not edit `src/db/repos`. Each follows the repository conventions
+   exactly (aliased columns, no `SELECT *`, parameters never interpolated, read-only),
+   so promoting them is a move, not a rewrite:
+   - `todayData.newLeads()` → `deals.ts`
+   - `todayData.lastActivityFor()` and `todayData.recentWithLinks()` → `activities.ts`
+   - `todayData.taskLinks()` → `tasks.ts`
+   - `todayData.workspaceIsEmpty()` → wherever the first-run check settles
+   - `searchRows.searchRows()` and `searchRows.recentRecords()` → `search.ts`
+   `search.searchGrouped()` returns the indexed blob as `text`, which is right for
+   matching and unusable for display; `searchRows()` is the second pass that fixes that,
+   and it belongs beside it.
+
+4. **A feature cannot contribute an overlay, so Today mounts its own React root.**
+   `search/overlay.tsx` appends a `<div>` to `document.body` from `onBoot` and renders
+   the search dialog into it with the *same* shared `queryClient`, because search has to
+   work on /pipeline and /contacts, not only on Today. It is the one awkward thing in
+   this feature and it is awkward on purpose rather than by accident — the alternative
+   was editing `Shell.tsx`. An `overlays?: ReactNode[]` field on `FeatureModule`, or a
+   single shell-rendered slot, removes it.
+
+5. **Two things another agent broke, neither mine, both reproducible on a clean tree:**
+   - `npm run typecheck` reports one error, `tests/repo/data/import-100k.test.ts(24,7):
+     'TIME_BUDGET_MS' is declared but its value is never read` (data agent).
+   - `npm test` fails 2 of 638 in `tests/repo/boot.test.ts`, which asserts the applied
+     migration list is exactly `["0000_init", "0001_search"]`. The leads agent has added
+     `0002_report_views`, so that assertion needs updating by whoever owns it. Every
+     other suite passes, including all three of this agent's.
+   Both were confirmed to be outside `src/features/today`, `tests/unit/today`,
+   `tests/repo/today` and `tests/e2e-mac/specs/today.e2e.ts`.
+
+6. **Non-blocking, recorded for the orchestrator:** `tests/e2e-mac/fixtures.ts`'s `helix`
+   fixture must be destructured by a test even when the test never touches it — it is
+   what installs the database bridge and the Tauri invoke shim, and Playwright only
+   builds a fixture a test asks for. A spec that writes `async ({ page })` and calls
+   `page.goto("/")` gets "Cannot read properties of undefined (reading 'invoke')" and the
+   boot error screen. Worth a line in that file's header comment; it cost this agent a
+   confusing twenty minutes.
