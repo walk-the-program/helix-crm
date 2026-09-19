@@ -801,3 +801,202 @@ search, light and dark), looked at. Two things they caught and that are now fixe
    `page.goto("/")` gets "Cannot read properties of undefined (reading 'invoke')" and the
    boot error screen. Worth a line in that file's header comment; it cost this agent a
    confusing twenty minutes.
+
+---
+
+## 2026-09-18 — Data feature agent (import, export, backups, duplicates, attachments)
+
+### Did
+
+**CSV import, `/import`** — a five-step wizard (`src/features/data/import/`).
+`ImportScreen` holds the state machine; `FilePickStep`, `MappingStep`,
+`PreviewStep`, `ResultStep` and `ProgressBar` are the pieces.
+- **Reading** (`lib/csv.ts`, the file CONTRACTS lists as `src/lib/csv.ts` and
+  foundations left unwritten). Bytes in: BOM detected from the bytes, not the
+  decoded text, because `TextDecoder("utf-8")` eats a BOM itself; encoding by
+  strict UTF-8 decode, falling back to windows-1252; delimiter by consistency
+  across the first ten logical lines outside quotes, which is what tells a
+  European `;` file from its `1250,00` decimal commas; CRLF vs LF reported.
+  Parsing is papaparse with a `step` callback, so one row is in memory at a
+  time; a ragged row raises `ImportParseError` with the row number, the first
+  column that has no value, and a sample, and `{ tolerant: true }` pads and
+  truncates instead (used by nothing in the app, only by the tests).
+- **Mapping** (`lib/mapping.ts`). Sixteen fields; emails, phones, tags, notes
+  and custom fields may take several columns. The guess is a rule list with a
+  disqualifier pass in front, which is what keeps Google's `Phonetic First
+  Name` and `E-mail 1 - Label` off first name and tags, and every deal-ish
+  column on Skip. Verified column by column against all six fixtures.
+  `headerSignature()` keys the remembered mapping, stored in the workspace's
+  `settings` table as `import.mapping.<signature>` (`lib/rememberMapping.ts`)
+  and restored by header text, not position.
+- **Writing** (`lib/importRun.ts`, `lib/importWrite.ts`). One
+  `withTransaction` for the whole file with `pauseTimers()` around it. Existing
+  emails, E.164 phones, company names, sources, tags and custom fields are
+  prefetched into maps once; per row the policy is skip / update / create,
+  keyed on `email_lower` then `e164`, and a contact created earlier in the same
+  file is registered in those maps so a repeat row in one file dedupes too.
+  Companies are linked by exact name or created. Statements accumulate and
+  flush every 500 rows through `raw.batch`.
+- **Result.** Counts (created, updated, skipped, companies created, plus new
+  tags and custom fields), and "Save skipped rows as CSV" through the save
+  dialog with a reason column appended. One `change_log` row for the whole
+  import rather than one per contact.
+
+**Export, `/export` and the `export-all` command** (`lib/exportCsv.ts`,
+`lib/exportRun.ts`, `export/ExportScreen.tsx`). Any entity to CSV with phones
+and emails flattened, or everything as a jszip of five CSVs plus a full JSON.
+Formula-injection guard on a leading `= + - @ TAB CR`, and a guarded cell is
+always quoted. Child rows are fetched in one bulk query per relation and
+grouped in JS, never per row.
+
+**Backups, `/backups`** (`lib/retention.ts`, `lib/backupsFs.ts`,
+`backups/scheduler.ts`, `backups/BackupsScreen.tsx`). List with dates, reason,
+size and total; "Back up now"; the schedule as this feature's `onBoot` (one
+after first paint unless a backup ran in the last hour, then every six hours,
+skipping any tick while `timersPaused()`); retention (everything from the last
+24 h, then one per day for 30 days, and the newest file always); restore with a
+confirmation naming both dates, `pre-restore` backup, `raw.close()`,
+`copyFile`, `raw.open()`, then `openWorkspace()` from `src/app/boot.ts` so the
+migrations and the query cache rerun. `BackupWriteError` shows a persistent
+banner until a backup succeeds.
+
+**Duplicates and merge, `/duplicates`** (`lib/duplicates.ts`,
+`duplicates/DuplicatesScreen.tsx`, `MergeDialog.tsx`, `MergesHistory.tsx`,
+`scanner.ts`). A whole-workspace pair scan on contacts (shared email, then
+shared E.164) and companies (same name ignoring case, or same phone), on boot
+and every 24 hours. Each pair shows the matching value highlighted and links to
+both records. The merge screen picks the survivor and then, per differing
+field, which value it keeps, and calls `merge.merge`. A 10-second Undo toast
+reverses it; the Merges tab lists every merge for 30 days with Reverse, and
+shows the refusal reason (already reversed, out of the window, or the survivor
+has been merged again) instead of a dead button.
+
+**Attachments** (`attachments/AttachmentList.tsx` + `README.md`). The component
+the records agent can adopt: add through the dialog then `copy_in`, list with
+image thumbnails over the asset protocol, open through the OS opener, remove as
+a soft delete with Undo. `AttachmentTooLarge` inline, not as a toast.
+
+**Feature module.** Routes `/import`, `/export`, `/duplicates`, `/backups`; nav
+"Import" at 70; commands `import-csv` and `export-all`; `onBoot` starts the
+backup schedule and the duplicate scan.
+
+### Verified
+
+```
+$ npm run typecheck
+(no output)
+
+$ npm test
+ Test Files  52 passed (52)
+      Tests  691 passed (691)
+
+$ npx vitest run tests/repo/data/import-100k.test.ts --reporter=verbose
+ [import-100k] runImport durationMs = 6985
+ ✓ imports 100,000 rows against a real file-backed database within the time budget
+
+$ npx vite build --outDir dist-data
+(clean)
+
+$ E2E_PORT=4183 E2E_OUT=dist-data npx playwright test -c tests/e2e-mac/playwright.config.ts \
+    tests/e2e-mac/specs/data.e2e.ts
+  4 passed (11.0s)      # three consecutive runs green
+```
+
+New tests: `tests/unit/data/{csv,mapping,importWrite,exportCsv,retention}.test.ts`
+(118 assertions over parsing, the guesses on every fixture header row, the
+statement planner, export escaping and the retention policy) and
+`tests/repo/data/{import,export,import-100k}.test.ts` (the whole import run
+against every fixture through the harness, with counts asserted).
+
+Every fixture imports: HubSpot 52, Zoho 47, Pipedrive 58, Google Contacts 44,
+Excel save-as 41, `clearpath-prospects.csv` 19 — `created + updated + skipped`
+always equals the row count, and the contacts really in the database match
+`created`. Spot-checked through the repositories: Sarah Mitchell's phone
+normalises to `+18015550142` and her email lowercases, Pipedrive's single
+`Person - Name` column splits, Google's `* myContacts ::: Suppliers` becomes two
+tags, ClearPath's nameless rows file under their company, and `deals` stays
+empty because v1 does not import deals. `ragged.csv` raises `ImportParseError`
+and writes nothing; a driver forced to fail on the third `raw.batch` raises
+`ImportWriteError` and leaves zero contacts, proving the outer transaction rolls
+back rather than just the failing savepoint.
+
+The e2e spec drives the HubSpot fixture through the real UI (dialog stub fed
+through `window.__helixE2E`), asserts 52 created and 46 companies, imports the
+same file again with "Import anyway" to manufacture duplicates, merges a pair
+(104 → 103 contacts), undoes it (→ 104), sees the reversal in the Merges tab,
+and exports contacts — asserting both that the save dialog was called and that
+the CSV that went through the fs plugin has the right header and content.
+Screens were screenshotted at 1280 in light and dark into
+`tests/e2e-mac/.cache/screens/data/` and looked at; two things the pictures
+caught were fixed: the mapping table's select overflowed its rounded border
+(now a fixed width), and `/export` and `/backups` were double-padded inside the
+shell's own `<main>`.
+
+One defect the 100k test caught, and the fix: `coalesceInserts` only merged
+*adjacent* inserts, and the import emits statements row by row (contact, phone,
+email, tag), so nothing ever merged — 100k rows went out as ~400k statements in
+35 s. `planBatch()` now buckets a batch by table first, in a fixed
+foreign-key-safe order (sources, companies, tags, custom_fields, contacts,
+contact_phones, contact_emails, tag_links, custom_values, then everything that
+is not an insert), and coalesces inside each bucket. Same run: **6,985 ms**.
+
+### Not done
+
+- **Backups and restore are not proven end to end.** The e2e harness's fs stub
+  is an in-memory map with no `readDir` and no `copyFile`, and `db_backup`
+  there is better-sqlite3's `VACUUM INTO` rather than the Rust pipe's second
+  read-only connection, so `/backups` always shows an empty list under
+  Playwright. The pure halves — the retention policy, the name parsing, the
+  schedule arithmetic — are covered in `tests/unit/data/retention.test.ts`.
+  Restore needs the Windows suite or a manual pass.
+- **`/backups` is at a top-level route**, not `/settings/backups`, because the
+  settings agent owns `/settings/*`. It is nav-less (reachable by URL and from
+  Diagnostics later). The orchestrator should move it.
+- No drag-and-drop *files* test: the Tauri drag-drop event has no stub in the
+  harness, so `subscribeFileDrop` is only exercised by hand. The HTML5 drop
+  path and the dialog fallback are what the spec drives.
+- Attachments have no automated test at all. `copy_in` is Rust, and its e2e
+  stub returns a made-up stored name with no file behind it, so a thumbnail can
+  never render under Playwright. The component is typechecked and reviewed only.
+- No purge of attachment files on disk: that needs a Rust command to delete a
+  file inside the workspace, which does not exist (see below).
+- The import's `region` is never set from settings — `settings.defaultRegion`
+  exists and the import accepts a region, but nothing passes it yet, so phones
+  normalise as US. One line once the settings screen exposes it.
+
+### Contract changes needed
+
+1. **`src/lib/csv.ts` should be promoted.** It lives at
+   `src/features/data/lib/csv.ts` today. Nothing outside this feature imports
+   it yet; the leads poller may want the same normalisers.
+2. **Repository functions this feature wrote for itself**, all in
+   `src/features/data/lib/importWrite.ts`, all pure statement builders:
+   `importContactStatements` (what `contacts.createStatements` does, plus
+   `address_json` in the same insert — the repository version cannot take an
+   address, and following each contact with an `UPDATE` is what defeated the
+   batch planner), `companyCreateStatement` (create-or-link by exact name),
+   `sourceCreateStatement`, `tagCreateStatement`, `tagLinkStatement`,
+   `customFieldCreateStatement`, `customValueStatement`,
+   `contactEmailStatement`, `contactPhoneStatement`, and
+   `contactUpdateStatement` (fills only columns that are empty today and
+   appends to notes rather than replacing them). `planBatch` and
+   `coalesceInserts` belong beside them wherever they land.
+3. **A whole-workspace duplicate scan** (`lib/duplicates.ts`:
+   `findContactPairs`, `findCompanyPairs`). `contacts.findDuplicates` answers
+   "does this one record clash with anything" for the create form, which is a
+   different query from "list every candidate pair in the file".
+4. **An attachment-file delete command.** `trash.attachmentFilesFor()` hands
+   back the stored names a purge must remove first, but there is no Rust
+   command to delete a file inside the workspace, and the fs plugin's scope is
+   `$APPDATA` (writable, so `remove()` would work) — decide whether the purge
+   goes through `plugin-fs` or a `delete_in(storedName)` command with the same
+   shape as `copy_in`. Backup pruning already deletes through `plugin-fs`.
+5. **The e2e fs stub loses the path on writes.** `writeTextFile` in
+   `@tauri-apps/plugin-fs` sends the bytes as the invoke payload and the path
+   as a request header; `tests/e2e-mac/fixtures.ts` keys `state.files` off
+   `args.path`, which is `undefined` for a write, so everything written lands
+   under one key. The data spec asserts on the payload instead. Worth teaching
+   the stub to read `options.headers.path`.
+6. **`settings.set` is typed too narrowly for a dynamic key** — not a change,
+   just a note: this feature uses `setRaw`/`getRaw` for the remembered
+   mappings, which is what they are for.
