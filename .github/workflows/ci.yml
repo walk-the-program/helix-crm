@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  # Ubuntu is deliberately excluded from this matrix: Tauri's Linux build
+  # depends on system packages (webkit2gtk, libappindicator, etc.) that are
+  # not installed in this project's CI setup yet, so `cargo test` would fail
+  # before it even gets to our code. macOS and Windows runners ship the
+  # toolchains Tauri needs out of the box, so they're sufficient for now.
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test

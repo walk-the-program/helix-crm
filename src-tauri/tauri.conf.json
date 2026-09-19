@@ -12,18 +12,32 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Helix CRM",
         "width": 1280,
-        "height": 820
+        "height": 820,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true,
+        "center": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/workspaces/**/attachments/**"]
+      }
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Business",
+    "shortDescription": "A local-first CRM for trade and service businesses",
+    "longDescription": "Helix CRM keeps your contacts, jobs, and follow-ups in one SQLite file on your own machine. No account, no cloud, imports from a spreadsheet in five minutes.",
+    "copyright": "Copyright (c) 2026 ClearPath Digital. AGPL-3.0-only.",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
