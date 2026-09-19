@@ -71,7 +71,7 @@ The built frontend in Chromium with no Tauri runtime at all.
   `window.__helixE2E` (queue a dialog path, set what `leads_fetch` returns, read
   back what the app opened) and every invoke is recorded for assertions.
 
-It serves `VITE_E2E=1 npx vite preview --port 4173`, so **`npm run build` has to
+It builds to `E2E_OUT` (default `dist`) and serves it on `E2E_PORT` (default 4173), so several agents can run suites at once; `npm run build` no longer has to
 have run first**. Specs are `*.e2e.ts`, never `*.spec.ts`, because Vitest's
 default glob would otherwise collect them.
 

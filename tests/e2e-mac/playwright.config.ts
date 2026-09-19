@@ -18,7 +18,10 @@ import { fileURLToPath } from "node:url";
  */
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-const PORT = 4173;
+// Per-agent overrides so several suites can run at once without colliding on
+// the port or the build folder: E2E_PORT=4174 E2E_OUT=dist-records npm run e2e:mac
+const PORT = Number(process.env.E2E_PORT ?? 4173);
+const OUT_DIR = process.env.E2E_OUT ?? "dist";
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
@@ -42,10 +45,10 @@ export default defineConfig({
     : [["list"]],
 
   webServer: {
-    command: `VITE_E2E=1 npx vite preview --port ${PORT}`,
+    command: `VITE_E2E=1 npx vite build --outDir ${OUT_DIR} --logLevel error && VITE_E2E=1 npx vite preview --outDir ${OUT_DIR} --host 127.0.0.1 --port ${PORT} --strictPort`,
     cwd: repoRoot,
     url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     stdout: "ignore",
     stderr: "pipe",

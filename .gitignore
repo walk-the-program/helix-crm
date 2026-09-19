@@ -10,3 +10,5 @@ test-results
 playwright-report
 .playwright-cli
 tests/e2e-mac/.cache
+
+dist-*
