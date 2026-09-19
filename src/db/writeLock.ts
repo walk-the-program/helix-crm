@@ -10,22 +10,32 @@
  * the middle of it, and the background timers (backup, lead poll, duplicate
  * scan) must pause while it runs.
  */
-import { raw } from "@/db/client";
+import { dbTransitionLabel, raw, subscribeDbState } from "@/db/client";
 
 type Resolver = () => void;
 
 const queue: Resolver[] = [];
 let held = false;
 
-/** Observable state for the UI: "Saved, queued behind the import". */
+/**
+ * Observable state for the UI: "Saved, queued behind the import".
+ *
+ * `transition` is the other thing the top bar has to be able to say. A
+ * workspace switch and a restore are not writes — they close the database and
+ * open another file — so they never hold this lock, and until they were exposed
+ * here the shell showed nothing at all while the app was unusable. The label
+ * comes from `src/db/client.ts`, which owns the close/reopen window.
+ */
 export const writeState: {
   busy: boolean;
   label: string | null;
   queued: number;
+  transition: string | null;
 } = {
   busy: false,
   label: null,
   queued: 0,
+  transition: null,
 };
 
 type Listener = () => void;
@@ -39,25 +49,37 @@ export function subscribeWriteState(listener: Listener): () => void {
   };
 }
 
-let snapshot = { busy: false, label: null as string | null, queued: 0 };
+let snapshot = {
+  busy: false,
+  label: null as string | null,
+  queued: 0,
+  transition: null as string | null,
+};
 
 /** Immutable snapshot for useSyncExternalStore. */
 export function getWriteStateSnapshot(): {
   busy: boolean;
   label: string | null;
   queued: number;
+  transition: string | null;
 } {
   return snapshot;
 }
 
 function publish(): void {
+  writeState.transition = dbTransitionLabel();
   snapshot = {
     busy: writeState.busy,
     label: writeState.label,
     queued: writeState.queued,
+    transition: writeState.transition,
   };
   for (const listener of listeners) listener();
 }
+
+// A switch or a restore changes nothing about the lock, so the only way its
+// label reaches a subscriber is for this store to republish when it changes.
+subscribeDbState(publish);
 
 /**
  * The lock is NOT reentrant. A repository write must never call another
@@ -213,5 +235,6 @@ export function __resetWriteLockForTests(): void {
   writeState.busy = false;
   writeState.label = null;
   writeState.queued = 0;
+  writeState.transition = null;
   publish();
 }

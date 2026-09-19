@@ -21,7 +21,16 @@ const SETTINGS = {
   workspaceName: { schema: z.string(), default: "My business" },
   siteOrigin: { schema: z.string().nullable(), default: null },
   aiEnabled: { schema: z.boolean(), default: false },
-  aiModel: { schema: z.string(), default: "claude-sonnet-4-5" },
+  aiModel: { schema: z.string(), default: "claude-sonnet-5" },
+  // Promoted from src/features/ai/lib/aiSettings.ts's defineExtraSetting escape
+  // hatch (docs/STATUS.md, "2026-09-18 — Settings and AI agent", contract
+  // change 1). The AI feature still reads/writes them through its own
+  // aiKeySuffix/aiKeyState/aiBaseUrl wrappers, which call this repo's
+  // getRaw/setRaw - those paths are key-agnostic, so promoting the key here
+  // needs no change on the feature side.
+  aiKeySuffix: { schema: z.string().nullable(), default: null },
+  aiKeyState: { schema: z.enum(["unset", "saved", "rejected"]), default: "unset" },
+  aiBaseUrl: { schema: z.string(), default: "https://api.anthropic.com" },
   backupsEnabled: { schema: z.boolean(), default: true },
   lastDuplicateScanAt: { schema: z.string().nullable(), default: null },
   lastBackupAt: { schema: z.string().nullable(), default: null },

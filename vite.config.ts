@@ -32,8 +32,22 @@ export default defineConfig(() => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching `src-tauri`, and everything else that is
+      //    written *while* the dev window is open but is not app source. An e2e
+      //    run, a screenshot pass or a docs edit used to reload the window out
+      //    from under whoever was looking at it — and a reload mid-run is also
+      //    how a Playwright spec fails for no reason.
+      ignored: [
+        "**/src-tauri/**",
+        // Playwright's per-run cache and the screenshots the specs write.
+        "**/tests/e2e-mac/.cache/**",
+        // Every throwaway build output: dist-shell, dist-recon, dist-settings…
+        "**/dist-*/**",
+        // The design agent's gallery renders and contrast audits.
+        "**/design/**",
+        // Notes. Nothing here is imported by the app.
+        "**/docs/**",
+      ],
     },
   },
 }));

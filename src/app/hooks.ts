@@ -18,12 +18,18 @@ import {
   type HelixRegistry,
   type Theme,
 } from "@/app/appSettings";
+import { isMac, matchesChord, parseShortcut } from "@/app/shortcuts";
 
-/** "Saved, queued behind the import" comes from here. */
+/**
+ * "Saved, queued behind the import" comes from here, and so does the note the
+ * top bar shows while a workspace switch or a restore has the database closed
+ * (`transition`).
+ */
 export function useWriteState(): {
   busy: boolean;
   label: string | null;
   queued: number;
+  transition: string | null;
 } {
   return useSyncExternalStore(
     subscribeWriteState,
@@ -91,27 +97,28 @@ export function useAppearance(initial?: HelixRegistry): Appearance {
   return { theme, density, setTheme, setDensity };
 }
 
-/** Cmd on macOS, Ctrl everywhere else. */
-export function isMac(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /mac/i.test(navigator.platform || navigator.userAgent);
-}
+/**
+ * Cmd on macOS, Ctrl everywhere else. It lives in `@/app/shortcuts` now, beside
+ * the parser, and is re-exported here because that is where every caller in the
+ * product imports it from.
+ */
+export { isMac };
 
 /**
- * Register a "mod+k" style shortcut for as long as the component is mounted.
+ * Register one "mod+k" style shortcut for as long as the component is mounted.
  * Typing in an input never triggers one, except for Escape.
+ *
+ * This is for a key that belongs to a *component*, not to a command: the shell
+ * binds every `FeatureCommand.shortcut` centrally (`useCommandShortcuts`), so a
+ * feature no longer needs this to make its own command's key work.
  */
 export function useShortcut(
   shortcut: string | undefined,
   run: () => void,
 ): void {
   useEffect(() => {
-    if (!shortcut) return;
-    const parts = shortcut.toLowerCase().split("+");
-    const key = parts[parts.length - 1];
-    const wantsMod = parts.includes("mod");
-    const wantsShift = parts.includes("shift");
-    const wantsAlt = parts.includes("alt");
+    const chord = parseShortcut(shortcut);
+    if (!chord) return;
 
     const handler = (event: KeyboardEvent) => {
       const target = event.target;
@@ -120,13 +127,8 @@ export function useShortcut(
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.isContentEditable);
-      if (typing && key !== "escape") return;
-
-      const mod = isMac() ? event.metaKey : event.ctrlKey;
-      if (wantsMod !== mod) return;
-      if (wantsShift !== event.shiftKey) return;
-      if (wantsAlt !== event.altKey) return;
-      if (event.key.toLowerCase() !== key) return;
+      if (typing && chord.key !== "escape") return;
+      if (!matchesChord(chord, event, isMac())) return;
 
       event.preventDefault();
       run();

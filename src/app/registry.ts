@@ -5,8 +5,10 @@
  * src/features/<area>/index.tsx, and their routes, sidebar items and commands
  * appear here automatically.
  */
+import { createElement, type FunctionComponent, type ReactNode } from "react";
 import type {
   FeatureCommand,
+  FeatureId,
   FeatureModule,
   FeatureNavItem,
   FeatureNavSection,
@@ -51,9 +53,28 @@ export function allNavProviders(): (() => FeatureNavSection[])[] {
     .filter((provider): provider is () => FeatureNavSection[] => Boolean(provider));
 }
 
-/** Everything the command palette offers. */
+/** Everything the command palette offers, and everything the shell binds. */
 export function allCommands(): FeatureCommand[] {
   return registry.flatMap((f) => f.commands ?? []);
+}
+
+/**
+ * Every feature's always-mounted overlay content, keyed by feature id.
+ *
+ * A function is wrapped as a component rather than called here, so it gets its
+ * own render and may use hooks (see `FeatureModule.overlays`). This file has no
+ * JSX — it is a .ts — which is why it reaches for `createElement`.
+ */
+export function allOverlays(): { id: FeatureId; node: ReactNode }[] {
+  return registry.flatMap((feature) => {
+    const overlays = feature.overlays;
+    if (overlays === undefined || overlays === null) return [];
+    const node =
+      typeof overlays === "function"
+        ? createElement(overlays as FunctionComponent)
+        : overlays;
+    return [{ id: feature.id, node }];
+  });
 }
 
 /** One command by id, looked up when it is needed rather than at mount. */

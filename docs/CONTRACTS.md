@@ -150,7 +150,18 @@ driver forwards to `page.exposeFunction`.
 export function withWrite<T>(fn: () => Promise<T>): Promise<T>;      // queues
 export function withTransaction<T>(fn: () => Promise<T>): Promise<T>; // begin/commit/rollback under the lock
 export function pauseTimers(): () => void;                            // returns resume
-export const writeState: { busy: boolean; label: string | null };     // for UI "queued behind the import"
+export const writeState: {
+  busy: boolean;
+  label: string | null;
+  queued: number;
+  /**
+   * Non-null while the database is closed and being reopened - a workspace
+   * switch or a restore. Not a write, so it never holds the lock; the label
+   * comes from src/db/client.ts (see "The closed window" below) and the shell
+   * shows it as a quiet line in the top bar.
+   */
+  transition: string | null;
+};
 ```
 
 `src/db/changeLog.ts`:
@@ -193,6 +204,7 @@ export const feature: FeatureModule = {
   routes: [{ path: "/contacts", element: <ContactsScreen/> }, ...],
   nav: [{ label: "Contacts", to: "/contacts", icon: Users, order: 20 }],
   commands: [{ id: "quick-add", label: "Quick add", shortcut: "mod+n", run: () => ... }],
+  overlays?: <QuickAddDialog/>,   // or a function; always mounted, every screen
   onBoot?: () => Promise<void>;   // e.g. start the lead poller; must be idempotent
 };
 ```
@@ -372,8 +384,9 @@ There is one search in the product.
   works on a screen where the shell is not mounted.
 - The topbar's "Search everything" button runs the same lookup as Cmd/Ctrl+K.
 
-`FeatureCommand.shortcut` is still a label, not a binding. The shell binds keys; a
-feature declares the string that gets printed next to the command.
+**Superseded:** this section used to end "`FeatureCommand.shortcut` is still a
+label, not a binding." It is a binding now - the shell registers every one of
+them. See "The keys the shell binds" below. Everything else here still holds.
 
 ### `FeatureModule.navProvider`
 
@@ -416,6 +429,127 @@ the library, as its README says.
 A pinned view is a link in the sidebar's Views group and arrives at the screen as
 `?view=<id>`, which `useSavedViews` reads; the screen applies it once, when the row
 loads.
+
+## Shell seams, revision 2 (binding)
+
+Wave 3 closed the seams between the features. This closes the seams between the
+features and the shell: three mechanisms every feature invented for itself,
+because the shell had no slot for them, are now the shell's job.
+
+### The keys the shell binds
+
+**`FeatureCommand.shortcut` is a binding, not a label.** The shell installs one
+`keydown` handler on `window` and answers every registered command's shortcut
+from `allCommands()`. `src/app/shortcuts.ts` is the whole mechanism and is pure
+apart from the hook, so the rules are testable: `parseShortcut`,
+`normaliseShortcut`, `matchesChord`, `isTypingTarget`, `shouldSkipEvent`,
+`pickCommand`, `useCommandShortcuts`.
+
+The rules:
+
+- `mod` is Cmd on macOS and Ctrl elsewhere, and the **other** platform's
+  modifier must not be held: Ctrl+Cmd+K is not Cmd+K.
+- The only modifier names are `mod`, `shift` and `alt`, and Shift and Alt must
+  match exactly. `"ctrl+k"` and `"cmd+k"` are refused rather than guessed at -
+  `parseShortcut` returns null, the palette still prints the string, and no key
+  is bound. A chord that does not parse never throws during a keypress.
+- A bare key (`"?"`, `"g"`) matches on `event.key` and says nothing about Shift,
+  because the browser has already applied it: `?` is Shift+/ on a US keyboard
+  and its own key elsewhere.
+- **Typing suppresses every shortcut.** An `INPUT`, `TEXTAREA`, `SELECT` or
+  contenteditable target means the owner is typing. A command that genuinely
+  needs its key inside a field opts in with **`whileTyping: true`**; a bare key
+  is never bound while typing, with or without the flag, because a bare key is
+  what the owner is typing.
+- A key repeat, an IME composition and an already-`defaultPrevented` event are
+  all ignored.
+- Registry order breaks a tie, which is also the order the palette lists
+  commands in, so two features claiming one key is visible rather than random.
+
+**`mod+k` and `mod+shift+k` stay the shell's own** (`SHELL_OWN_SHORTCUTS` in
+`Shell.tsx`) and the generic binder skips them, because they are lookups rather
+than commands: `mod+k` runs whichever feature owns `"search"` and falls back to
+the palette, and the palette is not a feature at all. Everything in the "One
+search" section above is unchanged.
+
+**Features should now delete their own bindings.** `src/features/today/search/
+overlay.tsx`, `src/features/records/quickAdd/host.tsx`,
+`src/features/settings/components/SettingsHost.tsx` and the AI host each bind a
+key their command already declares. They still work: the shell's handler calls
+`preventDefault`, `stopPropagation` **and** `stopImmediatePropagation`, and it is
+registered before any of them (a feature's `onBoot` runs after the shell's first
+paint), so a command runs exactly once. `stopImmediatePropagation` is the one
+that does the work - two listeners on `window` are not in a propagation
+relationship, so `stopPropagation` alone would not stop the second one. The
+double binding is transitional; the owning agent should remove it.
+
+`useShortcut(shortcut, run)` in `src/app/hooks.ts` survives for a key that
+belongs to a *component* rather than to a command, and now shares the parser.
+`isMac()` moved to `src/app/shortcuts.ts` and is re-exported from `hooks.ts`, so
+every existing import still resolves.
+
+### `FeatureModule.overlays`
+
+```ts
+overlays?: ReactNode | (() => ReactNode);
+```
+
+The dialogs that have to exist on every screen - quick add, the AI paste dialog,
+the workspace switcher, the shortcuts sheet - render here, inside the shell's
+providers, below the routed screen and outside `<main>`. A function is rendered
+as a component (`<Overlays/>`), so it gets its own render and may use hooks; it
+is not the delicate hook slot `navProvider` is.
+
+This replaces mounting a second React root on `<body>` from `onBoot` and
+rebuilding `QueryClientProvider` and `TooltipProvider` around it, which is what
+four features were doing. `allOverlays()` in the registry is what the shell
+reads. The slot is provided, not yet adopted: the existing hosts keep working
+until the owning feature agent moves its dialog across.
+
+### The closed window: switch and restore
+
+A workspace switch and a restore both close the database and open another file,
+and for that moment every read answers `DB_CLOSED`. `src/db/client.ts` names the
+window so the shell can say so instead of sitting there:
+
+```ts
+export function beginDbTransition(label: string): () => void;  // returns the ender
+export function dbTransitionLabel(): string | null;
+export function subscribeDbState(listener: () => void): () => void;
+```
+
+- `beginDbTransition` marks a deliberate one; the ender is idempotent, so it is
+  safe in a `finally`. Nested labels stack and the innermost wins.
+- A `raw.close()` with no label in flight marks an **implicit** one, which the
+  next successful `raw.open()` clears. That is what covers a restore's copy
+  step, which closes the file itself before calling back into the boot path.
+- `writeLock` folds the label into `writeState.transition` and republishes, so
+  `useWriteState()` exposes it and the top bar renders it as a quiet muted line
+  (it takes precedence over the write badge: nothing else can be true then).
+
+`boot.openWorkspace(workspace, { label? })` labels itself "Opening the
+workspace…" by default; `boot.switchWorkspace` wraps the whole close-open-migrate
+sequence in "Switching workspace…" and passes `{ label: null }` inwards so the
+note does not flicker between two strings. The first launch passes
+`{ label: null }` too, because `BootingScreen` owns the window at that point.
+
+### Promoted settings keys
+
+`aiKeySuffix` (`string | null`, default null), `aiKeyState`
+(`"unset" | "saved" | "rejected"`, default `"unset"`) and `aiBaseUrl` (string,
+default `https://api.anthropic.com`) are in the typed registry in
+`src/db/repos/settings.ts`. `aiModel`'s default is corrected to
+`claude-sonnet-5`. The AI feature still reads them through its own
+`defineExtraSetting` wrappers over `getRaw`/`setRaw`, which are key-agnostic and
+keep working unchanged - `src/features/ai/lib/aiSettings.ts` can shrink to
+`settings.get`/`settings.set` calls whenever that agent next touches the file.
+
+### The dev server's watch list
+
+`vite.config.ts` ignores `tests/e2e-mac/.cache/**`, `dist-*/**`, `design/**` and
+`docs/**` as well as `src-tauri/**`. An e2e run, a screenshot pass or a docs edit
+used to reload the dev window out from under whoever was looking at it, and a
+reload mid-run is also how a Playwright spec fails for no reason.
 
 ## Status reporting
 

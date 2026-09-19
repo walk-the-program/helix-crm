@@ -54,10 +54,23 @@ export type FeatureNavSection = {
 export type FeatureCommand = {
   id: string;
   label: string;
-  /** "mod+n" style; mod is Cmd on macOS and Ctrl elsewhere. */
+  /**
+   * "mod+n" style; mod is Cmd on macOS and Ctrl elsewhere. Since the shell
+   * binds `allCommands()` centrally this is a real binding, not just the label
+   * the palette prints: the only modifier names are `mod`, `shift` and `alt`,
+   * and a bare key ("?") is bound too. See `src/app/shortcuts.ts`.
+   */
   shortcut?: string;
   group?: string;
   keywords?: string[];
+  /**
+   * Answer the shortcut even while the owner is typing in an input, a textarea
+   * or a contenteditable. Off by default, because a command that fires
+   * mid-sentence is a bug; opt in only for a key that is genuinely about the
+   * field being typed in. A bare key ("?") is never bound while typing, with or
+   * without this flag — a bare key is what the owner is typing.
+   */
+  whileTyping?: boolean;
   run: () => void | Promise<void>;
 };
 
@@ -79,6 +92,22 @@ export type FeatureModule = {
    */
   navProvider?: () => FeatureNavSection[];
   commands?: FeatureCommand[];
+  /**
+   * Always-mounted content: the dialogs a feature opens from anywhere (quick
+   * add, the AI paste dialog, the workspace switcher, the shortcuts sheet).
+   *
+   * The shell renders these once, inside its own providers, on every screen.
+   * That is what this slot is for: before it existed, a feature that needed a
+   * dialog on every screen mounted a *second* React root on `<body>` from
+   * `onBoot` and had to re-create the providers around it by hand.
+   *
+   * Either a ReactNode, or a function, which the shell renders as a component
+   * (`<Overlays />`) — so a function may use hooks, with its own render and its
+   * own state, and is not bound by the rules that make `navProvider` delicate.
+   * Overlays render below the routed screen and outside `<main>`, so they must
+   * position themselves (every dialog in `src/ui` already does).
+   */
+  overlays?: ReactNode | (() => ReactNode);
   /** Started once after the database is open. Must be idempotent. */
   onBoot?: () => Promise<void>;
 };

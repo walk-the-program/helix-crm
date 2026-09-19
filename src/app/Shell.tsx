@@ -15,14 +15,27 @@
  *    the settings feature is still being built.
  * 3. **The "Views" group** comes from `FeatureModule.navProvider`, called on
  *    every render, which is how pinned saved views reach the sidebar.
+ *
+ * Two more things the shell does for every feature rather than each feature
+ * doing it for itself:
+ *
+ * 4. **The keys.** One handler binds every registered `FeatureCommand.shortcut`
+ *    (`useCommandShortcuts`). A command's shortcut used to be a label the
+ *    palette printed, so a feature that promised `mod+,` had to mount its own
+ *    React root from `onBoot` just to listen for it.
+ * 5. **The overlays.** `FeatureModule.overlays` renders inside this tree, which
+ *    is where a dialog that has to exist on every screen belongs — instead of a
+ *    second React root on `<body>` with the providers rebuilt around it.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Route, Router, Switch, useLocation } from "wouter";
 import { Toaster } from "sonner";
 import { MagnifyingGlass, MoonStars, Sun } from "@/ui/icons";
 import {
+  allCommands,
   allNavItems,
   allNavProviders,
+  allOverlays,
   allRoutes,
   findCommand,
 } from "@/app/registry";
@@ -33,6 +46,7 @@ import {
 } from "@/app/CommandPalette";
 import type { FeatureNavItem, FeatureNavSection } from "@/app/feature";
 import { useAppearance, useShortcut, useWriteState } from "@/app/hooks";
+import { useCommandShortcuts } from "@/app/shortcuts";
 import type { HelixRegistry, WorkspaceEntry } from "@/app/appSettings";
 import {
   Badge,
@@ -60,9 +74,28 @@ function NotFound() {
   );
 }
 
-/** "Queued behind the import" and friends. */
+/**
+ * The two things the top bar has to be able to say.
+ *
+ * A switch or a restore closes the database, which is not a write and so never
+ * shows up as one: the screen used to sit there with no explanation while every
+ * read answered DB_CLOSED. It takes precedence over the write badge, because
+ * nothing else can be true at that moment, and it is a quiet line rather than a
+ * badge — it is an explanation, not an alert.
+ */
 function WriteStatus() {
-  const { busy, label, queued } = useWriteState();
+  const { busy, label, queued, transition } = useWriteState();
+  if (transition) {
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+      >
+        {transition}
+      </span>
+    );
+  }
   if (!busy) return null;
   return (
     <Badge tone="neutral">
@@ -85,12 +118,22 @@ function useDynamicNavSections(): FeatureNavSection[] {
   return sections.sort((a, b) => a.order - b.order);
 }
 
+/**
+ * The keys the shell binds for itself, which the generic command binder must
+ * leave alone so a keystroke is never handled twice. Both are lookups rather
+ * than commands: mod+k runs whichever feature owns search and falls back to the
+ * palette, and the palette is not a feature at all.
+ */
+const SHELL_OWN_SHORTCUTS = ["mod+k", PALETTE_SHORTCUT] as const;
+
 export function Shell({ registry, workspace }: ShellProps) {
   const [location, navigate] = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const routes = useMemo(() => allRoutes(), []);
   const navItems = useMemo(() => allNavItems(), []);
   const navSections = useDynamicNavSections();
+  const commands = useMemo(() => allCommands(), []);
+  const overlays = useMemo(() => allOverlays(), []);
   const appearance = useAppearance(registry);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
@@ -108,6 +151,13 @@ export function Shell({ registry, workspace }: ShellProps) {
 
   useShortcut("mod+k", openSearch);
   useShortcut(PALETTE_SHORTCUT, openPalette);
+
+  /**
+   * Every other key in the product. Registered after the two above so those
+   * two answer first, and skipping their shortcuts so a feature that also
+   * registers a "search" command cannot get it twice.
+   */
+  useCommandShortcuts(commands, { reserved: SHELL_OWN_SHORTCUTS });
 
   // The search dialog renders in its own React root and asks for the palette
   // through an event rather than reaching into this component's state.
@@ -269,6 +319,15 @@ export function Shell({ registry, workspace }: ShellProps) {
           </main>
         </div>
       </div>
+
+      {/*
+        Every feature's always-mounted content: the dialogs that open from any
+        screen. Inside the providers, below the routed screen, so a feature no
+        longer needs its own React root on <body> (FeatureModule.overlays).
+      */}
+      {overlays.map(({ id, node }) => (
+        <Fragment key={id}>{node}</Fragment>
+      ))}
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/*

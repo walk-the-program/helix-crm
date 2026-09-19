@@ -187,6 +187,74 @@ export const tauriDriver: RawDriver = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* the closed window: workspace switch and restore                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A workspace switch and a restore both close the database and open another
+ * file, and for that moment every read answers DB_CLOSED. That used to be
+ * invisible: the screen simply stopped, and a slow migration on the new file
+ * looked like a hang.
+ *
+ * So the close/reopen window is named. `beginDbTransition(label)` marks a
+ * deliberate one and returns its ender; a `raw.close()` with no label in flight
+ * marks an implicit one, which the next successful `raw.open()` clears — that is
+ * what covers the restore's copy step, which closes the file itself before it
+ * calls back into the boot path. `writeLock` folds the label into `writeState`
+ * and the shell shows it as a quiet line in the top bar.
+ */
+const IMPLICIT_TRANSITION = "Reopening the database…";
+
+let explicitTransitions: string[] = [];
+let implicitTransition: string | null = null;
+
+const dbStateListeners = new Set<() => void>();
+
+function publishDbState(): void {
+  for (const listener of dbStateListeners) listener();
+}
+
+/** What to tell the owner while the database is being swapped, or null. */
+export function dbTransitionLabel(): string | null {
+  if (explicitTransitions.length > 0) {
+    return explicitTransitions[explicitTransitions.length - 1];
+  }
+  return implicitTransition;
+}
+
+export function subscribeDbState(listener: () => void): () => void {
+  dbStateListeners.add(listener);
+  return () => {
+    dbStateListeners.delete(listener);
+  };
+}
+
+/**
+ * Mark a deliberate close/reopen. Returns the ender, which is idempotent, so it
+ * is safe in a `finally` that may run twice.
+ */
+export function beginDbTransition(label: string): () => void {
+  explicitTransitions.push(label);
+  implicitTransition = null;
+  publishDbState();
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    const at = explicitTransitions.lastIndexOf(label);
+    if (at >= 0) explicitTransitions.splice(at, 1);
+    publishDbState();
+  };
+}
+
+/** Tests only: forget any in-flight transition. */
+export function __resetDbTransitionForTests(): void {
+  explicitTransitions = [];
+  implicitTransition = null;
+  publishDbState();
+}
+
+/* -------------------------------------------------------------------------- */
 /* the swappable driver                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -215,10 +283,21 @@ export const raw: RawDriver = {
   open: async (path) => {
     lastOpenPath = path;
     await current.open(path);
+    // The file is back: an unlabelled close has nothing left to explain.
+    if (implicitTransition !== null) {
+      implicitTransition = null;
+      publishDbState();
+    }
   },
   close: async () => {
     await current.close();
     lastOpenPath = null;
+    // Nobody said why, so say something true rather than nothing: a restore
+    // closes the file here and reopens it several steps later.
+    if (explicitTransitions.length === 0 && implicitTransition === null) {
+      implicitTransition = IMPLICIT_TRANSITION;
+      publishDbState();
+    }
   },
   backup: (reason) => current.backup(reason),
   info: () => current.info(),
