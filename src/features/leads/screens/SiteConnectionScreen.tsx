@@ -8,18 +8,21 @@
  * token is stored but never shows it again, because reading it back into the
  * webview would defeat the point of keeping it in Rust.
  *
- * This screen is mounted by the settings feature at "/settings/site"; it is
- * also registered by the leads feature so the route works before that lands.
+ * The settings feature mounts this screen at "/settings/site"; this folder owns
+ * it. The shape is the native settings shape (docs/DESIGN.md §9): three grouped
+ * inset lists under small-capitals labels, one black button on the screen, and
+ * the facts about the poll as label-and-value rows rather than a table.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Globe, Link2Off, RefreshCw } from "lucide-react";
+import { ArrowsClockwise, Globe, LinkBreak } from "@/ui/icons";
 import {
+  Badge,
   Button,
   Card,
   CardBody,
-  CardHeader,
-  CardTitle,
+  CardGroupLabel,
+  CardRow,
   ConfirmDialog,
   Field,
   FormRow,
@@ -182,169 +185,164 @@ export function SiteConnectionScreen() {
         subtitle="Leads from your ClearPath site land here on their own."
       />
 
-      <div className="flex flex-col gap-[var(--space-5)] p-[var(--space-6)] max-w-[720px]">
+      <div className="flex max-w-[46rem] flex-col gap-[var(--space-6)]">
         <PollBanner status={status} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection</CardTitle>
-            {connected ? (
-              <span className="text-[length:var(--text-sm)] text-[var(--color-success)]">
-                Connected
+        <div>
+          <CardGroupLabel>Connection</CardGroupLabel>
+          <Card>
+            <CardRow>
+              <span className="text-[var(--color-text)]">Status</span>
+              {connected ? (
+                <Badge tone="success">Connected</Badge>
+              ) : (
+                <Badge tone="neutral">Not connected</Badge>
+              )}
+            </CardRow>
+            <CardBody className="p-[var(--space-4)]">
+              <FormRow>
+                <Field
+                  label="Website address"
+                  error={originError}
+                  hint="The address of the site ClearPath built for you, with nothing after it."
+                >
+                  <Input
+                    value={origin}
+                    placeholder="https://yourbusiness.com"
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(event) => {
+                      setTouched(true);
+                      setOrigin(event.target.value);
+                      setOriginError(undefined);
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label="Token"
+                  hint={
+                    hasToken
+                      ? "A token is saved on this Mac. Leave this empty to keep it, or paste a new one to replace it."
+                      : "Copy this from your site's admin page. It is kept in the Mac keychain, never in your Helix file."
+                  }
+                >
+                  <Input
+                    type="password"
+                    value={token}
+                    placeholder={hasToken ? "Saved" : "Paste the token"}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(event) => setToken(event.target.value)}
+                  />
+                </Field>
+
+                <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+                  <Button
+                    variant="primary"
+                    onClick={() => save.mutate()}
+                    loading={save.isPending}
+                    loadingLabel="Saving…"
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => test.mutate()}
+                    loading={test.isPending}
+                    loadingLabel="Testing…"
+                    disabled={!connected}
+                    iconLeft={<Globe size={16} weight="bold" aria-hidden="true" />}
+                  >
+                    Test connection
+                  </Button>
+                </div>
+
+                {testResult ? (
+                  <p
+                    role="status"
+                    data-testid="site-test-result"
+                    className={[
+                      "text-[length:var(--text-sm)]",
+                      testResult.ok
+                        ? "text-[var(--color-success-ink)]"
+                        : "text-[var(--color-danger-ink)]",
+                    ].join(" ")}
+                  >
+                    {testResult.message}
+                  </p>
+                ) : null}
+              </FormRow>
+            </CardBody>
+          </Card>
+        </div>
+
+        <div className="flex flex-col gap-[var(--space-3)]">
+          <div>
+            <CardGroupLabel>Checking for leads</CardGroupLabel>
+            <Card>
+              <CardRow>
+                <span className="text-[var(--color-text-muted)]">How often</span>
+                <span className="text-right text-[var(--color-text)]">
+                  Every {POLL_MINUTES} minutes while Helix is open, and once when it starts.
+                </span>
+              </CardRow>
+              <CardRow>
+                <span className="text-[var(--color-text-muted)]">Last checked</span>
+                <span
+                  data-testid="site-last-polled"
+                  className="tabular-nums text-[var(--color-text)]"
+                >
+                  {lastPolledAt ? formatDateTimeDisplay(lastPolledAt) : "Not yet"}
+                </span>
+              </CardRow>
+              <CardRow>
+                <span className="text-[var(--color-text-muted)]">Last result</span>
+                <span className="text-right text-[var(--color-text)]">
+                  {lastError ? (
+                    <span className="text-[var(--color-danger-ink)]">{lastError}</span>
+                  ) : lastPolledAt ? (
+                    "Everything came through."
+                  ) : (
+                    "Nothing to report yet."
+                  )}
+                </span>
+              </CardRow>
+            </Card>
+          </div>
+          <div className="px-[var(--space-1)]">
+            <Button
+              variant="secondary"
+              onClick={() => pollNow.mutate()}
+              loading={pollNow.isPending}
+              loadingLabel="Checking…"
+              disabled={!connected}
+              iconLeft={<ArrowsClockwise size={16} weight="bold" aria-hidden="true" />}
+            >
+              Poll now
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <CardGroupLabel>Disconnect</CardGroupLabel>
+          <Card>
+            <CardRow className="gap-[var(--space-5)] py-[var(--space-3)]">
+              <span className="min-w-0 text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                Helix stops checking your site and forgets the address and the token. Every
+                contact and deal that already came in stays exactly where it is.
               </span>
-            ) : (
-              <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                Not connected
-              </span>
-            )}
-          </CardHeader>
-          <CardBody>
-            <FormRow>
-              <Field
-                label="Website address"
-                error={originError}
-                hint="The address of the site ClearPath built for you, with nothing after it."
-              >
-                <Input
-                  value={origin}
-                  placeholder="https://yourbusiness.com"
-                  autoComplete="off"
-                  spellCheck={false}
-                  onChange={(event) => {
-                    setTouched(true);
-                    setOrigin(event.target.value);
-                    setOriginError(undefined);
-                  }}
-                />
-              </Field>
-
-              <Field
-                label="Token"
-                hint={
-                  hasToken
-                    ? "A token is saved on this Mac. Leave this empty to keep it, or paste a new one to replace it."
-                    : "Copy this from your site's admin page. It is kept in the Mac keychain, never in your Helix file."
-                }
-              >
-                <Input
-                  type="password"
-                  value={token}
-                  placeholder={hasToken ? "Saved" : "Paste the token"}
-                  autoComplete="off"
-                  spellCheck={false}
-                  onChange={(event) => setToken(event.target.value)}
-                />
-              </Field>
-
-              <div className="flex flex-wrap items-center gap-[var(--space-2)]">
-                <Button
-                  variant="primary"
-                  onClick={() => save.mutate()}
-                  loading={save.isPending}
-                >
-                  Save
-                </Button>
-                <Button
-                  onClick={() => test.mutate()}
-                  loading={test.isPending}
-                  disabled={!connected}
-                  iconLeft={<Globe size={16} aria-hidden="true" />}
-                >
-                  Test connection
-                </Button>
-              </div>
-
-              {testResult ? (
-                <p
-                  role="status"
-                  data-testid="site-test-result"
-                  className={[
-                    "text-[length:var(--text-sm)]",
-                    testResult.ok
-                      ? "text-[var(--color-success)]"
-                      : "text-[var(--color-danger)]",
-                  ].join(" ")}
-                >
-                  {testResult.message}
-                </p>
-              ) : null}
-            </FormRow>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Checking for leads</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <dl className="grid grid-cols-[max-content_1fr] gap-x-[var(--space-6)] gap-y-[var(--space-2)]">
-              <dt className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                How often
-              </dt>
-              <dd className="text-[length:var(--text-sm)] text-[var(--color-text)]">
-                Every {POLL_MINUTES} minutes while Helix is open, and once when
-                it starts.
-              </dd>
-
-              <dt className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                Last checked
-              </dt>
-              <dd
-                data-testid="site-last-polled"
-                className="tabular text-[length:var(--text-sm)] text-[var(--color-text)]"
-              >
-                {lastPolledAt ? formatDateTimeDisplay(lastPolledAt) : "Not yet"}
-              </dd>
-
-              <dt className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                Last result
-              </dt>
-              <dd className="text-[length:var(--text-sm)] text-[var(--color-text)]">
-                {lastError ? (
-                  <span className="text-[var(--color-danger)]">{lastError}</span>
-                ) : lastPolledAt ? (
-                  "Everything came through."
-                ) : (
-                  "Nothing to report yet."
-                )}
-              </dd>
-            </dl>
-
-            <div className="mt-[var(--space-4)]">
               <Button
-                onClick={() => pollNow.mutate()}
-                loading={pollNow.isPending}
-                disabled={!connected}
-                iconLeft={<RefreshCw size={16} aria-hidden="true" />}
-              >
-                Poll now
-              </Button>
-            </div>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Disconnect</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              Helix stops checking your site and forgets the address and the
-              token. Every contact and deal that already came in stays exactly
-              where it is.
-            </p>
-            <div className="mt-[var(--space-4)]">
-              <Button
-                variant="danger"
+                variant="destructive"
                 disabled={!connection.data?.siteOrigin}
                 onClick={() => setConfirmingDisconnect(true)}
-                iconLeft={<Link2Off size={16} aria-hidden="true" />}
+                iconLeft={<LinkBreak size={16} weight="bold" aria-hidden="true" />}
               >
                 Disconnect
               </Button>
-            </div>
-          </CardBody>
-        </Card>
+            </CardRow>
+          </Card>
+        </div>
       </div>
 
       <ConfirmDialog

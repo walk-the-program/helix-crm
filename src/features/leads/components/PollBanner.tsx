@@ -8,7 +8,7 @@
  * that drove out of signal, is the system's state, which is what warning
  * means. Neither colour ever appears without a word beside it.
  */
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "@/ui/icons";
 import type { ReactNode } from "react";
 import type { PollStatus } from "@/features/leads/lib/types";
 
@@ -26,13 +26,14 @@ export function PollBanner(props: {
       data-testid="lead-poll-banner"
       className={[
         "flex items-start gap-[var(--space-3)]",
-        "rounded-[var(--radius-md)] border border-[var(--color-border)]",
+        "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
         "bg-[var(--color-warning-soft)] px-[var(--space-4)] py-[var(--space-3)]",
       ].join(" ")}
     >
       <AlertTriangle
         size={18}
-        className="mt-[2px] shrink-0 text-[var(--color-warning)]"
+        weight="regular"
+        className="mt-[var(--space-1)] shrink-0 text-[var(--color-warning-ink)]"
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">

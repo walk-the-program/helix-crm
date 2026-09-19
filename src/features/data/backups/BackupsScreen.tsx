@@ -1,17 +1,21 @@
 /**
- * "/backups" - list, run, and restore (docs/PLAN.md item 17).
+ * The backups screen - list, run, and restore (docs/PLAN.md item 17).
  *
  * The scheduler (./scheduler.ts) runs backups in the background; this screen
  * shows what happened, lets the owner force one, and rolls back to an
  * earlier file. A restore blocks the screen until it settles, because a
  * half-finished restore next to a live UI is how data gets lost.
+ *
+ * The route is "/settings/backups" and the settings feature mounts it; this
+ * folder owns the screen, the scheduler and the retention policy.
  */
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DatabaseBackup, TriangleAlert } from "lucide-react";
+import { DatabaseBackup, Warning } from "@/ui/icons";
 import {
   Badge,
   Button,
+  Card,
   ConfirmDialog,
   EmptyState,
   PageHeader,
@@ -92,54 +96,57 @@ export function BackupsScreen() {
   const isBusy = restoreMutation.isPending;
 
   return (
-    <div className="relative">
+    <div className="relative flex flex-col">
       <PageHeader
         title="Backups"
-        subtitle={
-          backupsDir ? `Stored in ${backupsDir}` : "Helix backs up your database automatically."
-        }
+        subtitle="Helix backs up your database automatically."
         actions={
-          <Button
-            variant="primary"
-            iconLeft={<DatabaseBackup className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />}
-            onClick={() => backupNow.mutate()}
-            loading={backupNow.isPending}
-            disabled={isBusy}
-          >
-            Back up now
-          </Button>
+          // One black button per screen: while the list is empty the empty
+          // state carries it, and the header's copy would be the second.
+          files.length > 0 ? (
+            <Button
+              variant="primary"
+              iconLeft={<DatabaseBackup size={16} weight="bold" aria-hidden="true" />}
+              onClick={() => backupNow.mutate()}
+              loading={backupNow.isPending}
+              loadingLabel="Backing up…"
+              disabled={isBusy}
+            >
+              Back up now
+            </Button>
+          ) : null
         }
       />
 
-      <div className="flex flex-col gap-[var(--space-4)] pt-[var(--space-6)]">
+      <div className="flex flex-col gap-[var(--space-5)]">
         {status.lastError ? (
           <div
             role="alert"
             className={[
-              "flex items-start gap-[var(--space-3)] rounded-[var(--radius-md)] border",
-              "border-[var(--color-danger)] bg-[var(--color-danger-soft)]",
-              "px-[var(--space-4)] py-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-danger)]",
+              "flex items-start gap-[var(--space-3)]",
+              "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+              "bg-[var(--color-danger-soft)] px-[var(--space-4)] py-[var(--space-3)]",
+              "text-[length:var(--text-sm)] text-[var(--color-danger-ink)]",
             ].join(" ")}
           >
-            <TriangleAlert
-              className="w-[var(--space-4)] h-[var(--space-4)] shrink-0 mt-[2px]"
+            <Warning
+              size={18}
+              weight="regular"
+              className="mt-[var(--space-1)] flex-none"
               aria-hidden="true"
             />
-            <div>
+            <div className="min-w-0">
               <div className="font-medium">Helix could not save a backup</div>
-              <div className="text-[var(--color-danger)]">{status.lastError}</div>
+              <div>{status.lastError}</div>
             </div>
           </div>
         ) : null}
 
-        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          Helix backs up your database after opening (unless one has run in the last hour) and
-          every 6 hours after that. It keeps every backup from the last 24 hours, then one per
-          day for 30 days, and removes the rest.
-        </p>
-        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          Backups cover the database only - attachments are plain files stored beside it and are
-          not included.
+        <p className="max-w-[var(--content-max)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          Helix backs up after opening, unless one has run in the last hour, and every 6 hours
+          after that. It keeps every backup from the last 24 hours, then one per day for 30
+          days, and removes the rest. Backups cover the database only — attachments are plain
+          files stored beside it and are not included.
         </p>
 
         {backupsQuery.isLoading ? (
@@ -148,56 +155,73 @@ export function BackupsScreen() {
           </div>
         ) : files.length === 0 ? (
           <EmptyState
-            icon={<DatabaseBackup size={32} aria-hidden="true" />}
             title="No backups yet"
             description="Helix will back up automatically, or you can start one now."
             action={
-              <Button onClick={() => backupNow.mutate()} loading={backupNow.isPending}>
+              <Button
+                variant="primary"
+                onClick={() => backupNow.mutate()}
+                loading={backupNow.isPending}
+                loadingLabel="Backing up…"
+              >
                 Back up now
               </Button>
             }
           />
         ) : (
-          <>
-            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)] tabular-nums">
+          <div className="flex flex-col gap-[var(--space-2)]">
+            <p className="px-[var(--space-1)] text-[length:var(--text-sm)] tabular-nums text-[var(--color-text-muted)]">
               {files.length} {files.length === 1 ? "backup" : "backups"} ·{" "}
               {formatBytes(totalBytes(files))} total
             </p>
 
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Date and time</TH>
-                  <TH>Reason</TH>
-                  <TH align="right">Size</TH>
-                  <TH align="right">
-                    <span className="sr-only">Actions</span>
-                  </TH>
-                </TR>
-              </THead>
-              <TBody>
-                {files.map((file) => (
-                  <TR key={file.path}>
-                    <TD>{formatDateTimeDisplay(file.at)}</TD>
-                    <TD>
-                      <Badge>{file.reason}</Badge>
-                    </TD>
-                    <TD align="right">{formatBytes(file.bytes)}</TD>
-                    <TD align="right">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => setRestoreTarget(file)}
-                      >
-                        Restore
-                      </Button>
-                    </TD>
+            <Card className="overflow-hidden">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Date and time</TH>
+                    <TH>Reason</TH>
+                    <TH align="right">Size</TH>
+                    <TH align="right">
+                      <span className="sr-only">Actions</span>
+                    </TH>
                   </TR>
-                ))}
-              </TBody>
-            </Table>
-          </>
+                </THead>
+                <TBody className="[&>tr:last-child]:border-b-0">
+                  {files.map((file) => (
+                    <TR key={file.path}>
+                      <TD primary>{formatDateTimeDisplay(file.at)}</TD>
+                      <TD>
+                        <Badge>{file.reason}</Badge>
+                      </TD>
+                      <TD align="right" muted>
+                        {formatBytes(file.bytes)}
+                      </TD>
+                      <TD align="right">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={isBusy}
+                          onClick={() => setRestoreTarget(file)}
+                        >
+                          Restore
+                        </Button>
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </Card>
+
+            {backupsDir ? (
+              <p
+                title={backupsDir}
+                className="truncate px-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
+              >
+                Stored in {backupsDir}
+              </p>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -233,13 +257,13 @@ export function BackupsScreen() {
           role="status"
           aria-live="polite"
           className={[
-            "fixed inset-0 z-40 flex flex-col items-center justify-center gap-[var(--space-3)]",
-            "bg-[var(--color-surface-raised)] opacity-95",
+            "fixed inset-0 z-40 flex flex-col items-center justify-center gap-[var(--space-4)]",
+            "bg-[var(--color-bg)]",
           ].join(" ")}
         >
           <Spinner size={28} label="Restoring backup" />
-          <div className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Restoring backup - please wait, this closes and reopens the database.
+          <div className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+            Restoring your backup. This closes and reopens the database.
           </div>
         </div>
       ) : null}

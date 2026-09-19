@@ -4,10 +4,14 @@
  * A drop zone that takes a real drag-drop from the desktop (Tauri hands over
  * paths), a browser File (the e2e build), and falls back to the file dialog
  * whenever the dropped path is not something Helix may read.
+ *
+ * It is a panel with a dashed hairline and a lot of air, not a bordered web
+ * upload widget: no 40px spot glyph in the middle (docs/DESIGN.md §11), no
+ * second border weight, and the drag state is a tint rather than a colour.
  */
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { FileSpreadsheet, FolderOpen } from "lucide-react";
+import { FolderOpen } from "@/ui/icons";
 import { Button } from "@/ui";
 import {
   loadCsvFromFile,
@@ -59,7 +63,7 @@ export function FilePickStep(props: {
   }
 
   return (
-    <div className="flex flex-col gap-[var(--space-5)]">
+    <div className="flex flex-col gap-[var(--space-4)]">
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -69,24 +73,20 @@ export function FilePickStep(props: {
         onDrop={onDrop}
         data-testid="import-dropzone"
         className={[
-          "flex flex-col items-center justify-center gap-[var(--space-4)]",
-          "rounded-[var(--radius-lg)] border-2 border-dashed px-[var(--space-6)] py-[var(--space-10)]",
-          "text-center transition-colors",
+          "flex flex-col items-center justify-center gap-[var(--space-5)]",
+          "rounded-[var(--radius-lg)] border border-dashed",
+          "px-[var(--space-6)] py-[var(--space-10)] text-center",
+          "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
           dragging
-            ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
+            ? "border-[var(--color-border-strong)] bg-[var(--color-accent-soft)]"
             : "border-[var(--color-border-strong)] bg-[var(--color-surface)]",
         ].join(" ")}
       >
-        <FileSpreadsheet
-          size={40}
-          className="text-[var(--color-text-faint)]"
-          aria-hidden="true"
-        />
-        <div className="flex flex-col gap-[var(--space-1)]">
-          <p className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
+        <div className="flex flex-col items-center gap-[var(--space-2)]">
+          <p className="text-[length:var(--text-lg)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
             Drop a spreadsheet here
           </p>
-          <p className="max-w-[46ch] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          <p className="max-w-[var(--content-max)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
             A CSV exported from HubSpot, Zoho, Pipedrive, Google Contacts, or
             saved out of Excel. Helix works out the columns; you check them
             before anything is written.
@@ -95,9 +95,9 @@ export function FilePickStep(props: {
         <Button
           ref={buttonRef}
           variant="primary"
-          size="lg"
           loading={busy}
-          iconLeft={<FolderOpen size={18} aria-hidden="true" />}
+          loadingLabel="Opening…"
+          iconLeft={<FolderOpen size={16} weight="bold" aria-hidden="true" />}
           onClick={() => void run(pickCsvFile)}
         >
           Choose a file

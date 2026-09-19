@@ -2364,3 +2364,104 @@ itself and two of them in a header printed the same sentence twice.
 3. **`EmptyState` is very tall inside a narrow panel.** Its `--space-10` padding
    is right for a full pane and makes a 300px-tall box out of one sentence
    inside a 380px details column. A `compact` prop would let a panel opt down.
+
+## 2026-09-19 — Data + leads sweep (Apple-like minimalist direction)
+
+Scope: `src/features/data/**`, `src/features/leads/**`,
+`tests/e2e-mac/specs/{data,leads}.e2e.ts`, `tests/unit/{data,leads}/**`.
+Contract: `docs/DESIGN.md` revision 2. Full write-up, per screen and per
+screenshot: `design/apple/sweep-data.md`.
+
+### Route ownership
+
+- `src/features/leads/index.tsx` no longer registers `/settings/site`; it still
+  exports `SiteConnectionScreen`, which the settings feature now mounts.
+- `src/features/data/index.tsx` no longer registers `/backups` and now exports
+  `BackupsScreen` for the settings feature to mount at `/settings/backups`.
+  There was no backups nav item to remove — Import is the data feature's only
+  nav row. `data.e2e.ts` navigates to the new path; nothing inside either
+  feature linked to the old ones.
+
+### What changed
+
+The import wizard is the headline: it now reads as a macOS setup assistant. The
+four tinted step pills (one of them green) became four step names joined by
+hairlines, with weight and ink carrying where you are; the navigation is a
+`secondary` **Back** and one black **Continue** together at the bottom right,
+and the preview step's button keeps the real verb, **Import**. The 40px
+spreadsheet glyph left the drop zone, the mapping badges and the yellow
+deal-columns box became sentences, and the duplicate policy became a grouped
+inset list under a small-capitals label.
+
+Elsewhere: export's six SaaS cards became two grouped lists; the duplicates
+list stopped putting a black button on all fifty-two rows and stopped painting
+all fifty-two match badges yellow; the merge dialog marks the surviving record
+with the selected tint instead of an accent border and lost the one stray
+`uppercase tracking-wide` label in this scope; backups, attachments and the
+website connection became grouped inset lists; and every semantic `-ink` token
+replaced the bare fill token wherever it was carrying text.
+
+Reports: every chart colour and axis style now lives in
+`features/leads/components/charts.tsx` as `var(--token)` strings. Bars are ink
+(`--color-text`, with `--color-text-faint` for a second series) **except** where
+the category is a pipeline stage, which keeps the stage's own muted colour —
+so "Leads by source", "Conversion between stages" and won/lost stopped being
+blue, teal, green and red. There are no gridlines, no value axis and no axis
+line anywhere on the screen: every bar carries its own figure at the end of it.
+`ReportCard` stamps `data-report="<title>"`, which is how the e2e now scopes to
+one card.
+
+### Verified
+
+- `npm run typecheck` clean; `npm test` 64 files / 799 tests passing.
+- `E2E_PORT=4188 E2E_OUT=dist-sweep-data` on `data.e2e.ts` and `leads.e2e.ts`:
+  19 tests passing (13 before; the six added ones cover the running panel, the
+  backups list and its restore dialog, the three empty screens and the
+  attachments panel).
+- `npx vite build --outDir dist-sweep-data` succeeds; directory deleted.
+- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|lucide-react|shadow-\[var\(--shadow-sm\)\]"`
+  over both features returns nothing. The recharts colour props read tokens
+  through CSS variables, not literals.
+- 44 screenshots at 1280 in `tests/e2e-mac/.cache/screens/sweep-data/` — 22
+  screens, light and dark — reviewed and re-captured four times. The ten defects
+  only a screenshot could show are in the sweep doc; the ones worth naming here
+  are `TD primary` truncating every name in the preview to three characters,
+  preview rows doubling in height when a contact had two phone numbers, the
+  second record in a duplicate pair starting at a different x on every row, and
+  a doubled hairline under the last row of every table.
+
+### Not done
+
+- The running panel cannot be photographed at real speed (1,500 rows import in
+  ~200ms), so `data.e2e.ts` holds each batched write for 600ms through the
+  `window.__helixDb` bridge and then asserts the progress bar is *still* visible
+  after both captures, so a screenshot cannot silently be of the next screen.
+- A real restore is still not exercised. The dialog is opened, photographed and
+  cancelled: the harness's backup file is a placeholder and restoring it would
+  prove nothing.
+
+### Contract changes needed
+
+1. **The e2e fixture writes backup files the product cannot read.**
+   `DbBridge.backup` in `tests/e2e-mac/fixtures.ts` builds the name from
+   `new Date().toISOString()` with every `:` and `.` replaced by a dash, which
+   leaves the milliseconds in it (`2026-09-19T00-48-08-123Z-manual.db`).
+   `parseBackupName` and Rust agree on `<date>T<HH-MM-SS>Z-<reason>.db`, so
+   every backup the harness writes is invisible to `listBackups`, and until this
+   is fixed no e2e can see a backup it just took. `data.e2e.ts` seeds two
+   correctly named files into the stub's file map to get a list to photograph.
+   Owner: whoever owns `tests/e2e-mac/fixtures.ts`.
+2. **`TD primary` needs a width hint** — the records sweep raised this already
+   and this sweep hit it independently. `max-w-0 truncate` gave the name column
+   three characters in a seven-column preview table. Both features now put
+   percentage widths on the `TH`s; the kit should either carry a default or say
+   in `Table.tsx` that the header row owns the widths.
+3. **`CardRow` has no `asChild`.** A grouped-list row that is really one control
+   (a radio row, a row that navigates) has to nest a `<label>` or `<button>`
+   inside the row, so the hit target is the child rather than the row. A
+   Radix-style `asChild` would let the grouped-list pattern carry a real
+   control.
+4. **`EmptyState` is very tall inside a narrow panel** (raised by the records
+   sweep; confirmed here). The Files panel on a record page passes
+   `className="py-[var(--space-5)]"` to bring a 300px box down to something a
+   380px column can hold. A `compact` prop would be the honest fix.

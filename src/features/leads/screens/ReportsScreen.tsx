@@ -8,14 +8,21 @@
  * every card at the same time so the numbers always agree with each other.
  *
  * Chart choices (form, colour, mark specs) come from the dataviz skill and
- * are spelled out per report below; nothing here invents a new colour or a
- * new chart type.
+ * from `components/charts.tsx`, which owns every colour and every axis style
+ * on this screen. Two rules decide what a bar looks like here:
+ *
+ *   - if the category is a pipeline stage, the bar takes that stage's own
+ *     muted colour, because the owner already reads those colours as stages
+ *     everywhere else in the product;
+ *   - otherwise the bar is ink, and a second series beside it is tertiary ink.
+ *
+ * No chart on this screen has a gridline or a value axis. Every bar carries
+ * its own figure at the end of it, which is exact where a gridline is a guess.
  */
 import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
   Legend,
   LabelList,
@@ -23,7 +30,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { EmptyState, PageHeader, Spinner, Tabs, TabsList, TabsTrigger } from "@/ui";
+import {
+  CardGroupLabel,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/ui";
 import { centsToDecimalString, formatMoney } from "@/lib/money";
 import {
   defaultGranularity,
@@ -47,8 +62,9 @@ import {
   CHART_ANIMATION_ACTIVE,
   CHART_AXIS_LINE,
   CHART_BAR_GAP,
+  CHART_BAR_INK,
+  CHART_BAR_INK_SECONDARY,
   CHART_CURSOR_FILL,
-  CHART_GRID_STROKE,
   CHART_LABEL_STYLE,
   CHART_TICK_LINE,
   CHART_TICK_STYLE,
@@ -68,6 +84,15 @@ function formatDays(value: number | null): string {
   return value === null ? "—" : value.toFixed(1);
 }
 
+/**
+ * One row per bar, at --row-h, so a report breathes like a list view. The floor
+ * is two rows' worth: a chart with a single category should be one bar and the
+ * air around it, not a bar marooned in a 140px box.
+ */
+function barChartHeight(rows: number, floor = 76): number {
+  return Math.max(floor, rows * 40 + 16);
+}
+
 export function ReportsScreen() {
   const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const [granularity, setGranularity] = useState<Granularity>(() => defaultGranularity(period));
@@ -84,7 +109,7 @@ export function ReportsScreen() {
   return (
     <div className="flex flex-col">
       <PageHeader title="Reports" actions={<PeriodPicker value={period} onChange={setPeriod} />} />
-      <div className="flex flex-col gap-[var(--space-6)] p-[var(--space-6)]">
+      <div className="flex flex-col gap-[var(--space-6)]">
         {query.isPending ? (
           <div className="flex justify-center py-[var(--space-10)]">
             <Spinner label="Loading reports" />
@@ -152,8 +177,6 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
     );
   }
 
-  const height = Math.max(180, rows.length * 44);
-
   return (
     <ReportCard
       title="Pipeline value by stage"
@@ -163,20 +186,14 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
       emptyDescription="Open deals show up here with what they are worth."
       csv={csv}
       chart={
-        <ChartFigure ariaLabel={ariaLabel} height={height}>
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 96, bottom: 4, left: 4 }}>
-            <CartesianGrid horizontal={false} vertical strokeDasharray="" stroke={CHART_GRID_STROKE} />
-            <XAxis
-              type="number"
-              tick={CHART_TICK_STYLE}
-              axisLine={CHART_AXIS_LINE}
-              tickLine={CHART_TICK_LINE}
-              tickFormatter={(value) => formatAxisMoney(Number(value))}
-            />
+        // The category is the stage, so each bar carries its own stage colour.
+        <ChartFigure ariaLabel={ariaLabel} height={barChartHeight(rows.length)}>
+          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 104, bottom: 0, left: 0 }}>
+            <XAxis type="number" hide />
             <YAxis
               type="category"
               dataKey="name"
-              width={116}
+              width={124}
               tick={CHART_TICK_STYLE}
               axisLine={CHART_AXIS_LINE}
               tickLine={CHART_TICK_LINE}
@@ -225,7 +242,7 @@ function GranularityControl(props: { value: Granularity; onChange: (value: Granu
         if (next === "month" || next === "quarter" || next === "year") onChange(next);
       }}
     >
-      <TabsList>
+      <TabsList className="border-b-0">
         <TabsTrigger value="month">Month</TabsTrigger>
         <TabsTrigger value="quarter">Quarter</TabsTrigger>
         <TabsTrigger value="year">Year</TabsTrigger>
@@ -234,13 +251,14 @@ function GranularityControl(props: { value: Granularity; onChange: (value: Granu
   );
 }
 
+/** The headline figure of a report: --text-3xl, tabular, with its two labels. */
 function StatTile(props: { label: string; value: string; count: string }) {
   return (
     <div className="flex flex-col gap-[var(--space-1)]">
       <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
         {props.label}
       </span>
-      <span className="tabular text-[length:var(--text-2xl)] font-semibold text-[var(--color-text)]">
+      <span className="tabular text-[length:var(--text-3xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
         {props.value}
       </span>
       <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
@@ -311,8 +329,6 @@ function WonLostCard(props: {
     );
   }
 
-  const height = 280;
-
   return (
     <ReportCard
       title="Won and lost"
@@ -323,8 +339,8 @@ function WonLostCard(props: {
       headerExtra={<GranularityControl value={granularity} onChange={onGranularityChange} />}
       csv={csv}
       chart={
-        <div className="flex flex-col gap-[var(--space-5)]">
-          <div className="flex flex-wrap gap-[var(--space-7)]">
+        <div className="flex flex-col gap-[var(--space-6)]">
+          <div className="flex flex-wrap gap-[var(--space-10)]">
             <StatTile
               label="Won"
               value={formatMoney(wonTotalCents)}
@@ -339,22 +355,19 @@ function WonLostCard(props: {
           {/* One bucket is a number, not a trend - the dataviz skill's "is it even
               a chart" rule. Two or more buckets earn the comparison a chart gives. */}
           {data.length > 1 ? (
-            <ChartFigure ariaLabel={ariaLabel} height={height}>
-              <BarChart data={data} barGap={CHART_BAR_GAP} margin={{ top: 20, right: 8, bottom: 4, left: 4 }}>
-                <CartesianGrid vertical={false} strokeDasharray="" stroke={CHART_GRID_STROKE} />
+            <ChartFigure ariaLabel={ariaLabel} height={260}>
+              <BarChart
+                data={data}
+                barGap={CHART_BAR_GAP}
+                margin={{ top: 24, right: 0, bottom: 0, left: 0 }}
+              >
                 <XAxis
                   dataKey="bucket"
                   tick={CHART_TICK_STYLE}
                   axisLine={CHART_AXIS_LINE}
                   tickLine={CHART_TICK_LINE}
                 />
-                <YAxis
-                  type="number"
-                  tick={CHART_TICK_STYLE}
-                  axisLine={CHART_AXIS_LINE}
-                  tickLine={CHART_TICK_LINE}
-                  tickFormatter={(value) => formatAxisMoney(Number(value))}
-                />
+                <YAxis type="number" hide />
                 <Tooltip
                   cursor={CHART_CURSOR_FILL}
                   content={(tooltipProps) => (
@@ -366,12 +379,19 @@ function WonLostCard(props: {
                 />
                 <Legend
                   iconType="rect"
-                  wrapperStyle={{ color: "var(--color-text-muted)", fontSize: "var(--text-xs)" }}
+                  iconSize={8}
+                  wrapperStyle={{
+                    color: "var(--color-text-muted)",
+                    fontSize: "var(--text-xs)",
+                  }}
                 />
+                {/* Two peers, two steps of one grey ramp. The words are in the
+                    legend and on the bars; the colour is not carrying meaning
+                    on its own. */}
                 <Bar
                   dataKey="won"
                   name="Won"
-                  fill="var(--stage-5)"
+                  fill={CHART_BAR_INK}
                   maxBarSize={MAX_BAR_SIZE}
                   radius={VERTICAL_BAR_RADIUS}
                   isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -386,7 +406,7 @@ function WonLostCard(props: {
                 <Bar
                   dataKey="lost"
                   name="Lost"
-                  fill="var(--stage-6)"
+                  fill={CHART_BAR_INK_SECONDARY}
                   maxBarSize={MAX_BAR_SIZE}
                   radius={VERTICAL_BAR_RADIUS}
                   isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -451,8 +471,6 @@ function SourcesCard(props: { rows: SourceRow[] }) {
     );
   }
 
-  const height = Math.max(160, Math.min(400, rows.length * 40));
-
   return (
     <ReportCard
       title="Leads by source"
@@ -462,20 +480,13 @@ function SourcesCard(props: { rows: SourceRow[] }) {
       emptyDescription="Where deals come from shows up here once leads start arriving."
       csv={csv}
       chart={
-        <ChartFigure ariaLabel={ariaLabel} height={height}>
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
-            <CartesianGrid horizontal={false} vertical strokeDasharray="" stroke={CHART_GRID_STROKE} />
-            <XAxis
-              type="number"
-              allowDecimals={false}
-              tick={CHART_TICK_STYLE}
-              axisLine={CHART_AXIS_LINE}
-              tickLine={CHART_TICK_LINE}
-            />
+        <ChartFigure ariaLabel={ariaLabel} height={barChartHeight(rows.length)}>
+          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 48, bottom: 0, left: 0 }}>
+            <XAxis type="number" allowDecimals={false} hide />
             <YAxis
               type="category"
               dataKey="name"
-              width={128}
+              width={136}
               tick={CHART_TICK_STYLE}
               axisLine={CHART_AXIS_LINE}
               tickLine={CHART_TICK_LINE}
@@ -492,7 +503,7 @@ function SourcesCard(props: { rows: SourceRow[] }) {
             <Bar
               dataKey="deals"
               name="Leads"
-              fill="var(--stage-2)"
+              fill={CHART_BAR_INK}
               maxBarSize={MAX_BAR_SIZE}
               radius={HORIZONTAL_BAR_RADIUS}
               isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -549,8 +560,6 @@ function ConversionCard(props: { rows: ConversionRow[] }) {
     );
   }
 
-  const height = Math.max(160, Math.min(360, chartRows.length * 40));
-
   return (
     <ReportCard
       title="Conversion between stages"
@@ -560,21 +569,13 @@ function ConversionCard(props: { rows: ConversionRow[] }) {
       emptyDescription="Conversion between stages shows up here once deals start moving."
       csv={csv}
       chart={
-        <ChartFigure ariaLabel={ariaLabel} height={height}>
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 48, bottom: 4, left: 4 }}>
-            <CartesianGrid horizontal={false} vertical strokeDasharray="" stroke={CHART_GRID_STROKE} />
-            <XAxis
-              type="number"
-              domain={[0, 100]}
-              tickFormatter={(value) => `${value}%`}
-              tick={CHART_TICK_STYLE}
-              axisLine={CHART_AXIS_LINE}
-              tickLine={CHART_TICK_LINE}
-            />
+        <ChartFigure ariaLabel={ariaLabel} height={barChartHeight(chartRows.length)}>
+          <BarChart data={data} layout="vertical" margin={{ top: 0, right: 56, bottom: 0, left: 0 }}>
+            <XAxis type="number" domain={[0, 100]} hide />
             <YAxis
               type="category"
               dataKey="name"
-              width={168}
+              width={188}
               tick={CHART_TICK_STYLE}
               axisLine={CHART_AXIS_LINE}
               tickLine={CHART_TICK_LINE}
@@ -591,7 +592,7 @@ function ConversionCard(props: { rows: ConversionRow[] }) {
             <Bar
               dataKey="rate"
               name="Conversion rate"
-              fill="var(--stage-4)"
+              fill={CHART_BAR_INK}
               maxBarSize={MAX_BAR_SIZE}
               radius={HORIZONTAL_BAR_RADIUS}
               isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -631,8 +632,8 @@ function DwellMiniChart(props: {
 
   if (filtered.length === 0) {
     return (
-      <div className="flex flex-col gap-[var(--space-2)]">
-        <h4 className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">{title}</h4>
+      <div>
+        <CardGroupLabel>{title}</CardGroupLabel>
         <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
           Nothing to show for this slice yet.
         </p>
@@ -650,24 +651,16 @@ function DwellMiniChart(props: {
     .map((row) => `${row.stageName} ${formatDays(row[valueKey])} days`)
     .join(", ")}`;
 
-  const height = Math.max(140, Math.min(320, filtered.length * 36));
-
   return (
-    <div className="flex flex-col gap-[var(--space-2)]">
-      <h4 className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">{title}</h4>
-      <ChartFigure ariaLabel={ariaLabel} height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
-          <CartesianGrid horizontal={false} vertical strokeDasharray="" stroke={CHART_GRID_STROKE} />
-          <XAxis
-            type="number"
-            tick={CHART_TICK_STYLE}
-            axisLine={CHART_AXIS_LINE}
-            tickLine={CHART_TICK_LINE}
-          />
+    <div>
+      <CardGroupLabel>{title}</CardGroupLabel>
+      <ChartFigure ariaLabel={ariaLabel} height={barChartHeight(filtered.length)}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 44, bottom: 0, left: 0 }}>
+          <XAxis type="number" hide />
           <YAxis
             type="category"
             dataKey="name"
-            width={96}
+            width={104}
             tick={CHART_TICK_STYLE}
             axisLine={CHART_AXIS_LINE}
             tickLine={CHART_TICK_LINE}
@@ -754,7 +747,7 @@ function DwellCard(props: { rows: DwellRow[] }) {
       emptyDescription="How long deals sit in each stage shows up here once some finish or some start waiting."
       csv={csv}
       chart={
-        <div className="grid grid-cols-2 gap-[var(--space-6)]">
+        <div className="grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-2">
           <DwellMiniChart title="Time in stage (finished)" rows={rows} valueKey="averageDays" />
           <DwellMiniChart
             title="Open deals waiting now"

@@ -7,12 +7,20 @@
  * Everything the loser owned moves either way: activities, tasks, deals, tags,
  * custom values, attachments, phones and emails (src/db/repos/merge.ts). Only
  * the fields on the record itself are a choice.
+ *
+ * Both choices are marked the way a native list marks a selection: the
+ * --color-selected tint and full-strength ink, never a coloured border
+ * (docs/DESIGN.md §9). The field choices are one grouped inset list under a
+ * small-capitals label rather than a grid of outlined boxes.
  */
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowsLeftRight } from "@/ui/icons";
 import {
   Button,
+  Card,
+  CardGroupLabel,
+  CardRow,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -66,6 +74,7 @@ export function MergeDialog(props: {
 
   const survivorSide = survivor === "a" ? pair.a : pair.b;
   const loserSide = survivor === "a" ? pair.b : pair.a;
+  const differing = (fields.data ?? []).filter((field) => field.differs);
 
   async function confirm() {
     if (!pair) return;
@@ -87,7 +96,9 @@ export function MergeDialog(props: {
     <Dialog open={pair !== null} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Merge these two {pair.entityType === "contact" ? "people" : "companies"}?</DialogTitle>
+          <DialogTitle>
+            Merge these two {pair.entityType === "contact" ? "people" : "companies"}?
+          </DialogTitle>
           <DialogDescription>
             They share the same {pair.matchedOn}: <strong>{pair.value}</strong>. Keeping{" "}
             <strong>{survivorSide.label}</strong>; {loserSide.label} goes to the trash
@@ -95,95 +106,106 @@ export function MergeDialog(props: {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-[var(--space-4)]">
-          <div className="grid grid-cols-2 gap-[var(--space-3)]">
-            {(["a", "b"] as Side[]).map((side) => {
-              const record = side === "a" ? pair.a : pair.b;
-              const active = survivor === side;
-              return (
-                <button
-                  key={side}
-                  type="button"
-                  onClick={() => setSurvivor(side)}
-                  aria-pressed={active}
-                  className={[
-                    "flex flex-col gap-[var(--space-1)] rounded-[var(--radius-md)] border p-[var(--space-3)] text-left",
-                    "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
-                    active
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
-                      : "border-[var(--color-border)] hover:bg-[var(--color-surface)]",
-                  ].join(" ")}
-                >
-                  <span className="text-[length:var(--text-xs)] uppercase tracking-wide text-[var(--color-text-muted)]">
-                    {active ? "Keeping this one" : "Keep this one instead"}
-                  </span>
-                  <span className="text-[length:var(--text-base)] font-semibold text-[var(--color-text)]">
-                    {record.label}
-                  </span>
-                  <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                    {record.detail}
-                  </span>
-                </button>
-              );
-            })}
+        <div className="flex flex-col gap-[var(--space-6)]">
+          <div>
+            <CardGroupLabel>Which record stays</CardGroupLabel>
+            <div className="grid grid-cols-2 gap-[var(--space-3)]">
+              {(["a", "b"] as Side[]).map((side) => {
+                const record = side === "a" ? pair.a : pair.b;
+                const active = survivor === side;
+                return (
+                  <button
+                    key={side}
+                    type="button"
+                    onClick={() => setSurvivor(side)}
+                    aria-pressed={active}
+                    className={[
+                      "flex flex-col gap-[var(--space-1)] p-[var(--space-4)] text-left",
+                      "rounded-[var(--radius-lg)] border",
+                      "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+                      "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
+                      active
+                        ? "border-[var(--color-border-strong)] bg-[var(--color-selected)]"
+                        : "border-[var(--color-border)] hover:bg-[var(--color-hover)]",
+                    ].join(" ")}
+                  >
+                    <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                      {active ? "Keeping this one" : "Keep this one instead"}
+                    </span>
+                    <span
+                      title={record.label}
+                      className="truncate text-[length:var(--text-lg)] font-semibold leading-[var(--leading-tight)] text-[var(--color-text)]"
+                    >
+                      {record.label}
+                    </span>
+                    <span className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                      {record.detail}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {fields.isLoading ? (
-            <div className="flex items-center gap-[var(--space-2)] py-[var(--space-4)]">
-              <Spinner size={16} /> <span>Reading both records…</span>
+            <div className="flex items-center gap-[var(--space-3)] py-[var(--space-4)]">
+              <Spinner size={18} />
+              <span className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+                Reading both records…
+              </span>
             </div>
+          ) : differing.length === 0 ? (
+            <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+              Every field is the same on both records, so there is nothing to
+              choose.
+            </p>
           ) : (
-            <div className="flex flex-col gap-[var(--space-2)]">
-              {(fields.data ?? [])
-                .filter((field) => field.differs)
-                .map((field) => {
+            <div>
+              <CardGroupLabel>Which value wins</CardGroupLabel>
+              <Card>
+                {differing.map((field) => {
                   const chosen = choice[field.column] ?? survivor;
                   return (
-                    <fieldset
-                      key={field.column}
-                      className="grid grid-cols-[140px_1fr_1fr] items-center gap-[var(--space-2)] border-0 p-0 m-0"
-                    >
-                      <legend className="sr-only">{field.label}</legend>
-                      <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                        {field.label}
-                      </span>
-                      {(["a", "b"] as Side[]).map((side) => (
-                        <label
-                          key={side}
-                          className={[
-                            "flex cursor-pointer items-center gap-[var(--space-2)] rounded-[var(--radius-sm)]",
-                            "border px-[var(--space-2)] py-[var(--space-1)]",
-                            chosen === side
-                              ? "border-[var(--color-accent)] bg-[var(--color-accent-soft)]"
-                              : "border-[var(--color-border)]",
-                          ].join(" ")}
-                        >
-                          <input
-                            type="radio"
-                            name={`merge-${field.column}`}
-                            checked={chosen === side}
-                            onChange={() =>
-                              setChoice((c) => ({ ...c, [field.column]: side }))
-                            }
-                            className="accent-[var(--color-accent)]"
-                            aria-label={`${field.label}: keep "${
-                              side === "a" ? field.aValue : field.bValue
-                            }"`}
-                          />
-                          <span className="truncate text-[length:var(--text-sm)] text-[var(--color-text)]">
-                            {valueText(side === "a" ? field.aValue : field.bValue)}
-                          </span>
-                        </label>
-                      ))}
-                    </fieldset>
+                    <CardRow key={field.column}>
+                      <fieldset className="m-0 grid w-full grid-cols-[9rem_1fr_1fr] items-center gap-[var(--space-3)] border-0 p-0">
+                        <legend className="sr-only">{field.label}</legend>
+                        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                          {field.label}
+                        </span>
+                        {(["a", "b"] as Side[]).map((side) => (
+                          <label
+                            key={side}
+                            className={[
+                              "flex min-w-0 cursor-pointer items-center gap-[var(--space-2)]",
+                              "rounded-[var(--radius-md)] px-[var(--space-2)] py-[var(--space-1)]",
+                              "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
+                              chosen === side
+                                ? "bg-[var(--color-selected)] text-[var(--color-text)]"
+                                : "text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]",
+                            ].join(" ")}
+                          >
+                            <input
+                              type="radio"
+                              name={`merge-${field.column}`}
+                              checked={chosen === side}
+                              onChange={() =>
+                                setChoice((c) => ({ ...c, [field.column]: side }))
+                              }
+                              className="flex-none accent-[var(--color-accent)]"
+                              aria-label={`${field.label}: keep "${
+                                side === "a" ? field.aValue : field.bValue
+                              }"`}
+                            />
+                            <span className="truncate text-[length:var(--text-sm)]">
+                              {valueText(side === "a" ? field.aValue : field.bValue)}
+                            </span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    </CardRow>
                   );
                 })}
-              {(fields.data ?? []).every((f) => !f.differs) ? (
-                <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  Every field is the same on both records, so there is nothing to
-                  choose.
-                </p>
-              ) : null}
+              </Card>
             </div>
           )}
         </div>
@@ -195,8 +217,9 @@ export function MergeDialog(props: {
           <Button
             variant="primary"
             loading={busy}
+            loadingLabel="Merging…"
             onClick={() => void confirm()}
-            iconLeft={<ArrowLeftRight size={16} aria-hidden="true" />}
+            iconLeft={<ArrowsLeftRight size={16} weight="bold" aria-hidden="true" />}
           >
             Merge into {survivorSide.label}
           </Button>

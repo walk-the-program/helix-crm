@@ -3,10 +3,11 @@
  * refused when it is (docs/PLAN.md item 15).
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Undo2 } from "lucide-react";
+import { Undo2 } from "@/ui/icons";
 import {
   Badge,
   Button,
+  Card,
   EmptyState,
   Table,
   TBody,
@@ -73,7 +74,7 @@ export function MergesHistory() {
         A merge can be reversed for {MERGE_REVERSAL_DAYS} days, as long as the
         surviving record has not been merged again since.
       </p>
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)]">
+      <Card className="overflow-hidden">
         <Table>
           <THead>
             <TR>
@@ -85,19 +86,25 @@ export function MergesHistory() {
               <TH align="right">Reverse</TH>
             </TR>
           </THead>
-          <TBody>
+          <TBody className="[&>tr:last-child]:border-b-0">
             {rows.map((row) => (
               <TR key={row.id}>
                 <TD>{formatDateTimeDisplay(row.at)}</TD>
                 <TD>{row.entityType === "contact" ? "Person" : "Company"}</TD>
                 <TD>
-                  <code className="font-[family-name:var(--font-mono)] text-[length:var(--text-xs)]">
-                    {row.survivorId.slice(0, 8)}
+                  <code
+                    title={row.survivorId}
+                    className="font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]"
+                  >
+                    {row.survivorId.slice(-6)}
                   </code>
                 </TD>
                 <TD>
-                  <code className="font-[family-name:var(--font-mono)] text-[length:var(--text-xs)]">
-                    {row.loserId.slice(0, 8)}
+                  <code
+                    title={row.loserId}
+                    className="font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]"
+                  >
+                    {row.loserId.slice(-6)}
                   </code>
                 </TD>
                 <TD>
@@ -112,7 +119,7 @@ export function MergesHistory() {
                 <TD align="right">
                   {row.refusal ? (
                     <Tooltip content={row.refusal}>
-                      <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                      <span className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
                         {row.reversedAt ? "Already undone" : "Cannot undo"}
                       </span>
                     </Tooltip>
@@ -121,7 +128,7 @@ export function MergesHistory() {
                       size="sm"
                       variant="secondary"
                       onClick={() => void undo(row)}
-                      iconLeft={<Undo2 size={14} aria-hidden="true" />}
+                      iconLeft={<Undo2 size={16} weight="bold" aria-hidden="true" />}
                     >
                       Reverse
                     </Button>
@@ -131,7 +138,7 @@ export function MergesHistory() {
             ))}
           </TBody>
         </Table>
-      </div>
+      </Card>
     </div>
   );
 }

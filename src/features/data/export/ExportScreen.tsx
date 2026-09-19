@@ -1,20 +1,18 @@
 /**
- * The "/export" screen: one card per entity with its live row count and a
- * CSV button, plus a prominent "export everything" zip action. Every write
- * goes through exportRun.ts, which itself only ever touches the filesystem
- * through fsBridge (the dialog, then the write).
+ * The "/export" screen: one grouped list for the "everything" zip and one for
+ * per-entity CSVs, each with its live row count. Every write goes through
+ * exportRun.ts, which itself only ever touches the filesystem through
+ * fsBridge (the dialog, then the write).
  */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Archive, Download } from "lucide-react";
+import { Archive, Download } from "@/ui/icons";
 import {
   Button,
   Card,
-  CardBody,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+  CardGroupLabel,
+  CardRow,
   EmptyState,
   PageHeader,
   toast,
@@ -79,89 +77,83 @@ export function ExportScreen() {
   }
 
   return (
-    <div>
+    <div className="flex flex-col">
       <PageHeader
         title="Export"
         subtitle="This data is yours to take. Export any list as CSV, or everything at once."
       />
-      <div className="flex flex-col gap-[var(--space-5)] pt-[var(--space-6)]">
+      <div className="flex flex-col gap-[var(--space-6)]">
         {isEmpty ? (
           <EmptyState
             title="Nothing to export yet"
-            description={
-              <>
-                There is nothing in this workspace yet.{" "}
-                <Link
-                  href="/import"
-                  className="text-[var(--color-accent)] underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2"
-                >
-                  Import your data
-                </Link>{" "}
-                to get started.
-              </>
+            description="There is nothing in this workspace yet."
+            action={
+              <Link href="/import">
+                <Button variant="primary">Import your data</Button>
+              </Link>
             }
           />
         ) : (
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle>Export everything</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  One .zip containing a CSV for every entity - contacts, companies, deals,
-                  tasks and activities - plus a full JSON dump of the whole workspace.
-                </p>
-              </CardBody>
-              <CardFooter>
-                <Button
-                  variant="primary"
-                  iconLeft={
-                    <Archive className="w-[var(--space-4)] h-[var(--space-4)]" aria-hidden="true" />
-                  }
-                  loading={savingZip}
-                  onClick={handleExportEverything}
-                >
-                  Export everything (.zip)
-                </Button>
-              </CardFooter>
-            </Card>
+            <div>
+              <CardGroupLabel>Everything</CardGroupLabel>
+              <Card>
+                <CardRow>
+                  <div className="flex min-w-0 max-w-[var(--content-max)] flex-col gap-[var(--space-1)]">
+                    <span className="font-medium text-[var(--color-text)]">
+                      Everything, as one file
+                    </span>
+                    <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                      One .zip containing a CSV for every entity - contacts, companies, deals,
+                      tasks and activities - plus a full JSON dump of the whole workspace.
+                    </span>
+                  </div>
+                  <Button
+                    variant="primary"
+                    iconLeft={<Archive size={16} weight="bold" aria-hidden="true" />}
+                    loading={savingZip}
+                    onClick={handleExportEverything}
+                  >
+                    Export everything (.zip)
+                  </Button>
+                </CardRow>
+              </Card>
+            </div>
 
-            <div className="grid grid-cols-1 gap-[var(--space-4)] sm:grid-cols-2 lg:grid-cols-3">
-              {EXPORT_ENTITIES.map((entity) => {
-                const count = counts ? counts[entity] : null;
-                return (
-                  <Card key={entity}>
-                    <CardHeader>
-                      <CardTitle>{entityLabel(entity)}</CardTitle>
-                    </CardHeader>
-                    <CardBody className="flex flex-col gap-[var(--space-1)]">
-                      <p className="text-[length:var(--text-2xl)] font-semibold tabular-nums text-[var(--color-text)]">
-                        {count === null ? "-" : count}
-                      </p>
-                      <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                        {count === 1 ? "record" : "records"}
-                      </p>
-                    </CardBody>
-                    <CardFooter>
-                      <Button
-                        variant="secondary"
-                        iconLeft={
-                          <Download
-                            className="w-[var(--space-4)] h-[var(--space-4)]"
-                            aria-hidden="true"
-                          />
-                        }
-                        loading={savingEntity === entity}
-                        disabled={count === 0}
-                        onClick={() => handleExportEntity(entity)}
-                      >
-                        Export CSV
-                      </Button>
-                    </CardFooter>
-                  </Card>
-                );
-              })}
+            <div>
+              <CardGroupLabel>By list</CardGroupLabel>
+              <Card>
+                {EXPORT_ENTITIES.map((entity) => {
+                  const count = counts ? counts[entity] : null;
+                  return (
+                    <CardRow key={entity}>
+                      <span className="font-medium text-[var(--color-text)]">
+                        {entityLabel(entity)}
+                      </span>
+                      <div className="flex items-center gap-[var(--space-3)]">
+                        <span className="text-[length:var(--text-sm)]">
+                          <span className="tabular-nums text-[var(--color-text-muted)]">
+                            {count === null ? "-" : count}
+                          </span>{" "}
+                          <span className="text-[var(--color-text-faint)]">
+                            {count === 1 ? "record" : "records"}
+                          </span>
+                        </span>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          iconLeft={<Download size={16} weight="bold" aria-hidden="true" />}
+                          loading={savingEntity === entity}
+                          disabled={count === 0}
+                          onClick={() => handleExportEntity(entity)}
+                        >
+                          Export CSV
+                        </Button>
+                      </div>
+                    </CardRow>
+                  );
+                })}
+              </Card>
             </div>
           </>
         )}

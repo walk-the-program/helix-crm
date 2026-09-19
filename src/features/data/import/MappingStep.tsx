@@ -5,10 +5,14 @@
  * so the owner can see what they are deciding about, and a select of every
  * field. "Create a custom field" asks for the name. Deal columns are called
  * out: v1 does not import deals.
+ *
+ * The state of the guess is a sentence rather than a tinted badge with a glyph
+ * in it, and the deal-column note is a sentence rather than a yellow box:
+ * "needs you" in this product is position and weight (docs/DESIGN.md §3), and
+ * neither of these needs the owner to do anything.
  */
 import { useMemo } from "react";
-import { AlertTriangle, Check, Wand2 } from "lucide-react";
-import { Badge, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/ui";
+import { Card, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/ui";
 import {
   FIELDS,
   allowsMultiple,
@@ -76,51 +80,36 @@ export function MappingStep(props: {
 
   return (
     <div className="flex flex-col gap-[var(--space-4)]">
-      <div className="flex flex-wrap items-center gap-[var(--space-3)]">
-        <Badge tone={remembered ? "accent" : "neutral"}>
-          {remembered ? (
-            <>
-              <Check size={12} aria-hidden="true" /> Using your last mapping for this file
-            </>
-          ) : (
-            <>
-              <Wand2 size={12} aria-hidden="true" /> Guessed from the column names
-            </>
-          )}
-        </Badge>
-        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          {summary.mapped} of {mapping.length} columns will be imported
-          {summary.skipped > 0 ? `, ${summary.skipped} skipped` : ""}.
-        </span>
-      </div>
-
-      {summary.missing.length > 0 ? (
-        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          Nothing is mapped to{" "}
-          {summary.missing.map((f) => fieldLabel(f).toLowerCase()).join(", ")}. That is
-          fine if the file does not have it.
+      <div className="flex flex-col gap-[var(--space-1)]">
+        <p className="text-[length:var(--text-base)] text-[var(--color-text)]">
+          {remembered
+            ? "Using your last mapping for this file"
+            : "Guessed from the column names"}
+          .{" "}
+          <span className="text-[var(--color-text-muted)]">
+            {summary.mapped} of {mapping.length} columns will be imported
+            {summary.skipped > 0 ? `, ${summary.skipped} skipped` : ""}.
+          </span>
         </p>
-      ) : null}
 
-      {dealColumns.length > 0 ? (
-        <div
-          role="note"
-          className="flex items-start gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-warning-soft)] px-[var(--space-4)] py-[var(--space-3)]"
-        >
-          <AlertTriangle
-            size={16}
-            className="mt-[2px] shrink-0 text-[var(--color-warning)]"
-            aria-hidden="true"
-          />
-          <p className="text-[length:var(--text-sm)] text-[var(--color-text)]">
+        {summary.missing.length > 0 ? (
+          <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            Nothing is mapped to{" "}
+            {summary.missing.map((f) => fieldLabel(f).toLowerCase()).join(", ")}. That is
+            fine if the file does not have it.
+          </p>
+        ) : null}
+
+        {dealColumns.length > 0 ? (
+          <p role="note" className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             This file has deal columns ({dealColumns.join(", ")}). Helix imports
             people and companies in this version; deals are not imported, so
             those columns stay on Skip. You can add the deals by hand afterwards.
           </p>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)]">
+      <Card className="overflow-hidden">
         <Table>
           <THead>
             <TR>
@@ -129,7 +118,7 @@ export function MappingStep(props: {
               <TH>Import as</TH>
             </TR>
           </THead>
-          <TBody>
+          <TBody className="[&>tr:last-child]:border-b-0">
             {mapping.map((column) => {
               const sample = sampleFor(sampleRows, column.index);
               const options = FIELDS.map((field) => ({
@@ -139,24 +128,18 @@ export function MappingStep(props: {
               }));
               return (
                 <TR key={`${column.header}-${column.index}`}>
-                  <TD>
-                    <span className="font-medium text-[var(--color-text)]">
-                      {column.header.length > 0 ? column.header : "(unnamed column)"}
-                    </span>
+                  <TD primary title={column.header}>
+                    {column.header.length > 0 ? column.header : "(unnamed column)"}
                   </TD>
-                  <TD>
-                    <span className="text-[var(--color-text-muted)]">
-                      {sample.length > 0 ? sample : "—"}
-                    </span>
-                  </TD>
-                  <TD>
-                    <div className="flex items-center gap-[var(--space-2)]">
+                  <TD muted>{sample.length > 0 ? sample : "—"}</TD>
+                  <TD className="w-[34%]">
+                    <div className="flex max-w-[22rem] items-center gap-[var(--space-2)]">
                       <Select
                         value={column.field}
                         onValueChange={(v) => setField(column.index, v as FieldId)}
                         options={options}
                         ariaLabel={`Import "${column.header}" as`}
-                        className="w-[220px]"
+                        className="min-w-0 flex-1"
                       />
                       {column.field === "custom" ? (
                         <Input
@@ -164,7 +147,7 @@ export function MappingStep(props: {
                           onChange={(e) => setCustomName(column.index, e.target.value)}
                           aria-label={`Name of the custom field for "${column.header}"`}
                           placeholder="Field name"
-                          className="w-[180px]"
+                          className="min-w-0 flex-1"
                         />
                       ) : null}
                     </div>
@@ -174,7 +157,7 @@ export function MappingStep(props: {
             })}
           </TBody>
         </Table>
-      </div>
+      </Card>
     </div>
   );
 }

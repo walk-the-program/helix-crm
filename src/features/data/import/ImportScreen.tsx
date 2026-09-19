@@ -7,11 +7,16 @@
  *
  * Nothing is written before "Import": the file is read, sniffed and mapped in
  * memory, and the write happens in one transaction (see lib/importRun.ts).
+ *
+ * The shape is a macOS setup assistant (docs/DESIGN.md §1): a quiet trail of
+ * step names in the canvas, one panel of content under it, and the two buttons
+ * that move the assistant pinned to the bottom right - Back, then the single
+ * black button for the step. Nothing is coloured and nothing is a pill.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Upload } from "lucide-react";
-import { Button, EmptyState, PageHeader, Spinner, toast } from "@/ui";
+import { ArrowLeft, ArrowRight, Upload } from "@/ui/icons";
+import { Button, Card, CardBody, EmptyState, PageHeader, Spinner, toast } from "@/ui";
 import {
   ImportParseError,
   delimiterLabel,
@@ -46,38 +51,85 @@ const STEP_LABELS: { id: Step; label: string }[] = [
 
 const PREVIEW_ROWS = 20;
 
+/**
+ * Where the owner is, in words.
+ *
+ * The old trail was four tinted pills, one of them green - four filled shapes
+ * and two colours to say one thing. A native assistant states the step names
+ * in a row and lets weight and ink carry the position: the current step is
+ * full-strength ink at weight 500, the ones behind it are secondary, the ones
+ * ahead are tertiary, and a hairline joins them.
+ */
 function StepTrail({ step }: { step: Step }) {
   const current = step === "running" ? "preview" : step;
   const index = STEP_LABELS.findIndex((s) => s.id === current);
+
   return (
-    <ol className="flex flex-wrap items-center gap-[var(--space-2)]">
-      {STEP_LABELS.map((entry, i) => {
-        const state = i < index ? "done" : i === index ? "current" : "todo";
-        return (
-          <li key={entry.id} className="flex items-center gap-[var(--space-2)]">
-            <span
-              aria-current={state === "current" ? "step" : undefined}
-              className={[
-                "rounded-[var(--radius-full)] px-[var(--space-3)] py-[var(--space-1)]",
-                "text-[length:var(--text-xs)] font-medium",
-                state === "current"
-                  ? "bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
-                  : state === "done"
-                    ? "bg-[var(--color-success-soft)] text-[var(--color-success)]"
-                    : "text-[var(--color-text-faint)]",
-              ].join(" ")}
-            >
-              {i + 1}. {entry.label}
-            </span>
-            {i < STEP_LABELS.length - 1 ? (
-              <span aria-hidden="true" className="text-[var(--color-text-faint)]">
-                ›
+    <nav aria-label="Import steps">
+      <ol className="flex flex-wrap items-center gap-[var(--space-3)] text-[length:var(--text-sm)]">
+        {STEP_LABELS.map((entry, i) => {
+          const state = i < index ? "done" : i === index ? "current" : "todo";
+          return (
+            <li key={entry.id} className="flex items-center gap-[var(--space-3)]">
+              <span
+                aria-current={state === "current" ? "step" : undefined}
+                className={
+                  state === "current"
+                    ? "font-medium text-[var(--color-text)]"
+                    : state === "done"
+                      ? "text-[var(--color-text-muted)]"
+                      : "text-[var(--color-text-faint)]"
+                }
+              >
+                {entry.label}
               </span>
-            ) : null}
-          </li>
-        );
-      })}
-    </ol>
+              {i < STEP_LABELS.length - 1 ? (
+                <span
+                  aria-hidden="true"
+                  className="h-[var(--hairline)] w-[var(--space-5)] flex-none bg-[var(--color-border-strong)]"
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+/** Back on the left of the pair, the one black button on the right. */
+function StepFooter(props: {
+  onBack: () => void;
+  backLabel: string;
+  onNext: () => void;
+  nextLabel: string;
+  nextIcon: "continue" | "import";
+}) {
+  const { onBack, backLabel, onNext, nextLabel, nextIcon } = props;
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-[var(--space-2)]">
+      <Button
+        variant="secondary"
+        onClick={onBack}
+        iconLeft={<ArrowLeft size={16} weight="bold" aria-hidden="true" />}
+      >
+        {backLabel}
+      </Button>
+      <Button
+        variant="primary"
+        onClick={onNext}
+        iconLeft={
+          nextIcon === "import" ? <Upload size={16} weight="bold" aria-hidden="true" /> : undefined
+        }
+        iconRight={
+          nextIcon === "continue" ? (
+            <ArrowRight size={16} weight="bold" aria-hidden="true" />
+          ) : undefined
+        }
+      >
+        {nextLabel}
+      </Button>
+    </div>
   );
 }
 
@@ -87,17 +139,21 @@ function ParseFailure(props: { error: ImportParseError; onRetry: () => void }) {
     <EmptyState
       title="Helix could not read that file"
       description={
-        <span className="flex flex-col gap-[var(--space-2)]">
+        <span className="flex flex-col items-center gap-[var(--space-3)]">
           <span>{error.message}</span>
           {error.sample ? (
-            <code className="rounded-[var(--radius-sm)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)]">
+            <code className="rounded-[var(--radius-sm)] bg-[var(--color-accent-soft)] px-[var(--space-2)] py-[var(--space-1)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
               {error.sample}
             </code>
           ) : null}
           <span>Fix that row in a spreadsheet, save it again, and try once more.</span>
         </span>
       }
-      action={<Button onClick={onRetry}>Choose another file</Button>}
+      action={
+        <Button variant="primary" onClick={onRetry}>
+          Choose another file
+        </Button>
+      }
     />
   );
 }
@@ -218,7 +274,7 @@ export function ImportScreen() {
     : "Bring a spreadsheet or another CRM in.";
 
   return (
-    <div className="flex flex-col gap-[var(--space-6)]">
+    <div className="flex flex-col">
       <PageHeader
         title="Import"
         subtitle={subtitle}
@@ -246,7 +302,11 @@ export function ImportScreen() {
           <EmptyState
             title="This file has headers but no rows"
             description="There is nothing to import yet. Add some rows in your spreadsheet and save it again."
-            action={<Button onClick={reset}>Choose another file</Button>}
+            action={
+              <Button variant="primary" onClick={reset}>
+                Choose another file
+              </Button>
+            }
           />
         ) : null}
 
@@ -263,18 +323,13 @@ export function ImportScreen() {
               remembered={remembered}
               onChange={setMapping}
             />
-            <div className="flex justify-between gap-[var(--space-3)]">
-              <Button variant="ghost" onClick={reset} iconLeft={<ArrowLeft size={16} />}>
-                Choose another file
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => setStep("preview")}
-                iconRight={<ArrowRight size={16} />}
-              >
-                Preview 20 rows
-              </Button>
-            </div>
+            <StepFooter
+              onBack={reset}
+              backLabel="Back"
+              onNext={() => setStep("preview")}
+              nextLabel="Continue"
+              nextIcon="continue"
+            />
           </>
         ) : null}
 
@@ -286,53 +341,45 @@ export function ImportScreen() {
               policy={policy}
               onPolicyChange={setPolicy}
             />
-            <div className="flex justify-between gap-[var(--space-3)]">
-              <Button
-                variant="ghost"
-                onClick={() => setStep("map")}
-                iconLeft={<ArrowLeft size={16} />}
-              >
-                Back to the columns
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={() => void startImport()}
-                iconLeft={<Upload size={16} />}
-              >
-                Import
-              </Button>
-            </div>
+            <StepFooter
+              onBack={() => setStep("map")}
+              backLabel="Back"
+              onNext={() => void startImport()}
+              nextLabel="Import"
+              nextIcon="import"
+            />
           </>
         ) : null}
 
         {step === "running" ? (
-          <div className="flex flex-col gap-[var(--space-4)]">
-            <div className="flex items-center gap-[var(--space-3)]">
-              <Spinner size={18} />
-              <span className="text-[length:var(--text-base)] text-[var(--color-text)]">
-                {progress?.phase === "reading"
-                  ? "Reading your file…"
-                  : "Writing to your workspace…"}
-              </span>
-            </div>
-            <ProgressBar
-              label={
-                progress?.phase === "reading"
-                  ? "Rows read"
-                  : `Rows imported (${(progress?.processed ?? 0).toLocaleString()} of ${(
-                      progress?.total ?? 0
-                    ).toLocaleString()})`
-              }
-              value={progress?.processed ?? 0}
-              max={progress?.total ?? 0}
-              indeterminate={progress?.phase === "reading"}
-            />
-            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              It all goes in at once, so if anything fails nothing is left half
-              imported. Other changes wait until this finishes.
-            </p>
-          </div>
+          <Card>
+            <CardBody className="flex flex-col gap-[var(--space-5)] p-[var(--space-6)]">
+              <div className="flex items-center gap-[var(--space-3)]">
+                <Spinner size={18} />
+                <span className="text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
+                  {progress?.phase === "reading"
+                    ? "Reading your file…"
+                    : "Writing to your workspace…"}
+                </span>
+              </div>
+              <ProgressBar
+                label={
+                  progress?.phase === "reading"
+                    ? "Rows read"
+                    : `Rows imported (${(progress?.processed ?? 0).toLocaleString()} of ${(
+                        progress?.total ?? 0
+                      ).toLocaleString()})`
+                }
+                value={progress?.processed ?? 0}
+                max={progress?.total ?? 0}
+                indeterminate={progress?.phase === "reading"}
+              />
+              <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                It all goes in at once, so if anything fails nothing is left half
+                imported. Other changes wait until this finishes.
+              </p>
+            </CardBody>
+          </Card>
         ) : null}
 
         {step === "result" && result ? (

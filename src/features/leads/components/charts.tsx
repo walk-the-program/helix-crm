@@ -3,10 +3,26 @@
  *
  * Every report chart is a recharts `BarChart`, so the pieces that would
  * otherwise be copy-pasted five times live here instead: the mark specs, the
- * axis/grid styling (read from design tokens, never a hardcoded hex), the
- * accessible figure wrapper, and a tooltip content renderer that follows the
- * dataviz skill's rule that values lead and labels follow, keyed by a short
- * line of the series colour rather than a filled box.
+ * axis styling, the accessible figure wrapper, and a tooltip content renderer
+ * that follows the dataviz skill's rule that values lead and labels follow,
+ * keyed by a short line of the series colour rather than a filled box.
+ *
+ * Colour (docs/DESIGN.md §5). A chart is not allowed its own palette:
+ *
+ *   - a series whose category IS a pipeline stage takes that stage's own
+ *     muted colour, which the stage row already carries as `var(--stage-N)`;
+ *   - every other bar is ink. One series is full-strength ink; a second series
+ *     beside it is tertiary ink. Two steps of one grey ramp separate them, and
+ *     the words are in the legend and on the bars either way.
+ *
+ * Every value here is a `var(--token)` string rather than a literal, so the
+ * marks follow the theme: a presentation attribute is parsed as CSS, so
+ * `fill="var(--color-text)"` resolves against whatever `data-theme` is on the
+ * document, and the dark theme's charts need no second code path.
+ *
+ * There are no gridlines and no value axis anywhere in these reports. Every
+ * bar carries its own number at the end of it, so a grid would be a second,
+ * fainter copy of information the label already states exactly.
  */
 import type { ReactElement } from "react";
 import { ResponsiveContainer } from "recharts";
@@ -30,30 +46,48 @@ import type { NameType, ValueType } from "recharts/types/component/DefaultToolti
 export const CHART_ANIMATION_ACTIVE = false;
 
 /** Bars are never thicker than this, per the mark spec. */
-export const MAX_BAR_SIZE = 24;
+export const MAX_BAR_SIZE = 20;
 
 /** Rounded on the data end only, square at the baseline. */
 export const HORIZONTAL_BAR_RADIUS: [number, number, number, number] = [0, 4, 4, 0];
 export const VERTICAL_BAR_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
 
-/** The 2px surface-coloured gap between adjacent bars in a group. */
+/** The surface-coloured gap between adjacent bars in a group. */
 export const CHART_BAR_GAP = 2;
 
-/** Gridlines are hairline, solid and belong on the value axis only. */
-export const CHART_GRID_STROKE = "var(--color-border)";
+/** The one bar colour: the page's own ink. */
+export const CHART_BAR_INK = "var(--color-text)";
 
-/** Axis line, tick line and tick text all read from the same muted tokens. */
-export const CHART_AXIS_LINE = { stroke: "var(--color-border)" };
-export const CHART_TICK_LINE = { stroke: "var(--color-border)" };
+/** The second series beside it, two steps down the same grey ramp. */
+export const CHART_BAR_INK_SECONDARY = "var(--color-text-faint)";
+
+/**
+ * No axis line and no tick line.
+ *
+ * A horizontal bar chart already has a baseline: the left edge every bar starts
+ * from. Drawing a rule down it adds a second one, and on a chart with one or
+ * two categories that rule runs the full height of the plot with nothing
+ * beside it, which reads as a stray mark rather than an axis.
+ */
+export const CHART_AXIS_LINE = false as const;
+export const CHART_TICK_LINE = false as const;
+
+/** Axis text is secondary grey, at the meta size, with tabular figures. */
 export const CHART_TICK_STYLE = {
   fill: "var(--color-text-muted)",
   fontSize: "var(--text-xs)",
+  fontVariantNumeric: "tabular-nums lining-nums",
 } as const;
 
-/** Selective direct labels use the same muted ink as axis ticks, never the mark colour. */
+/**
+ * The number at the end of a bar. It is data, so it carries full-strength ink
+ * and tabular figures - the axis grey belongs to the labels around it, not to
+ * the figure itself.
+ */
 export const CHART_LABEL_STYLE = {
-  fill: "var(--color-text-muted)",
+  fill: "var(--color-text)",
   fontSize: "var(--text-xs)",
+  fontVariantNumeric: "tabular-nums lining-nums",
 } as const;
 
 /**
@@ -76,9 +110,12 @@ export function ChartFigure(props: { ariaLabel: string; height: number; children
 /**
  * Custom tooltip content, styled from tokens instead of recharts' default
  * inline styles. The value is the strong element and the series name is
- * secondary (the reverse of the legend), and each row is keyed by a short
- * stroke of the series colour rather than a filled swatch, per the dataviz
- * skill's "line keys, not boxes" rule at tooltip density.
+ * secondary (the reverse of the legend), and each row is keyed by a hairline
+ * of the series colour rather than a filled swatch, per the dataviz skill's
+ * "line keys, not boxes" rule at tooltip density.
+ *
+ * A tooltip is a floating layer, so it is the one thing on this screen allowed
+ * to cast the product's single shadow.
  */
 export function ChartTooltipContent(
   props: TooltipContentProps<ValueType, NameType> & {
@@ -92,7 +129,7 @@ export function ChartTooltipContent(
     <div
       className={[
         "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
-        "bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]",
+        "bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]",
         "px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)]",
       ].join(" ")}
     >
@@ -107,7 +144,7 @@ export function ChartTooltipContent(
             <div key={key} className="flex items-center gap-[var(--space-2)]">
               <span
                 aria-hidden="true"
-                className="inline-block h-[2px] w-[var(--space-3)] shrink-0"
+                className="inline-block h-[var(--hairline)] w-[var(--space-3)] shrink-0"
                 style={{ backgroundColor: entry.color ?? "var(--color-text-muted)" }}
               />
               <span className="text-[var(--color-text-muted)]">{entry.name}</span>

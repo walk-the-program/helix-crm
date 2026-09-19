@@ -4,19 +4,16 @@
  *
  *   onBoot  -> poller.start()      after the first paint, idempotent
  *   /reports          the five reports over the SQL views in 0002_report_views
- *   /settings/site    the site connection
  *
- * "/settings/site" belongs to the settings area's URL space, so
- * `SiteConnectionScreen` is exported for the settings feature to mount. It is
- * registered here as well, and the registry puts this feature ahead of
- * settings, so wouter's Switch matches this exact path before settings'
- * "/settings/:section" catch-all. When settings mounts it, this route can go.
+ * The site connection screen has no route of its own here. "/settings/site"
+ * belongs to the settings area's URL space, so `SiteConnectionScreen` is
+ * exported for the settings feature to mount there; the screen and everything
+ * behind it still live in this folder, which is the feature that owns them.
  */
 import type { FeatureModule } from "@/app/feature";
 import { NAV_ORDER } from "@/app/feature";
-import { BarChart3 } from "lucide-react";
+import { BarChart3 } from "@/ui/icons";
 import { ReportsScreen } from "@/features/leads/screens/ReportsScreen";
-import { SiteConnectionScreen } from "@/features/leads/screens/SiteConnectionScreen";
 import { start as startPoller } from "@/features/leads/poller";
 
 export { SiteConnectionScreen } from "@/features/leads/screens/SiteConnectionScreen";
@@ -33,10 +30,7 @@ export type { PollStatus } from "@/features/leads/lib/types";
 
 export const feature: FeatureModule = {
   id: "leads",
-  routes: [
-    { path: "/reports", element: <ReportsScreen /> },
-    { path: "/settings/site", element: <SiteConnectionScreen /> },
-  ],
+  routes: [{ path: "/reports", element: <ReportsScreen /> }],
   nav: [
     { label: "Reports", to: "/reports", icon: BarChart3, order: NAV_ORDER.reports },
   ],

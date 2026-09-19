@@ -5,17 +5,24 @@
  * what it found and re-runs it on demand. Merging is one dialog away, and the
  * 10-second Undo toast is the first line of defence - the history tab is the
  * second, for 30 days.
+ *
+ * The pairs are one grouped inset list rather than a stack of cards with a
+ * black button on each: a list of twelve primary buttons has no primary at all
+ * (docs/DESIGN.md §5), and the black button belongs to the merge dialog, which
+ * is where something actually happens.
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, RefreshCw, Users } from "lucide-react";
+import { ArrowsClockwise, Users } from "@/ui/icons";
 import {
   Badge,
   Button,
   Card,
-  CardBody,
+  CardGroupLabel,
+  CardRow,
   EmptyState,
+  Field,
   PageHeader,
   Select,
   Tabs,
@@ -64,7 +71,8 @@ function matchLabel(pair: DuplicatePair): string {
   return "Same name";
 }
 
-function PairCard(props: {
+/** One candidate pair: what matched, the two records, and the two actions. */
+function PairRow(props: {
   pair: DuplicatePair;
   dismissed: boolean;
   onMerge: () => void;
@@ -75,41 +83,46 @@ function PairCard(props: {
     pair.entityType === "contact" ? `/contacts/${id}` : `/companies/${id}`;
 
   return (
-    <Card className={dismissed ? "opacity-60" : undefined}>
-      <CardBody className="flex flex-wrap items-center justify-between gap-[var(--space-4)]">
-        <div className="flex min-w-0 flex-col gap-[var(--space-2)]">
-          <div className="flex flex-wrap items-center gap-[var(--space-2)]">
-            <Badge tone="warning">{matchLabel(pair)}</Badge>
-            <span className="rounded-[var(--radius-sm)] bg-[var(--color-warning-soft)] px-[var(--space-2)] py-[var(--space-1)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text)]">
-              {pair.value}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-[var(--space-4)]">
-            {[pair.a, pair.b].map((side) => (
-              <div key={side.id} className="flex flex-col">
-                <Link
-                  href={href(side.id)}
-                  className="text-[length:var(--text-base)] font-medium text-[var(--color-accent)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2"
-                >
-                  {side.label}
-                </Link>
-                <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  {side.detail} · added {formatDateDisplay(side.createdAt)}
-                </span>
-              </div>
-            ))}
-          </div>
+    <CardRow className={dismissed ? "flex-wrap opacity-60" : "flex-wrap"}>
+      <div className="flex min-w-0 flex-1 flex-col gap-[var(--space-2)] py-[var(--space-2)]">
+        <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+          <Badge tone="neutral">{matchLabel(pair)}</Badge>
+          <span className="rounded-[var(--radius-sm)] bg-[var(--color-accent-soft)] px-[var(--space-2)] py-[1px] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+            {pair.value}
+          </span>
         </div>
-        <div className="flex items-center gap-[var(--space-2)]">
-          <Button variant="ghost" onClick={onDismiss}>
-            {dismissed ? "Show again" : "Not a duplicate"}
-          </Button>
-          <Button variant="primary" onClick={onMerge} disabled={dismissed}>
-            Review and merge
-          </Button>
+        {/* A grid, not a wrapping flex row: the second record has to start at
+            the same x on every row of the list, whatever the first one is
+            called. */}
+        <div className="grid grid-cols-1 gap-x-[var(--space-6)] gap-y-[var(--space-2)] sm:grid-cols-2">
+          {[pair.a, pair.b].map((side) => (
+            <div key={side.id} className="flex min-w-0 flex-col">
+              <Link
+                href={href(side.id)}
+                title={side.label}
+                className="truncate font-medium text-[var(--color-link)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+              >
+                {side.label}
+              </Link>
+              <span
+                title={side.detail}
+                className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+              >
+                {side.detail} · added {formatDateDisplay(side.createdAt)}
+              </span>
+            </div>
+          ))}
         </div>
-      </CardBody>
-    </Card>
+      </div>
+      <div className="flex flex-none items-center gap-[var(--space-2)]">
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
+          {dismissed ? "Show again" : "Not a duplicate"}
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onMerge} disabled={dismissed}>
+          Review and merge
+        </Button>
+      </div>
+    </CardRow>
   );
 }
 
@@ -194,12 +207,12 @@ export function DuplicatesScreen() {
   const hidden = (pairs.data ?? []).filter((p) => dismissed.has(p.key) && matchesFilters(p));
 
   return (
-    <div className="flex flex-col gap-[var(--space-6)]">
+    <div className="flex flex-col">
       <PageHeader
         title="Duplicates"
         subtitle="People and companies that look like the same record twice."
         actions={
-          <div className="flex items-end gap-[var(--space-2)]">
+          <div className="flex items-center gap-[var(--space-2)]">
             <ViewsToolbar
               entityType="contact"
               current={currentView}
@@ -209,7 +222,8 @@ export function DuplicatesScreen() {
               variant="secondary"
               onClick={() => void pairs.refetch()}
               loading={pairs.isFetching}
-              iconLeft={<RefreshCw size={16} aria-hidden="true" />}
+              loadingLabel="Scanning…"
+              iconLeft={<ArrowsClockwise size={16} weight="bold" aria-hidden="true" />}
             >
               Scan again
             </Button>
@@ -217,124 +231,125 @@ export function DuplicatesScreen() {
         }
       />
 
-      <div className="flex flex-wrap items-end gap-[var(--space-3)]">
-        <div className="w-[170px]">
-          <label
-            htmlFor="duplicate-entity-type"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Type
-          </label>
-          <Select
-            id="duplicate-entity-type"
-            ariaLabel="Filter by record type"
-            value={entityType}
-            options={[
-              { value: ALL, label: "Contacts and companies" },
-              { value: "contact", label: "Contacts" },
-              { value: "company", label: "Companies" },
-            ]}
-            onValueChange={setEntityType}
-          />
+      <div className="flex flex-col gap-[var(--space-6)]">
+        <div className="flex flex-wrap items-end gap-[var(--space-4)]">
+          <div className="w-[13rem]">
+            <Field label="Type" htmlFor="duplicate-entity-type">
+              <Select
+                id="duplicate-entity-type"
+                ariaLabel="Filter by record type"
+                value={entityType}
+                options={[
+                  { value: ALL, label: "Contacts and companies" },
+                  { value: "contact", label: "Contacts" },
+                  { value: "company", label: "Companies" },
+                ]}
+                onValueChange={setEntityType}
+              />
+            </Field>
+          </div>
+
+          <div className="w-[13rem]">
+            <Field label="Matched on" htmlFor="duplicate-matched-on">
+              <Select
+                id="duplicate-matched-on"
+                ariaLabel="Filter by what matched"
+                value={matchedOn}
+                options={[
+                  { value: ALL, label: "Any match" },
+                  { value: "email", label: "Same email" },
+                  { value: "phone", label: "Same phone number" },
+                  { value: "name", label: "Same name" },
+                ]}
+                onValueChange={setMatchedOn}
+              />
+            </Field>
+          </div>
         </div>
 
-        <div className="w-[170px]">
-          <label
-            htmlFor="duplicate-matched-on"
-            className="block text-[length:var(--text-sm)] font-medium text-[var(--color-text-muted)]"
-          >
-            Matched on
-          </label>
-          <Select
-            id="duplicate-matched-on"
-            ariaLabel="Filter by what matched"
-            value={matchedOn}
-            options={[
-              { value: ALL, label: "Any match" },
-              { value: "email", label: "Same email" },
-              { value: "phone", label: "Same phone number" },
-              { value: "name", label: "Same name" },
-            ]}
-            onValueChange={setMatchedOn}
-          />
-        </div>
-      </div>
+        <Tabs defaultValue="pairs">
+          <TabsList>
+            <TabsTrigger value="pairs">
+              Possible duplicates{found.length > 0 ? ` (${found.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="history">Merges</TabsTrigger>
+          </TabsList>
 
-      <Tabs defaultValue="pairs">
-        <TabsList>
-          <TabsTrigger value="pairs">
-            Possible duplicates{found.length > 0 ? ` (${found.length})` : ""}
-          </TabsTrigger>
-          <TabsTrigger value="history">Merges</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pairs">
-          {pairs.isLoading ? (
-            <p className="text-[var(--color-text-muted)]">Looking for duplicates…</p>
-          ) : found.length === 0 ? (
-            <EmptyState
-              icon={<CheckCircle2 size={32} aria-hidden="true" />}
-              title={
-                hidden.length > 0
-                  ? "Nothing left to look at"
-                  : "No duplicates to sort out"
-              }
-              description="Helix checks on every launch and once a day, matching on email address and phone number. Anything it finds shows up here."
-              action={
-                <Link href="/contacts">
-                  <Button iconLeft={<Users size={16} aria-hidden="true" />}>
-                    Back to contacts
-                  </Button>
-                </Link>
-              }
-            />
-          ) : (
-            <div className="flex flex-col gap-[var(--space-3)]">
-              {found.map((pair) => (
-                <PairCard
-                  key={pair.key}
-                  pair={pair}
-                  dismissed={false}
-                  onMerge={() => setActive(pair)}
-                  onDismiss={() =>
-                    setDismissed((set) => new Set(set).add(pair.key))
-                  }
-                />
-              ))}
-            </div>
-          )}
-
-          {hidden.length > 0 ? (
-            <details className="mt-[var(--space-5)]">
-              <summary className="cursor-pointer text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                {hidden.length} pair{hidden.length === 1 ? "" : "s"} you said were
-                not duplicates
-              </summary>
-              <div className="mt-[var(--space-3)] flex flex-col gap-[var(--space-3)]">
-                {hidden.map((pair) => (
-                  <PairCard
+          <TabsContent value="pairs">
+            {pairs.isLoading ? (
+              <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                Looking for duplicates…
+              </p>
+            ) : found.length === 0 ? (
+              <EmptyState
+                title={
+                  hidden.length > 0
+                    ? "Nothing left to look at"
+                    : "No duplicates to sort out"
+                }
+                description="Helix checks on every launch and once a day, matching on email address and phone number. Anything it finds shows up here."
+                action={
+                  <Link href="/contacts">
+                    <Button
+                      variant="primary"
+                      iconLeft={<Users size={16} weight="bold" aria-hidden="true" />}
+                    >
+                      Back to contacts
+                    </Button>
+                  </Link>
+                }
+              />
+            ) : (
+              <Card>
+                {found.map((pair) => (
+                  <PairRow
                     key={pair.key}
                     pair={pair}
-                    dismissed
+                    dismissed={false}
                     onMerge={() => setActive(pair)}
                     onDismiss={() =>
-                      setDismissed((set) => {
-                        const next = new Set(set);
-                        next.delete(pair.key);
-                        return next;
-                      })
+                      setDismissed((set) => new Set(set).add(pair.key))
                     }
                   />
                 ))}
-              </div>
-            </details>
-          ) : null}
-        </TabsContent>
+              </Card>
+            )}
 
-        <TabsContent value="history">
-          <MergesHistory />
-        </TabsContent>
-      </Tabs>
+            {hidden.length > 0 ? (
+              <details className="mt-[var(--space-6)]">
+                <summary className="cursor-default text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                  {hidden.length} pair{hidden.length === 1 ? "" : "s"} you said were
+                  not duplicates
+                </summary>
+                <div className="mt-[var(--space-3)]">
+                  <CardGroupLabel>Not duplicates</CardGroupLabel>
+                  <Card>
+                    {hidden.map((pair) => (
+                      <PairRow
+                        key={pair.key}
+                        pair={pair}
+                        dismissed
+                        onMerge={() => setActive(pair)}
+                        onDismiss={() =>
+                          setDismissed((set) => {
+                            const next = new Set(set);
+                            next.delete(pair.key);
+                            return next;
+                          })
+                        }
+                      />
+                    ))}
+                  </Card>
+                </div>
+              </details>
+            ) : null}
+          </TabsContent>
+
+          <TabsContent value="history">
+            <MergesHistory />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       <MergeDialog
         pair={active}

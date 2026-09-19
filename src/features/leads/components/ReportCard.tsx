@@ -7,6 +7,11 @@
  * screen's own view controls, but its state lives per card - each report
  * remembers its own choice independently, which is why `Tabs.Root` wraps
  * this whole component rather than living at the screen level.
+ *
+ * `data-report` names the card in the DOM. The leads e2e needs to scope its
+ * locators to one card, and it used to do that by matching the shadow class
+ * every card carried; cards cast no shadow any more (docs/DESIGN.md §6), so the
+ * card says what it is instead of being recognised by how it was painted.
  */
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -55,9 +60,9 @@ export function ReportCard(props: ReportCardProps) {
   }
 
   return (
-    <Card>
+    <Card data-report={title}>
       <Tabs value={view} onValueChange={(next) => setView(next === "table" ? "table" : "chart")}>
-        <CardHeader>
+        <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
           <div className="flex min-w-0 flex-col gap-[var(--space-1)]">
             <CardTitle>{title}</CardTitle>
             {description ? (
@@ -69,9 +74,9 @@ export function ReportCard(props: ReportCardProps) {
           {empty ? (
             headerExtra ?? null
           ) : (
-            <div className="flex shrink-0 items-center gap-[var(--space-3)]">
+            <div className="flex shrink-0 items-center gap-[var(--space-4)]">
               {headerExtra}
-              <TabsList>
+              <TabsList className="border-b-0">
                 <TabsTrigger value="chart">Chart</TabsTrigger>
                 <TabsTrigger value="table">Table</TabsTrigger>
               </TabsList>
@@ -81,16 +86,20 @@ export function ReportCard(props: ReportCardProps) {
             </div>
           )}
         </CardHeader>
-        <CardBody>
-          {empty ? (
-            <EmptyState title={emptyTitle} description={emptyDescription} />
-          ) : (
-            <>
-              <TabsContent value="chart">{chart}</TabsContent>
-              <TabsContent value="table">{table}</TabsContent>
-            </>
-          )}
-        </CardBody>
+        {empty ? (
+          <EmptyState title={emptyTitle} description={emptyDescription} />
+        ) : (
+          <>
+            {/* The chart keeps its own padding; the table runs to the card's
+                edges the way a native list view does. */}
+            <TabsContent value="chart" className="pt-0">
+              <CardBody className="p-[var(--space-5)]">{chart}</CardBody>
+            </TabsContent>
+            <TabsContent value="table" className="pt-0">
+              {table}
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </Card>
   );

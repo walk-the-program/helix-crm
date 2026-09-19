@@ -17,8 +17,18 @@
  */
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Paperclip, Trash2 } from "lucide-react";
-import { Button, Card, CardBody, EmptyState, Spinner, toast } from "@/ui";
+import { FileText, Paperclip, Trash2 } from "@/ui/icons";
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardRow,
+  CardTitle,
+  EmptyState,
+  Spinner,
+  toast,
+} from "@/ui";
 import { formatDateDisplay } from "@/lib/dates";
 import {
   AttachmentTooLargeError,
@@ -85,16 +95,16 @@ function Thumbnail(props: { attachment: Attachment; dir: string | null }) {
       <img
         src={src}
         alt=""
-        className="h-[var(--space-9)] w-[var(--space-9)] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover"
+        className="h-[var(--space-8)] w-[var(--space-8)] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="flex h-[var(--space-9)] w-[var(--space-9)] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-faint)]"
+      className="flex h-[var(--space-8)] w-[var(--space-8)] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-faint)]"
     >
-      <FileText size={18} />
+      <FileText size={18} weight="regular" aria-hidden="true" />
     </span>
   );
 }
@@ -200,64 +210,73 @@ export function AttachmentList(props: {
   return (
     <Card>
       {compact ? null : (
-        <div className="flex items-center justify-between gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-5)] py-[var(--space-4)]">
-          <h3 className="text-[length:var(--text-base)] font-semibold text-[var(--color-text)]">
-            Files
-          </h3>
+        <CardHeader>
+          <CardTitle>Files</CardTitle>
           <Button
             size="sm"
+            variant="secondary"
             onClick={() => void add()}
             loading={adding}
-            iconLeft={<Paperclip size={14} aria-hidden="true" />}
+            iconLeft={<Paperclip size={16} weight="bold" aria-hidden="true" />}
           >
             Add a file
           </Button>
-        </div>
+        </CardHeader>
       )}
-      <CardBody className="flex flex-col gap-[var(--space-3)]">
-        {problem ? (
+
+      {problem ? (
+        <CardBody className="pb-0">
           <p
             role="alert"
-            className="rounded-[var(--radius-md)] bg-[var(--color-danger-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-danger)]"
+            className="rounded-[var(--radius-md)] bg-[var(--color-danger-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
           >
             {problem}
           </p>
-        ) : null}
+        </CardBody>
+      ) : null}
 
-        {files.isLoading ? (
+      {files.isLoading ? (
+        <CardBody>
           <div className="flex items-center gap-[var(--space-2)] text-[var(--color-text-muted)]">
             <Spinner size={16} /> Reading the files…
           </div>
-        ) : rows.length === 0 ? (
+        </CardBody>
+      ) : rows.length === 0 ? (
+        <CardBody>
           <EmptyState
-            icon={<Paperclip size={28} aria-hidden="true" />}
+            // The default --space-10 padding is right for a whole pane and
+            // makes a 300px box out of one sentence inside a 380px details
+            // column (docs/STATUS.md, records sweep, contract item 3).
+            className="py-[var(--space-5)]"
             title="No files yet"
             description="Quotes, photos of the job, a signed estimate: anything you would otherwise dig out of email."
             action={
               compact ? (
-                <Button size="sm" onClick={() => void add()} loading={adding}>
+                <Button variant="primary" size="sm" onClick={() => void add()} loading={adding}>
                   Add a file
                 </Button>
               ) : undefined
             }
           />
-        ) : (
-          <ul className="flex flex-col gap-[var(--space-2)]">
-            {rows.map((attachment) => (
-              <li
-                key={attachment.id}
-                className="flex items-center gap-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border)] px-[var(--space-3)] py-[var(--space-2)]"
-              >
+        </CardBody>
+      ) : (
+        <ul className="flex flex-col">
+          {rows.map((attachment) => (
+            <li
+              key={attachment.id}
+              className="border-b border-[var(--color-border)] last:border-b-0"
+            >
+              <CardRow className="border-b-0">
                 <Thumbnail attachment={attachment} dir={dir} />
                 <button
                   type="button"
                   onClick={() => void open(attachment)}
                   className="flex min-w-0 flex-1 flex-col text-left focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2"
                 >
-                  <span className="truncate text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
+                  <span className="truncate font-medium text-[var(--color-text)]">
                     {attachment.fileName}
                   </span>
-                  <span className="text-[length:var(--text-xs)] tabular-nums text-[var(--color-text-muted)]">
+                  <span className="text-[length:var(--text-xs)] tabular-nums text-[var(--color-text-faint)]">
                     {formatFileSize(attachment.bytes)} · added{" "}
                     {formatDateDisplay(attachment.createdAt)}
                   </span>
@@ -267,15 +286,15 @@ export function AttachmentList(props: {
                   variant="ghost"
                   aria-label={`Remove ${attachment.fileName}`}
                   onClick={() => void remove(attachment)}
-                  iconLeft={<Trash2 size={14} aria-hidden="true" />}
+                  iconLeft={<Trash2 size={16} weight="bold" aria-hidden="true" />}
                 >
                   Remove
                 </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardBody>
+              </CardRow>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

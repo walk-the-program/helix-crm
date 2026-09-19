@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { test, expect, type HelixHarness } from "../fixtures";
 import type { Locator, Page } from "@playwright/test";
 
-const SCREENS = fileURLToPath(new URL("../.cache/screens/leads/", import.meta.url));
+const SCREENS = fileURLToPath(new URL("../.cache/screens/sweep-data/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
 
 const SITE_ORIGIN = "https://sorensenlandscaping.com";
@@ -151,13 +151,11 @@ async function connectSite(page: Page): Promise<void> {
 
 /** Scopes locators to one report card by its exact title. */
 function reportCard(page: Page, title: string): Locator {
-  // Card is the only component on this screen whose class list carries
-  // "shadow-[var(--shadow-sm)]" (src/ui/Card.tsx); filtering that down to the
-  // one card whose subtree has this exact heading gives the whole card - the
-  // Chart/Table toggle, the CSV button and both views all live under it.
-  return page
-    .locator('div[class*="shadow-[var(--shadow-sm)]"]')
-    .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+  // The card names itself: `ReportCard` stamps `data-report` with the report's
+  // title (src/features/leads/components/ReportCard.tsx). This used to match on
+  // the shadow class every card carried, which stopped being a way to recognise
+  // a card the moment cards stopped casting a shadow (docs/DESIGN.md section 6).
+  return page.locator(`[data-report="${title}"]`);
 }
 
 /** A local calendar day in the current month, so the seed never hard-codes a year. */
@@ -605,24 +603,47 @@ test.describe("screenshots", () => {
     );
   }
 
+  /** The same screen in both themes, left in light afterwards. */
+  async function shootBoth(
+    page: Page,
+    name: string,
+    options?: { fullPage?: boolean },
+  ): Promise<void> {
+    mkdirSync(SCREENS, { recursive: true });
+    await switchTheme(page, "light");
+    await page.screenshot({ path: `${SCREENS}${name}-light.png`, ...options });
+    await switchTheme(page, "dark");
+    await page.screenshot({ path: `${SCREENS}${name}-dark.png`, ...options });
+    await switchTheme(page, "light");
+  }
+
   test("captures Website and Reports in both themes", async ({ page, helix }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
 
-    await connectSite(page);
-    await switchTheme(page, "light");
-    await page.screenshot({ path: `${SCREENS}site-light.png`, fullPage: true });
-    await switchTheme(page, "dark");
-    await page.screenshot({ path: `${SCREENS}site-dark.png`, fullPage: true });
-    await switchTheme(page, "light");
+    // The site screen before anything is filled in, then connected.
+    await page.goto("/settings/site");
+    await expect(page.getByText("Not connected", { exact: true })).toBeVisible();
+    await shootBoth(page, "site-not-connected");
 
+    await connectSite(page);
+    await shootBoth(page, "site-connected");
+
+    // Reports: five cards, charts first.
     await bootThenSeedReports(page, helix);
     await expect(
       page.getByRole("heading", { name: "Pipeline value by stage", exact: true }),
     ).toBeVisible();
+    for (const title of CARD_TITLES) {
+      await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    }
+    await shootBoth(page, "reports-charts", { fullPage: true });
 
-    await switchTheme(page, "light");
-    await page.screenshot({ path: `${SCREENS}reports-light.png`, fullPage: true });
-    await switchTheme(page, "dark");
-    await page.screenshot({ path: `${SCREENS}reports-dark.png`, fullPage: true });
+    // Then the same five cards in their table views.
+    for (const title of CARD_TITLES) {
+      const card = reportCard(page, title);
+      await card.getByRole("tab", { name: "Table" }).click();
+      await expect(card.getByRole("table")).toBeVisible();
+    }
+    await shootBoth(page, "reports-tables", { fullPage: true });
   });
 });

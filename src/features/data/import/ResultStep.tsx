@@ -4,8 +4,8 @@
  */
 import { useState } from "react";
 import { Link } from "wouter";
-import { Download, Users } from "lucide-react";
-import { Button, Card, CardBody, toast } from "@/ui";
+import { Download, Users } from "@/ui/icons";
+import { Button, Card, CardBody, CardRow, toast } from "@/ui";
 import { rowsToCsv } from "@/lib/csv";
 import { pickSavePath, writeTextFileAt } from "@/features/data/lib/fsBridge";
 import type { ImportResult } from "@/features/data/lib/importRun";
@@ -15,7 +15,7 @@ function Count(props: { value: number; label: string; tone?: "accent" | "muted" 
     <div className="flex flex-col gap-[var(--space-1)]">
       <span
         className={[
-          "text-[length:var(--text-2xl)] font-semibold tabular-nums",
+          "text-[length:var(--text-2xl)] font-semibold leading-[var(--leading-tight)] tabular-nums",
           props.tone === "muted" ? "text-[var(--color-text-muted)]" : "text-[var(--color-text)]",
         ].join(" ")}
       >
@@ -66,9 +66,9 @@ export function ResultStep(props: {
   }
 
   return (
-    <div className="flex flex-col gap-[var(--space-5)]">
+    <div className="flex flex-col gap-[var(--space-6)]">
       <Card>
-        <CardBody className="flex flex-wrap gap-[var(--space-10)]">
+        <CardBody className="flex flex-wrap gap-[var(--space-9)] p-[var(--space-6)]">
           <Count value={result.created} label="contacts created" />
           <Count value={result.updated} label="contacts updated" />
           <Count value={result.skipped} label="rows skipped" tone="muted" />
@@ -92,9 +92,9 @@ export function ResultStep(props: {
 
       {result.skipped > 0 ? (
         <Card>
-          <CardBody className="flex flex-wrap items-center justify-between gap-[var(--space-4)]">
-            <div className="flex flex-col gap-[var(--space-1)]">
-              <span className="text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
+          <CardRow className="flex-wrap py-[var(--space-3)]">
+            <span className="flex min-w-0 flex-col gap-[var(--space-1)]">
+              <span className="font-medium text-[var(--color-text)]">
                 {result.skipped.toLocaleString()} rows did not go in
               </span>
               <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
@@ -104,21 +104,26 @@ export function ResultStep(props: {
                   ? " Only the first 5,000 are saved."
                   : ""}
               </span>
-            </div>
+            </span>
             <Button
+              variant="secondary"
               onClick={() => void saveSkipped()}
               loading={saving}
-              iconLeft={<Download size={16} aria-hidden="true" />}
+              loadingLabel="Saving…"
+              iconLeft={<Download size={16} weight="bold" aria-hidden="true" />}
             >
               Save skipped rows as CSV
             </Button>
-          </CardBody>
+          </CardRow>
         </Card>
       ) : null}
 
-      <div className="flex flex-wrap gap-[var(--space-3)]">
+      <div className="flex flex-wrap gap-[var(--space-2)]">
         <Link href="/contacts">
-          <Button variant="primary" iconLeft={<Users size={16} aria-hidden="true" />}>
+          <Button
+            variant="primary"
+            iconLeft={<Users size={16} weight="bold" aria-hidden="true" />}
+          >
             See the contacts
           </Button>
         </Link>

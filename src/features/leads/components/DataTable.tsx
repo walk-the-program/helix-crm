@@ -39,7 +39,8 @@ export function DataTable<Row>(props: {
           ))}
         </TR>
       </THead>
-      <TBody>
+      {/* No rule under the last row: the card edge is already a hairline. */}
+      <TBody className="[&>tr:last-child]:border-b-0">
         {rows.map((row, index) => (
           <TR key={getRowKey(row, index)}>
             {columns.map((column) => (

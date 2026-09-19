@@ -3,10 +3,10 @@
  *
  * The preview is the last place anything is reversible for free, so it shows
  * the mapped values rather than the raw cells, and every warning the mapping
- * raised.
+ * raised. The policy is a grouped inset list under a small-capitals label,
+ * which is how a native settings pane asks a question like this.
  */
-import { AlertTriangle, Ban } from "lucide-react";
-import { Badge, Card, CardBody, Table, TBody, TD, TH, THead, TR } from "@/ui";
+import { Badge, Card, CardGroupLabel, CardRow, Table, TBody, TD, TH, THead, TR } from "@/ui";
 import { formatPhone } from "@/lib/phone";
 import {
   DEDUPE_POLICIES,
@@ -32,72 +32,79 @@ export function PreviewStep(props: {
   const unimportable = rows.filter((r) => !r.importable).length;
 
   return (
-    <div className="flex flex-col gap-[var(--space-5)]">
-      <div className="flex flex-wrap items-baseline gap-[var(--space-3)]">
-        <p className="text-[length:var(--text-sm)] text-[var(--color-text)]">
+    <div className="flex flex-col gap-[var(--space-6)]">
+      <div className="flex flex-wrap items-center gap-[var(--space-3)]">
+        <p className="text-[length:var(--text-base)] text-[var(--color-text)]">
           The first {rows.length} of{" "}
-          <span className="tabular-nums font-medium">{totalRows.toLocaleString()}</span>{" "}
+          <span className="font-medium tabular-nums">{totalRows.toLocaleString()}</span>{" "}
           rows, as they will be filed.
         </p>
         {problems > 0 ? (
-          <Badge tone="warning">
-            <AlertTriangle size={12} aria-hidden="true" /> {problems} to look at
-          </Badge>
+          <Badge tone="warning">{problems} to look at</Badge>
         ) : (
           <Badge tone="success">Nothing looks wrong</Badge>
         )}
         {unimportable > 0 ? (
-          <Badge tone="danger">
-            <Ban size={12} aria-hidden="true" /> {unimportable} cannot be filed
-          </Badge>
+          <Badge tone="danger">{unimportable} cannot be filed</Badge>
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--color-border)]">
-        <Table>
+      <Card className="overflow-hidden">
+        {/* table-fixed, with a share of the width per column. Seven columns of
+            auto layout gave the name almost nothing and let two phone numbers
+            wrap a row to double height; a fixed layout keeps every row one line
+            tall and puts the full value in a title attribute instead. */}
+        <Table className="table-fixed">
           <THead>
             <TR>
-              <TH>Row</TH>
-              <TH>Name</TH>
-              <TH>Company</TH>
-              <TH>Email</TH>
-              <TH>Phone</TH>
-              <TH>Tags</TH>
-              <TH>What Helix noticed</TH>
+              <TH align="right" className="w-[6%]">
+                Row
+              </TH>
+              <TH className="w-[16%]">Name</TH>
+              <TH className="w-[16%]">Company</TH>
+              <TH className="w-[22%]">Email</TH>
+              <TH className="w-[15%]">Phone</TH>
+              <TH className="w-[8%]">Tags</TH>
+              <TH className="w-[17%]">What Helix noticed</TH>
             </TR>
           </THead>
-          <TBody>
-            {rows.map((row) => (
+          <TBody className="[&>tr:last-child]:border-b-0">
+            {rows.map((row) => {
+              const name = nameOf(row);
+              const emails = row.emails.map((e) => e.email).join(", ");
+              const phones = row.phones
+                .map((p) => (p.e164 ? formatPhone(p.e164) : p.raw))
+                .join(", ");
+              const tags = row.tags.join(", ");
+              return (
               <TR key={row.rowNumber}>
-                <TD align="right">
-                  <span className="tabular-nums text-[var(--color-text-faint)]">
-                    {row.rowNumber}
-                  </span>
+                <TD align="right" muted>
+                  {row.rowNumber}
                 </TD>
-                <TD>
-                  <span
-                    className={
-                      row.importable
-                        ? "text-[var(--color-text)]"
-                        : "text-[var(--color-text-faint)] line-through"
-                    }
-                  >
-                    {nameOf(row)}
-                  </span>
+                <TD
+                  title={name}
+                  className={[
+                    "truncate font-medium",
+                    row.importable ? "" : "text-[var(--color-text-faint)] line-through",
+                  ].join(" ")}
+                >
+                  {name}
                 </TD>
-                <TD>{row.company || "—"}</TD>
-                <TD>{row.emails.map((e) => e.email).join(", ") || "—"}</TD>
-                <TD>
-                  {row.phones.length > 0
-                    ? row.phones
-                        .map((p) => (p.e164 ? formatPhone(p.e164) : p.raw))
-                        .join(", ")
-                    : "—"}
+                <TD muted title={row.company || undefined} className="truncate">
+                  {row.company || "—"}
                 </TD>
-                <TD>{row.tags.join(", ") || "—"}</TD>
-                <TD>
+                <TD muted title={emails || undefined} className="truncate">
+                  {emails || "—"}
+                </TD>
+                <TD muted title={phones || undefined} className="truncate">
+                  {phones || "—"}
+                </TD>
+                <TD muted title={tags || undefined} className="truncate">
+                  {tags || "—"}
+                </TD>
+                <TD muted>
                   {row.flags.length === 0 ? (
-                    <span className="text-[var(--color-text-faint)]">—</span>
+                    "—"
                   ) : (
                     <ul className="flex flex-col gap-[var(--space-1)]">
                       {row.flags.map((flag, i) => (
@@ -105,8 +112,8 @@ export function PreviewStep(props: {
                           key={i}
                           className={
                             flag.level === "error"
-                              ? "text-[var(--color-danger)]"
-                              : "text-[var(--color-warning)]"
+                              ? "text-[var(--color-danger-ink)]"
+                              : "text-[var(--color-warning-ink)]"
                           }
                         >
                           {flag.message}
@@ -116,46 +123,41 @@ export function PreviewStep(props: {
                   )}
                 </TD>
               </TR>
-            ))}
+              );
+            })}
           </TBody>
         </Table>
-      </div>
+      </Card>
 
-      <Card>
-        <CardBody className="flex flex-col gap-[var(--space-3)]">
-          <fieldset className="flex flex-col gap-[var(--space-3)] border-0 p-0 m-0">
-            <legend className="text-[length:var(--text-base)] font-semibold text-[var(--color-text)]">
-              When someone is already in Helix
-            </legend>
-            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              Matched on their email address first, then on their phone number.
-            </p>
-            {DEDUPE_POLICIES.map((option) => (
-              <label
-                key={option.value}
-                className="flex cursor-pointer items-start gap-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--space-3)] hover:bg-[var(--color-surface)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--color-focus)]"
-              >
+      <fieldset className="m-0 border-0 p-0">
+        <legend className="sr-only">When someone is already in Helix</legend>
+        <CardGroupLabel aria-hidden="true">When someone is already in Helix</CardGroupLabel>
+        <Card>
+          {DEDUPE_POLICIES.map((option) => (
+            <CardRow key={option.value} interactive>
+              <label className="flex w-full cursor-pointer items-start gap-[var(--space-3)]">
                 <input
                   type="radio"
                   name="dedupe-policy"
                   value={option.value}
                   checked={policy === option.value}
                   onChange={() => onPolicyChange(option.value)}
-                  className="mt-[3px] accent-[var(--color-accent)]"
+                  className="mt-[var(--space-1)] flex-none accent-[var(--color-accent)]"
                 />
                 <span className="flex flex-col gap-[var(--space-1)]">
-                  <span className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
-                    {option.label}
-                  </span>
+                  <span className="font-medium text-[var(--color-text)]">{option.label}</span>
                   <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
                     {option.hint}
                   </span>
                 </span>
               </label>
-            ))}
-          </fieldset>
-        </CardBody>
-      </Card>
+            </CardRow>
+          ))}
+        </Card>
+        <p className="px-[var(--space-1)] pt-[var(--space-2)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+          Matched on their email address first, then on their phone number.
+        </p>
+      </fieldset>
     </div>
   );
 }
