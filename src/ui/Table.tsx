@@ -5,16 +5,17 @@ import type {
   TdHTMLAttributes,
   ThHTMLAttributes,
 } from "react";
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { CaretDown, CaretUp, CaretUpDown } from "@/ui/icons";
 import { cn } from "@/ui/cn";
-import { focusRing, focusRingInset } from "@/ui/styles";
+import { focusRing, focusRingInset, sectionLabel } from "@/ui/styles";
 
 /**
- * The ledger (docs/DESIGN.md section 9, "Tables").
+ * The list (docs/DESIGN.md §9 "Tables").
  *
- * A white surface, a sticky header at --text-sm weight 600, rows separated by
- * a single hairline. No zebra striping and no vertical cell borders: they
- * fight the data. Row height is --row-h, so density is a token change.
+ * A white surface, rows separated by a single hairline, no zebra striping, no
+ * vertical rules, no shadow. The header is the product's section-label style:
+ * 11px uppercase tracked in tertiary ink, which is how a native list view
+ * labels its columns. Row height is --row-h, so density is a token change.
  */
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
@@ -30,7 +31,7 @@ export function THead({ className, ...props }: HTMLAttributes<HTMLTableSectionEl
     <thead
       className={cn(
         "sticky top-0 z-[1]",
-        "bg-[var(--color-surface)] text-[var(--color-text-muted)]",
+        "bg-[var(--color-surface)]",
         "[&_th]:border-b [&_th]:border-[var(--color-border)]",
         className,
       )}
@@ -44,8 +45,10 @@ export function TBody({ className, ...props }: HTMLAttributes<HTMLTableSectionEl
 }
 
 /**
- * The totals row: at the foot of the table, 2px --color-border-strong top
- * rule, weight 600.
+ * The totals row: at the foot of the table, a single hairline above it, weight
+ * 600. A 2px rule was the old ledger look; a native list separates its summary
+ * row with the same hairline as everything else and lets the weight do the
+ * work.
  *
  * Deliberately NOT `position: sticky`. `bottom: 0` means "never fall below the
  * scrollport's bottom edge", so while the table is still below the fold the
@@ -60,7 +63,7 @@ export function TFoot({ className, ...props }: HTMLAttributes<HTMLTableSectionEl
     <tfoot
       className={cn(
         "bg-[var(--color-surface)] font-semibold",
-        "[&_td]:border-t-2 [&_td]:border-[var(--color-border-strong)]",
+        "[&_td]:border-t [&_td]:border-[var(--color-border-strong)]",
         className,
       )}
       {...props}
@@ -69,9 +72,9 @@ export function TFoot({ className, ...props }: HTMLAttributes<HTMLTableSectionEl
 }
 
 /**
- * A selected row is --color-selected plus a 3px --color-focus left rail. The
- * rail is drawn by the first cell rather than by a shadow on the row: a
- * border-collapse table does not reliably paint a box-shadow on a <tr>.
+ * A selected row is the --color-selected tint and full-strength ink, the way a
+ * macOS list marks its selection. There is no left rail: a 3px bar on the
+ * first cell is a web-app device, and the tint plus the ink is enough.
  */
 export function TR({
   className,
@@ -98,14 +101,8 @@ export function TR({
       aria-selected={selected || undefined}
       className={cn(
         "border-b border-[var(--color-border)]",
-        clickable && "cursor-pointer hover:bg-[var(--color-hover)]",
-        selected && [
-          "bg-[var(--color-selected)]",
-          "[&>td:first-child]:relative",
-          "[&>td:first-child]:before:absolute [&>td:first-child]:before:content-['']",
-          "[&>td:first-child]:before:inset-y-0 [&>td:first-child]:before:left-0",
-          "[&>td:first-child]:before:w-[3px] [&>td:first-child]:before:bg-[var(--color-focus)]",
-        ],
+        clickable && "cursor-default hover:bg-[var(--color-hover)]",
+        selected && "bg-[var(--color-selected)] [&>td]:text-[var(--color-text)]",
         clickable && focusRingInset,
         className,
       )}
@@ -131,11 +128,11 @@ export function TH({
   const sorted = sortDirection === "asc" || sortDirection === "desc";
 
   const icon = !sortable ? null : sortDirection === "asc" ? (
-    <ChevronUp className="w-[16px] h-[16px] flex-none" aria-hidden="true" />
+    <CaretUp size={10} weight="bold" className="flex-none" aria-hidden="true" />
   ) : sortDirection === "desc" ? (
-    <ChevronDown className="w-[16px] h-[16px] flex-none" aria-hidden="true" />
+    <CaretDown size={10} weight="bold" className="flex-none" aria-hidden="true" />
   ) : (
-    <ChevronsUpDown className="w-[16px] h-[16px] flex-none" aria-hidden="true" />
+    <CaretUpDown size={10} weight="bold" className="flex-none opacity-0 group-hover:opacity-100" aria-hidden="true" />
   );
 
   const content: ReactNode = sortable ? (
@@ -143,9 +140,9 @@ export function TH({
       type="button"
       onClick={onSort}
       className={cn(
-        "inline-flex items-center gap-[var(--space-1)] min-h-[var(--control-h-sm)]",
-        "font-semibold hover:text-[var(--color-text)]",
-        sorted ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)]",
+        "group inline-flex items-center gap-[var(--space-1)]",
+        sectionLabel,
+        sorted ? "text-[var(--color-text-muted)]" : "hover:text-[var(--color-text-muted)]",
         focusRing,
         align === "right" && "flex-row-reverse",
       )}
@@ -169,12 +166,13 @@ export function TH({
               ? "descending"
               : "none"
       }
-      // The column header is sentence case at --text-sm weight 600. There are
-      // no all-caps tracked-out labels in this product (docs/DESIGN.md s4).
+      // The column header is the section-label style: 11px, uppercase, tracked
+      // 0.05em, tertiary ink. It is the only uppercase type in the product
+      // (docs/DESIGN.md §4).
       data-numeric={align === "right" ? "" : undefined}
       className={cn(
-        "h-[var(--row-h)] px-[var(--space-3)] font-semibold",
-        "text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
+        "h-[var(--control-h)] px-[var(--space-3)] align-middle",
+        sectionLabel,
         align === "right" ? "text-right" : "text-left",
         className,
       )}
@@ -186,10 +184,11 @@ export function TH({
 }
 
 /**
- * `primary` is the row's customer name: --text-lg weight 500. `muted` is every
- * subordinate cell. `align="right"` stamps data-numeric, which is what turns
- * on tabular figures in globals.css — a column of amounts that does not line
- * up reads as sloppy bookkeeping to this audience.
+ * `primary` is the row's customer name: body size, weight 500, full ink — not
+ * a larger size. A native list keeps one size down a column and separates the
+ * name from its meta with weight and colour. `muted` is every subordinate
+ * cell. `align="right"` stamps data-numeric, which is what turns on tabular
+ * figures in globals.css.
  */
 export function TD({
   className,
@@ -209,13 +208,13 @@ export function TD({
       className={cn(
         "h-[var(--row-h)] px-[var(--space-3)]",
         // A name truncates at one line and carries a title attribute; it never
-        // wraps inside a fixed-height row (docs/DESIGN.md section 4). max-w-0
-        // is what makes truncate work in an auto-layout table: the cell still
-        // takes its share of the width, and the ellipsis happens inside it.
+        // wraps inside a fixed-height row (docs/DESIGN.md §4). max-w-0 is what
+        // makes truncate work in an auto-layout table: the cell still takes its
+        // share of the width, and the ellipsis happens inside it.
         primary
-          ? "max-w-0 truncate text-[length:var(--text-lg)] font-medium text-[var(--color-text)]"
+          ? "max-w-0 truncate font-medium text-[var(--color-text)]"
           : muted
-            ? "text-[var(--color-text-muted)]"
+            ? "text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
             : "text-[var(--color-text)]",
         align === "right" ? "text-right tabular-nums" : "text-left",
         className,

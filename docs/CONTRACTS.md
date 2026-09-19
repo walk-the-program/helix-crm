@@ -205,38 +205,61 @@ Import 70, Settings 90.
 
 ## Design tokens
 
-`src/styles/tokens.css` defines every colour, size, radius, and shadow as CSS variables
-on `:root` and `[data-theme="dark"]`; `[data-density="compact"]` overrides spacing.
-Tailwind config maps utilities to those variables. Components in `src/ui/` use only
-tokens; feature code uses only `src/ui/` components and Tailwind utilities. No hex
-colours outside `tokens.css`.
+`src/styles/tokens.css` defines every colour, size, radius, shadow and duration as CSS
+variables on `:root` and `[data-theme="dark"]`; `[data-density="compact"]` overrides the
+type scale, spacing and heights. `src/styles/app.css` mirrors every token onto a private
+`--tok-*` alias and feeds those into Tailwind's `@theme inline`, so `bg-surface`,
+`text-muted` and friends resolve at use time under whatever `data-theme` is in force.
+Components in `src/ui/` use only tokens; feature code uses only `src/ui/` components,
+`@/ui/icons` and Tailwind utilities. No hex, `rgb()`, `rgba()` or `hsl()` outside
+`tokens.css`.
 
-Minimum window width 1024 px. Body text 16 px. System font stack. Tabular numbers on
-money and counts.
+Minimum window width 1024 px, design target 1280. Body text 15 px comfortable / 13 px
+compact. System font stack, no webfont, no serif. Tabular numbers on money and counts.
 
-The design agent owns `tokens.css` and `globals.css`. The foundations agent ships a
-placeholder `tokens.css` with neutral values so the app runs before the design lands.
-Both use exactly these variable names (the design agent may add more, never rename):
+The design agent owns `tokens.css`, `globals.css` and `src/ui/icons.ts`. Both the design
+agent and the foundations agent use exactly these variable names (the design agent may
+add more, never rename):
 
 ```
---color-bg  --color-surface  --color-surface-raised  --color-border  --color-border-strong
---color-text  --color-text-muted  --color-text-faint
+--color-bg  --color-surface  --color-surface-raised  --color-sidebar
+--color-hover  --color-selected  --color-overlay  --color-tint
+--color-border  --color-border-strong
+--color-text  --color-text-muted  --color-text-faint  --color-text-disabled
 --color-accent  --color-accent-hover  --color-accent-text  --color-accent-soft
---color-danger  --color-danger-soft  --color-success  --color-success-soft
---color-warning  --color-warning-soft  --color-focus
---stage-1 ... --stage-8            (the pipeline stage ramp)
+--color-accent-ink  --color-link
+--color-danger  --color-danger-soft  --color-danger-ink
+--color-success  --color-success-soft  --color-success-ink
+--color-warning  --color-warning-soft  --color-warning-ink
+--color-info  --color-info-soft  --color-info-ink
+--color-focus
+--stage-1 ... --stage-8            (the pipeline stage ink)
+--stage-1-soft ... --stage-8-soft  (its pastel fill)
 --font-sans  --font-mono
---text-xs  --text-sm  --text-base  --text-lg  --text-xl  --text-2xl  --text-3xl
---leading-tight  --leading-normal
+--text-label  --text-xs  --text-sm  --text-base  --text-lg  --text-xl  --text-2xl  --text-3xl
+--leading-tight  --leading-normal  --tracking-title  --tracking-label
 --space-1 ... --space-10           (4 px scale)
 --radius-sm  --radius-md  --radius-lg  --radius-full
 --shadow-sm  --shadow-md  --shadow-lg
---sidebar-w  --topbar-h  --row-h
+--sidebar-w  --topbar-h  --row-h  --control-h  --control-h-sm  --content-max
+--hairline  --focus-ring-w
+--dur-fast  --dur-base  --dur-slow  --ease-out  --ease-in-out  --press-scale
 ```
 
-Themes: `:root` is light, `[data-theme="dark"]` overrides colours, `[data-density="compact"]`
-overrides `--space-*`, `--row-h`, and `--text-base`. The shell sets both attributes on
-`<html>` from app-level settings.
+Added in revision 2 of `docs/DESIGN.md`: `--text-label` (the 11 px small-capitals section
+label), `--tracking-title` / `--tracking-label`, `--color-text-disabled` (the platform grey
+that may not carry text), `--color-link` and `--color-info*` (the pale-blue pastel pair),
+`--color-tint`, `--hairline` and `--press-scale`. `--shadow-sm` is now `none`: only a
+floating layer casts a shadow.
+
+Themes: `:root` is light, `[data-theme="dark"]` overrides colours,
+`[data-density="compact"]` overrides the type scale, `--space-*`, `--row-h`, `--topbar-h`
+and `--control-h*`. The shell sets both attributes on `<html>` from app-level settings.
+
+Icons: `@phosphor-icons/react` only, imported through `src/ui/icons.ts`, which also
+re-exports every Lucide name the product used so a feature migrates by changing the import
+path alone. `src/ui/icons.ts` is not re-exported from `src/ui/index.ts` (it would collide
+with the `Table` component). Regular weight at 18 px in lists, bold at 16 px in buttons.
 
 ## Site endpoint contract (ClearPath templates)
 

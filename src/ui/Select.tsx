@@ -1,5 +1,5 @@
 import * as RadixSelect from "@radix-ui/react-select";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { CaretDown, CaretUp, Check } from "@/ui/icons";
 import { cn } from "@/ui/cn";
 import { disabledState, focusRing, quietTransition } from "@/ui/styles";
 
@@ -12,13 +12,15 @@ export type SelectOption = {
 };
 
 /**
- * The trigger matches Input exactly: --control-h, --radius-sm,
- * --color-surface, 16px text.
+ * The trigger matches Input exactly: --control-h, --radius-md, a
+ * --color-border-strong hairline, --color-surface, body type. A caret in
+ * secondary ink sits at the right edge, the way a macOS pop-up button draws it.
  *
- * The highlighted item is --color-selected, NOT the accent. An open menu
- * highlight is not "this needs you" (docs/DESIGN.md section 5), and
- * --color-hover is within a point of --color-surface-raised in the dark theme,
- * so it would have made the keyboard highlight invisible at 10pm.
+ * The menu is a floating layer: --color-surface-raised, hairline,
+ * --radius-lg, --shadow-md, items at --radius-md. The highlighted item is
+ * --color-selected — a menu highlight is chrome, and --color-hover sits within
+ * a point of the raised surface in the dark theme, which would make the
+ * keyboard highlight invisible at 10 pm.
  */
 export function Select(props: {
   value: string | undefined;
@@ -42,7 +44,7 @@ export function Select(props: {
         aria-invalid={invalid || undefined}
         className={cn(
           "flex w-full h-[var(--control-h)] flex-none items-center justify-between gap-[var(--space-2)]",
-          "rounded-[var(--radius-sm)] border border-[var(--color-border)]",
+          "rounded-[var(--radius-md)] border border-[var(--color-border-strong)]",
           "bg-[var(--color-surface)] text-[var(--color-text)]",
           "px-[var(--space-3)] text-[length:var(--text-base)]",
           "enabled:hover:bg-[var(--color-hover)]",
@@ -58,7 +60,7 @@ export function Select(props: {
           <RadixSelect.Value placeholder={placeholder} />
         </span>
         <RadixSelect.Icon className="flex-none text-[var(--color-text-muted)]">
-          <ChevronDown className="w-[16px] h-[16px]" aria-hidden="true" />
+          <CaretDown size={14} weight="bold" aria-hidden="true" />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
       <RadixSelect.Portal>
@@ -69,10 +71,11 @@ export function Select(props: {
             "z-50 overflow-hidden rounded-[var(--radius-lg)]",
             "border border-[var(--color-border)] bg-[var(--color-surface-raised)]",
             "shadow-[var(--shadow-md)]",
+            "min-w-[var(--radix-select-trigger-width)]",
           )}
         >
           <RadixSelect.ScrollUpButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
-            <ChevronUp className="w-[16px] h-[16px]" aria-hidden="true" />
+            <CaretUp size={14} weight="bold" aria-hidden="true" />
           </RadixSelect.ScrollUpButton>
           <RadixSelect.Viewport className="p-[var(--space-1)]">
             {options.map((option) => (
@@ -82,21 +85,21 @@ export function Select(props: {
                 disabled={option.disabled}
                 className={cn(
                   "relative flex min-h-[var(--control-h-sm)] cursor-default items-center",
-                  "rounded-[var(--radius-sm)] pl-[var(--space-7)] pr-[var(--space-3)]",
+                  "rounded-[var(--radius-md)] pl-[var(--space-7)] pr-[var(--space-3)]",
                   "text-[length:var(--text-base)] text-[var(--color-text)]",
                   "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
                   "data-[disabled]:opacity-50",
                 )}
               >
                 <RadixSelect.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center text-[var(--color-text-muted)]">
-                  <Check className="w-[16px] h-[16px]" aria-hidden="true" />
+                  <Check size={14} weight="bold" aria-hidden="true" />
                 </RadixSelect.ItemIndicator>
                 <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
               </RadixSelect.Item>
             ))}
           </RadixSelect.Viewport>
           <RadixSelect.ScrollDownButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
-            <ChevronDown className="w-[16px] h-[16px]" aria-hidden="true" />
+            <CaretDown size={14} weight="bold" aria-hidden="true" />
           </RadixSelect.ScrollDownButton>
         </RadixSelect.Content>
       </RadixSelect.Portal>

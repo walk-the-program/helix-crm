@@ -11,7 +11,7 @@
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { CheckCircle2, Inbox, Phone, Plus, Search, Settings, Trash2 } from "lucide-react";
+import { CheckCircle2, Inbox, Phone, Plus, Search, Settings, Trash2 } from "@/ui/icons";
 
 import {
   Badge,
@@ -279,7 +279,7 @@ const BUTTON_HOVER_TOKEN: Record<(typeof BUTTON_VARIANTS)[number], string> = {
   primary: "--color-accent-hover",
   secondary: "--color-hover",
   ghost: "--color-hover",
-  danger: "--color-danger-ink",
+  danger: "--color-danger-soft",
 };
 const BUTTON_LABEL: Record<(typeof BUTTON_VARIANTS)[number], string> = {
   primary: "Save changes",
@@ -335,7 +335,7 @@ function buildButtonSection(): Section {
           <Button
             variant={variant}
             size={size}
-            iconLeft={<Plus className="w-[16px] h-[16px]" aria-hidden="true" />}
+            iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
           >
             {label}
           </Button>,
@@ -375,9 +375,9 @@ function buildIconButtonSection(): Section {
       const isDanger = variant === "danger";
       const label = isDanger ? "Delete contact" : "Settings";
       const icon = isDanger ? (
-        <Trash2 className="w-[16px] h-[16px]" aria-hidden="true" />
+        <Trash2 size={16} weight="bold" aria-hidden="true" />
       ) : (
-        <Settings className="w-[16px] h-[16px]" aria-hidden="true" />
+        <Settings size={16} weight="bold" aria-hidden="true" />
       );
       const defaultHtml = mount(
         <IconButton variant={variant} size={size} label={label} icon={icon} />,
@@ -688,6 +688,115 @@ function buildCardSection(): Section {
 }
 
 // ---------------------------------------------------------------------------
+// Grouped inset list — Card + rows separated by hairlines. The macOS
+// "grouped table view" pattern: a Card containing plain rows, each divided
+// from the next by a single --color-border hairline rather than its own
+// border, card padding, or a shadow. Added for the native-minimalist pass
+// (docs/DESIGN.md); no dedicated component exists yet, so this specimen is
+// built from Card plus token-driven row styling, the same way every other
+// composite specimen in this file is.
+// ---------------------------------------------------------------------------
+
+const GROUPED_LIST_ROWS: Array<{ label: string; value: ReactNode }> = [
+  { label: "Stage", value: <Badge tone="accent">Estimate sent</Badge> },
+  { label: "Owner", value: "Dana Whitfield" },
+  { label: "Source", value: "Website form" },
+  { label: "Last activity", value: "2 days ago" },
+];
+
+function buildGroupedListSection(): Section {
+  const specimens: Specimen[] = [];
+  specimens.push({
+    id: "groupedlist.inset",
+    label: "Grouped inset list",
+    html: mount(
+      <Card style={{ width: 320 }}>
+        {GROUPED_LIST_ROWS.map((row, index) => (
+          <div
+            key={row.label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "var(--space-3)",
+              padding: "var(--space-3) var(--space-4)",
+              borderBottom:
+                index < GROUPED_LIST_ROWS.length - 1 ? "1px solid var(--color-border)" : undefined,
+              fontSize: "var(--text-base)",
+            }}
+          >
+            <span style={{ color: "var(--color-text-muted)" }}>{row.label}</span>
+            <span>{row.value}</span>
+          </div>
+        ))}
+      </Card>,
+    ),
+  });
+  return { id: "groupedlist", title: "Grouped inset list", specimens };
+}
+
+// ---------------------------------------------------------------------------
+// Section label row — the 11px uppercase, tracked, tertiary-ink label a
+// native sidebar or grouped list uses to name a cluster of rows (the same
+// treatment SidebarSection applies to its own `label` prop). Rendered here
+// from the raw tokens rather than an internal class fragment, since
+// src/ui/styles.ts is deliberately not re-exported from src/ui/index.ts.
+// ---------------------------------------------------------------------------
+
+function buildSectionLabelSection(): Section {
+  const specimens: Specimen[] = [
+    {
+      id: "sectionlabel.default",
+      label: "Section label",
+      html: mount(
+        <div
+          style={{
+            fontSize: "var(--text-label)",
+            textTransform: "uppercase",
+            letterSpacing: "var(--tracking-label)",
+            color: "var(--color-text-faint)",
+          }}
+        >
+          Pinned views
+        </div>,
+      ),
+    },
+  ];
+  return { id: "sectionlabel", title: "Section label", specimens };
+}
+
+// ---------------------------------------------------------------------------
+// Badge — every tone together, muted pastel
+// ---------------------------------------------------------------------------
+
+const BADGE_ALL_TONES: Array<{ tone: "neutral" | "accent" | "success" | "warning" | "danger"; label: string }> = [
+  { tone: "neutral", label: "Draft" },
+  { tone: "accent", label: "Needs you" },
+  { tone: "success", label: "Won" },
+  { tone: "warning", label: "Offline" },
+  { tone: "danger", label: "Overdue" },
+];
+
+function buildBadgeAllTonesSection(): Section {
+  const specimens: Specimen[] = [
+    {
+      id: "badge.tones-all",
+      label: "All tones, muted pastel",
+      html: mount(
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          {BADGE_ALL_TONES.map(({ tone, label }) => (
+            <Badge key={tone} tone={tone}>
+              {label}
+            </Badge>
+          ))}
+        </div>,
+      ),
+    },
+  ];
+  return { id: "badgetones", title: "Badge — all tones", specimens };
+}
+
+// ---------------------------------------------------------------------------
 // EmptyState
 // ---------------------------------------------------------------------------
 
@@ -698,7 +807,7 @@ function buildEmptyStateSection(): Section {
     label: "Empty list",
     html: mount(
       <EmptyState
-        icon={<Inbox className="w-[24px] h-[24px]" aria-hidden="true" />}
+        icon={<Inbox size={18} weight="regular" aria-hidden="true" />}
         title="No leads waiting"
         description="New leads from your website and calls will show up here."
         action={<Button variant="primary">Add a lead</Button>}
@@ -710,7 +819,7 @@ function buildEmptyStateSection(): Section {
     label: "Zero-result search",
     html: mount(
       <EmptyState
-        icon={<Search className="w-[24px] h-[24px]" aria-hidden="true" />}
+        icon={<Search size={18} weight="regular" aria-hidden="true" />}
         title={"No results for \u201ccottonwood\u201d"}
         description={
           <>
@@ -734,7 +843,9 @@ function buildEmptyStateSection(): Section {
       <EmptyState
         icon={
           <CheckCircle2
-            className="w-[24px] h-[24px] text-[var(--color-success)]"
+            size={18}
+            weight="regular"
+            className="text-[var(--color-success)]"
             aria-hidden="true"
           />
         }
@@ -988,9 +1099,9 @@ function buildNavSection(): Section {
           <>
             <IconButton
               label="Search"
-              icon={<Search className="w-[20px] h-[20px]" aria-hidden="true" />}
+              icon={<Search size={16} weight="bold" aria-hidden="true" />}
             />
-            <Button variant="secondary" iconLeft={<Plus className="w-[16px] h-[16px]" aria-hidden="true" />}>
+            <Button variant="secondary" iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}>
               Quick add
             </Button>
           </>
@@ -1115,7 +1226,7 @@ function buildTooltipSection(): Section {
   const html = mountOverlay(
     <TooltipProvider>
       <Tooltip content="Log a call">
-        <IconButton label="Log a call" icon={<Phone className="w-[20px] h-[20px]" aria-hidden="true" />} />
+        <IconButton label="Log a call" icon={<Phone size={16} weight="bold" aria-hidden="true" />} />
       </Tooltip>
     </TooltipProvider>,
     (container) => {
@@ -1415,7 +1526,10 @@ export function renderGallery(): string {
     buildCheckboxSection(),
     buildSwitchSection(),
     buildBadgeSection(),
+    buildBadgeAllTonesSection(),
     buildCardSection(),
+    buildGroupedListSection(),
+    buildSectionLabelSection(),
     buildEmptyStateSection(),
     buildFieldSection(),
     buildTableSection(),

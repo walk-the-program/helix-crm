@@ -1,10 +1,11 @@
 import type { MouseEvent, ReactNode } from "react";
 import { cn } from "@/ui/cn";
-import { focusRing, quietTransition } from "@/ui/styles";
+import { focusRing, quietTransition, sectionLabel } from "@/ui/styles";
 
 /**
- * The nav rail: --sidebar-w, --color-sidebar, never collapses
- * (docs/DESIGN.md section 3).
+ * The sidebar (docs/DESIGN.md §3): 240px, the warm --color-sidebar tint, a
+ * single hairline right edge, and nothing else. It never collapses, it never
+ * carries a shadow, and it is the only chrome that is not white.
  */
 export function Sidebar(props: { children: ReactNode; footer?: ReactNode }) {
   return (
@@ -15,11 +16,11 @@ export function Sidebar(props: { children: ReactNode; footer?: ReactNode }) {
         "border-r border-[var(--color-border)] bg-[var(--color-sidebar)]",
       ].join(" ")}
     >
-      <nav aria-label="Main" className="flex-1 overflow-y-auto py-[var(--space-3)]">
+      <nav aria-label="Main" className="flex-1 overflow-y-auto py-[var(--space-2)]">
         {props.children}
       </nav>
       {props.footer ? (
-        <div className="border-t border-[var(--color-border)] p-[var(--space-3)]">
+        <div className="border-t border-[var(--color-border)] p-[var(--space-2)]">
           {props.footer}
         </div>
       ) : null}
@@ -27,14 +28,19 @@ export function Sidebar(props: { children: ReactNode; footer?: ReactNode }) {
   );
 }
 
+/**
+ * A group of nav rows under an optional label.
+ *
+ * The label is the section-label style — 11px, uppercase, tracked 0.05em,
+ * tertiary ink — which is how a native sidebar names a group. It is the only
+ * place in the product where type is set in capitals, and it is never longer
+ * than three words.
+ */
 export function SidebarSection(props: { label?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-[var(--space-1)] px-[var(--space-2)] py-[var(--space-2)]">
-      {/* Sentence case. There are no all-caps tracked-out labels in this
-          product — small caps at 13px is the opposite of legible for the
-          reader this is built for (docs/DESIGN.md section 4). */}
+    <div className="flex flex-col gap-[1px] px-[var(--space-2)] py-[var(--space-2)]">
       {props.label ? (
-        <div className="px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] font-medium text-[var(--color-text-faint)]">
+        <div className={cn("px-[var(--space-3)] pb-[var(--space-2)] pt-[var(--space-1)]", sectionLabel)}>
           {props.label}
         </div>
       ) : null}
@@ -44,12 +50,14 @@ export function SidebarSection(props: { label?: string; children: ReactNode }) {
 }
 
 /**
- * The active item is --color-selected with full-strength ink.
+ * A nav row. Selected is the --color-selected tint (system blue at 10%) with
+ * full-strength ink and weight 500 — the soft neutral-blue tint a macOS
+ * sidebar paints behind its selected row. Hover is the plain --color-hover
+ * tint, one step quieter.
  *
- * It was --color-accent-soft with accent text, which is the same defect
- * design/review.md finding 1 caught in the comps: global chrome never carries
- * the accent, because the sidebar is on screen at all times and the accent
- * has to keep meaning "this needs you".
+ * The icon takes the row's ink rather than its own colour: a sidebar full of
+ * coloured glyphs is the single loudest tell of a web app pretending to be a
+ * desktop one.
  */
 export function NavItem(props: {
   label: string;
@@ -66,6 +74,7 @@ export function NavItem(props: {
     "rounded-[var(--radius-md)] px-[var(--space-3)] no-underline",
     "text-[length:var(--text-base)] text-[var(--color-text-muted)]",
     "hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+    "hover:no-underline",
     quietTransition,
     focusRing,
     active && "bg-[var(--color-selected)] text-[var(--color-text)] font-medium",
@@ -75,7 +84,7 @@ export function NavItem(props: {
     <>
       {icon ? (
         <span
-          className="inline-flex flex-none items-center justify-center text-[var(--color-text-muted)]"
+          className="inline-flex flex-none items-center justify-center text-current"
           aria-hidden="true"
         >
           {icon}
@@ -104,8 +113,9 @@ export function NavItem(props: {
 }
 
 /**
- * 56px (48px compact) and it holds three things: where you are, search, and
- * quick add. Nothing else is ever added to it, and nothing in it is the accent.
+ * The toolbar: 48px (44 compact), white, one hairline along the bottom, and it
+ * holds three things — where you are, search, and quick add. Nothing else is
+ * ever added to it, and nothing in it is coloured.
  */
 export function Topbar(props: { children?: ReactNode; left?: ReactNode; right?: ReactNode }) {
   return (
@@ -118,7 +128,7 @@ export function Topbar(props: { children?: ReactNode; left?: ReactNode; right?: 
     >
       <div className="flex flex-none items-center gap-[var(--space-3)] min-w-0">{props.left}</div>
       <div className="flex-1 min-w-0">{props.children}</div>
-      <div className="flex flex-none items-center gap-[var(--space-2)]">{props.right}</div>
+      <div className="flex flex-none items-center gap-[var(--space-1)]">{props.right}</div>
     </div>
   );
 }

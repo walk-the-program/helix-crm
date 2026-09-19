@@ -78,14 +78,27 @@ svg {
 h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   line-height: var(--leading-tight);
-  letter-spacing: -0.011em;   /* the system stack tracks a touch wide at size */
+  letter-spacing: var(--tracking-title);
   text-wrap: balance;
 }
 
-h1 { font-size: var(--text-2xl); }
-h2 { font-size: var(--text-xl); }
-h3 { font-size: var(--text-lg); }
+h1 { font-size: var(--text-xl); }
+h2 { font-size: var(--text-lg); }
+h3 { font-size: var(--text-base); }
 h4, h5, h6 { font-size: var(--text-base); }
+
+/* The only all-caps type in the product: the grouped-list section header, the
+   way a native settings pane labels a group. 11px, tracked, tertiary ink,
+   never longer than three words. */
+.section-label,
+[data-section-label] {
+  font-size: var(--text-label);
+  font-weight: 590;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
 
 p, li {
   text-wrap: pretty;
@@ -103,13 +116,16 @@ b, strong {
   font-weight: 600;
 }
 
+/* A link is the interactive blue and is not underlined until it is hovered:
+   the same treatment a native app gives an inline link. */
 a {
-  color: var(--color-text);
-  text-decoration-color: var(--color-border-strong);
+  color: var(--color-link);
+  text-decoration: none;
   text-underline-offset: 2px;
 }
 
 a:hover {
+  text-decoration: underline;
   text-decoration-color: currentColor;
 }
 
@@ -118,17 +134,19 @@ code, kbd, samp, pre {
   font-size: 0.9em;
 }
 
+/* A keyboard hint, the way a macOS menu draws one: the glyph in tertiary ink
+   on a quiet neutral tint, no bezel, no drop shadow, no second border. */
 kbd {
   display: inline-block;
   padding: 0 var(--space-1);
   min-width: 1.5em;
   text-align: center;
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  line-height: 1.6;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-bottom-width: 2px;
+  line-height: 1.7;
+  color: var(--color-text-faint);
+  background: var(--color-accent-soft);
+  border: var(--hairline) solid var(--color-border);
   border-radius: var(--radius-sm);
 }
 
@@ -213,7 +231,6 @@ th[data-numeric] {
 :focus-visible {
   outline: var(--focus-ring-w) solid var(--color-focus);
   outline-offset: 1px;
-  border-radius: var(--radius-sm);
 }
 
 /* Inside a dense table the offset ring would clip against the row above, so
@@ -246,12 +263,12 @@ td:focus-visible,
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--color-text-disabled) transparent;
 }
 
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 ::-webkit-scrollbar-track {
@@ -259,7 +276,7 @@ td:focus-visible,
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: var(--color-border-strong);
+  background-color: var(--color-text-disabled);
   border-radius: var(--radius-full);
   border: 3px solid transparent;
   background-clip: content-box;
@@ -276,7 +293,8 @@ td:focus-visible,
 
 /* --- Motion ---------------------------------------------------------------
    Nothing moves on its own. No entrances, no scroll reveals, no hover lifts.
-   Motion exists to show what changed when the owner did something.           */
+   Motion exists to show what changed when the owner did something: 150 to
+   200 ms, ease-out, and a scale(0.98) press on a button.                    */
 
 @media (prefers-reduced-motion: reduce) {
   *,

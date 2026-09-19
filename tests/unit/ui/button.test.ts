@@ -77,10 +77,13 @@ describe("Button", () => {
 
     renderButton({ variant: "danger" }, "Danger");
     const dangerClass = screen.getByRole("button", { name: "Danger" }).className;
-    // Danger legitimately carries --color-accent-text) (the readable ink
-    // colour on a filled button) — only the base --color-accent) fill token
-    // is reserved for primary.
-    expect(dangerClass).toContain("--color-accent-text)");
+    // Under the native-minimalist direction, destructive/danger is text-only
+    // by default (transparent background, --color-danger-ink label) — it is
+    // filled only via the `solid` prop, which this specimen does not set. So
+    // it carries neither accent token: not the primary fill (--color-accent))
+    // nor the old filled-button ink (--color-accent-text)).
+    expect(dangerClass).toContain("--color-danger-ink)");
     expect(dangerClass).not.toContain("--color-accent)");
+    expect(dangerClass).not.toContain("--color-accent-text)");
   });
 });

@@ -31,6 +31,16 @@ export const quietTransform =
 /** A control never shrinks below its hit target inside a flex row. */
 export const noShrink = "flex-none";
 
+/** The only transform in the UI: a button presses down slightly on click.
+ *  Reduced motion holds it at rest. */
+export const pressScale =
+  "active:scale-[var(--press-scale)] motion-reduce:active:scale-100";
+
+/** The one uppercase type in the product: an 11px tracked section label in
+ *  tertiary ink (docs/DESIGN.md section 4, "Type"). */
+export const sectionLabel =
+  "text-[length:var(--text-label)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-faint)]";
+
 /** Disabled: muted, and the cursor says so. Never pointer-events: none, which
  *  would also kill the tooltip that explains why the control is disabled. */
 export const disabledState =

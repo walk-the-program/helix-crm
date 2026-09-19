@@ -1,8 +1,9 @@
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ElementRef } from "react";
 import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check } from "lucide-react";
+import { Check } from "@/ui/icons";
 import { cn } from "@/ui/cn";
+import { sectionLabel } from "@/ui/styles";
 
 export const DropdownMenu = RadixDropdownMenu.Root;
 export const DropdownMenuTrigger = RadixDropdownMenu.Trigger;
@@ -19,6 +20,12 @@ export const DropdownMenuContent = forwardRef<
         "z-50 min-w-[200px] overflow-hidden rounded-[var(--radius-lg)]",
         "border border-[var(--color-border)] bg-[var(--color-surface-raised)]",
         "shadow-[var(--shadow-md)] p-[var(--space-1)]",
+        // A macOS menu that has a tick anywhere indents every row to the same
+        // text origin, so the labels line up down the left edge. Without this
+        // a plain item sat 20px left of a checkable one.
+        "[&:has([role=menuitemcheckbox])_[role=menuitem]]:pl-[var(--space-7)]",
+        "[&:has([role=menuitemcheckbox])_[role=menuitem]]:pr-[var(--space-3)]",
+        "[&:has([role=menuitemcheckbox])_[data-menu-label]]:pl-[var(--space-7)]",
         className,
       )}
       {...props}
@@ -33,9 +40,8 @@ DropdownMenuContent.displayName = "DropdownMenuContent";
  * It was --color-accent-soft, which put "this needs you" orange under the
  * pointer on every menu in the product — the accent means one thing, and a
  * menu highlight is not it (docs/DESIGN.md section 5). --color-hover is the
- * other candidate and it is wrong here: in the dark theme #232D37 against the
- * raised surface #242F39 is a 1-point difference, so the keyboard highlight
- * would be invisible.
+ * other candidate and it is wrong here: in the dark theme --color-hover sits
+ * too close to --color-surface-raised to read as a keyboard highlight.
  *
  * A destructive item is --color-danger-ink, which is the readable weight of
  * danger on a surface; --color-danger is the fill.
@@ -48,7 +54,7 @@ export const DropdownMenuItem = forwardRef<
     ref={ref}
     className={cn(
       "flex min-h-[var(--control-h-sm)] cursor-default items-center gap-[var(--space-2)]",
-      "rounded-[var(--radius-sm)] px-[var(--space-3)]",
+      "rounded-[var(--radius-md)] px-[var(--space-3)]",
       "text-[length:var(--text-base)] text-[var(--color-text)]",
       "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",
@@ -69,7 +75,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
     ref={ref}
     className={cn(
       "relative flex min-h-[var(--control-h-sm)] cursor-default items-center gap-[var(--space-2)]",
-      "rounded-[var(--radius-sm)] pl-[var(--space-7)] pr-[var(--space-3)]",
+      "rounded-[var(--radius-md)] pl-[var(--space-7)] pr-[var(--space-3)]",
       "text-[length:var(--text-base)] text-[var(--color-text)]",
       "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",
@@ -78,7 +84,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
     {...props}
   >
     <RadixDropdownMenu.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center text-[var(--color-text-muted)]">
-      <Check className="w-[16px] h-[16px]" aria-hidden="true" />
+      <Check size={16} weight="bold" aria-hidden="true" />
     </RadixDropdownMenu.ItemIndicator>
     {children}
   </RadixDropdownMenu.CheckboxItem>
@@ -103,11 +109,8 @@ export const DropdownMenuLabel = forwardRef<
 >(({ className, ...props }, ref) => (
   <RadixDropdownMenu.Label
     ref={ref}
-    className={cn(
-      "px-[var(--space-3)] py-[var(--space-1)]",
-      "text-[length:var(--text-xs)] text-[var(--color-text-faint)]",
-      className,
-    )}
+    data-menu-label=""
+    className={cn("px-[var(--space-3)] py-[var(--space-1)]", sectionLabel, className)}
     {...props}
   />
 ));

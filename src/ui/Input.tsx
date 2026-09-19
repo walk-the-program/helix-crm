@@ -5,32 +5,40 @@ import { disabledState, focusRing, quietTransition } from "@/ui/styles";
 
 export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   invalid?: boolean;
+  /** The soft grey rounded field of a macOS search bar, for search only. */
+  search?: boolean;
 };
 
 /**
- * Field height --control-h, 1px --color-border, --radius-sm, --color-surface
- * fill, 16px text (docs/DESIGN.md section 9, "Inputs").
+ * A macOS text field: white fill, one visible hairline
+ * (--color-border-strong), --radius-md, --control-h tall, body type
+ * (docs/DESIGN.md §9 "Fields").
  *
- * An invalid field turns its BORDER --color-danger. It does not recolour the
- * focus ring: the ring is --color-focus and means "the keyboard is here",
- * nothing else.
+ * Focus is the system-blue ring and nothing else — the border does not thicken
+ * and the field does not change colour, because a field that redraws itself on
+ * focus reads as a web form.
+ *
+ * An invalid field turns its BORDER --color-danger. It never recolours the
+ * ring: the ring means "the keyboard is here", and nothing else.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, invalid, ...props }, ref) => {
+  ({ className, invalid, search, ...props }, ref) => {
     return (
       <input
         ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
-          "w-full h-[var(--control-h)] rounded-[var(--radius-sm)]",
-          "bg-[var(--color-surface)] text-[var(--color-text)]",
-          "border border-[var(--color-border)]",
+          "w-full h-[var(--control-h)] rounded-[var(--radius-md)]",
+          "text-[var(--color-text)]",
           "px-[var(--space-3)] text-[length:var(--text-base)]",
           "placeholder:text-[var(--color-text-faint)]",
+          search
+            ? "border-0 bg-[var(--color-accent-soft)] rounded-[var(--radius-full)]"
+            : "border border-[var(--color-border-strong)] bg-[var(--color-surface)]",
           quietTransition,
           focusRing,
           disabledState,
-          invalid && "border-[var(--color-danger)]",
+          invalid && "border border-[var(--color-danger)]",
           className,
         )}
         {...props}

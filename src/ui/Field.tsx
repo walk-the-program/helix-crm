@@ -1,6 +1,6 @@
 import { cloneElement, isValidElement, useId } from "react";
 import type { ReactElement, ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
+import { WarningCircle } from "@/ui/icons";
 import { cn } from "@/ui/cn";
 
 export function FormRow(props: { children: ReactNode; className?: string }) {
@@ -87,7 +87,7 @@ export function Field(props: {
             "text-[length:var(--text-xs)] text-[var(--color-danger-ink)]",
           )}
         >
-          <AlertCircle className="w-[16px] h-[16px] flex-none translate-y-[1px]" aria-hidden="true" />
+          <WarningCircle size={14} className="flex-none translate-y-[1px]" aria-hidden="true" />
           <span>{error}</span>
         </p>
       ) : null}

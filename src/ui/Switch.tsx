@@ -3,7 +3,7 @@ import { cn } from "@/ui/cn";
 import { focusRing, quietTransform, quietTransition } from "@/ui/styles";
 
 /**
- * A 36x20 track inside a --control-h-sm hit target, so the switch clears the
+ * A 38x22 track inside a --control-h-sm hit target, so the switch clears the
  * 32/28px floor without drawing a 32px-tall pill.
  *
  * "On" is ink, not the accent. A setting that is switched on is not asking for
@@ -29,7 +29,7 @@ export function Switch(props: {
       aria-label={ariaLabel}
       className={cn(
         "group relative inline-flex flex-none items-center",
-        "w-[36px] h-[var(--control-h-sm)] rounded-[var(--radius-full)]",
+        "w-[38px] h-[var(--control-h-sm)] rounded-[var(--radius-full)]",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         focusRing,
         className,
@@ -39,7 +39,7 @@ export function Switch(props: {
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2",
-          "h-[20px] rounded-[var(--radius-full)]",
+          "h-[22px] rounded-[var(--radius-full)]",
           "bg-[var(--color-border-strong)]",
           "group-data-[state=checked]:bg-[var(--color-text)]",
           quietTransition,
@@ -48,8 +48,8 @@ export function Switch(props: {
       <RadixSwitch.Thumb
         className={cn(
           "pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2",
-          "block w-[16px] h-[16px] rounded-[var(--radius-full)]",
-          "bg-[var(--color-surface)] shadow-[var(--shadow-sm)]",
+          "block w-[18px] h-[18px] rounded-[var(--radius-full)]",
+          "bg-[var(--color-surface)] border border-[var(--color-border)]",
           "data-[state=checked]:translate-x-[16px]",
           quietTransform,
         )}

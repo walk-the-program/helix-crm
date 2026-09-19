@@ -1861,3 +1861,131 @@ so the mounted observer rebuilds against it. Asserted in the archive test.
    reads `settings.site_origin`, while the TypeScript settings registry stores
    that key as `siteOrigin`. Nothing this agent owns depends on it, but the two
    spellings cannot both be right.
+
+---
+
+## 2026-09-19 — Redesign agent (Apple-like minimalist direction)
+
+Walker looked at the build and said the design was still sloppy, and asked for a
+truly Apple-like one. The previous direction — light-first, one equipment-orange
+accent, dense ledger tables — is rejected and superseded.
+
+### Did
+
+**`docs/DESIGN.md`** — rewritten as revision 2 and re-issued as the contract.
+The reference is the software already on the owner's Mac: a translucent grey
+sidebar against white content, one hairline between them, a selected row marked
+by a soft blue tint and heavier text, grouped inset lists, 11-to-28px system
+type, and a lot of air. Twelve sections with concrete values, a do/don't list,
+one paragraph per component type, and a **Superseded** section at the bottom
+naming what was rejected and the five specific reasons, so it is not rebuilt by
+accident. The audience research, the two sentences the product is measured
+against, the no-dark-patterns rule and the token architecture all carried over.
+
+**`src/styles/tokens.css`** — rewritten.
+- Canvas `#FBFBFA`, surfaces `#FFFFFF`, sidebar `#F7F6F3`, hairlines
+  `rgba(0,0,0,0.06)` and `rgba(0,0,0,0.13)`. Dark is true Apple greys: `#1E1E1E`
+  canvas, `#2A2A2A` surface, `#323232` raised, white hairlines at 8%.
+- Ink `#1D1D1F` / `#56565A` / `#6E6E73`. Apple's own label greys measure 2.57:1
+  and 3.62:1 on white and cannot carry text, so the ramp ships the accessible
+  cousins and `#A1A1A6` survives only as `--color-text-disabled`.
+- `--color-accent` is now the near-black primary fill (`#111111`), inverting to
+  `#F5F5F7` in dark. There is no coloured accent in the product any more.
+  System blue does three things: the focus ring (`#007AFF`), link text
+  (`#0B62D6`, because `#007AFF` fails AA at 15px), and the 10% selected tint.
+- Every tag, badge, stage and semantic state is a muted pastel with its own dark
+  ink partner, measured and documented inline. The eight-stage ramp is pale
+  slate / blue / lavender / teal / green / red / clay / yellow, and keeps its
+  identity across themes.
+- Type: system stack, no serif, body 15px comfortable / 13px compact on 1.5,
+  titles 20-28px semibold at -0.01em, and a new `--text-label` (11px, uppercase,
+  0.05em) which is the only capitals in the product.
+- One shadow, `0 2px 8px rgba(0,0,0,0.04)`, and only a floating layer wears it.
+  `--shadow-sm` is `none`.
+- Sidebar 240px, top bar 48px, rows 40/32, controls 32/28, radius 6 on controls
+  and 10 on containers, motion 150-200ms ease-out with a `scale(0.98)` press.
+
+**`globals.css` / `app.css`** — heading scale re-pointed, a `.section-label`
+rule added, links set in the interactive blue, `kbd` rebuilt as a flat system-sans
+chip, scrollbars quietened. The `--tok-*` mirror and the `@theme inline` block in
+`app.css` were extended with the new names (`--color-text-disabled`,
+`--color-link`, `--color-tint`, `--color-info*`) and the `@source inline` list
+updated, so the Tailwind utility names keep working under a scoped `data-theme`.
+
+**`src/ui/**`** — every primitive restyled to the contract. Button gained a
+text-only `destructive` variant (with `solid` for a dialog's confirm) and the
+press scale; Input gained a `search` form; Table lost its zebra-era header,
+row rails and second type size and gained small-capitals column labels; Card
+became a grouped inset list with `CardRow` and `CardGroupLabel`; Badge became a
+muted pastel pill; EmptyState is centred with no glyph; Nav, Kbd, Checkbox,
+Switch, Tooltip, DropdownMenu and Select all moved to the new tokens. Every
+export name and prop is unchanged; `Button.solid`, `Input.search`, `CardRow`,
+`CardGroupLabel` and two new `styles.ts` fragments are additions.
+
+**`src/ui/icons.ts`** (new) — the Lucide-to-Phosphor map. All 86 Lucide names
+the product used are re-exported under both their Phosphor name and their old
+spelling, so a feature migrates by changing the import path alone. 18px regular
+in lists, 16px bold in buttons. `src/ui` and `src/app` are clear of
+`lucide-react`. It is deliberately not re-exported from `src/ui/index.ts`
+(`Table`, `Check` and `X` would collide with components).
+
+**`Shell.tsx` / `CommandPalette.tsx` / `BootScreens.tsx`** — the sidebar is the
+240px tint with a hairline right edge and a small grey workspace name in the
+footer; the toolbar is 48px white with a hairline bottom, a macOS-style soft grey
+rounded search field, and a monochrome theme toggle; the palette is a Spotlight
+panel held 14% down the window.
+
+**Fixed, from item 8 of the previous entry:** `DialogContent` is now
+height-bound — capped at `100vh - 2 × 48px`, one internal scroll box, and the
+header and footer stick to its top and bottom. All 14 dialog call sites in
+`src/features` get the fix without changing a line, and it is asserted in
+`tests/unit/ui/dialog.test.ts` because the gallery harness neutralises
+`position` and cannot show it.
+
+### Evidence
+
+`design/apple/review.md` — ten defects with the screenshot that caught each and
+the fix. Gallery regenerated with three new specimens and screenshotted full-page
+at 1280 in light, dark, comfortable and compact
+(`design/apple/gallery-1280-*.png`, plus 32 per-section crops in
+`design/apple/sections/`). `design/contrast-audit.js` run in all four modes:
+**0 failures, 428 text elements measured in each**
+(`design/apple/contrast-*.json`). Console clean, two requests per load.
+
+`npm run typecheck` clean. `npm test` 59 files / 739 tests green.
+`npx vite build --outDir dist-redesign` succeeds; the directory was deleted.
+
+### For the feature sweep agents
+
+1. Change `from "lucide-react"` to `from "@/ui/icons"`. Nothing else. Every old
+   name is re-exported; the icon takes `size` and `weight`, not `strokeWidth`.
+   18 regular in a list, 16 bold in a button, one weight per cluster.
+2. Delete every local colour. `--color-accent` is black now, not orange: a
+   feature that painted "needs you" orange must convey it by position and
+   weight instead. Anything that used `--color-accent-soft` as an attention tint
+   wants a muted pastel (`--color-info-soft` and friends) or nothing.
+3. Drop `shadow-[var(--shadow-sm)]` wherever it appears: it resolves to `none`.
+4. Sizes moved. Body is 15px, rows are 40px, controls are 32px. A hard-coded
+   `h-[40px]`, `text-[16px]` or `w-[18px]` breaks compact — use the tokens.
+5. Table headers, group labels and nav section labels are the 11px small-caps
+   style; nothing else in a feature screen is uppercase.
+6. Empty states pass a title, one sentence and one primary button. The `icon`
+   prop still compiles and is not drawn.
+7. No new hex. `tokens.css` is still the only file in the repo with a colour in
+   it.
+
+### Notes for whoever comes next
+
+1. **`src/features` is untouched by this pass** and is currently a mix of the old
+   orange-era classes and the new tokens. It will look inconsistent until the
+   three sweep agents land.
+2. **The gallery cannot photograph an overlay's geometry.** Its harness forces
+   `position: static` on portalled content, so dialog, popover and select
+   specimens show their close buttons and sticky edges in the wrong place. That
+   is the harness, not the kit; anything positional has to be asserted in a test.
+3. **`Shell` and `CommandPalette` have no gallery specimen** because the gallery
+   imports only from `src/ui`. Adding one means pulling in the registry and the
+   router, which is a bigger change than it looks.
+4. **`--color-accent` is a misleading name now** that it is a neutral fill rather
+   than an accent. It is kept because `docs/CONTRACTS.md` fixes the name and
+   every feature reaches for it; renaming it is a repo-wide change for a word.

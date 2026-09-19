@@ -1,25 +1,29 @@
 import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Loader2 } from "lucide-react";
+import { CircleNotch } from "@/ui/icons";
 import { cn } from "@/ui/cn";
-import { disabledState, focusRing, noShrink, quietTransition } from "@/ui/styles";
+import { disabledState, focusRing, noShrink, pressScale, quietTransition } from "@/ui/styles";
 
 /**
- * Four variants and no more (docs/DESIGN.md section 9).
+ * Four variants and no more (docs/DESIGN.md §9).
  *
- *   primary   -> the accent fill. One per screen, for the thing he came to do.
- *   secondary -> the "Default" button of the contract: surface fill, 1px
- *                border, full-strength ink. Everything else.
- *   ghost     -> the "Quiet" button: no fill, no border, muted ink. Row
- *                actions and toolbars.
- *   danger    -> a confirmed destructive action inside a dialog.
+ *   primary     -> the solid near-black control. One per screen, for the thing
+ *                  the owner came to do. Inverts to near-white in the dark
+ *                  theme, which is what a native dark app does with its
+ *                  default button.
+ *   secondary   -> white, hairline, full-strength ink. The default. This is
+ *                  the macOS push button.
+ *   ghost       -> no fill, no border, secondary ink. Toolbars and row
+ *                  actions.
+ *   destructive -> text-only red. It gets a fill only when it is the confirm
+ *                  button inside a dialog, which is what `solid` is for.
  *
- * The prop names are the ones the feature code already passes; only the looks
- * moved to match the contract.
+ * `danger` is kept as an alias of `destructive` because feature code passes it
+ * today; both spell the same variant.
  *
- * Height is --control-h (36/32) or --control-h-sm (32/28) and never a hard
- * pixel, so density is a token change rather than an edit here.
+ * Height is --control-h (32/28) or --control-h-sm (28/24), never a hard pixel,
+ * so density is a token change rather than an edit here.
  */
 const buttonVariants = cva(
   [
@@ -29,6 +33,7 @@ const buttonVariants = cva(
     "rounded-[var(--radius-md)] font-medium",
     "leading-[var(--leading-tight)]",
     quietTransition,
+    pressScale,
     disabledState,
     focusRing,
   ].join(" "),
@@ -37,25 +42,28 @@ const buttonVariants = cva(
       variant: {
         primary: [
           "bg-[var(--color-accent)] text-[var(--color-accent-text)]",
-          "enabled:hover:bg-[var(--color-accent-hover)] enabled:active:bg-[var(--color-accent-hover)]",
+          "enabled:hover:bg-[var(--color-accent-hover)]",
         ].join(" "),
         secondary: [
           "bg-[var(--color-surface)] text-[var(--color-text)]",
-          "border border-[var(--color-border)]",
-          "enabled:hover:bg-[var(--color-hover)] enabled:active:bg-[var(--color-selected)]",
+          "border border-[var(--color-border-strong)]",
+          "enabled:hover:bg-[var(--color-hover)]",
         ].join(" "),
         ghost: [
           "bg-transparent text-[var(--color-text-muted)]",
           "enabled:hover:bg-[var(--color-hover)] enabled:hover:text-[var(--color-text)]",
-          "enabled:active:bg-[var(--color-selected)]",
+        ].join(" "),
+        destructive: [
+          "bg-transparent text-[var(--color-danger-ink)]",
+          "enabled:hover:bg-[var(--color-danger-soft)]",
         ].join(" "),
         danger: [
-          "bg-[var(--color-danger)] text-[var(--color-accent-text)]",
-          "enabled:hover:bg-[var(--color-danger-ink)] enabled:active:bg-[var(--color-danger-ink)]",
+          "bg-transparent text-[var(--color-danger-ink)]",
+          "enabled:hover:bg-[var(--color-danger-soft)]",
         ].join(" "),
       },
       size: {
-        sm: "h-[var(--control-h-sm)] px-[var(--space-3)] text-[length:var(--text-base)]",
+        sm: "h-[var(--control-h-sm)] px-[var(--space-3)] text-[length:var(--text-sm)]",
         md: "h-[var(--control-h)] px-[var(--space-4)] text-[length:var(--text-base)]",
         lg: "h-[var(--control-h)] px-[var(--space-5)] text-[length:var(--text-base)]",
       },
@@ -67,6 +75,16 @@ const buttonVariants = cva(
   },
 );
 
+/**
+ * The one case where destructive is a fill rather than text: the confirm
+ * button of a destructive dialog, where the red has already been explained by
+ * the sentence above it.
+ */
+const solidDestructive = [
+  "bg-[var(--color-danger)] text-[var(--color-surface)]",
+  "enabled:hover:opacity-90",
+].join(" ");
+
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
   VariantProps<typeof buttonVariants> & {
     loading?: boolean;
@@ -74,6 +92,8 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
     loadingLabel?: ReactNode;
     iconLeft?: ReactNode;
     iconRight?: ReactNode;
+    /** Destructive only: draw it as a fill. For a dialog's confirm button. */
+    solid?: boolean;
   };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -86,6 +106,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       loadingLabel,
       iconLeft,
       iconRight,
+      solid,
       disabled,
       children,
       ...props
@@ -95,18 +116,25 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     // A loading button never shows a spinner alone: it keeps a label, and the
     // caller is expected to pass the progressive form of its own verb.
     const label = loading ? (loadingLabel ?? children) : children;
+    const destructive = variant === "danger" || variant === "destructive";
 
     return (
       <button
         ref={ref}
-        className={cn(buttonVariants({ variant, size }), className)}
+        className={cn(
+          buttonVariants({ variant, size }),
+          solid && destructive && solidDestructive,
+          className,
+        )}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
         {...props}
       >
         {loading ? (
-          <Loader2
-            className="w-[16px] h-[16px] animate-spin motion-reduce:animate-none"
+          <CircleNotch
+            size={16}
+            weight="bold"
+            className="animate-spin motion-reduce:animate-none"
             aria-hidden="true"
           />
         ) : (

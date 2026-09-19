@@ -1,10 +1,10 @@
 import * as RadixCheckbox from "@radix-ui/react-checkbox";
-import { Check, Minus } from "lucide-react";
+import { Check, Minus } from "@/ui/icons";
 import { cn } from "@/ui/cn";
 import { focusRing, quietTransition } from "@/ui/styles";
 
 /**
- * The box people see is 18px. The thing they can hit is --control-h-sm
+ * The box people see is 16px. The thing they can hit is --control-h-sm
  * (32px comfortable, 28px compact), which is the hit-target floor in
  * docs/DESIGN.md section 7 — a bare 18px box is not clickable by a
  * two-finger typist with a trackpad.
@@ -59,7 +59,7 @@ export function Checkbox(props: {
         aria-hidden="true"
         className={cn(
           "inline-flex items-center justify-center",
-          "w-[18px] h-[18px] rounded-[var(--radius-sm)]",
+          "w-[16px] h-[16px] rounded-[var(--radius-sm)]",
           "border border-[var(--color-border-strong)] bg-[var(--color-surface)]",
           "text-[var(--color-surface)]",
           quietTransition,
@@ -68,9 +68,9 @@ export function Checkbox(props: {
       >
         <RadixCheckbox.Indicator className="inline-flex items-center justify-center">
           {checked === "indeterminate" ? (
-            <Minus className="w-[14px] h-[14px]" aria-hidden="true" />
+            <Minus size={12} weight="bold" aria-hidden="true" />
           ) : (
-            <Check className="w-[14px] h-[14px]" aria-hidden="true" />
+            <Check size={12} weight="bold" aria-hidden="true" />
           )}
         </RadixCheckbox.Indicator>
       </span>

@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Route, Router, Switch, useLocation } from "wouter";
 import { Toaster } from "sonner";
-import { Search } from "lucide-react";
+import { MagnifyingGlass, MoonStars, Sun } from "@/ui/icons";
 import {
   allNavItems,
   allNavProviders,
@@ -37,6 +37,7 @@ import type { HelixRegistry, WorkspaceEntry } from "@/app/appSettings";
 import {
   Badge,
   EmptyState,
+  IconButton,
   Kbd,
   NavItem,
   Sidebar,
@@ -201,12 +202,12 @@ export function Shell({ registry, workspace }: ShellProps) {
                 type="button"
                 onClick={switchWorkspace}
                 title="Switch workspace"
-                className="flex w-full items-center rounded-[var(--radius-md)] px-[var(--space-3)] py-[var(--space-2)] text-left text-[length:var(--text-xs)] text-[var(--color-text-faint)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                className="flex min-h-[var(--control-h-sm)] w-full items-center rounded-[var(--radius-md)] px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] hover:text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
               >
                 <span className="truncate">{workspace.name}</span>
               </button>
             ) : (
-              <div className="px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+              <div className="flex min-h-[var(--control-h-sm)] items-center px-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
                 {workspace.name}
               </div>
             )
@@ -218,35 +219,43 @@ export function Shell({ registry, workspace }: ShellProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar
             left={
+              /* The macOS search field: a soft grey rounded field, no border,
+                 the glyph in tertiary ink, the shortcut on the right. It is a
+                 button rather than an input because pressing it opens the
+                 search dialog — the field is the affordance, not the target. */
               <button
                 type="button"
                 onClick={openSearch}
-                className="flex h-[40px] min-w-[280px] items-center gap-[var(--space-2)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+                className="flex h-[var(--control-h)] min-w-[260px] items-center gap-[var(--space-2)] rounded-[var(--radius-full)] bg-[var(--color-accent-soft)] px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
               >
-                <Search size={16} aria-hidden />
-                <span className="flex-1">Search everything</span>
+                <MagnifyingGlass size={16} weight="bold" aria-hidden />
+                <span className="flex-1">Search</span>
                 <Kbd keys="mod+k" />
               </button>
             }
             right={
-              <div className="flex items-center gap-[var(--space-3)]">
+              <div className="flex items-center gap-[var(--space-2)]">
                 <WriteStatus />
-                <button
-                  type="button"
+                <IconButton
+                  label={appearance.theme === "dark" ? "Switch to light" : "Switch to dark"}
                   onClick={() =>
                     void appearance.setTheme(
                       appearance.theme === "dark" ? "light" : "dark",
                     )
                   }
-                  className="h-[40px] rounded-[var(--radius-md)] px-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-                >
-                  {appearance.theme === "dark" ? "Light" : "Dark"}
-                </button>
+                  icon={
+                    appearance.theme === "dark" ? (
+                      <Sun size={16} weight="bold" aria-hidden />
+                    ) : (
+                      <MoonStars size={16} weight="bold" aria-hidden />
+                    )
+                  }
+                />
               </div>
             }
           />
 
-          <main className="min-w-0 flex-1 overflow-y-auto p-[var(--space-6)]">
+          <main className="min-w-0 flex-1 overflow-y-auto px-[var(--space-7)] py-[var(--space-6)]">
             <Switch>
               {routes.map((route) => (
                 <Route key={route.path} path={route.path}>

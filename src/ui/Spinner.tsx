@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { CircleNotch } from "@/ui/icons";
 
 /**
  * A spinner never stands in for a loading table — that gets a quiet row count
@@ -10,9 +10,10 @@ export function Spinner(props: { size?: number; label?: string }) {
 
   return (
     <span role="status" className="inline-flex flex-none items-center justify-center">
-      <Loader2
+      <CircleNotch
+        size={size}
+        weight="bold"
         className="animate-spin motion-reduce:animate-none text-[var(--color-text-muted)]"
-        style={{ width: size, height: size }}
         aria-hidden="true"
       />
       <span className="sr-only">{label}</span>

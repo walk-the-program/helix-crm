@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/ui/cn";
-import { disabledState, focusRing, noShrink, quietTransition } from "@/ui/styles";
+import { disabledState, focusRing, noShrink, pressScale, quietTransition } from "@/ui/styles";
 
 /**
  * An icon-only button. It exists only inside a row's action cluster, and it
@@ -18,6 +18,7 @@ const iconButtonVariants = cva(
     noShrink,
     "rounded-[var(--radius-md)]",
     quietTransition,
+    pressScale,
     disabledState,
     focusRing,
   ].join(" "),

@@ -48,12 +48,15 @@
   --tok-text:           var(--color-text);
   --tok-text-muted:     var(--color-text-muted);
   --tok-text-faint:     var(--color-text-faint);
+  --tok-text-disabled:  var(--color-text-disabled);
 
   --tok-accent:         var(--color-accent);
   --tok-accent-hover:   var(--color-accent-hover);
   --tok-accent-text:    var(--color-accent-text);
   --tok-accent-soft:    var(--color-accent-soft);
   --tok-accent-ink:     var(--color-accent-ink);
+  --tok-link:           var(--color-link);
+  --tok-tint:           var(--color-tint);
 
   --tok-danger:         var(--color-danger);
   --tok-danger-soft:    var(--color-danger-soft);
@@ -64,6 +67,9 @@
   --tok-warning:        var(--color-warning);
   --tok-warning-soft:   var(--color-warning-soft);
   --tok-warning-ink:    var(--color-warning-ink);
+  --tok-info:           var(--color-info);
+  --tok-info-soft:      var(--color-info-soft);
+  --tok-info-ink:       var(--color-info-ink);
 
   --tok-focus:          var(--color-focus);
 
@@ -122,12 +128,15 @@
   --color-text:           var(--tok-text);
   --color-muted:          var(--tok-text-muted);
   --color-faint:          var(--tok-text-faint);
+  --color-disabled:       var(--tok-text-disabled);
 
   --color-accent:         var(--tok-accent);
   --color-accent-hover:   var(--tok-accent-hover);
   --color-accent-text:    var(--tok-accent-text);
   --color-accent-soft:    var(--tok-accent-soft);
   --color-accent-ink:     var(--tok-accent-ink);
+  --color-link:           var(--tok-link);
+  --color-tint:           var(--tok-tint);
 
   --color-danger:         var(--tok-danger);
   --color-danger-soft:    var(--tok-danger-soft);
@@ -138,6 +147,9 @@
   --color-warning:        var(--tok-warning);
   --color-warning-soft:   var(--tok-warning-soft);
   --color-warning-ink:    var(--tok-warning-ink);
+  --color-info:           var(--tok-info);
+  --color-info-soft:      var(--tok-info-soft);
+  --color-info-ink:       var(--tok-info-ink);
 
   --color-focus:          var(--tok-focus);
 
@@ -169,5 +181,5 @@
  * `border-strong`, `text-accent-ink` and the stage ramp are always available.
  * ------------------------------------------------------------------------ */
 
-@source inline("{bg,text,border}-{bg,surface,surface-raised,sidebar,hover,selected,overlay,border,strong,text,muted,faint,accent,accent-hover,accent-text,accent-soft,accent-ink,danger,danger-soft,danger-ink,success,success-soft,success-ink,warning,warning-soft,warning-ink,focus}");
+@source inline("{bg,text,border}-{bg,surface,surface-raised,sidebar,hover,selected,overlay,border,strong,text,muted,faint,disabled,accent,accent-hover,accent-text,accent-soft,accent-ink,link,tint,danger,danger-soft,danger-ink,success,success-soft,success-ink,warning,warning-soft,warning-ink,info,info-soft,info-ink,focus}");
 @source inline("{bg,text,border}-stage-{1,2,3,4,5,6,7,8}{,-soft}");
