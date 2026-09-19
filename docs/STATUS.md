@@ -1000,3 +1000,199 @@ is not an insert), and coalesces inside each bucket. Same run: **6,985 ms**.
 6. **`settings.set` is typed too narrowly for a dynamic key** — not a change,
    just a note: this feature uses `setRaw`/`getRaw` for the remembered
    mappings, which is what they are for.
+
+---
+
+## 2026-09-18 — Records feature agent
+
+### Did
+
+**Contacts.** `screens/ContactsScreen.tsx` is a virtualised list (`VirtualList`,
+20 000-row page, 68 px rows) with search-as-you-type (200 ms debounce), four
+sorts, tag and source filters, and an Archived toggle. Three distinct empty
+states: first run, zero-result search (repeats the query in quotes and offers to
+clear the filters), and "nothing archived".
+`screens/ContactPage.tsx` follows DESIGN.md §3 exactly — the fixed top block is
+the name, then the phone as a real `tel:` control at `--text-2xl`, then the next
+step (the soonest open task, or "No next step" in `--color-accent-ink`), then at
+most two more controls. Everything else sits below: phones and emails with
+labels and a primary flag, company link, source, tags, address, custom fields,
+notes. Nothing on the page has a save button; every field autosaves through
+`components/InlineEdit.tsx` (600 ms debounce, "Saved" for two seconds, blur
+flushes, Escape reverts). Create goes through `components/NewContactDialog.tsx`
+with the live dedupe warning ("… already has that email. Open it instead?" plus
+"Create anyway"). Archive/restore and a soft delete with an Undo toast.
+
+**One-tap actions.** `lib/links.ts` builds `tel:`, `sms:` and `mailto:` (pure);
+`lib/address.ts` builds the maps URL; `lib/oneTap.ts` opens it through
+`@tauri-apps/plugin-opener` and then offers a ten-second toast whose one click
+writes the matching timeline entry ("Called (801) 555-0147").
+
+**Companies.** `CompaniesScreen.tsx` mirrors the contacts list.
+`CompanyPage.tsx` shows linked people, open and closed deals (labelled from the
+vocabulary), and a merged timeline over `activities.list({ mergedForCompanyId })`
+so every call logged against any of its contacts appears, with the same
+autosaving detail panel.
+
+**Pipeline.** `PipelineScreen.tsx` toggles a board and a list.
+`components/PipelineBoard.tsx` is dnd-kit (pointer + keyboard sensors) with
+optimistic columns and `deals.moveTo` behind them; `components/DealCard.tsx`
+shows exactly four things and supports shift+arrow to move between and within
+stages. Column headers carry the name, the count and the value total in tabular
+money. Moving into a lost stage is refused by the repository until there is a
+reason, so `components/LostReasonDialog.tsx` asks for one and retries.
+`components/StageManagerDialog.tsx` adds, renames, reorders, recolours from the
+eight-step stage ramp, sets quiet days, and deletes with a forced move target.
+`screens/DealPage.tsx` edits title, value, stage, expected date, contact,
+company and source inline, shows won/lost and the reason, and reopens.
+
+**Timeline.** `components/Timeline.tsx`, shared by all three record pages.
+Note/call/email/meeting/text, two clicks to add (pick the kind, type, save),
+edit and delete of user entries with an Undo toast, system entries rendered
+dashed and muted with no controls, relative dates with the exact timestamp in a
+tooltip.
+
+**Tasks.** `screens/TasksScreen.tsx` groups Overdue / Today / Next 7 days /
+Later / Done from the pure `lib/taskGroups.ts`, completes from the list, snoozes
+to tomorrow or next week, shows linked-record chips, and creates with a due date
+and an optional time. `components/TaskRail.tsx` puts the same rows and composer
+on every record page. Overdue uses the accent, never danger.
+
+**Quick add.** `quickAdd/` — a module store, the dialog, and a host mounted once
+from the feature's `onBoot` into its own React root beside the shell, because
+the shell renders only route elements. Cmd/Ctrl+N works from any screen; the
+`quick-add` FeatureCommand with `shortcut: "mod+n"` is registered as well.
+Type switcher for contact, company, deal, task and note with exactly the
+required fields from the plan. Enter saves and closes, shift+Enter saves and
+clears, and every save shows a ten-second Undo that replays
+`changeLog.undoBatch`.
+
+**Undo and trash.** `lib/mutations.ts` centralises invalidation and undo.
+`screens/TrashScreen.tsx` at `/trash` (sidebar order 85) lists all eight types
+with counts, restore, "Delete forever" behind a confirm dialog, and a sequential
+"Empty the trash".
+
+Throughout: repositories are the only data access, every read is TanStack Query
+on the shared `qk` keys, every write invalidates. Only `src/ui` components and
+token-bound Tailwind utilities — no hex and no palette classes anywhere in the
+feature (grepped). 44 px targets on the primary row actions, keyboard access
+everywhere, long names truncated with a `title`, and no animation at all, which
+is how `prefers-reduced-motion` is respected.
+
+### Verified
+
+```
+$ npx tsc --noEmit
+(no output, exit 0)
+
+$ npm test
+ Test Files  52 passed (52)
+      Tests  691 passed (691)
+
+$ npx vite build --outDir dist-records
+(no output, exit 0)
+
+$ E2E_PORT=4181 E2E_OUT=dist-records npx playwright test \
+    -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/records.e2e.ts
+  ✓ 1 records › creates a contact through quick add (400ms)
+  ✓ 2 records › warns on a duplicate email and still allows creating anyway (2.1s)
+  ✓ 3 records › autosaves an inline edit on the contact page (1.2s)
+  ✓ 4 records › adds a phone and logs a call from it (1.4s)
+  ✓ 5 records › creates a deal and moves it to the next stage with the keyboard (436ms)
+  ✓ 6 records › marks a task done from the tasks list (468ms)
+  ✓ 7 records › deletes a contact and undoes it (1.3s)
+  ✓ 8 records › restores a contact from trash after the undo toast expires (11.0s)
+  ✓ 9 records screens › captures every screen, light and dark (8.5s)
+  9 passed (29.1s)
+```
+
+New tests: `tests/unit/records/` — board.test.ts (the board's move arithmetic,
+including the "dropped one slot early" case and the clamp at the ends),
+taskGroups.test.ts (every bucket boundary, ordering, `dueLabel`, the due
+date/time round trip), address.test.ts (parse/stringify, legacy aliases, the
+maps URL), links.test.ts (tel/sms/mailto), inlineEdit.test.ts (jsdom: no save
+button, one write per burst, blur flushes, Escape reverts, the failure state).
+`tests/repo/records/` — boardMoves.test.ts (drag and shift+arrow against the
+real repositories, stage events, the lost-reason refusal, forced stage move,
+column totals), undoFlow.test.ts (undoBatch on every quick-add type, restore on
+every delete, the dedupe query), trashFlow.test.ts (delete → trash → restore →
+purge, including tag links and custom values).
+
+Screenshots at 1280 px, light and dark, in
+`tests/e2e-mac/.cache/screens/records/` (30 files, gitignored), captured by the
+last test in the spec and reviewed by hand. Two things they caught and that are
+now fixed: the phone and email rows wrapped their action cluster onto a second
+line in the 380 px details column and looked broken, so each is now a
+deliberate two-line block with the number full width and the label, primary
+badge and icon actions beneath it; and the timeline card floated as a short card
+in a tall empty column, so it now fills the grid row (`fill` prop).
+
+### Not done
+
+- **Saved views (plan item 13) are not wired into these lists.** The filters,
+  sort and the archived toggle are component state; nothing names or pins them.
+  `savedViews` exists in the repositories and nobody has claimed the screen.
+- **No pointer-drag e2e.** The board's drag path is exercised by hand and by the
+  pure `lib/board.ts` tests; the spec uses the keyboard move, which the brief
+  allows. dnd-kit's pointer sensor needs synthetic pointer events with a real
+  activation distance, which is a lot of fragility for the same assertion.
+- **Deal tags, deal custom fields and deal attachments have no repository-side
+  filter in the lists.** The deal page edits them; the pipeline's filters are
+  stage only (value range and date range are in `DealFilter` but not on screen —
+  they belong with saved views).
+- **Timeline paging.** A record's timeline loads 200 entries and stops. A
+  record with more needs an infinite list; nothing in v1 reaches that.
+- **The contacts list does not show a phone column.** The row is name plus
+  company plus tags; the phone lives on the record page where it is the hero.
+- `src/app`, `src/db`, `src/ui`, `src/styles`, `src-tauri`, `package.json` and
+  the registry were not touched, as scoped.
+
+### Contract changes needed
+
+Five things the orchestrator should promote or decide. Nothing here blocks.
+
+1. **`undoBatch` cannot undo a soft delete.** `_base.softDeleteRow` logs
+   `op: "delete"` with an `after` and no `before`, and `changeLog.undoBatch`
+   skips a `delete` entry that has no `before` (`if (!before) continue`). So the
+   Undo toast on a delete calls the entity's `restore()` instead of
+   `undoBatch()` — the exact inverse, and one statement rather than a replay.
+   Either is fine, but the two paths should be made explicit in CONTRACTS so the
+   next agent does not assume `undoBatch` covers deletes. Quick add's Undo does
+   use `undoBatch`, which handles `create` correctly.
+
+2. **`deals.board()` omits empty stages and does not order by stage position.**
+   It groups `list()` into a Map, so a stage with no deals is missing and the
+   column order is insertion order. Every caller has to drive the columns from
+   `stages.list()` and look the group up — which `PipelineBoard` and the repo
+   test both do. Worth making `board()` take the stage list and return one entry
+   per stage in position order.
+
+3. **There is no `contacts.updateEmail`.** `addPhone`/`updatePhone`/`removePhone`
+   exist, but emails only have `addEmail`/`removeEmail`. Changing an email's
+   label or primary flag is therefore a remove followed by an add
+   (`components/ContactMethods.tsx`), which loses the row's id and its
+   `created_at`. `updateEmail(emailId, { label?, isPrimary? })` mirroring
+   `updatePhone` is the fix.
+
+4. **There is no "tags for many entities" read.** `tags.listForEntity` answers
+   one row at a time, so a list that wants a tag column walks the workspace's
+   tags and calls `listEntityIdsForTag` for each
+   (`lib/hooks.ts`: `useEntityTagIndex`). Fine for a handful of tags, wrong at
+   scale. `tags.indexFor(entityType): Promise<Map<entityId, Tag[]>>` in one
+   query is the promotion.
+
+5. **Candidates for promotion out of `src/features/records/lib/`:**
+   `board.ts` (pure board arithmetic — Today may want it), `taskGroups.ts` (the
+   Overdue/Today/Next-7 buckets and `dueLabel`, which the Today screen almost
+   certainly duplicates), `address.ts` (address JSON parse/stringify/format —
+   the CSV import needs the same shape), `links.ts` (tel/sms/mailto builders)
+   and `mutations.ts`'s `invalidateRecords` + `deleteWithUndo`. If Today or Data
+   has written its own copy of any of these, they should be reconciled before
+   either lands.
+
+One note, not a change: `tests/e2e-mac/.cache/results` is a single `outputDir`
+shared by every agent's Playwright run, and two runs at once make Playwright
+fail at `browserContext.close` with an ENOENT on its own trace file. Passing
+`--output tests/e2e-mac/.cache/results-records` on the command line avoids it
+without touching the shared config; the config should probably derive
+`outputDir` from `E2E_OUT` the way it already derives the port.
