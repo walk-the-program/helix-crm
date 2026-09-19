@@ -1,6 +1,11 @@
 /**
  * Workspace: the business name, and the three formatting choices everything
- * else reads - currency, locale and the phone region.
+ * else reads — currency, locale and the phone region.
+ *
+ * Two grouped inset lists, label on the left and control on the right, with the
+ * sample value as the row's own second line: "A deal worth 12,450 reads
+ * $12,450.00" sits under "Currency" rather than in a paragraph somewhere else,
+ * which is how a native settings pane explains a pop-up menu.
  *
  * The name is written twice on purpose: to the workspace's own settings table
  * (what the screens read) and to helix.json (what the workspace list reads
@@ -8,15 +13,17 @@
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Field, FormRow, Input, Select, toast } from "@/ui";
+import { Button, Input, Select, toast } from "@/ui";
 import * as settingsRepo from "@/db/repos/settings";
 import { readRegistry, updateRegistry } from "@/app/appSettings";
 import { formatMoney } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
 import { normalizePhone } from "@/lib/phone";
 import {
+  SettingsGroup,
+  SettingsLoading,
+  SettingsRow,
   SettingsScreenFrame,
-  SettingsBlock,
 } from "@/features/settings/components/SettingsLayout";
 import {
   refetchRegistry,
@@ -34,11 +41,13 @@ const CURRENCIES = [
   { value: "NZD", label: "New Zealand dollar (NZD)" },
 ];
 
+// The sample date used to be part of each label, which ran the pop-up button
+// past its own width; the row's hint says what the choice reads like instead.
 const LOCALES = [
-  { value: "en-US", label: "English (United States) — 3/14/2026" },
-  { value: "en-CA", label: "English (Canada) — 2026-03-14" },
-  { value: "en-GB", label: "English (United Kingdom) — 14/03/2026" },
-  { value: "en-AU", label: "English (Australia) — 14/03/2026" },
+  { value: "en-US", label: "English (United States)" },
+  { value: "en-CA", label: "English (Canada)" },
+  { value: "en-GB", label: "English (United Kingdom)" },
+  { value: "en-AU", label: "English (Australia)" },
 ];
 
 const REGIONS = [
@@ -109,16 +118,9 @@ export function WorkspaceScreen() {
   }
 
   if (isLoading || !data) {
-    // A quiet line, not a spinner: DESIGN.md s8 wants loading to be stated, not
-    // animated, and a bare spinner on an empty panel reads as a broken screen.
     return (
       <SettingsScreenFrame title="Workspace" testId="settings-workspace">
-        <p
-          className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-          role="status"
-        >
-          Reading your settings…
-        </p>
+        <SettingsLoading>Reading your settings…</SettingsLoading>
       </SettingsScreenFrame>
     );
   }
@@ -133,76 +135,94 @@ export function WorkspaceScreen() {
       title="Workspace"
       subtitle="The business this file belongs to, and how numbers and dates are written."
       testId="settings-workspace"
+      actions={
+        <Button
+          variant="primary"
+          onClick={() => void saveName()}
+          loading={saving}
+          loadingLabel="Saving…"
+          data-testid="workspace-name-save"
+        >
+          Save name
+        </Button>
+      }
     >
-      <SettingsBlock
-        title="Business name"
-        description="It shows at the bottom of the sidebar and in the workspace list."
+      <SettingsGroup
+        label="Business"
+        footnote="The name shows at the bottom of the sidebar and in the workspace list."
       >
-        <FormRow>
-          <Field label="Name" error={nameError ?? undefined}>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Sorensen Landscaping"
-              data-testid="workspace-name-input"
-            />
-          </Field>
-          <div>
-            <Button
-              variant="primary"
-              onClick={() => void saveName()}
-              loading={saving}
-              data-testid="workspace-name-save"
-            >
-              Save name
-            </Button>
-          </div>
-        </FormRow>
-      </SettingsBlock>
+        <SettingsRow
+          label="Name"
+          htmlFor="workspace-name"
+          field
+          hint={
+            nameError ? (
+              <span role="alert" className="text-[var(--color-danger-ink)]">
+                {nameError}
+              </span>
+            ) : undefined
+          }
+        >
+          <Input
+            id="workspace-name"
+            value={name}
+            invalid={Boolean(nameError)}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (nameError) setNameError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void saveName();
+            }}
+            placeholder="Sorensen Landscaping"
+            data-testid="workspace-name-input"
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
-      <SettingsBlock
-        title="Money and dates"
-        description="Used everywhere a price, a date or a phone number is shown."
+      <SettingsGroup
+        label="Formats"
+        footnote="Used everywhere a price, a date or a phone number is shown."
       >
-        <FormRow>
-          <Field label="Currency" hint={`A deal worth 12,450 reads ${sampleMoney}.`}>
-            <Select
-              value={data.currency}
-              onValueChange={(value) =>
-                void saveKey("currency", value, `Money now shows in ${value}`)
-              }
-              options={CURRENCIES}
-              ariaLabel="Currency"
-            />
-          </Field>
-          <Field
-            label="Date and number format"
-            hint={`14 March 2026 reads ${sampleDate}.`}
-          >
-            <Select
-              value={data.locale}
-              onValueChange={(value) =>
-                void saveKey("locale", value, "Date format saved")
-              }
-              options={LOCALES}
-              ariaLabel="Date and number format"
-            />
-          </Field>
-          <Field
-            label="Default phone region"
-            hint={`A number typed as (801) 555-0147 is stored as ${samplePhone}.`}
-          >
-            <Select
-              value={data.defaultRegion}
-              onValueChange={(value) =>
-                void saveKey("defaultRegion", value, "Phone region saved")
-              }
-              options={REGIONS}
-              ariaLabel="Default phone region"
-            />
-          </Field>
-        </FormRow>
-      </SettingsBlock>
+        <SettingsRow
+          label="Currency"
+          hint={`A deal worth 12,450 reads ${sampleMoney}.`}
+          field
+        >
+          <Select
+            value={data.currency}
+            onValueChange={(value) =>
+              void saveKey("currency", value, `Money now shows in ${value}`)
+            }
+            options={CURRENCIES}
+            ariaLabel="Currency"
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Date and number format"
+          hint={`14 March 2026 reads ${sampleDate}.`}
+          field
+        >
+          <Select
+            value={data.locale}
+            onValueChange={(value) => void saveKey("locale", value, "Date format saved")}
+            options={LOCALES}
+            ariaLabel="Date and number format"
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Phone region"
+          hint={`A number typed as (801) 555-0147 is stored as ${samplePhone}.`}
+          field
+        >
+          <Select
+            value={data.defaultRegion}
+            onValueChange={(value) => void saveKey("defaultRegion", value, "Phone region saved")}
+            options={REGIONS}
+            ariaLabel="Default phone region"
+          />
+        </SettingsRow>
+      </SettingsGroup>
     </SettingsScreenFrame>
   );
 }

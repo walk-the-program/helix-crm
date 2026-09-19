@@ -1,19 +1,27 @@
 /**
  * Settings > Tags.
  *
- * DESIGN.md: one primary button per screen (Add tag), colour is never the
- * only carrier of meaning (the name is always shown in full-strength text
- * next to the swatch), and a destructive action always asks first in plain
- * words naming the record and its usage.
+ * A single grouped inset list, the way WorkspacesScreen lists workspaces
+ * (docs/DESIGN.md §9 "Cards and grouped lists"): the swatch and the name carry
+ * the row, the usage sentence and the row actions sit on the right, and colour
+ * is never the only carrier of meaning - the name is always shown in full ink
+ * next to the dot. Creating a tag used to be an inline form pinned above the
+ * list; it is now the screen's one dialog, opened from the frame's primary
+ * button, because a settings pane holds at most one black button and a form
+ * bolted above a list is exactly the "SaaS card" shape §9 rejects. That one
+ * button is in the header when there are tags and in the empty state when there
+ * are none, never in both at once.
+ *
+ * A destructive action always names the record and what it costs before it
+ * runs (docs/DESIGN.md §7 "no dark patterns").
  */
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Pencil, Plus, Tag as TagIcon, Trash2 } from "lucide-react";
+import { ICON_SIZE_SM, ICON_WEIGHT_STRONG, Pencil, Trash2 } from "@/ui/icons";
 import {
-  Badge,
   Button,
-  cn,
+  CardRow,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -23,16 +31,12 @@ import {
   Field,
   IconButton,
   Input,
-  Table,
-  TBody,
-  TD,
-  TH,
-  THead,
-  TR,
   toast,
 } from "@/ui";
+import { cn } from "@/ui/cn";
 import {
-  SettingsBlock,
+  SettingsGroup,
+  SettingsLoading,
   SettingsScreenFrame,
 } from "@/features/settings/components/SettingsLayout";
 import { qk, queryClient } from "@/app/queryClient";
@@ -85,8 +89,11 @@ function ColorSwatchPicker(props: {
             title={c.name}
             onClick={() => onChange(c.token)}
             className={cn(
-              "h-[var(--space-8)] w-[var(--space-8)] shrink-0 rounded-[var(--radius-full)]",
-              "border-2 transition-colors",
+              // A 24px swatch, the size macOS draws a colour well at. The
+              // selected one is marked by an ink hairline rather than a 2px
+              // ring, which on a small circle reads as a web control.
+              "h-[var(--space-6)] w-[var(--space-6)] shrink-0 rounded-[var(--radius-full)]",
+              "border transition-colors duration-[var(--dur-fast)] motion-reduce:transition-none",
               "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
               checked ? "border-[var(--color-text)]" : "border-transparent",
             )}
@@ -107,12 +114,14 @@ function LabelledColorPicker(props: {
   const { label, value, onChange, showName } = props;
   return (
     <div className="flex flex-col gap-[var(--space-1)]">
-      <span className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
+      {/* Same typography as the Field primitive's label, so a colour picker
+          sitting under a text field does not shout louder than it. */}
+      <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
         {label}
       </span>
       <ColorSwatchPicker value={value} onChange={onChange} aria-label={label} />
       {showName ? (
-        <span className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+        <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
           {colorName(value)}
         </span>
       ) : null}
@@ -131,17 +140,27 @@ function TagSwatch(props: { color: string }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Create row                                                                 */
+/* Add-tag dialog - the screen's one primary action                          */
 /* -------------------------------------------------------------------------- */
 
-function CreateTagForm(props: {
+function AddTagDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   pending: boolean;
   onCreate: (input: { name: string; color: string }) => void;
 }) {
-  const { pending, onCreate } = props;
+  const { open, onOpenChange, pending, onCreate } = props;
   const [name, setName] = useState("");
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [nameError, setNameError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setColor(DEFAULT_COLOR);
+      setNameError(null);
+    }
+  }, [open]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,37 +171,45 @@ function CreateTagForm(props: {
     }
     setNameError(null);
     onCreate({ name: trimmedName, color });
-    setName("");
-    setColor(DEFAULT_COLOR);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-[var(--space-4)]">
-      <div className="w-[240px]">
-        <Field label="Name" htmlFor="new-tag-name" error={nameError ?? undefined}>
-          <Input
-            id="new-tag-name"
-            data-testid="tag-name-input"
-            placeholder="Repeat customer"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (nameError) setNameError(null);
-            }}
-          />
-        </Field>
-      </div>
-      <LabelledColorPicker label="Colour" value={color} onChange={setColor} />
-      <Button
-        type="submit"
-        variant="primary"
-        iconLeft={<Plus className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />}
-        loading={pending}
-        data-testid="tag-add"
-      >
-        Add tag
-      </Button>
-    </form>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Add tag</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-[var(--space-4)]">
+          <Field label="Name" htmlFor="new-tag-name" error={nameError ?? undefined}>
+            <Input
+              id="new-tag-name"
+              data-testid="tag-name-input"
+              placeholder="Repeat customer"
+              value={name}
+              autoFocus
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError(null);
+              }}
+            />
+          </Field>
+          <LabelledColorPicker label="Colour" value={color} onChange={setColor} />
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={pending} data-testid="tag-add">
+              Add tag
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -234,7 +261,7 @@ function EditTagDialog(props: {
           <DialogFooter>
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={pending}
             >
@@ -278,7 +305,7 @@ function DeleteTagDialog(props: {
           </p>
         ) : null}
         <DialogFooter>
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancel
           </Button>
           <Button
@@ -297,36 +324,43 @@ function DeleteTagDialog(props: {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Table row                                                                  */
+/* Row                                                                        */
 /* -------------------------------------------------------------------------- */
 
 function TagRow(props: {
   tag: TagRecord;
   count: number;
+  last: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { tag, count, onEdit, onDelete } = props;
+  const { tag, count, last, onEdit, onDelete } = props;
   return (
-    <TR data-testid="tag-row" data-tag-name={tag.name}>
-      <TD>
-        <span className="inline-flex items-center gap-[var(--space-2)]">
-          <TagSwatch color={tag.color} />
-          <span
-            className="truncate text-[length:var(--text-base)] text-[var(--color-text)]"
-            title={tag.name}
-          >
-            {tag.name}
-          </span>
+    <CardRow
+      className={cn("items-center gap-[var(--space-4)]", last && "border-b-0")}
+      data-testid="tag-row"
+      data-tag-name={tag.name}
+    >
+      <span className="flex min-w-0 items-center gap-[var(--space-2)]">
+        <TagSwatch color={tag.color} />
+        <span
+          className="truncate text-[length:var(--text-base)] text-[var(--color-text)]"
+          title={tag.name}
+        >
+          {tag.name}
         </span>
-      </TD>
-      <TD align="right">
-        <Badge tone="neutral">{count}</Badge>
-      </TD>
-      <TD align="right">
-        <div className="flex items-center justify-end gap-[var(--space-1)]">
-          <IconButton label={`Rename or recolour "${tag.name}"`} size="sm" onClick={onEdit}>
-            <Pencil className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />
+      </span>
+      <span className="flex flex-none items-center gap-[var(--space-3)]">
+        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          {count === 0 ? "Not used yet" : `On ${count} ${count === 1 ? "record" : "records"}`}
+        </span>
+        <span className="flex items-center gap-[var(--space-1)]">
+          <IconButton
+            label={`Rename or recolour "${tag.name}"`}
+            size="sm"
+            onClick={onEdit}
+          >
+            <Pencil size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
           </IconButton>
           <IconButton
             label={`Delete "${tag.name}"`}
@@ -335,11 +369,11 @@ function TagRow(props: {
             data-testid="tag-delete"
             onClick={onDelete}
           >
-            <Trash2 className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />
+            <Trash2 size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
           </IconButton>
-        </div>
-      </TD>
-    </TR>
+        </span>
+      </span>
+    </CardRow>
   );
 }
 
@@ -353,6 +387,7 @@ export function TagsScreen() {
   const tags = tagsQuery.data?.rows ?? [];
   const countByTagId = new Map((countsQuery.data ?? []).map((c) => [c.tagId, c.count]));
 
+  const [addOpen, setAddOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<TagRecord | null>(null);
   const [deletingTag, setDeletingTag] = useState<TagRecord | null>(null);
 
@@ -363,7 +398,10 @@ export function TagsScreen() {
 
   const createMutation = useMutation({
     mutationFn: (input: { name: string; color: string }) => tagsRepo.create(input),
-    onSuccess: () => invalidate(),
+    onSuccess: async () => {
+      await invalidate();
+      setAddOpen(false);
+    },
   });
 
   const updateMutation = useMutation({
@@ -383,52 +421,52 @@ export function TagsScreen() {
     },
   });
 
+  const addTagButton = (
+    <Button
+      variant="primary"
+      onClick={() => setAddOpen(true)}
+      data-testid="tag-add-open"
+    >
+      Add tag
+    </Button>
+  );
+
   return (
     <SettingsScreenFrame
       title="Tags"
       subtitle="The labels you put on people, companies and deals."
       testId="settings-tags"
+      actions={tags.length > 0 ? addTagButton : undefined}
     >
-      <SettingsBlock
-        title="Add a tag"
-        description="Tags carry over history. Deleting one removes the label, never the record."
-      >
-        <CreateTagForm
-          pending={createMutation.isPending}
-          onCreate={(input) => createMutation.mutate(input)}
+      {tagsQuery.isLoading ? (
+        <SettingsLoading>Reading the tag list…</SettingsLoading>
+      ) : tags.length === 0 ? (
+        <EmptyState
+          title="No tags yet"
+          description="Tags fill up as you label contacts, companies and deals. Add one and it shows up everywhere you can tag a record."
+          action={addTagButton}
         />
-      </SettingsBlock>
+      ) : (
+        <SettingsGroup label="All tags">
+          {tags.map((tag, index) => (
+            <TagRow
+              key={tag.id}
+              tag={tag}
+              count={countByTagId.get(tag.id) ?? 0}
+              last={index === tags.length - 1}
+              onEdit={() => setEditingTag(tag)}
+              onDelete={() => setDeletingTag(tag)}
+            />
+          ))}
+        </SettingsGroup>
+      )}
 
-      <SettingsBlock title="All tags">
-        {tags.length === 0 ? (
-          <EmptyState
-            icon={<TagIcon size={24} aria-hidden="true" />}
-            title="No tags yet"
-            description="Tags fill up as you label contacts, companies and deals. Add one above and it shows up everywhere you can tag a record."
-          />
-        ) : (
-          <Table>
-            <THead>
-              <tr>
-                <TH>Name</TH>
-                <TH align="right">Usage</TH>
-                <TH align="right">Actions</TH>
-              </tr>
-            </THead>
-            <TBody>
-              {tags.map((tag) => (
-                <TagRow
-                  key={tag.id}
-                  tag={tag}
-                  count={countByTagId.get(tag.id) ?? 0}
-                  onEdit={() => setEditingTag(tag)}
-                  onDelete={() => setDeletingTag(tag)}
-                />
-              ))}
-            </TBody>
-          </Table>
-        )}
-      </SettingsBlock>
+      <AddTagDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        pending={createMutation.isPending}
+        onCreate={(input) => createMutation.mutate(input)}
+      />
 
       <EditTagDialog
         tag={editingTag}

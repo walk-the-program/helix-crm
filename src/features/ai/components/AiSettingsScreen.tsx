@@ -5,27 +5,26 @@
  * The screen says all three in plain words, because the audience's reasonable
  * first question about an AI feature is "what is it sending, and when".
  *
+ * Four grouped inset lists in the System Settings idiom: the switch, the key,
+ * the model, and a plain-language account of what leaves the machine. The
+ * buttons carry no glyphs - "Save key" and "Test key" are already the shortest
+ * true sentence, and a glyph on each of three adjacent buttons is the noise
+ * DESIGN.md section 10 rules out.
+ *
  * The key field is write-only. It is handed straight to the keychain through
  * secret_set and never read back; all the screen keeps is the last four
  * characters so it can say "saved, ends in 1234".
  */
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Eye, KeyRound, Trash2 } from "lucide-react";
+import { Badge, Button, CardRow, Input, Select, Switch, toast } from "@/ui";
+import { cn } from "@/ui/cn";
 import {
-  Badge,
-  Button,
-  Field,
-  FormRow,
-  Input,
-  Select,
-  Switch,
-  toast,
-} from "@/ui";
-import {
+  SettingsGroup,
+  SettingsLoading,
+  SettingsRow,
   SettingsScreenFrame,
-  SettingsBlock,
-  DataRow,
+  SettingsValueRow,
 } from "@/features/settings/components/SettingsLayout";
 import { AI_MODELS } from "@/features/ai/lib/models";
 import {
@@ -136,18 +135,14 @@ export function AiSettingsScreen() {
   if (config.isLoading || !config.data) {
     return (
       <SettingsScreenFrame title="AI" testId="settings-ai">
-        <p
-          className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-          role="status"
-        >
-          Reading your AI settings…
-        </p>
+        <SettingsLoading>Reading your AI settings…</SettingsLoading>
       </SettingsScreenFrame>
     );
   }
 
   const data = config.data;
   const hasKey = data.keyState !== "unset";
+  const modelNote = AI_MODELS.find((m) => m.id === data.model)?.note;
 
   return (
     <SettingsScreenFrame
@@ -155,115 +150,126 @@ export function AiSettingsScreen() {
       subtitle="Optional, off by default, and paid for with your own Anthropic key."
       testId="settings-ai"
     >
-      <SettingsBlock
-        title="AI is off"
-        description="Turn it on and three buttons appear: paste an email and get a contact and a job to check, draft a follow-up from a job's history, and summarise a record."
+      {/* No label on the first group: the page title already says AI, and a
+          macOS pane leads with an unlabelled group rather than repeating
+          itself. */}
+      <SettingsGroup
+        footnote="Turn it on and three buttons appear: paste an email and get a customer and a job to check, draft a follow-up from a job's history, and summarise a record."
       >
-        <div className="flex items-center gap-[var(--space-3)]">
+        <SettingsRow
+          label={<span data-testid="ai-enabled-label">{data.enabled ? "AI is on" : "AI is off"}</span>}
+          htmlFor="ai-enabled"
+          className="border-b-0"
+        >
           <Switch
             checked={data.enabled}
             onCheckedChange={(next) => void onToggle(next)}
             id="ai-enabled"
             ariaLabel="AI is on"
           />
-          <label
-            htmlFor="ai-enabled"
-            className="text-[length:var(--text-base)] text-[var(--color-text)]"
-            data-testid="ai-enabled-label"
-          >
-            {data.enabled ? "AI is on" : "AI is off"}
-          </label>
-        </div>
-      </SettingsBlock>
+        </SettingsRow>
+      </SettingsGroup>
 
-      <SettingsBlock
-        title="Your Anthropic key"
-        description="It goes into your Mac Keychain or Windows Credential Manager. It is never written to the database, to helix.json, or to the log."
+      <SettingsGroup
+        label="Your Anthropic key"
+        footnote="It goes into your Mac Keychain or Windows Credential Manager. It is never written to the database, to helix.json, or to the log."
       >
-        <FormRow>
-          <div
+        <SettingsRow label="Key">
+          <span
             className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
             data-testid="ai-key-state"
           >
-            <KeyRound size={16} aria-hidden />
             {describeStoredKey(data.keyState, data.keySuffix)}
-            {data.keyState === "rejected" ? (
-              <Badge tone="danger">Rejected</Badge>
-            ) : null}
-          </div>
+            {data.keyState === "rejected" ? <Badge tone="danger">Rejected</Badge> : null}
+          </span>
+        </SettingsRow>
 
-          <Field
-            label={hasKey ? "Replace the key" : "API key"}
-            error={keyError ?? undefined}
-            hint="Starts with sk-ant-. Create one at console.anthropic.com."
-          >
-            <Input
-              type="password"
-              value={keyInput}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => setKeyInput(e.target.value)}
-              placeholder="sk-ant-..."
-              data-testid="ai-key-input"
-            />
-          </Field>
+        <SettingsRow
+          label={hasKey ? "Replace the key" : "API key"}
+          htmlFor="ai-key-input"
+          field
+          hint={
+            keyError ? (
+              <span role="alert" className="text-[var(--color-danger-ink)]">
+                {keyError}
+              </span>
+            ) : (
+              "Starts with sk-ant-. Create one at console.anthropic.com."
+            )
+          }
+        >
+          <Input
+            id="ai-key-input"
+            type="password"
+            value={keyInput}
+            invalid={Boolean(keyError)}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => {
+              setKeyInput(e.target.value);
+              if (keyError) setKeyError(null);
+            }}
+            placeholder="sk-ant-..."
+            data-testid="ai-key-input"
+          />
+        </SettingsRow>
 
-          <div className="flex flex-wrap items-center gap-[var(--space-2)]">
-            <Button
-              variant="primary"
-              onClick={() => void onSaveKey()}
-              loading={saving}
-              iconLeft={<Check size={16} aria-hidden />}
-              data-testid="ai-key-save"
-            >
-              Save key
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => void onTestKey()}
-              loading={testing}
-              disabled={!hasKey}
-              iconLeft={<Eye size={16} aria-hidden />}
-              data-testid="ai-key-test"
-            >
-              Test key
-            </Button>
-            {hasKey ? (
-              <Button
-                variant="secondary"
-                onClick={() => void onForgetKey()}
-                iconLeft={<Trash2 size={16} aria-hidden />}
-                data-testid="ai-key-forget"
-              >
-                Remove key
-              </Button>
-            ) : null}
-          </div>
-
-          {testResult ? (
-            <p
+        {testResult ? (
+          <CardRow>
+            <span
               role="status"
               data-testid="ai-test-result"
-              className={[
+              className={cn(
                 "text-[length:var(--text-sm)]",
                 testResult.ok
                   ? "text-[var(--color-success-ink)]"
                   : "text-[var(--color-danger-ink)]",
-              ].join(" ")}
+              )}
             >
-              {testResult.ok
-                ? "That key works. Anthropic answered."
-                : testResult.message}
-            </p>
-          ) : null}
-        </FormRow>
-      </SettingsBlock>
+              {testResult.ok ? "That key works. Anthropic answered." : testResult.message}
+            </span>
+          </CardRow>
+        ) : null}
 
-      <SettingsBlock
-        title="Model"
-        description="All three read the same text. The difference is accuracy on messy notes, and what it costs you."
-      >
-        <Field label="Model">
+        <CardRow className="justify-end border-b-0">
+          {hasKey ? (
+            <Button
+              variant="destructive"
+              onClick={() => void onForgetKey()}
+              data-testid="ai-key-forget"
+            >
+              Remove key
+            </Button>
+          ) : null}
+          <Button
+            variant="secondary"
+            onClick={() => void onTestKey()}
+            loading={testing}
+            loadingLabel="Testing…"
+            disabled={!hasKey}
+            data-testid="ai-key-test"
+          >
+            Test key
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => void onSaveKey()}
+            loading={saving}
+            loadingLabel="Saving…"
+            data-testid="ai-key-save"
+          >
+            Save key
+          </Button>
+        </CardRow>
+      </SettingsGroup>
+
+      <SettingsGroup label="Model" footnote={modelNote}>
+        <SettingsRow
+          label="Model"
+          hint="All three read the same text. The difference is accuracy on messy notes, and what it costs you."
+          field
+          className="border-b-0"
+        >
           <Select
             value={data.model}
             onValueChange={(value) => {
@@ -272,30 +278,27 @@ export function AiSettingsScreen() {
             options={AI_MODELS.map((m) => ({ value: m.id, label: m.label }))}
             ariaLabel="Model"
           />
-        </Field>
-        <p className="mt-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          {AI_MODELS.find((m) => m.id === data.model)?.note}
-        </p>
-      </SettingsBlock>
+        </SettingsRow>
+      </SettingsGroup>
 
-      <SettingsBlock title="What gets sent, and when">
-        <DataRow label="Only on a button">
+      <SettingsGroup label="What gets sent, and when">
+        <SettingsValueRow label="Only on a button">
           Nothing is sent unless you press one of the three AI buttons. There is no
           background AI, no scheduled call, and nothing runs while Helix sits open.
-        </DataRow>
-        <DataRow label="Only what is on screen">
-          One record and its timeline, or the text you pasted. Never your contact
-          list, never another customer, never the whole database.
-        </DataRow>
-        <DataRow label="Nothing saves itself">
-          What comes back is shown to you first. Nothing is written to your data
-          until you press Confirm.
-        </DataRow>
-        <DataRow label="Where it goes">
-          Straight to Anthropic&apos;s API from your machine. Helix has no server, so
-          no request passes through us.
-        </DataRow>
-      </SettingsBlock>
+        </SettingsValueRow>
+        <SettingsValueRow label="Only what is on screen">
+          One record and its timeline, or the text you pasted. Never your contact list,
+          never another customer, never the whole database.
+        </SettingsValueRow>
+        <SettingsValueRow label="Nothing saves itself">
+          What comes back is shown to you first. Nothing is written to your data until
+          you press Save.
+        </SettingsValueRow>
+        <SettingsValueRow label="Where it goes">
+          Straight to Anthropic&apos;s API from your machine. Helix has no server, so no
+          request passes through us.
+        </SettingsValueRow>
+      </SettingsGroup>
     </SettingsScreenFrame>
   );
 }

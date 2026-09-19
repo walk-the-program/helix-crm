@@ -1,19 +1,24 @@
 /**
  * Diagnostics: where the data is, how big it is, and what the app last did.
  *
- * Nothing here is an action on the owner's data. Two buttons: copy the log, and
- * show me the folder. Both say plainly when they cannot work rather than
- * failing silently, which is the whole point of the screen.
+ * Four grouped inset lists of label/value rows and nothing else — this screen
+ * reads, it never writes. Both buttons are quiet (ghost): there is no primary
+ * action here, and DESIGN.md §9 gives a screen a black button only when it has
+ * one thing the owner came to do.
+ *
+ * Both say plainly when they cannot work rather than failing silently, which is
+ * the whole point of the screen.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardCopy, FolderOpen } from "lucide-react";
+import { ClipboardCopy, FolderOpen, ICON_SIZE_SM, ICON_WEIGHT_STRONG } from "@/ui/icons";
 import { Badge, Button, toast } from "@/ui";
 import { useWriteState } from "@/app/hooks";
 import { formatDateTimeDisplay } from "@/lib/dates";
 import {
+  SettingsGroup,
+  SettingsLoading,
   SettingsScreenFrame,
-  SettingsBlock,
-  DataRow,
+  SettingsValueRow,
 } from "@/features/settings/components/SettingsLayout";
 import { settingsKeys } from "@/features/settings/lib/queries";
 import {
@@ -31,6 +36,7 @@ function Unknown(props: { children?: string }) {
   );
 }
 
+/** A path or a version string: the one place the product sets a monospace. */
 function Mono(props: { children: string }) {
   return (
     <span className="font-[var(--font-mono)] text-[length:var(--text-sm)] break-all">
@@ -67,18 +73,20 @@ export function DiagnosticsScreen() {
       subtitle="Where your data lives and what Helix last did with it."
       testId="settings-diagnostics"
       actions={
-        <div className="flex items-center gap-[var(--space-2)]">
+        <div className="flex items-center gap-[var(--space-1)]">
           <Button
-            variant="secondary"
-            iconLeft={<ClipboardCopy size={16} aria-hidden />}
+            variant="ghost"
+            iconLeft={
+              <ClipboardCopy size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+            }
             onClick={() => void onCopyLog()}
             data-testid="diagnostics-copy-log"
           >
             Copy log
           </Button>
           <Button
-            variant="secondary"
-            iconLeft={<FolderOpen size={16} aria-hidden />}
+            variant="ghost"
+            iconLeft={<FolderOpen size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
             onClick={() => void onReveal()}
             data-testid="diagnostics-reveal"
           >
@@ -88,20 +96,15 @@ export function DiagnosticsScreen() {
       }
     >
       {isLoading || !data ? (
-        <p
-          className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-          role="status"
-        >
-          Reading the database and the workspace file…
-        </p>
+        <SettingsLoading>Reading the database and the workspace file…</SettingsLoading>
       ) : (
         <>
-          <SettingsBlock title="This copy of Helix">
-            <DataRow label="Version">{data.appVersion}</DataRow>
-            <DataRow label="Workspace">
+          <SettingsGroup label="This copy of Helix">
+            <SettingsValueRow label="Version">{data.appVersion}</SettingsValueRow>
+            <SettingsValueRow label="Workspace">
               {data.workspaceName ?? <Unknown />}
-            </DataRow>
-            <DataRow label="Write queue">
+            </SettingsValueRow>
+            <SettingsValueRow label="Write queue">
               {write.busy ? (
                 <span>
                   {write.label ?? "A write is running"}
@@ -110,31 +113,31 @@ export function DiagnosticsScreen() {
               ) : (
                 "Idle"
               )}
-            </DataRow>
-            <DataRow label="Key storage">
+            </SettingsValueRow>
+            <SettingsValueRow label="Key storage">
               {data.keychain ? (
                 <Badge tone="success">Keychain available</Badge>
               ) : (
                 <Badge tone="warning">No keychain on this machine</Badge>
               )}
-            </DataRow>
-          </SettingsBlock>
+            </SettingsValueRow>
+          </SettingsGroup>
 
-          <SettingsBlock title="Database">
-            <DataRow label="File">
+          <SettingsGroup label="Database">
+            <SettingsValueRow label="File">
               {data.db?.path ? <Mono>{data.db.path}</Mono> : <Unknown />}
-            </DataRow>
-            <DataRow label="Size">
+            </SettingsValueRow>
+            <SettingsValueRow label="Size">
               {data.db ? (
                 <span className="tabular">{formatBytes(data.db.sizeBytes)}</span>
               ) : (
                 <Unknown>{data.dbError ?? "Not known yet"}</Unknown>
               )}
-            </DataRow>
-            <DataRow label="SQLite">
+            </SettingsValueRow>
+            <SettingsValueRow label="SQLite">
               {data.db?.sqliteVersion ?? <Unknown />}
-            </DataRow>
-            <DataRow label="Search (FTS5)">
+            </SettingsValueRow>
+            <SettingsValueRow label="Search (FTS5)">
               {data.db ? (
                 data.db.fts5 ? (
                   <Badge tone="success">Working</Badge>
@@ -144,8 +147,8 @@ export function DiagnosticsScreen() {
               ) : (
                 <Unknown />
               )}
-            </DataRow>
-            <DataRow label="Migration">
+            </SettingsValueRow>
+            <SettingsValueRow label="Migration">
               {data.migration ? (
                 <span>
                   {data.migration.version}{" "}
@@ -157,47 +160,51 @@ export function DiagnosticsScreen() {
               ) : (
                 <Unknown />
               )}
-            </DataRow>
-            <DataRow label="Last backup">
+            </SettingsValueRow>
+            <SettingsValueRow label="Last backup">
               {data.lastBackupAt ? (
                 formatDateTimeDisplay(data.lastBackupAt)
               ) : (
                 <Unknown>No backup has run yet</Unknown>
               )}
-            </DataRow>
-          </SettingsBlock>
+            </SettingsValueRow>
+          </SettingsGroup>
 
-          <SettingsBlock title="Website leads">
-            <DataRow label="Site">
-              {data.siteOrigin ? <Mono>{data.siteOrigin}</Mono> : <Unknown>No site connected</Unknown>}
-            </DataRow>
-            <DataRow label="Last checked">
+          <SettingsGroup label="Website leads">
+            <SettingsValueRow label="Site">
+              {data.siteOrigin ? (
+                <Mono>{data.siteOrigin}</Mono>
+              ) : (
+                <Unknown>No site connected</Unknown>
+              )}
+            </SettingsValueRow>
+            <SettingsValueRow label="Last checked">
               {data.lastPolledAt ? (
                 formatDateTimeDisplay(data.lastPolledAt)
               ) : (
                 <Unknown>Never</Unknown>
               )}
-            </DataRow>
-            <DataRow label="Last error">
+            </SettingsValueRow>
+            <SettingsValueRow label="Last error">
               {data.lastPollError ? (
                 <span className="text-[var(--color-danger-ink)]">{data.lastPollError}</span>
               ) : (
                 "None"
               )}
-            </DataRow>
-          </SettingsBlock>
+            </SettingsValueRow>
+          </SettingsGroup>
 
-          <SettingsBlock
-            title="Files"
-            description="Backups and attachments sit beside the database in this folder."
+          <SettingsGroup
+            label="Files"
+            footnote="Backups and attachments sit beside the database in this folder."
           >
-            <DataRow label="App data">
+            <SettingsValueRow label="App data">
               {data.appData ? <Mono>{data.appData}</Mono> : <Unknown />}
-            </DataRow>
-            <DataRow label="Log file">
+            </SettingsValueRow>
+            <SettingsValueRow label="Log file">
               {data.logPath ? <Mono>{data.logPath}</Mono> : <Unknown />}
-            </DataRow>
-          </SettingsBlock>
+            </SettingsValueRow>
+          </SettingsGroup>
         </>
       )}
     </SettingsScreenFrame>

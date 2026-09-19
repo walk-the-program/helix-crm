@@ -1,9 +1,15 @@
 /**
  * Workspaces (E7): one SQLite file per business.
  *
- * The list is helix.json, not the database, because a closed workspace cannot
- * be queried - which is also why the last poll and last backup times are
- * mirrored there on every poll and backup.
+ * A grouped inset list of workspaces, and a second one for the archived ones.
+ * The open workspace wears the --color-selected tint and full ink, which is how
+ * a native list marks the row you are in - position and weight, never a
+ * coloured rail (DESIGN.md section 9). Its own row is the only one that cannot
+ * be switched to or archived.
+ *
+ * The list is helix.json, not the database, because a closed workspace cannot be
+ * queried - which is also why the last poll and last backup times are mirrored
+ * there on every poll and backup.
  *
  * Switching closes the open file and opens another, so it is refused while a
  * write holds the lock, and the message says why. Archiving deletes that
@@ -12,10 +18,11 @@
  */
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArchiveRestore, Box, Check, Pencil } from "lucide-react";
+import { ArchiveRestore, ICON_SIZE_SM, ICON_WEIGHT_STRONG, Pencil } from "@/ui/icons";
 import {
   Badge,
   Button,
+  CardRow,
   ConfirmDialog,
   Dialog,
   DialogContent,
@@ -27,12 +34,15 @@ import {
   Input,
   toast,
 } from "@/ui";
+import { cn } from "@/ui/cn";
 import { formatDateTimeDisplay } from "@/lib/dates";
 import { useWriteState } from "@/app/hooks";
 import type { WorkspaceEntry } from "@/app/appSettings";
 import {
+  SettingsGroup,
+  SettingsLoading,
+  SettingsNotice,
   SettingsScreenFrame,
-  SettingsBlock,
 } from "@/features/settings/components/SettingsLayout";
 import { refetchRegistry, useRegistry } from "@/features/settings/lib/queries";
 import {
@@ -44,62 +54,58 @@ import {
   unarchiveWorkspace,
 } from "@/features/settings/lib/workspaces";
 
-function Timestamp(props: { value: string | null; never: string }) {
-  if (!props.value) {
-    return <span className="text-[var(--color-text-faint)]">{props.never}</span>;
-  }
-  return <span className="tabular">{formatDateTimeDisplay(props.value)}</span>;
+function stamp(value: string | null, never: string): string {
+  return value ? formatDateTimeDisplay(value) : never;
 }
 
 function WorkspaceRow(props: {
   workspace: WorkspaceEntry;
   open: boolean;
   busy: boolean;
+  last: boolean;
   onSwitch: () => void;
   onRename: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
 }) {
-  const { workspace, open, busy } = props;
+  const { workspace, open, busy, last } = props;
 
   return (
-    <div
-      className="flex items-center gap-[var(--space-4)] border-b border-[var(--color-border)] py-[var(--space-3)] last:border-b-0"
+    <CardRow
+      className={cn(
+        "items-center gap-[var(--space-4)] py-[var(--space-3)]",
+        open && "bg-[var(--color-selected)]",
+        last && "border-b-0",
+      )}
       data-testid="workspace-row"
       data-workspace-name={workspace.name}
       data-workspace-open={open ? "true" : "false"}
     >
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-col gap-[var(--space-1)]">
         <div className="flex items-center gap-[var(--space-2)]">
           <span
-            className="truncate text-[length:var(--text-lg)] font-medium text-[var(--color-text)]"
+            className="truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
             title={workspace.name}
           >
             {workspace.name}
           </span>
-          {open ? <Badge tone="success">Open</Badge> : null}
+          {open ? <Badge tone="neutral">Open</Badge> : null}
           {workspace.archived ? <Badge tone="neutral">Archived</Badge> : null}
         </div>
-        <div className="mt-[var(--space-1)] flex flex-wrap gap-[var(--space-4)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
-          <span>
-            Last opened:{" "}
-            {open ? "now" : <Timestamp value={null} never="not this session" />}
-          </span>
-          <span>
-            Last lead check:{" "}
-            <Timestamp value={workspace.lastPolledAt} never="never" />
-          </span>
-          <span>
-            Last backup: <Timestamp value={workspace.lastBackupAt} never="never" />
+        <div className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          <span className="tabular">Last backup {stamp(workspace.lastBackupAt, "never")}</span>
+          {" · "}
+          <span className="tabular">
+            Last lead check {stamp(workspace.lastPolledAt, "never")}
           </span>
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-[var(--space-2)]">
+      <div className="flex flex-none items-center gap-[var(--space-1)]">
         <Button
-          variant="secondary"
+          variant="ghost"
           size="sm"
-          iconLeft={<Pencil size={14} aria-hidden />}
+          iconLeft={<Pencil size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
           onClick={props.onRename}
           data-testid="workspace-rename"
         >
@@ -109,7 +115,9 @@ function WorkspaceRow(props: {
           <Button
             variant="secondary"
             size="sm"
-            iconLeft={<ArchiveRestore size={14} aria-hidden />}
+            iconLeft={
+              <ArchiveRestore size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+            }
             onClick={props.onUnarchive}
             data-testid="workspace-unarchive"
           >
@@ -129,7 +137,7 @@ function WorkspaceRow(props: {
               </Button>
             )}
             <Button
-              variant="secondary"
+              variant="ghost"
               size="sm"
               onClick={props.onArchive}
               disabled={open}
@@ -140,7 +148,7 @@ function WorkspaceRow(props: {
           </>
         )}
       </div>
-    </div>
+    </CardRow>
   );
 }
 
@@ -230,41 +238,39 @@ export function WorkspacesScreen() {
   const live = workspaces.filter((w) => !w.archived);
   const archived = workspaces.filter((w) => w.archived);
 
+  function rowProps(workspace: WorkspaceEntry) {
+    return {
+      workspace,
+      busy: write.busy,
+      onSwitch: () => void onSwitch(workspace),
+      onRename: () => {
+        setRenaming(workspace);
+        setRenameValue(workspace.name);
+      },
+      onArchive: () => setArchiving(workspace),
+      onUnarchive: () => void unarchiveWorkspace(workspace.id).then(refresh),
+    };
+  }
+
   return (
     <SettingsScreenFrame
       title="Workspaces"
       subtitle="One file per business. Only the one you have open polls for leads and backs up."
       testId="settings-workspaces"
       actions={
-        <Button
-          variant="primary"
-          onClick={() => setCreating(true)}
-          data-testid="workspace-new"
-        >
+        <Button variant="primary" onClick={() => setCreating(true)} data-testid="workspace-new">
           New workspace
         </Button>
       }
     >
       {blocked ? (
-        <p
-          className="mb-[var(--space-4)] rounded-[var(--radius-md)] bg-[var(--color-warning-soft)] px-[var(--space-4)] py-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-warning-ink)]"
-          role="status"
-          data-testid="workspace-blocked"
-        >
-          {blocked}
-        </p>
+        <SettingsNotice data-testid="workspace-blocked">{blocked}</SettingsNotice>
       ) : null}
 
       {isLoading ? (
-        <p
-          className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-          role="status"
-        >
-          Reading the workspace list…
-        </p>
+        <SettingsLoading>Reading the workspace list…</SettingsLoading>
       ) : live.length === 0 ? (
         <EmptyState
-          icon={<Box size={24} aria-hidden />}
           title="No workspaces yet"
           description="A workspace is one business: its own file, its own contacts, its own backups."
           action={
@@ -274,46 +280,32 @@ export function WorkspacesScreen() {
           }
         />
       ) : (
-        <SettingsBlock title="Your workspaces">
-          {live.map((workspace) => (
+        <SettingsGroup label="Your workspaces">
+          {live.map((workspace, index) => (
             <WorkspaceRow
               key={workspace.id}
-              workspace={workspace}
+              {...rowProps(workspace)}
               open={registry?.lastOpened === workspace.id}
-              busy={write.busy}
-              onSwitch={() => void onSwitch(workspace)}
-              onRename={() => {
-                setRenaming(workspace);
-                setRenameValue(workspace.name);
-              }}
-              onArchive={() => setArchiving(workspace)}
-              onUnarchive={() => void unarchiveWorkspace(workspace.id).then(refresh)}
+              last={index === live.length - 1}
             />
           ))}
-        </SettingsBlock>
+        </SettingsGroup>
       )}
 
       {archived.length > 0 ? (
-        <SettingsBlock
-          title="Archived"
-          description="Hidden from the switcher. The files are untouched and can come back at any time."
+        <SettingsGroup
+          label="Archived"
+          footnote="Hidden from the switcher. The files are untouched and can come back at any time."
         >
-          {archived.map((workspace) => (
+          {archived.map((workspace, index) => (
             <WorkspaceRow
               key={workspace.id}
-              workspace={workspace}
+              {...rowProps(workspace)}
               open={false}
-              busy={write.busy}
-              onSwitch={() => void onSwitch(workspace)}
-              onRename={() => {
-                setRenaming(workspace);
-                setRenameValue(workspace.name);
-              }}
-              onArchive={() => setArchiving(workspace)}
-              onUnarchive={() => void unarchiveWorkspace(workspace.id).then(refresh)}
+              last={index === archived.length - 1}
             />
           ))}
-        </SettingsBlock>
+        </SettingsGroup>
       ) : null}
 
       <Dialog open={creating} onOpenChange={setCreating}>
@@ -337,14 +329,14 @@ export function WorkspacesScreen() {
             />
           </Field>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setCreating(false)}>
+            <Button variant="ghost" onClick={() => setCreating(false)} disabled={pending}>
               Cancel
             </Button>
             <Button
               variant="primary"
               onClick={() => void onCreate()}
               loading={pending}
-              iconLeft={<Check size={16} aria-hidden />}
+              loadingLabel="Creating…"
               data-testid="workspace-new-create"
             >
               Create and switch
@@ -353,10 +345,7 @@ export function WorkspacesScreen() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={renaming !== null}
-        onOpenChange={(open) => !open && setRenaming(null)}
-      >
+      <Dialog open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Rename workspace</DialogTitle>
@@ -373,13 +362,14 @@ export function WorkspacesScreen() {
             />
           </Field>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setRenaming(null)}>
+            <Button variant="ghost" onClick={() => setRenaming(null)} disabled={pending}>
               Cancel
             </Button>
             <Button
               variant="primary"
               onClick={() => void onRename()}
               loading={pending}
+              loadingLabel="Saving…"
               data-testid="workspace-rename-save"
             >
               Save name

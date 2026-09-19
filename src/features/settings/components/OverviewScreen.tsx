@@ -1,68 +1,78 @@
 /**
- * "/settings" - the index of every settings section, owned and external
- * alike, in the fixed order `SETTINGS_SECTIONS` defines
- * (docs/DESIGN.md ss3-11: no rail here, this screen *is* the index).
+ * "/settings" — the index.
+ *
+ * Four grouped inset lists, in the order `SETTINGS_SECTIONS` fixes: a row per
+ * section with its icon and its one line, and a caret on the right saying the
+ * row goes somewhere. This is the iOS/System Settings index, and it is the only
+ * screen in the feature that does not carry the section list, because it is the
+ * section list.
+ *
+ * The two rows another feature owns say where they land ("Opens the pipeline"),
+ * so a jump out of Settings is never a surprise.
  */
 import { Link } from "wouter";
 import { PageHeader } from "@/ui";
-import { SETTINGS_SECTIONS } from "@/features/settings/lib/sections";
+import { CaretRight, ICON_SIZE } from "@/ui/icons";
+import { SettingsGroup, SettingsRow } from "@/features/settings/components/SettingsLayout";
+import { sectionsByGroup } from "@/features/settings/lib/sections";
 
 const EXTERNAL_HINTS: Record<string, string> = {
   stages: "Opens the pipeline",
-  site: "Opens the website connection",
-  backups: "Opens backups",
   trash: "Opens trash",
 };
 
 export function OverviewScreen() {
   return (
-    <div data-testid="settings-overview">
+    <div data-testid="settings-overview" className="max-w-3xl">
       <PageHeader
         title="Settings"
         subtitle="Everything you can change about how Helix works and looks."
       />
-      <div className="p-[var(--space-6)]">
-        <div className="grid grid-cols-2 gap-[var(--space-4)]">
-          {SETTINGS_SECTIONS.map((section) => {
-            const hint = section.external
-              ? (EXTERNAL_HINTS[section.id] ?? "Opens elsewhere")
-              : null;
-            return (
-              <Link
-                key={section.id}
-                href={section.to}
-                data-testid="settings-section-link"
-                data-section={section.id}
-                className={[
-                  "flex items-start gap-[var(--space-3)] no-underline",
-                  "rounded-[var(--radius-md)] border border-[var(--color-border)]",
-                  "bg-[var(--color-surface)] p-[var(--space-4)]",
-                  "hover:bg-[var(--color-hover)]",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-                ].join(" ")}
-              >
-                <section.icon
-                  size={20}
-                  className="mt-[2px] shrink-0 text-[var(--color-text-muted)]"
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
-                    {section.title}
-                  </div>
-                  <p className="mt-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                    {section.description}
-                  </p>
-                  {hint ? (
-                    <p className="mt-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-                      {hint}
-                    </p>
-                  ) : null}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+      <div className="flex flex-col gap-[var(--space-6)]">
+        {sectionsByGroup().map((group) => (
+          <SettingsGroup key={group.id} label={group.label}>
+            {group.sections.map((section) => {
+              const hint = section.external
+                ? (EXTERNAL_HINTS[section.id] ?? "Opens elsewhere")
+                : null;
+              return (
+                <Link
+                  key={section.id}
+                  href={section.to}
+                  data-testid="settings-section-link"
+                  data-section={section.id}
+                  className={[
+                    // The hairline belongs to the link, not to the row inside
+                    // it: only the link is a child of the panel, so only it can
+                    // tell whether it is the last row.
+                    "block border-b border-[var(--color-border)] last:border-b-0",
+                    "no-underline hover:bg-[var(--color-hover)] hover:no-underline",
+                    "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)]",
+                    "focus-visible:-outline-offset-2",
+                  ].join(" ")}
+                >
+                  <SettingsRow
+                    className="border-b-0"
+                    leading={<section.icon size={ICON_SIZE} aria-hidden />}
+                    label={<span className="truncate">{section.title}</span>}
+                    hint={section.description}
+                  >
+                    {hint ? (
+                      <span className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+                        {hint}
+                      </span>
+                    ) : null}
+                    <CaretRight
+                      size={ICON_SIZE}
+                      className="flex-none text-[var(--color-text-faint)]"
+                      aria-hidden
+                    />
+                  </SettingsRow>
+                </Link>
+              );
+            })}
+          </SettingsGroup>
+        ))}
       </div>
     </div>
   );

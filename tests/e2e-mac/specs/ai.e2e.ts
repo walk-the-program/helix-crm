@@ -14,6 +14,10 @@
  * The fake answers the Messages API shape and nothing more. It is deliberately
  * strict about the key: a request carrying the "bad" key gets a real 401, which
  * is how the AiKeyRejected path is proved.
+ *
+ * Run it on this agent's own port and build folder (the fake is always on 4795):
+ *   E2E_PORT=4189 E2E_OUT=dist-sweep-settings npx playwright test \
+ *     -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/ai.e2e.ts
  */
 import { createServer, type Server } from "node:http";
 import { test, expect } from "../fixtures";
@@ -387,12 +391,10 @@ test.describe("AI, a rejected key", () => {
 });
 
 test.describe("AI, screenshots", () => {
-  test("the settings screen and the paste dialog, light and dark", async ({
-    page,
-    helix,
-  }) => {
+  test("the settings screen and all three sheets, light and dark", async ({ page, helix }) => {
+    test.setTimeout(180_000);
     const { mkdirSync } = await import("node:fs");
-    const dir = new URL("../.cache/screens/settings/", import.meta.url).pathname;
+    const dir = new URL("../.cache/screens/sweep-settings/", import.meta.url).pathname;
     mkdirSync(dir, { recursive: true });
 
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -400,29 +402,80 @@ test.describe("AI, screenshots", () => {
     useFakeEndpoint(helix.bridge);
     await setUpAi(page, GOOD_KEY);
 
-    // No navigation inside the loop: the keychain stub is per page load, so a
-    // goto here would drop the key this test just saved.
-    for (const theme of ["light", "dark"] as const) {
-      await page.evaluate(
-        (value) => document.documentElement.setAttribute("data-theme", value),
-        theme,
-      );
-      await expect(page.getByTestId("settings-ai")).toBeVisible();
-      await page.screenshot({ path: `${dir}ai-settings-${theme}.png`, fullPage: true });
-
-      await page.keyboard.press("Meta+Shift+V");
-      await expect(page.getByTestId("ai-paste-dialog")).toBeVisible();
-      await page.getByTestId("ai-paste-text").fill(PASTED);
-      await page.getByTestId("ai-paste-extract").click();
-      await expect(page.getByTestId("ai-paste-form")).toBeVisible();
-      // Only one accent button in a dialog: once the form is up, Read it again
-      // steps back to a default button and Save is the primary (DESIGN.md s9).
-      await expect(page.getByTestId("ai-paste-extract")).not.toHaveClass(
-        /color-accent\)\]/,
-      );
-      await page.screenshot({ path: `${dir}ai-paste-${theme}.png` });
-      await page.keyboard.press("Escape");
-      await expect(page.getByTestId("ai-paste-dialog")).toBeHidden();
+    /**
+     * A screen is captured full page; a sheet is captured at the viewport,
+     * because a dialog is `position: fixed` and a full-page capture of one puts
+     * it somewhere that is not where a person sees it.
+     */
+    async function shoot(name: string, fullPage = true): Promise<void> {
+      for (const theme of ["light", "dark"] as const) {
+        await page.evaluate(
+          (value) => document.documentElement.setAttribute("data-theme", value),
+          theme,
+        );
+        await page.screenshot({ path: `${dir}${name}-${theme}.png`, fullPage });
+      }
+      await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
     }
+
+    /**
+     * In-app navigation without a page load. A deep `goto` 404s under
+     * `vite preview` and would also throw away the keychain stub, which lives in
+     * the page; pushState plus a popstate is what wouter itself listens for, so
+     * the router moves and nothing is reloaded.
+     */
+    async function goInApp(path: string): Promise<void> {
+      await page.evaluate((next) => {
+        window.history.pushState({}, "", next);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }, path);
+    }
+
+    await expect(page.getByTestId("settings-ai")).toBeVisible();
+    await shoot("ai-settings");
+
+    // The paste sheet, with the proposal form up.
+    await page.keyboard.press("Meta+Shift+V");
+    await expect(page.getByTestId("ai-paste-dialog")).toBeVisible();
+    await page.getByTestId("ai-paste-text").fill(PASTED);
+    await page.getByTestId("ai-paste-extract").click();
+    await expect(page.getByTestId("ai-paste-form")).toBeVisible();
+    // One black button in a sheet: "Read it" is a default push button and Save
+    // is the primary, whether or not the form is up yet (DESIGN.md s9).
+    await expect(page.getByTestId("ai-paste-extract")).not.toHaveClass(/color-accent\)\]/);
+    await shoot("ai-paste", false);
+
+    // Saving it gives the other two sheets something real to talk about: they
+    // hang off a record, and the fixtures seed no deals.
+    await page.getByTestId("ai-paste-confirm").click();
+    await expect(page.getByTestId("ai-paste-dialog")).toBeHidden();
+    await expect
+      .poll(() => helix.bridge.query("SELECT id FROM contacts WHERE deleted_at IS NULL", []).length)
+      .toBe(1);
+
+    const contactId = String(
+      helix.bridge.query("SELECT id FROM contacts WHERE deleted_at IS NULL", [])[0][0],
+    );
+    const dealId = String(
+      helix.bridge.query("SELECT id FROM deals WHERE deleted_at IS NULL", [])[0][0],
+    );
+
+    // Summarise, from the contact the paste just created.
+    await goInApp(`/contacts/${contactId}`);
+    await page.getByTestId("ai-summarize").click();
+    await expect(page.getByTestId("ai-summary-dialog")).toBeVisible();
+    await expect(page.getByTestId("ai-summary-text")).toContainText("sprinkler");
+    await shoot("ai-summary", false);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("ai-summary-dialog")).toBeHidden();
+
+    // Draft a follow-up, from its deal.
+    await goInApp(`/deals/${dealId}`);
+    await page.getByTestId("ai-draft-followup").click();
+    await expect(page.getByTestId("ai-draft-dialog")).toBeVisible();
+    await expect(page.getByTestId("ai-draft-subject")).toHaveValue("Your sprinklers");
+    await shoot("ai-draft", false);
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("ai-draft-dialog")).toBeHidden();
   });
 });

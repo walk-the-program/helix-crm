@@ -14,7 +14,7 @@
  * checklist.
  *
  * Run it on this agent's own port and build folder:
- *   E2E_PORT=4185 E2E_OUT=dist-settings npx playwright test \
+ *   E2E_PORT=4189 E2E_OUT=dist-sweep-settings npx playwright test \
  *     -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/settings.e2e.ts
  */
 import { mkdirSync, readFileSync } from "node:fs";
@@ -23,7 +23,7 @@ import type { Page } from "@playwright/test";
 import { test, expect, type HelixHarness } from "../fixtures";
 import { SETTINGS_SECTIONS } from "../../../src/features/settings/lib/sections";
 
-const SCREENS_DIR = fileURLToPath(new URL("../.cache/screens/settings/", import.meta.url));
+const SCREENS_DIR = fileURLToPath(new URL("../.cache/screens/sweep-settings/", import.meta.url));
 
 const APP_VERSION = (
   JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")) as {
@@ -87,6 +87,11 @@ async function openSettings(page: Page): Promise<void> {
 
 function sectionLink(page: Page, sectionId: string) {
   return page.locator(`[data-testid="settings-section-link"][data-section="${sectionId}"]`);
+}
+
+/** The section list that sits beside every settings screen. */
+function navLink(page: Page, sectionId: string) {
+  return page.locator(`[data-testid="settings-nav-link"][data-section="${sectionId}"]`);
 }
 
 /** From the settings index, open one of this feature's own sections. */
@@ -174,9 +179,47 @@ test("the settings index lists every section, including the ones other features 
   // A couple of the external rows, checked by href, since they point at
   // screens this feature does not own and never will render.
   await expect(sectionLink(page, "stages")).toHaveAttribute("href", "/pipeline");
-  await expect(sectionLink(page, "site")).toHaveAttribute("href", "/settings/site");
-  await expect(sectionLink(page, "backups")).toHaveAttribute("href", "/backups");
   await expect(sectionLink(page, "trash")).toHaveAttribute("href", "/trash");
+
+  // Website connection and Backups are built by the leads and data features and
+  // mounted under "/settings" by this one, so they are real settings routes
+  // rather than a jump out of Settings.
+  await expect(sectionLink(page, "site")).toHaveAttribute("href", "/settings/site");
+  await expect(sectionLink(page, "backups")).toHaveAttribute("href", "/settings/backups");
+});
+
+/* -------------------------------------------------------------------------- */
+/* 1b. The section list beside every screen                                   */
+/* -------------------------------------------------------------------------- */
+
+test("the section list reaches another section without going back to the index", async ({
+  page,
+  helix,
+}) => {
+  void helix; // requesting the fixture installs the e2e shim - see test 1's comment
+  await bootApp(page);
+  await openSection(page, "workspace");
+  await expect(page.getByTestId("settings-workspace")).toBeVisible();
+
+  // Every section is listed, including the two that live in another feature.
+  const nav = page.getByTestId("settings-nav");
+  await expect(nav).toBeVisible();
+  for (const section of SETTINGS_SECTIONS) {
+    await expect(navLink(page, section.id), `missing a nav row for "${section.id}"`).toBeVisible();
+  }
+
+  // The row for the screen you are on is the selected one, and nothing else is.
+  await expect(navLink(page, "workspace").getByRole("link")).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+
+  // And it navigates: appearance, then diagnostics, without touching the index.
+  await navLink(page, "appearance").click();
+  await expect(page.getByTestId("settings-appearance")).toBeVisible();
+  await navLink(page, "diagnostics").click();
+  await expect(page.getByTestId("settings-diagnostics")).toBeVisible();
 });
 
 /* -------------------------------------------------------------------------- */
@@ -259,6 +302,9 @@ test("creating a tag adds a row and is saved to the database", async ({ page, he
   await expect(page.getByTestId("settings-tags")).toBeVisible();
 
   const tagName = `E2E Tag ${Date.now()}`;
+  // The inline create form became the screen's one dialog, so the primary button
+  // opens it and the dialog's own button submits.
+  await page.getByTestId("tag-add-open").click();
   await page.getByTestId("tag-name-input").fill(tagName);
   await page.getByTestId("tag-add").click();
 
@@ -465,16 +511,33 @@ test('pressing "?" opens the shortcuts sheet, and Escape closes it', async ({ pa
 });
 
 /* -------------------------------------------------------------------------- */
-/* 10. Screenshots, both themes, every settings route                         */
+/* 10. Screenshots, both themes, every settings screen and overlay            */
 /* -------------------------------------------------------------------------- */
 
 test("captures every settings screen in both themes", async ({ page, helix }) => {
   void helix; // requesting the fixture installs the e2e shim - see test 1's comment
+  test.setTimeout(180_000);
   mkdirSync(SCREENS_DIR, { recursive: true });
   await page.setViewportSize({ width: 1280, height: 900 });
 
   await bootApp(page);
 
+  /**
+   * A screen is captured full page; an overlay is captured at the viewport,
+   * because a dialog is `position: fixed` and a full-page capture of one puts
+   * it somewhere that is not where a person sees it.
+   */
+  async function shoot(name: string, fullPage = true): Promise<void> {
+    for (const theme of ["light", "dark"] as const) {
+      await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+      await page.screenshot({ path: `${SCREENS_DIR}${name}-${theme}.png`, fullPage });
+    }
+    // Leave it as the app found it before moving on.
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+  }
+
+  // Every route reachable from the index, including the two screens other
+  // features build and this one mounts ("site", "backups").
   const routes: { section: string; sectionId: string | null }[] = [
     { section: "overview", sectionId: null },
     { section: "workspace", sectionId: "workspace" },
@@ -485,6 +548,8 @@ test("captures every settings screen in both themes", async ({ page, helix }) =>
     { section: "shortcuts", sectionId: "shortcuts" },
     { section: "workspaces", sectionId: "workspaces" },
     { section: "diagnostics", sectionId: "diagnostics" },
+    { section: "site", sectionId: "site" },
+    { section: "backups", sectionId: "backups" },
   ];
 
   for (const route of routes) {
@@ -495,22 +560,32 @@ test("captures every settings screen in both themes", async ({ page, helix }) =>
     }
 
     // Wait for the screen's own content, not just its frame: Workspace,
-    // Workspaces, AI and Diagnostics each read something asynchronously and
-    // show a "Reading…" line first, and a capture of that line tells us
-    // nothing about the design.
+    // Workspaces, AI, Diagnostics, Backups and the site connection each read
+    // something asynchronously and show a "Reading…" line first, and a capture
+    // of that line tells us nothing about the design.
     await expect(
       page.locator('p[role="status"]').filter({ hasText: /^Reading/ }),
     ).toHaveCount(0);
 
-    for (const theme of ["light", "dark"] as const) {
-      await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
-      await page.screenshot({
-        path: `${SCREENS_DIR}${route.section}-${theme}.png`,
-        fullPage: true,
-      });
-    }
-
-    // Leave it as the app found it before moving to the next route.
-    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    await shoot(route.section);
   }
+
+  // The two overlays. The shortcuts sheet is on "?" from anywhere; the
+  // workspace switcher is a palette command, which is the only handle on it
+  // until the sidebar footer opens it (docs/STATUS.md).
+  await openSettings(page);
+  await page.getByRole("heading", { name: "Settings", exact: true, level: 1 }).click();
+  await page.keyboard.press("?");
+  await expect(page.getByTestId("shortcuts-sheet")).toBeVisible();
+  await shoot("shortcuts-sheet", false);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("shortcuts-sheet")).not.toBeVisible();
+
+  await page.keyboard.press("Meta+Shift+k");
+  const switchCommand = page.locator("[cmdk-item]", { hasText: "Switch workspace" });
+  await expect(switchCommand).toBeVisible();
+  await switchCommand.click();
+  await expect(page.getByTestId("workspace-picker")).toBeVisible();
+  await shoot("workspace-switcher", false);
+  await page.keyboard.press("Escape");
 });

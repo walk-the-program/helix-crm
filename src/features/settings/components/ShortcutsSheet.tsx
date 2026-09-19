@@ -1,11 +1,20 @@
 /**
- * Keyboard shortcuts, shown two ways: the "/settings/shortcuts" screen and
- * the "?" sheet opened from anywhere in the app. Both render the same list
- * (`groupShortcuts(allCommands())`, src/features/settings/lib/shortcuts.ts)
- * so they can never disagree.
+ * Keyboard shortcuts, shown two ways: the "/settings/shortcuts" screen and the
+ * "?" sheet opened from anywhere in the app. Both render the same list
+ * (`groupShortcuts(allCommands())`, src/features/settings/lib/shortcuts.ts) so
+ * they can never disagree.
+ *
+ * One grouped inset list per command group: the command on the left, the key on
+ * the right, which is how a macOS menu draws a shortcut — and the reason `Kbd`
+ * is set in the system face rather than a monospace (design/apple/review.md,
+ * finding 4).
  */
 import { Dialog, DialogContent, DialogHeader, DialogTitle, Kbd } from "@/ui";
-import { SettingsScreenFrame } from "@/features/settings/components/SettingsLayout";
+import {
+  SettingsGroup,
+  SettingsRow,
+  SettingsScreenFrame,
+} from "@/features/settings/components/SettingsLayout";
 import {
   duplicateShortcuts,
   groupShortcuts,
@@ -13,23 +22,25 @@ import {
 } from "@/features/settings/lib/shortcuts";
 import { allCommands } from "@/app/registry";
 
-function Row(props: { row: ShortcutRow }) {
-  const { row } = props;
+function Row(props: { row: ShortcutRow; last: boolean }) {
+  const { row, last } = props;
   return (
-    <div
+    <SettingsRow
+      label={row.label}
+      className={last ? "border-b-0" : undefined}
       data-testid="shortcut-row"
-      data-shortcut-id={row.id}
-      className="flex min-h-[var(--control-h)] items-center justify-between gap-[var(--space-4)] border-b border-[var(--color-border)] py-[var(--space-2)] last:border-b-0"
     >
-      <span className="text-[length:var(--text-base)] text-[var(--color-text)]">{row.label}</span>
       {row.shortcut ? (
         <Kbd keys={row.shortcut} />
       ) : (
-        <span className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]" aria-label="No shortcut">
+        <span
+          className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]"
+          aria-label="No shortcut"
+        >
           —
         </span>
       )}
-    </div>
+    </SettingsRow>
   );
 }
 
@@ -40,16 +51,11 @@ export function ShortcutsList() {
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
       {groups.map((group) => (
-        <div key={group.name} className="flex flex-col">
-          <h2 className="text-[length:var(--text-sm)] font-semibold text-[var(--color-text-muted)] pb-[var(--space-2)]">
-            {group.name}
-          </h2>
-          <div className="flex flex-col">
-            {group.rows.map((row) => (
-              <Row key={row.id} row={row} />
-            ))}
-          </div>
-        </div>
+        <SettingsGroup key={group.name} label={group.name}>
+          {group.rows.map((row, index) => (
+            <Row key={row.id} row={row} last={index === group.rows.length - 1} />
+          ))}
+        </SettingsGroup>
       ))}
       {duplicates.length > 0 ? (
         <p className="text-[length:var(--text-sm)] text-[var(--color-warning-ink)]">
@@ -69,13 +75,16 @@ export function ShortcutsScreen() {
       testId="settings-shortcuts"
       subtitle="Every key this app answers to. Also opens with ?."
     >
-      <div className="max-w-[560px]">
-        <ShortcutsList />
-      </div>
+      <ShortcutsList />
     </SettingsScreenFrame>
   );
 }
 
+/**
+ * The "?" sheet. `DialogContent` is already height-bound and scrolls its own
+ * body with the header pinned, so this adds no scroll box of its own — two
+ * nested scrollers in one panel was the old version's defect.
+ */
 export function ShortcutsSheet(props: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { open, onOpenChange } = props;
 
@@ -85,9 +94,7 @@ export function ShortcutsSheet(props: { open: boolean; onOpenChange: (open: bool
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
         </DialogHeader>
-        <div className="max-h-[70vh] overflow-y-auto pr-[var(--space-2)]">
-          <ShortcutsList />
-        </div>
+        <ShortcutsList />
       </DialogContent>
     </Dialog>
   );

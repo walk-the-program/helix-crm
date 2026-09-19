@@ -1,17 +1,32 @@
 /**
  * Settings > Custom fields.
  *
- * DESIGN.md: one primary button per screen (creating a field), a destructive
- * action always names the record and what it costs before it runs, and every
- * control keeps its shared height and focus ring.
+ * The entity switch (Contacts / Companies / Deals) is chrome, not a setting,
+ * so it sits directly under the page header as a plain segmented control -
+ * not inside a group label or a panel of its own (docs/DESIGN.md §9 "Sidebar
+ * and nav": a control that only points at a section is not itself a setting).
+ * Below it is one grouped inset list per entity, a CardRow per field, in the
+ * same shape WorkspacesScreen uses for its rows. The kind badge is gone: a
+ * grey pill on every row was noise, and a field's kind is not a status - it
+ * now reads as a plain second line under the name, the way a Finder list
+ * subtitles a file with its kind and size.
+ *
+ * "Add a field" is the screen's one black button, and it is in exactly one
+ * place at a time: the header when there are fields, the empty state when there
+ * are none (docs/DESIGN.md §9 - one primary button per screen, and an empty
+ * state is a title, a sentence and one button).
+ *
+ * A destructive action always names the record and what it costs before it
+ * runs (docs/DESIGN.md §7 "no dark patterns"). The mutations, `move()`,
+ * `parseOptions`, `optionsFromText` and every toast string are unchanged.
  */
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ICON_SIZE_SM, ICON_WEIGHT_STRONG, Pencil, Trash2 } from "@/ui/icons";
 import {
-  Badge,
   Button,
+  CardRow,
   Dialog,
   DialogContent,
   DialogFooter,
@@ -22,20 +37,16 @@ import {
   IconButton,
   Input,
   Select,
-  Table,
-  TBody,
-  TD,
-  TH,
-  THead,
   Tabs,
   TabsList,
   TabsTrigger,
   Textarea,
-  TR,
   toast,
 } from "@/ui";
+import { cn } from "@/ui/cn";
 import {
-  SettingsBlock,
+  SettingsGroup,
+  SettingsLoading,
   SettingsScreenFrame,
 } from "@/features/settings/components/SettingsLayout";
 import { qk, queryClient } from "@/app/queryClient";
@@ -108,20 +119,24 @@ function FieldNameAndKind(props: {
         />
       </Field>
       {kindLocked ? (
-        <Field label="Kind" htmlFor="field-kind-locked">
-          <p
-            id="field-kind-locked"
-            className="text-[length:var(--text-base)] text-[var(--color-text)]"
-          >
-            {kindLabel(kind)}
-          </p>
-        </Field>
-      ) : (
+        // A kind that cannot change is a statement, not a control, so it is not
+        // wrapped in a Field: a <label for> pointing at a paragraph is a broken
+        // promise to a screen reader. The label typography is Field's, so the
+        // block still lines up with the fields above and below it.
         <div className="flex flex-col gap-[var(--space-1)]">
-          <span className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
+          <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             Kind
           </span>
-          <div data-testid="field-kind-select">
+          <p className="text-[length:var(--text-base)] text-[var(--color-text)]">
+            {kindLabel(kind)}
+          </p>
+        </div>
+      ) : (
+        // htmlFor names the Select's own trigger, which is a button and so is
+        // labelable; the wrapper carries its own id purely so Field leaves it
+        // alone and the two ids cannot collide.
+        <Field label="Kind" htmlFor="field-kind">
+          <div id="field-kind-control" data-testid="field-kind-select">
             <Select
               id="field-kind"
               value={kind}
@@ -130,7 +145,7 @@ function FieldNameAndKind(props: {
               ariaLabel="Kind"
             />
           </div>
-        </div>
+        </Field>
       )}
       {kind === "choice" ? (
         <Field label="Options" htmlFor="field-options" hint="One option per line.">
@@ -197,7 +212,7 @@ function CreateFieldDialog(props: {
           <DialogFooter>
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={pending}
             >
@@ -262,7 +277,7 @@ function EditFieldDialog(props: {
             <DialogFooter>
               <Button
                 type="button"
-                variant="secondary"
+                variant="ghost"
                 onClick={() => onOpenChange(false)}
                 disabled={pending}
               >
@@ -312,7 +327,7 @@ function DeleteFieldDialog(props: {
           </p>
         ) : null}
         <DialogFooter>
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={pending}>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancel
           </Button>
           <Button
@@ -331,7 +346,7 @@ function DeleteFieldDialog(props: {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Table row                                                                  */
+/* Row                                                                        */
 /* -------------------------------------------------------------------------- */
 
 function FieldRow(props: {
@@ -345,60 +360,61 @@ function FieldRow(props: {
 }) {
   const { field, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDelete } = props;
   const options = parseOptions(field.optionsJson);
+  const detail =
+    field.kind === "choice" && options.length > 0
+      ? `${kindLabel(field.kind)} · ${options.join(", ")}`
+      : kindLabel(field.kind);
 
   return (
-    <TR data-testid="field-row" data-field-name={field.name}>
-      <TD>
+    <CardRow
+      className={cn("items-center gap-[var(--space-4)]", isLast && "border-b-0")}
+      data-testid="field-row"
+      data-field-name={field.name}
+    >
+      <span className="flex min-w-0 flex-col gap-[var(--space-1)] py-[var(--space-1)]">
         <span
           className="truncate text-[length:var(--text-base)] text-[var(--color-text)]"
           title={field.name}
         >
           {field.name}
         </span>
-      </TD>
-      <TD>
-        <Badge tone="neutral">{kindLabel(field.kind)}</Badge>
-      </TD>
-      <TD>
-        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          {field.kind === "choice" ? options.join(", ") : "—"}
+        <span className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          {detail}
         </span>
-      </TD>
-      <TD align="right">
-        <div className="flex items-center justify-end gap-[var(--space-1)]">
-          <IconButton
-            label={`Move "${field.name}" up`}
-            size="sm"
-            disabled={isFirst}
-            data-testid="field-move-up"
-            onClick={onMoveUp}
-          >
-            <ArrowUp className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />
-          </IconButton>
-          <IconButton
-            label={`Move "${field.name}" down`}
-            size="sm"
-            disabled={isLast}
-            data-testid="field-move-down"
-            onClick={onMoveDown}
-          >
-            <ArrowDown className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />
-          </IconButton>
-          <IconButton label={`Edit "${field.name}"`} size="sm" onClick={onEdit}>
-            <Pencil className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />
-          </IconButton>
-          <IconButton
-            label={`Delete "${field.name}"`}
-            size="sm"
-            variant="danger"
-            data-testid="field-delete"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />
-          </IconButton>
-        </div>
-      </TD>
-    </TR>
+      </span>
+      <span className="flex flex-none items-center gap-[var(--space-1)]">
+        <IconButton
+          label={`Move "${field.name}" up`}
+          size="sm"
+          disabled={isFirst}
+          data-testid="field-move-up"
+          onClick={onMoveUp}
+        >
+          <ArrowUp size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+        </IconButton>
+        <IconButton
+          label={`Move "${field.name}" down`}
+          size="sm"
+          disabled={isLast}
+          data-testid="field-move-down"
+          onClick={onMoveDown}
+        >
+          <ArrowDown size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+        </IconButton>
+        <IconButton label={`Edit "${field.name}"`} size="sm" onClick={onEdit}>
+          <Pencil size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+        </IconButton>
+        <IconButton
+          label={`Delete "${field.name}"`}
+          size="sm"
+          variant="danger"
+          data-testid="field-delete"
+          onClick={onDelete}
+        >
+          <Trash2 size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+        </IconButton>
+      </span>
+    </CardRow>
   );
 }
 
@@ -462,12 +478,7 @@ export function FieldsScreen() {
   }
 
   const addFieldButton = (
-    <Button
-      variant="primary"
-      iconLeft={<Plus className="h-[var(--space-4)] w-[var(--space-4)]" aria-hidden="true" />}
-      data-testid="field-add-open"
-      onClick={() => setCreateOpen(true)}
-    >
+    <Button variant="primary" data-testid="field-add-open" onClick={() => setCreateOpen(true)}>
       Add a field
     </Button>
   );
@@ -479,57 +490,44 @@ export function FieldsScreen() {
       testId="settings-fields"
       actions={fields.length > 0 ? addFieldButton : undefined}
     >
-      <SettingsBlock title="Entity">
-        <Tabs value={entityType} onValueChange={(v) => setEntityType(v as EntityType)}>
-          <TabsList>
-            {ENTITY_OPTIONS.map((option) => (
-              <TabsTrigger
-                key={option.value}
-                value={option.value}
-                data-testid={`field-entity-${option.value}`}
-              >
-                {option.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </SettingsBlock>
+      <Tabs value={entityType} onValueChange={(v) => setEntityType(v as EntityType)}>
+        <TabsList>
+          {ENTITY_OPTIONS.map((option) => (
+            <TabsTrigger
+              key={option.value}
+              value={option.value}
+              data-testid={`field-entity-${option.value}`}
+            >
+              {option.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
-      <SettingsBlock title={entityLabel.label}>
-        {fields.length === 0 ? (
-          <EmptyState
-            icon={<Layers size={24} aria-hidden="true" />}
-            title={`No custom fields for ${entityLabel.plural} yet`}
-            description={`Add a field to track something on a ${entityType} that the built-in fields don't cover.`}
-            action={addFieldButton}
-          />
-        ) : (
-          <Table>
-            <THead>
-              <tr>
-                <TH>Name</TH>
-                <TH>Kind</TH>
-                <TH>Options</TH>
-                <TH align="right">Actions</TH>
-              </tr>
-            </THead>
-            <TBody>
-              {fields.map((field, index) => (
-                <FieldRow
-                  key={field.id}
-                  field={field}
-                  isFirst={index === 0}
-                  isLast={index === fields.length - 1}
-                  onMoveUp={() => void move(field, -1)}
-                  onMoveDown={() => void move(field, 1)}
-                  onEdit={() => setEditingField(field)}
-                  onDelete={() => setDeletingField(field)}
-                />
-              ))}
-            </TBody>
-          </Table>
-        )}
-      </SettingsBlock>
+      {fieldsQuery.isLoading ? (
+        <SettingsLoading>Reading the field list…</SettingsLoading>
+      ) : fields.length === 0 ? (
+        <EmptyState
+          title={`No custom fields for ${entityLabel.plural} yet`}
+          description={`Add a field to track something on a ${entityType} that the built-in fields don't cover.`}
+          action={addFieldButton}
+        />
+      ) : (
+        <SettingsGroup label={entityLabel.label}>
+          {fields.map((field, index) => (
+            <FieldRow
+              key={field.id}
+              field={field}
+              isFirst={index === 0}
+              isLast={index === fields.length - 1}
+              onMoveUp={() => void move(field, -1)}
+              onMoveDown={() => void move(field, 1)}
+              onEdit={() => setEditingField(field)}
+              onDelete={() => setDeletingField(field)}
+            />
+          ))}
+        </SettingsGroup>
+      )}
 
       <CreateFieldDialog
         open={createOpen}

@@ -1,19 +1,26 @@
 /**
  * Paste to record (PLAN.md's "AI paste-to-record" flow).
  *
- *   paste -> Extract -> a form he can edit -> Confirm -> one transaction
+ *   paste -> Read it -> a form he can edit -> Save -> one transaction
+ *
+ * The sheet is native: a title, a sentence, one text area, and - once the model
+ * has answered - the proposal as two grouped inset lists with the label on the
+ * left and the field on the right. Cancel is the ghost button and Save is the
+ * one black button in the sheet; "Read it" is a default push button even before
+ * there is anything to save, because a dialog with two filled buttons in it has
+ * no primary action at all (docs/DESIGN.md section 9).
  *
  * Three rules make this safe:
- *   - what the model returns lands in a form, never in the database. Confirm is
+ *   - what the model returns lands in a form, never in the database. Save is
  *     the only thing that writes.
  *   - every field is editable, including the ones the model filled in.
  *   - a contact that already matches on email or phone is named before he
- *     confirms, so he chooses rather than discovers.
+ *     saves, so he chooses rather than discovers.
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { navigate } from "wouter/use-browser-location";
-import { AlertCircle, Sparkles, UserPlus } from "lucide-react";
+import { ICON_SIZE_SM, ICON_WEIGHT_STRONG, Sparkle, WarningCircle } from "@/ui/icons";
 import {
   Button,
   Dialog,
@@ -23,13 +30,17 @@ import {
   DialogHeader,
   DialogTitle,
   Field,
-  FormRow,
   Input,
   Textarea,
   toast,
 } from "@/ui";
 import { qk } from "@/app/queryClient";
 import { parseMoneyToCents } from "@/lib/money";
+import {
+  SettingsGroup,
+  SettingsNotice,
+  SettingsRow,
+} from "@/features/settings/components/SettingsLayout";
 import { AiParseError, aiErrorMessage } from "@/features/ai/errors";
 import { AiReason } from "@/features/ai/components/AiGate";
 import { runWithProvider, useAi } from "@/features/ai/lib/useAi";
@@ -178,14 +189,10 @@ export function PasteToRecordDialog(props: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* The shared DialogContent is centred and unbounded, so a form this tall
-          runs its footer off the bottom of a short window. Cap it and scroll
-          inside instead - the Save button has to stay reachable. */}
-      <DialogContent
-        size="lg"
-        data-testid="ai-paste-dialog"
-        className="max-h-[85vh] overflow-y-auto"
-      >
+      {/* 680 is the form width (DESIGN.md section 9), and DialogContent is
+          already height-bound with its header and footer pinned, so a tall
+          proposal scrolls inside the sheet and Save stays reachable. */}
+      <DialogContent size="md" data-testid="ai-paste-dialog">
         <DialogHeader>
           <DialogTitle>Paste an email, a text or a voicemail</DialogTitle>
           <DialogDescription>
@@ -194,17 +201,17 @@ export function PasteToRecordDialog(props: {
           </DialogDescription>
         </DialogHeader>
 
-        {ai.disabledReason ? (
-          <p
-            className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-[var(--space-3)] py-[var(--space-3)] text-[length:var(--text-sm)]"
-            data-testid="ai-paste-disabled"
-            role="status"
-          >
-            <AiReason reason={ai.disabledReason} />
-          </p>
-        ) : null}
+        <div className="flex flex-col gap-[var(--space-4)]">
+          {ai.disabledReason ? (
+            <p
+              className="rounded-[var(--radius-md)] bg-[var(--color-accent-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)]"
+              data-testid="ai-paste-disabled"
+              role="status"
+            >
+              <AiReason reason={ai.disabledReason} />
+            </p>
+          ) : null}
 
-        <FormRow>
           <Field label="The message">
             <Textarea
               rows={6}
@@ -214,121 +221,130 @@ export function PasteToRecordDialog(props: {
               data-testid="ai-paste-text"
             />
           </Field>
-          <div>
+
+          <div className="flex justify-end">
             <Button
-              variant={form ? "secondary" : "primary"}
+              variant="secondary"
               onClick={() => void onExtract()}
               loading={extracting}
+              loadingLabel="Reading…"
               disabled={ai.disabledReason !== null || text.trim().length === 0}
-              iconLeft={<Sparkles size={16} aria-hidden />}
+              iconLeft={<Sparkle size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
               data-testid="ai-paste-extract"
             >
-              {extracting ? "Reading…" : form ? "Read it again" : "Read it"}
+              {form ? "Read it again" : "Read it"}
             </Button>
           </div>
-        </FormRow>
 
-        {error ? (
-          <p
-            role="alert"
-            data-testid="ai-paste-error"
-            className="mt-[var(--space-4)] flex items-start gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
-          >
-            <AlertCircle size={16} aria-hidden className="mt-[2px] shrink-0" />
-            {error}
-          </p>
-        ) : null}
-
-        {rawAnswer ? (
-          <details className="mt-[var(--space-2)]">
-            <summary className="cursor-pointer text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              What it actually said
-            </summary>
-            <pre
-              data-testid="ai-paste-raw"
-              className="mt-[var(--space-2)] max-h-[180px] overflow-auto rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-3)] font-[var(--font-mono)] text-[length:var(--text-xs)] whitespace-pre-wrap"
+          {error ? (
+            <p
+              role="alert"
+              data-testid="ai-paste-error"
+              className="flex items-start gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
             >
-              {rawAnswer}
-            </pre>
-          </details>
-        ) : null}
+              <WarningCircle size={ICON_SIZE_SM} aria-hidden className="flex-none" />
+              {error}
+            </p>
+          ) : null}
 
-        {form ? (
-          <div
-            className="mt-[var(--space-6)] border-t border-[var(--color-border)] pt-[var(--space-5)]"
-            data-testid="ai-paste-form"
-          >
-            <h3 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
-              Check this before it saves
-            </h3>
-
-            {duplicate ? (
-              <p
-                className="mt-[var(--space-3)] rounded-[var(--radius-md)] bg-[var(--color-warning-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-warning-ink)]"
-                data-testid="ai-paste-duplicate"
-                role="status"
+          {rawAnswer ? (
+            <details>
+              <summary className="cursor-pointer text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                What it actually said
+              </summary>
+              <pre
+                data-testid="ai-paste-raw"
+                className="mt-[var(--space-2)] max-h-48 overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[var(--font-mono)] text-[length:var(--text-xs)] whitespace-pre-wrap"
               >
-                {duplicate.name} already has this email or phone number. Saving makes a
-                second record.
-              </p>
-            ) : null}
+                {rawAnswer}
+              </pre>
+            </details>
+          ) : null}
 
-            <div className="mt-[var(--space-4)] grid grid-cols-2 gap-[var(--space-4)]">
-              <Field label="First name">
-                <Input
-                  value={form.firstName}
-                  onChange={(e) => set("firstName", e.target.value)}
-                  data-testid="ai-first-name"
-                />
-              </Field>
-              <Field label="Last name">
-                <Input
-                  value={form.lastName}
-                  onChange={(e) => set("lastName", e.target.value)}
-                  data-testid="ai-last-name"
-                />
-              </Field>
-              <Field label="Phone">
-                <Input
-                  value={form.phone}
-                  onChange={(e) => set("phone", e.target.value)}
-                  placeholder="(801) 555-0147"
-                  data-testid="ai-phone"
-                />
-              </Field>
-              <Field label="Email">
-                <Input
-                  value={form.email}
-                  onChange={(e) => set("email", e.target.value)}
-                  data-testid="ai-email"
-                />
-              </Field>
-              <Field label="Job title">
-                <Input
-                  value={form.dealTitle}
-                  onChange={(e) => set("dealTitle", e.target.value)}
-                  data-testid="ai-deal-title"
-                />
-              </Field>
-              <Field label="Value" hint="Leave it blank if the message does not say.">
-                <Input
-                  value={form.dealValue}
-                  onChange={(e) => set("dealValue", e.target.value)}
-                  placeholder="600"
-                  data-testid="ai-deal-value"
-                />
-              </Field>
-              <Field label="Expected date" hint="YYYY-MM-DD">
-                <Input
-                  value={form.dealExpectedOn}
-                  onChange={(e) => set("dealExpectedOn", e.target.value)}
-                  placeholder="2026-04-02"
-                  data-testid="ai-deal-expected"
-                />
-              </Field>
-            </div>
+          {form ? (
+            <div className="flex flex-col gap-[var(--space-5)]" data-testid="ai-paste-form">
+              {duplicate ? (
+                <SettingsNotice data-testid="ai-paste-duplicate">
+                  {duplicate.name} already has this email or phone number. Saving makes a
+                  second record.
+                </SettingsNotice>
+              ) : null}
 
-            <div className="mt-[var(--space-4)]">
+              <SettingsGroup label="Customer">
+                <SettingsRow label="First name" htmlFor="ai-first-name" field>
+                  <Input
+                    id="ai-first-name"
+                    value={form.firstName}
+                    onChange={(e) => set("firstName", e.target.value)}
+                    data-testid="ai-first-name"
+                  />
+                </SettingsRow>
+                <SettingsRow label="Last name" htmlFor="ai-last-name" field>
+                  <Input
+                    id="ai-last-name"
+                    value={form.lastName}
+                    onChange={(e) => set("lastName", e.target.value)}
+                    data-testid="ai-last-name"
+                  />
+                </SettingsRow>
+                <SettingsRow label="Phone" htmlFor="ai-phone" field>
+                  <Input
+                    id="ai-phone"
+                    value={form.phone}
+                    onChange={(e) => set("phone", e.target.value)}
+                    placeholder="(801) 555-0147"
+                    data-testid="ai-phone"
+                  />
+                </SettingsRow>
+                <SettingsRow label="Email" htmlFor="ai-email" field>
+                  <Input
+                    id="ai-email"
+                    value={form.email}
+                    onChange={(e) => set("email", e.target.value)}
+                    data-testid="ai-email"
+                  />
+                </SettingsRow>
+              </SettingsGroup>
+
+              <SettingsGroup label="Job">
+                <SettingsRow label="Title" htmlFor="ai-deal-title" field>
+                  <Input
+                    id="ai-deal-title"
+                    value={form.dealTitle}
+                    onChange={(e) => set("dealTitle", e.target.value)}
+                    data-testid="ai-deal-title"
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  label="Value"
+                  hint="Leave it blank if the message does not say."
+                  htmlFor="ai-deal-value"
+                  field
+                >
+                  <Input
+                    id="ai-deal-value"
+                    value={form.dealValue}
+                    onChange={(e) => set("dealValue", e.target.value)}
+                    placeholder="600"
+                    data-testid="ai-deal-value"
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  label="Expected date"
+                  hint="Written as year-month-day."
+                  htmlFor="ai-deal-expected"
+                  field
+                >
+                  <Input
+                    id="ai-deal-expected"
+                    value={form.dealExpectedOn}
+                    onChange={(e) => set("dealExpectedOn", e.target.value)}
+                    placeholder="2026-04-02"
+                    data-testid="ai-deal-expected"
+                  />
+                </SettingsRow>
+              </SettingsGroup>
+
               <Field label="Notes">
                 <Textarea
                   rows={3}
@@ -338,19 +354,19 @@ export function PasteToRecordDialog(props: {
                 />
               </Field>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
 
         <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
           <Button
             variant="primary"
             onClick={() => void onConfirm()}
             loading={saving}
+            loadingLabel="Saving…"
             disabled={!form}
-            iconLeft={<UserPlus size={16} aria-hidden />}
             data-testid="ai-paste-confirm"
           >
             Save customer and job

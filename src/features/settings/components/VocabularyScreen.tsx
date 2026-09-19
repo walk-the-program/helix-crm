@@ -1,23 +1,32 @@
 /**
- * "/settings/vocabulary" - relabel deals as jobs or quotes.
+ * "/settings/vocabulary" — relabel deals as jobs or quotes.
+ *
+ * A grouped list of three choices and a grouped list showing what they read
+ * like, which is the System Settings answer to "what will this do": show the
+ * result rather than describe it.
  *
  * Labels only: the database always says `deals` and `stages` (see
- * src/app/vocabulary.ts). Saving is immediate, no Save button, and the
- * preview below the radios reflects the radio's own selection so it updates
- * before the settings query round-trips.
+ * src/app/vocabulary.ts). Saving is immediate, no Save button, and the preview
+ * reflects the radio's own selection so it updates before the settings query
+ * round-trips.
  */
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as settingsRepo from "@/db/repos/settings";
 import { qk } from "@/app/queryClient";
 import { vocabularyFor, type VocabularyKey } from "@/app/vocabulary";
-import { SettingsScreenFrame } from "@/features/settings/components/SettingsLayout";
-import { Button, toast } from "@/ui";
+import {
+  SettingsChoiceRow,
+  SettingsGroup,
+  SettingsScreenFrame,
+  SettingsValueRow,
+} from "@/features/settings/components/SettingsLayout";
+import { toast } from "@/ui";
 
-const OPTIONS: { value: VocabularyKey; label: string }[] = [
-  { value: "deals", label: "Deals" },
-  { value: "jobs", label: "Jobs" },
-  { value: "quotes", label: "Quotes" },
+const OPTIONS: { value: VocabularyKey; label: string; description: string }[] = [
+  { value: "deals", label: "Deals", description: "The default." },
+  { value: "jobs", label: "Jobs", description: "For work you schedule and complete." },
+  { value: "quotes", label: "Quotes", description: "For work you price before it starts." },
 ];
 
 export function VocabularyScreen() {
@@ -61,78 +70,34 @@ export function VocabularyScreen() {
       testId="settings-vocabulary"
       subtitle="Call your deals whatever fits the work."
     >
-      <div className="flex max-w-[560px] flex-col gap-[var(--space-6)]">
-        <div
-          role="radiogroup"
-          aria-label="Vocabulary"
-          className="flex flex-col gap-[var(--space-2)]"
-        >
+      <SettingsGroup
+        label="Call them"
+        footnote="This changes labels only. Nothing in your data moves."
+      >
+        <div role="radiogroup" aria-label="Vocabulary">
           {OPTIONS.map((option) => (
-            <label
+            <SettingsChoiceRow
               key={option.value}
-              className={[
-                "flex min-h-[var(--control-h)] cursor-pointer items-center gap-[var(--space-3)]",
-                "rounded-[var(--radius-md)] border px-[var(--space-4)] py-[var(--space-2)]",
-                "bg-[var(--color-surface)]",
-                selected === option.value
-                  ? "border-[var(--color-border-strong)]"
-                  : "border-[var(--color-border)]",
-              ].join(" ")}
-            >
-              <input
-                type="radio"
-                name="vocabulary"
-                value={option.value}
-                checked={selected === option.value}
-                onChange={() => choose(option.value)}
-                data-testid={`vocabulary-option-${option.value}`}
-                className={[
-                  "h-[var(--space-4)] w-[var(--space-4)] shrink-0",
-                  // The accent means "this needs you" (DESIGN.md s5); a chosen radio is not
-          // a signal, so the control paints in ink.
-          "accent-[var(--color-text)]",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-                ].join(" ")}
-              />
-              <span className="text-[length:var(--text-base)] text-[var(--color-text)]">
-                {option.label}
-              </span>
-            </label>
+              name="vocabulary"
+              value={option.value}
+              checked={selected === option.value}
+              label={option.label}
+              description={option.description}
+              onSelect={() => choose(option.value)}
+              testId={`vocabulary-option-${option.value}`}
+            />
           ))}
         </div>
+      </SettingsGroup>
 
-        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          This changes labels only. Nothing in your data moves.
-        </p>
-
-        <div
-          data-testid="vocabulary-preview"
-          className="flex flex-col gap-[var(--space-4)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-4)]"
-        >
-          <div>
-            <div className="text-[length:var(--text-xs)] font-semibold text-[var(--color-text-muted)]">
-              Sidebar
-            </div>
-            <div className="mt-[var(--space-1)] flex items-center justify-between border-b border-[var(--color-border)] pb-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text)]">
-              <span>Pipeline</span>
-              <span className="text-[var(--color-text-muted)]">{preview.many}</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-[length:var(--text-xs)] font-semibold text-[var(--color-text-muted)]">
-              Pipeline board
-            </div>
-            <div className="mt-[var(--space-2)]">
-              <Button variant="primary" size="sm" disabled tabIndex={-1} aria-hidden="true">
-                {preview.newOne}
-              </Button>
-            </div>
-          </div>
-          <p className="text-[length:var(--text-sm)] text-[var(--color-text)]">
-            Every {preview.lower} keeps its own timeline.
-          </p>
-        </div>
-      </div>
+      <SettingsGroup
+        label="Reads like"
+        data-testid="vocabulary-preview"
+        footnote={`Every ${preview.lower} keeps its own timeline.`}
+      >
+        <SettingsValueRow label="In the sidebar">{preview.many}</SettingsValueRow>
+        <SettingsValueRow label="On the pipeline board">{preview.newOne}</SettingsValueRow>
+      </SettingsGroup>
     </SettingsScreenFrame>
   );
 }

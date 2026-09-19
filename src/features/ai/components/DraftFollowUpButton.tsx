@@ -2,13 +2,17 @@
  * "Draft a follow-up": one deal, its timeline, and a short email the owner can
  * copy or open in his mail app.
  *
+ * The sheet is a title, a sentence, and two fields. Cancel is the ghost button,
+ * Copy is a default push button, and "Open in Mail" is the one black button -
+ * the thing he came to the sheet to do (docs/DESIGN.md section 9).
+ *
  * Nothing is sent from Helix. The draft opens in whatever mail app the OS uses,
  * through a mailto: URL and the opener plugin, so the owner reads it in his own
  * outbox before anyone else sees it. Email sending is out of scope for v1
  * (PLAN.md, "NOT in scope"), and this is the line that keeps it that way.
  */
 import { useState } from "react";
-import { Copy, Mail, PenLine } from "lucide-react";
+import { Copy, ICON_SIZE_SM, ICON_WEIGHT_STRONG, Mail, PenLine } from "@/ui/icons";
 import {
   Button,
   Dialog,
@@ -85,12 +89,12 @@ export function DraftFollowUpButton(props: {
         disabledReason={ai.disabledReason}
         busy={busy && !open}
         onClick={() => void onDraft()}
-        icon={<PenLine size={16} aria-hidden />}
+        icon={<PenLine size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
         testId="ai-draft-followup"
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent size="lg" data-testid="ai-draft-dialog">
+        <DialogContent size="md" data-testid="ai-draft-dialog">
           <DialogHeader>
             <DialogTitle>Follow-up draft</DialogTitle>
             <DialogDescription>
@@ -99,26 +103,27 @@ export function DraftFollowUpButton(props: {
             </DialogDescription>
           </DialogHeader>
 
-          {error ? (
-            <p
-              role="alert"
-              data-testid="ai-draft-error"
-              className="text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
-            >
-              {error}
-            </p>
-          ) : null}
+          <div className="flex flex-col gap-[var(--space-4)]">
+            {error ? (
+              <p
+                role="alert"
+                data-testid="ai-draft-error"
+                className="text-[length:var(--text-sm)] text-[var(--color-danger-ink)]"
+              >
+                {error}
+              </p>
+            ) : null}
 
-          {ai.disabledReason ? <AiReason reason={ai.disabledReason} /> : null}
+            {ai.disabledReason ? <AiReason reason={ai.disabledReason} /> : null}
 
-          <Field label="Subject">
-            <Input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              data-testid="ai-draft-subject"
-            />
-          </Field>
-          <div className="mt-[var(--space-4)]">
+            <Field label="Subject">
+              <Input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                data-testid="ai-draft-subject"
+              />
+            </Field>
+
             <Field label="Message">
               <Textarea
                 rows={10}
@@ -130,12 +135,13 @@ export function DraftFollowUpButton(props: {
           </div>
 
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
-              Close
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
             </Button>
             <Button
               variant="secondary"
-              iconLeft={<Copy size={16} aria-hidden />}
+              iconLeft={<Copy size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
+              disabled={body.length === 0}
               onClick={() => {
                 void navigator.clipboard
                   .writeText(`${subject}\n\n${body}`)
@@ -148,7 +154,8 @@ export function DraftFollowUpButton(props: {
             </Button>
             <Button
               variant="primary"
-              iconLeft={<Mail size={16} aria-hidden />}
+              iconLeft={<Mail size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
+              disabled={body.length === 0}
               onClick={() => void openInMail(email, subject, body)}
               data-testid="ai-draft-mail"
             >

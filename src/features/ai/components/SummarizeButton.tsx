@@ -2,12 +2,16 @@
  * "Summarise": three or four sentences about one record and its timeline, so
  * the owner can pick up a job he has not touched in a month.
  *
+ * The sheet holds one paragraph and two buttons: Close as the ghost, and Copy
+ * as the black one, because copying it somewhere he can use it is the only
+ * thing this sheet is for (docs/DESIGN.md section 9).
+ *
  * The summary is shown and can be copied. It is never written into the record:
  * a model's paragraph is not a fact about the customer, and the timeline is the
  * thing this business runs on.
  */
 import { useState } from "react";
-import { Copy, ScrollText } from "lucide-react";
+import { Copy, ICON_SIZE_SM, ICON_WEIGHT_STRONG, ScrollText } from "@/ui/icons";
 import {
   Button,
   Dialog,
@@ -68,7 +72,7 @@ export function SummarizeButton(props: {
         disabledReason={ai.disabledReason}
         busy={busy && !open}
         onClick={() => void onSummarize()}
-        icon={<ScrollText size={16} aria-hidden />}
+        icon={<ScrollText size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
         testId="ai-summarize"
       />
 
@@ -101,12 +105,12 @@ export function SummarizeButton(props: {
           )}
 
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
               Close
             </Button>
             <Button
-              variant="secondary"
-              iconLeft={<Copy size={16} aria-hidden />}
+              variant="primary"
+              iconLeft={<Copy size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />}
               disabled={summary.length === 0}
               onClick={() => {
                 void navigator.clipboard

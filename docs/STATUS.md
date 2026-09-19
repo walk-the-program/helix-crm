@@ -2223,3 +2223,67 @@ Nothing blocking. Four things for whoever comes next:
    would bite the moment commands become dynamic.
    `tests/unit/app/shellFooter.test.ts` asserts the current behaviour rather than
    the assumption, so a change here fails a test instead of surprising someone.
+
+## 2026-09-19 — Settings + AI sweep (System Settings idiom)
+
+Scope: `src/features/settings/**`, `src/features/ai/**`,
+`tests/e2e-mac/specs/{settings,ai}.e2e.ts`, `tests/unit/{settings,ai}/**`, plus
+two route mounts under `/settings`. Full write-up with the per-screen reasoning
+and what each screenshot caught: `design/apple/sweep-settings.md`.
+
+### Did
+
+1. **Rewrote `SettingsLayout.tsx` into the row vocabulary every settings screen
+   is now built from**: `SettingsNav`, `SettingsScreenFrame`, `SettingsMount`,
+   `SettingsGroup`, `SettingsRow`, `SettingsChoiceRow`, `SettingsValueRow`,
+   `SettingsLoading`, `SettingsNotice`. `SettingsBlock` and `DataRow` are gone;
+   nothing outside this feature imported them.
+2. **Gave settings a left section list** (224px, four groups under 11px labels,
+   built from the shell's own `NavItem`/`SidebarSection`) so the index is no
+   longer the only way in. The decision and the 1024px arithmetic behind it are
+   in the sweep doc and in the file's own header comment.
+3. **Restyled every screen to grouped inset lists**: index, workspace,
+   vocabulary, tags, custom fields, appearance, the shortcuts screen and its "?"
+   sheet, workspaces, the switcher dialog, diagnostics, AI settings, and the
+   paste, draft and summary sheets.
+4. **Mounted `SiteConnectionScreen` at `/settings/site` and `BackupsScreen` at
+   `/settings/backups`**, both wrapped in `SettingsMount` so the section list
+   survives the jump, and both listed in the index's "Data" group.
+5. **Swapped every `lucide-react` import for `@/ui/icons`** across both features
+   and moved every icon to `size`/`weight` (18 regular in a list, 16 bold in a
+   button). `Sparkles` has no Phosphor alias in the map and became `Sparkle`.
+6. **Two new e2e tests**: the section list lists every section, marks exactly one
+   row current and navigates without the index; and the AI screenshot test now
+   drives the paste flow through to a saved record so the summary and draft
+   sheets have a real record to talk about.
+
+### Verified
+
+- `npm run typecheck` clean; `npm test` 64 files / 799 tests green.
+- `E2E_PORT=4189 E2E_OUT=dist-sweep-settings` over `settings.e2e.ts` and
+  `ai.e2e.ts`: 18 passed. `npx vite build --outDir dist-sweep-settings` succeeds;
+  the directory was deleted.
+- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|lucide-react|shadow-\[var\(--shadow-sm\)\]"`
+  over both features returns nothing.
+- 34 screenshots at 1280, light and dark, in
+  `tests/e2e-mac/.cache/screens/sweep-settings/`, reviewed and re-captured after
+  the seven defects listed in the sweep doc were fixed.
+
+### Contract changes needed
+
+1. **`src/features/leads/index.tsx` should drop its own `/settings/site`
+   route.** Settings now registers that path (wrapped in `SettingsMount`), but
+   leads sits earlier in the registry, so wouter's `Switch` matches the bare
+   leads registration first and the website connection renders without the
+   settings section list. One deleted line in a file this agent does not own
+   fixes it; the settings-side route is already correct.
+2. **`src/ui/icons.ts` has no `Sparkles` alias** even though the map is meant to
+   carry every Lucide name the product used. `Sparkle` is exported and is what
+   the AI feature now imports, but the next feature to migrate will hit the same
+   gap.
+3. **Row hairlines and wrapper elements.** `CardRow`'s `last:border-b-0`
+   resolves against its parent, so a row wrapped in a `<label>`, `<Link>` or
+   `<button>` loses every hairline rather than just the last one. The features
+   work around it by putting the border on the wrapper. If `src/ui` ever grows a
+   `CardRow` variant that takes the hairline as a prop, three files here can drop
+   the workaround.

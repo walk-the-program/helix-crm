@@ -2,18 +2,24 @@
  * The settings feature: the index, the workspace-level screens, the workspace
  * list (E7) and Diagnostics.
  *
- * Routes registered here are only the ones this feature owns. Three settings
- * rows point at screens other features own and are linked, never registered:
- * "/pipeline" (stage management, records), "/settings/site" (leads) and
- * "/backups" and "/trash" (data and records). See lib/sections.ts.
+ * Two screens other features build are mounted here, under "/settings", because
+ * that is where the owner goes looking for them: the website connection (the
+ * leads feature's own screen) and backups (the data feature's). The feature that
+ * owns the screen still owns the screen; this file only decides that it appears
+ * inside Settings, so the section list and the index can reach it.
+ *
+ * Two rows still point elsewhere and are linked, never registered: "/pipeline"
+ * (stage management, records) and "/trash" (records). See lib/sections.ts.
  *
  * "/settings/ai" belongs to the AI feature and is registered there, so the AI
  * module can be read - and reviewed - as one folder.
  */
 import type { FeatureModule } from "@/app/feature";
 import { NAV_ORDER } from "@/app/feature";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon } from "@/ui/icons";
 import { navigate } from "wouter/use-browser-location";
+import { SiteConnectionScreen } from "@/features/leads";
+import { BackupsScreen } from "@/features/data";
 import { mountOverlay } from "@/features/settings/lib/overlayHost";
 import { OverviewScreen } from "@/features/settings/components/OverviewScreen";
 import { WorkspaceScreen } from "@/features/settings/components/WorkspaceScreen";
@@ -24,6 +30,7 @@ import { AppearanceScreen } from "@/features/settings/components/AppearanceScree
 import { ShortcutsScreen } from "@/features/settings/components/ShortcutsSheet";
 import { WorkspacesScreen } from "@/features/settings/components/WorkspacesScreen";
 import { DiagnosticsScreen } from "@/features/settings/components/DiagnosticsScreen";
+import { SettingsMount } from "@/features/settings/components/SettingsLayout";
 import {
   SettingsHost,
   shortcutsSheet,
@@ -43,6 +50,29 @@ export const feature: FeatureModule = {
     { path: "/settings/shortcuts", element: <ShortcutsScreen /> },
     { path: "/settings/workspaces", element: <WorkspacesScreen /> },
     { path: "/settings/diagnostics", element: <DiagnosticsScreen /> },
+    // Other features' screens, mounted under Settings inside the same frame, so
+    // following the section list into one of them does not lose the section
+    // list. NOTE: the leads feature also registers "/settings/site" itself and
+    // sits earlier in the registry, so wouter's Switch matches its bare
+    // registration first and the website connection renders without the
+    // section list until leads drops that route. Backups has no such duplicate
+    // and gets the frame today.
+    {
+      path: "/settings/site",
+      element: (
+        <SettingsMount>
+          <SiteConnectionScreen />
+        </SettingsMount>
+      ),
+    },
+    {
+      path: "/settings/backups",
+      element: (
+        <SettingsMount>
+          <BackupsScreen />
+        </SettingsMount>
+      ),
+    },
   ],
   nav: [
     {

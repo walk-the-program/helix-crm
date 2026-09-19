@@ -1,53 +1,91 @@
 /**
- * The frame every settings screen sits in: a section rail on the left, the
- * screen on the right, and one breadcrumb back to the index.
+ * The frame and the row vocabulary every settings screen is built from.
  *
- * DESIGN.md: no decoration, one primary action per screen, `--control-h` for
- * every control, accent only where something needs the owner.
+ * This is macOS System Settings, in the words of docs/DESIGN.md §9 "Cards and
+ * grouped lists": a list of sections on the left, grouped under 11px labels,
+ * and a detail pane on the right made of **grouped inset lists** — a white
+ * panel at --radius-lg with a hairline between rows, a label on the left and
+ * the control on the right, and a small-capitals label sitting above the panel
+ * in the canvas.
+ *
+ * Why a left section list rather than a segmented control along the top: it is
+ * the idiom the reference application uses, it keeps every section one click
+ * away from every other, and it survives the 1024px floor. At 1024 the shell's
+ * sidebar takes 240, the shell's own gutter takes 2 x 32, this nav takes 224
+ * and the 24px gap leaves a 472px detail column — which is wider than the
+ * System Settings pane at its own minimum window, and a grouped list of
+ * label/control rows is exactly what fits there. 224 rather than 192 because
+ * "Keyboard shortcuts" truncated at 192, which the first screenshot pass
+ * caught.
+ *
+ * Nothing here adds a page gutter: `Shell`'s `<main>` already pays
+ * --space-7 / --space-6 (DESIGN.md §3), and a screen that pads itself again
+ * draws a double margin.
  */
 import type { ReactNode } from "react";
-import { Link, useLocation } from "wouter";
-import { ChevronLeft } from "lucide-react";
-import { PageHeader } from "@/ui";
-import { OWNED_SECTIONS } from "@/features/settings/lib/sections";
+import { useLocation } from "wouter";
+import { navigate } from "wouter/use-browser-location";
+import { Card, CardGroupLabel, CardRow, NavItem, PageHeader, SidebarSection } from "@/ui";
+import { cn } from "@/ui/cn";
+import { ICON_SIZE } from "@/ui/icons";
+import { sectionsByGroup } from "@/features/settings/lib/sections";
 
-export function SettingsRail() {
+/* -------------------------------------------------------------------------- */
+/* The section list                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every section, in its group, so the index is never the only way in.
+ *
+ * It lists the two rows other features own as well ("/pipeline" and "/trash"):
+ * from the owner's side they are settings, and a list that hides them makes him
+ * go back to the index to find them. The rows are `NavItem` — the same
+ * primitive the shell's sidebar uses — so the selected tint, the ink and the
+ * hit target cannot drift from the chrome they sit next to.
+ */
+export function SettingsNav() {
   const [location] = useLocation();
 
   return (
     <nav
       aria-label="Settings sections"
-      className="flex w-[216px] shrink-0 flex-col gap-[var(--space-1)]"
+      data-testid="settings-nav"
+      className="w-56 flex-none"
     >
-      {OWNED_SECTIONS.map((section) => {
-        const active = location === section.to;
-        return (
-          <Link
-            key={section.id}
-            href={section.to}
-            aria-current={active ? "page" : undefined}
-            className={[
-              "flex min-h-[var(--control-h)] items-center gap-[var(--space-2)]",
-              "rounded-[var(--radius-md)] px-[var(--space-3)] py-[var(--space-2)]",
-              "text-[length:var(--text-sm)] no-underline",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-              active
-                ? "bg-[var(--color-selected)] font-medium text-[var(--color-text)]"
-                : "text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]",
-            ].join(" ")}
-          >
-            <section.icon size={18} aria-hidden />
-            <span className="truncate">{section.title}</span>
-          </Link>
-        );
-      })}
+      {sectionsByGroup().map((group) => (
+        <SidebarSection key={group.id} label={group.label}>
+          {group.sections.map((section) => (
+            <div
+              key={section.id}
+              data-testid="settings-nav-link"
+              data-section={section.id}
+            >
+              <NavItem
+                label={section.title}
+                icon={<section.icon size={ICON_SIZE} aria-hidden />}
+                active={location === section.to}
+                href={section.to}
+                onClick={(event) => {
+                  event.preventDefault();
+                  navigate(section.to);
+                }}
+              />
+            </div>
+          ))}
+        </SidebarSection>
+      ))}
     </nav>
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* The frame                                                                  */
+/* -------------------------------------------------------------------------- */
+
 export function SettingsScreenFrame(props: {
   title: string;
   subtitle?: ReactNode;
+  /** At most one, and it is the black button (DESIGN.md §9 "Buttons"). */
   actions?: ReactNode;
   children: ReactNode;
   /** Set on the outermost element so the e2e suite can find the screen. */
@@ -56,63 +94,274 @@ export function SettingsScreenFrame(props: {
   const { title, subtitle, actions, children, testId } = props;
 
   return (
-    <div className="flex gap-[var(--space-8)]" data-testid={testId}>
-      <SettingsRail />
-      {/* Wider than --content-max (a prose cap): these screens carry tables and
-          row action clusters, not paragraphs. Individual prose blocks cap
-          themselves. */}
-      <div className="min-w-0 flex-1 max-w-[920px]">
-        <PageHeader
-          title={title}
-          subtitle={subtitle}
-          actions={actions}
-          breadcrumb={
-            <Link
-              href="/settings"
-              className="inline-flex items-center gap-[var(--space-1)] text-[var(--color-text-faint)] no-underline hover:text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-            >
-              <ChevronLeft size={14} aria-hidden />
-              Settings
-            </Link>
-          }
-        />
-        <div className="pt-[var(--space-6)]">{children}</div>
+    <div className="flex gap-[var(--space-6)]" data-testid={testId}>
+      <SettingsNav />
+      {/* The detail column. Capped so a row's label and its control stay in
+          conversation on a wide window instead of drifting to opposite edges —
+          the thing that makes a settings pane read as a web form. */}
+      <div className="min-w-0 flex-1 max-w-3xl">
+        <PageHeader title={title} subtitle={subtitle} actions={actions} />
+        <div className="flex flex-col gap-[var(--space-6)]">{children}</div>
       </div>
     </div>
   );
 }
 
-/** A labelled block inside a settings screen. Not a card: cards are for data. */
-export function SettingsBlock(props: {
-  title: string;
-  description?: ReactNode;
-  children: ReactNode;
-}) {
+/**
+ * The same frame around a screen another feature built and this one mounts
+ * under "/settings" (the website connection and backups).
+ *
+ * Without it, following the section list into one of those two screens loses
+ * the section list, and the only way back is the shell's own sidebar - which
+ * makes the sub-navigation a one-way door. The mounted screen brings its own
+ * page header; all this adds is the list beside it and the same column cap.
+ */
+export function SettingsMount(props: { children: ReactNode }) {
   return (
-    <section className="border-b border-[var(--color-border)] py-[var(--space-6)] first:pt-0 last:border-b-0">
-      <h2 className="text-[length:var(--text-lg)] font-semibold text-[var(--color-text)]">
-        {props.title}
-      </h2>
-      {props.description ? (
-        <p className="mt-[var(--space-1)] max-w-[60ch] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          {props.description}
+    <div className="flex gap-[var(--space-6)]">
+      <SettingsNav />
+      <div className="min-w-0 flex-1 max-w-3xl">{props.children}</div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* The grouped inset list                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One grouped inset list: the small-capitals label in the canvas, the white
+ * panel under it, and an optional sentence under the panel.
+ *
+ * The sentence goes *below* the group, not above the first row, because that is
+ * where System Settings puts the explanation of a switch — and it keeps the
+ * panel itself nothing but rows.
+ */
+export function SettingsGroup(props: {
+  label?: string;
+  footnote?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  "data-testid"?: string;
+}) {
+  const { label, footnote, children, className } = props;
+
+  return (
+    <section className={cn("flex flex-col", className)} data-testid={props["data-testid"]}>
+      {label ? <CardGroupLabel>{label}</CardGroupLabel> : null}
+      {/* overflow-hidden so a hovered or selected first/last row is clipped by
+          the panel's own 10px corner instead of painting a square one over it. */}
+      <Card className="overflow-hidden">{children}</Card>
+      {footnote ? (
+        <p className="px-[var(--space-1)] pt-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+          {footnote}
         </p>
       ) : null}
-      <div className="mt-[var(--space-4)]">{props.children}</div>
     </section>
   );
 }
 
-/** label / value pair for the read-only rows on Diagnostics and Workspaces. */
-export function DataRow(props: { label: string; children: ReactNode }) {
+/**
+ * A row with a label on the left and a control on the right.
+ *
+ * `hint` is the second line under the label — the sample value, or the sentence
+ * that says what the option does. It is --text-sm in secondary ink, so the
+ * label keeps the row's weight.
+ *
+ * `field` boxes the control at a fixed width so that a column of selects and
+ * inputs lines up down the panel. Without it the right side is only as wide as
+ * what it holds, which is what a switch, a badge or a button cluster wants.
+ */
+export function SettingsRow(props: {
+  label: ReactNode;
+  hint?: ReactNode;
+  htmlFor?: string;
+  field?: boolean;
+  /**
+   * A glyph at the head of the row. It sits outside the label column rather
+   * than inside it, so the hint under the label lines up with the label and not
+   * with the icon - the misalignment the first screenshot pass caught on the
+   * settings index.
+   */
+  leading?: ReactNode;
+  children?: ReactNode;
+  className?: string;
+  /** Forwarded so a test or a screenshot can address one row. */
+  "data-testid"?: string;
+}) {
+  const { label, hint, htmlFor, field, leading, children, className } = props;
+  const labelClass = "text-[length:var(--text-base)] text-[var(--color-text)]";
+
   return (
-    <div className="flex min-h-[var(--row-h)] items-center gap-[var(--space-4)] border-b border-[var(--color-border)] py-[var(--space-2)] last:border-b-0">
-      <div className="w-[180px] shrink-0 text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+    <CardRow
+      className={cn("items-center gap-[var(--space-3)]", className)}
+      data-testid={props["data-testid"]}
+    >
+      {leading ? (
+        <span className="flex flex-none items-center text-[var(--color-text-muted)]">
+          {leading}
+        </span>
+      ) : null}
+      <span className="flex min-w-0 flex-1 flex-col gap-[var(--space-1)] py-[var(--space-1)]">
+        {htmlFor ? (
+          <label htmlFor={htmlFor} className={labelClass}>
+            {label}
+          </label>
+        ) : (
+          <span className={labelClass}>{label}</span>
+        )}
+        {hint ? (
+          <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            {hint}
+          </span>
+        ) : null}
+      </span>
+      {children ? (
+        <span
+          className={cn(
+            "flex flex-none items-center justify-end gap-[var(--space-2)]",
+            field && "w-56 max-w-[55%]",
+          )}
+        >
+          {children}
+        </span>
+      ) : null}
+    </CardRow>
+  );
+}
+
+/**
+ * One choice in a grouped list of choices: the radio on the left, its name, and
+ * the sentence that says what it does under the name.
+ *
+ * The radio itself is the native control, painted in ink rather than in an
+ * accent — a chosen option is not asking for the owner's attention (DESIGN.md
+ * §5) — and it stays a real `<input type="radio">` inside a `<label>`, so arrow
+ * keys walk the group and a screen reader reads it without any help from us.
+ */
+export function SettingsChoiceRow(props: {
+  /** The radio group's name: the same string on every row of one group. */
+  name: string;
+  value: string;
+  checked: boolean;
+  label: string;
+  description?: string;
+  onSelect: () => void;
+  testId?: string;
+}) {
+  const { name, value, checked, label, description, onSelect, testId } = props;
+
+  return (
+    // The hairline lives on this wrapper rather than on the row inside it: the
+    // wrapper is the panel's own child, so `last:border-b-0` resolves against
+    // the panel. On the row it would resolve against the wrapper, where every
+    // row is an only child and every hairline would disappear.
+    <label
+      className={cn(
+        "block cursor-pointer hover:bg-[var(--color-hover)]",
+        "border-b border-[var(--color-border)] last:border-b-0",
+        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--color-focus)]",
+        "has-[:focus-visible]:-outline-offset-2",
+      )}
+    >
+      <CardRow className="items-start gap-[var(--space-3)] border-b-0 py-[var(--space-3)]">
+        <span className="flex min-w-0 items-start gap-[var(--space-3)]">
+          <input
+            type="radio"
+            name={name}
+            value={value}
+            checked={checked}
+            onChange={onSelect}
+            data-testid={testId}
+            className="mt-[var(--space-1)] h-[var(--space-4)] w-[var(--space-4)] flex-none accent-[var(--color-text)]"
+          />
+          <span className="flex min-w-0 flex-col gap-[var(--space-1)]">
+            <span
+              className={cn(
+                "text-[length:var(--text-base)] text-[var(--color-text)]",
+                checked && "font-medium",
+              )}
+            >
+              {label}
+            </span>
+            {description ? (
+              <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                {description}
+              </span>
+            ) : null}
+          </span>
+        </span>
+      </CardRow>
+    </label>
+  );
+}
+
+/**
+ * A read-only label/value row: Diagnostics, and the "what gets sent" list on
+ * the AI screen.
+ *
+ * The label column is fixed so the values line up down the panel, and the row
+ * aligns to the top rather than the middle, because a file path or a sentence
+ * wraps and a centred wrapped value pulls its label off the first line.
+ */
+export function SettingsValueRow(props: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <CardRow className={cn("items-start gap-[var(--space-4)] py-[var(--space-3)]", props.className)}>
+      <span className="w-40 flex-none text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
         {props.label}
-      </div>
-      <div className="min-w-0 flex-1 text-[length:var(--text-base)] text-[var(--color-text)]">
+      </span>
+      <span className="min-w-0 flex-1 text-left text-[length:var(--text-base)] text-[var(--color-text)]">
         {props.children}
-      </div>
-    </div>
+      </span>
+    </CardRow>
+  );
+}
+
+/**
+ * The one line a screen shows while it reads the database or helix.json.
+ *
+ * A sentence, not a spinner: an animated ring on an otherwise empty pane reads
+ * as a screen that has broken (DESIGN.md §8). The e2e screenshot pass also
+ * waits on `p[role="status"]` starting with "Reading", so every screen says it
+ * the same way.
+ */
+export function SettingsLoading(props: { children: string }) {
+  return (
+    <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]" role="status">
+      {props.children}
+    </p>
+  );
+}
+
+/**
+ * Something the owner has to know before he acts — a switch that is refused
+ * while a write holds the lock, a duplicate he is about to create.
+ *
+ * A muted pastel and its own ink, which is the only tint the product allows for
+ * attention (DESIGN.md §5). It is a row inside the panel wherever there is a
+ * panel to put it in, so it never becomes a floating coloured box.
+ */
+export function SettingsNotice(props: {
+  children: ReactNode;
+  className?: string;
+  "data-testid"?: string;
+}) {
+  return (
+    <p
+      role="status"
+      data-testid={props["data-testid"]}
+      className={cn(
+        "rounded-[var(--radius-md)] bg-[var(--color-warning-soft)]",
+        "px-[var(--space-3)] py-[var(--space-2)]",
+        "text-[length:var(--text-sm)] text-[var(--color-warning-ink)]",
+        props.className,
+      )}
+    >
+      {props.children}
+    </p>
   );
 }

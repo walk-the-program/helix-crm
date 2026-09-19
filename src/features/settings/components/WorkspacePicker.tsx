@@ -1,5 +1,9 @@
 /**
- * The workspace switcher, as a dialog.
+ * The workspace switcher, as a native sheet: a title, a sentence, and one
+ * grouped inset list of workspaces. The row is the action - there is no Switch
+ * button per row, because picking the row is what picking the row means - and
+ * the open one wears the --color-selected tint with a check on the right, the
+ * way a macOS list marks the item you are already in.
  *
  * The sidebar footer already shows the open workspace's name, and that is where
  * this belongs - but the shell is another agent's file, so the switcher is
@@ -8,10 +12,12 @@
  * footer open this is noted there.
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { Check } from "lucide-react";
+import { Check, ICON_SIZE } from "@/ui/icons";
 import { useLocation } from "wouter";
 import {
   Button,
+  Card,
+  CardRow,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -20,7 +26,9 @@ import {
   DialogTitle,
   toast,
 } from "@/ui";
+import { cn } from "@/ui/cn";
 import { formatDateTimeDisplay } from "@/lib/dates";
+import { SettingsNotice } from "@/features/settings/components/SettingsLayout";
 import { refetchRegistry, useRegistry } from "@/features/settings/lib/queries";
 import {
   openWorkspaceById,
@@ -62,54 +70,61 @@ export function WorkspacePicker(props: {
           </DialogDescription>
         </DialogHeader>
 
-        {blocked ? (
-          <p
-            className="rounded-[var(--radius-md)] bg-[var(--color-warning-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-warning-ink)]"
-            role="status"
-          >
-            {blocked}
-          </p>
-        ) : null}
+        <div className="flex flex-col gap-[var(--space-4)]">
+          {blocked ? <SettingsNotice>{blocked}</SettingsNotice> : null}
 
-        <div className="flex flex-col">
-          {workspaces.map((workspace) => {
-            const isOpen = workspace.id === openId;
-            return (
-              <button
-                key={workspace.id}
-                type="button"
-                disabled={isOpen || blocked !== null}
-                onClick={() => void choose(workspace.id, workspace.name)}
-                data-testid="workspace-picker-item"
-                data-workspace-name={workspace.name}
-                className={[
-                  "flex min-h-[44px] items-center justify-between gap-[var(--space-3)]",
-                  "rounded-[var(--radius-md)] px-[var(--space-3)] py-[var(--space-2)] text-left",
-                  "text-[length:var(--text-base)] text-[var(--color-text)]",
-                  "hover:bg-[var(--color-hover)] disabled:opacity-60 disabled:hover:bg-transparent",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-                ].join(" ")}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{workspace.name}</span>
-                  <span className="block text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
-                    {workspace.lastBackupAt
-                      ? `Backed up ${formatDateTimeDisplay(workspace.lastBackupAt)}`
-                      : "No backup yet"}
-                  </span>
-                </span>
-                {isOpen ? (
-                  <span className="inline-flex items-center gap-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
-                    <Check size={14} aria-hidden />
-                    Open
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
+          {/* No section label: a sheet holding one list does not need to name
+              it, and the title two lines up already has. */}
+          <div className="flex flex-col">
+            <Card className="overflow-hidden">
+              {workspaces.map((workspace) => {
+                const isOpen = workspace.id === openId;
+                return (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    disabled={isOpen || blocked !== null}
+                    onClick={() => void choose(workspace.id, workspace.name)}
+                    data-testid="workspace-picker-item"
+                    data-workspace-name={workspace.name}
+                    className={cn(
+                      "block w-full text-left",
+                      // The hairline is the button's, not the row's: the button
+                      // is the panel's child, so only it knows it is last.
+                      "border-b border-[var(--color-border)] last:border-b-0",
+                      "enabled:hover:bg-[var(--color-hover)] disabled:cursor-default",
+                      "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)]",
+                      "focus-visible:-outline-offset-2",
+                      isOpen && "bg-[var(--color-selected)]",
+                    )}
+                  >
+                    <CardRow className="items-center gap-[var(--space-3)] border-b-0 py-[var(--space-2)]">
+                      <span className="flex min-w-0 flex-col gap-[var(--space-1)]">
+                        <span className="truncate font-medium">{workspace.name}</span>
+                        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)] tabular">
+                          {workspace.lastBackupAt
+                            ? `Backed up ${formatDateTimeDisplay(workspace.lastBackupAt)}`
+                            : "No backup yet"}
+                        </span>
+                      </span>
+                      {isOpen ? (
+                        <span className="inline-flex flex-none items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text)]">
+                          <Check size={ICON_SIZE} aria-hidden />
+                          Open
+                        </span>
+                      ) : null}
+                    </CardRow>
+                  </button>
+                );
+              })}
+            </Card>
+          </div>
         </div>
 
         <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button
             variant="secondary"
             onClick={() => {

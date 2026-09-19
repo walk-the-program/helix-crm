@@ -11,7 +11,7 @@
  */
 import type { ReactNode } from "react";
 import { Link } from "wouter";
-import { Sparkles } from "lucide-react";
+import { ICON_SIZE_SM, ICON_WEIGHT_STRONG, Sparkle } from "@/ui/icons";
 import { Button } from "@/ui";
 
 export function AiReason(props: { reason: string }) {
@@ -61,7 +61,9 @@ export function AiActionButton(props: {
         onClick={onClick}
         disabled={disabledReason !== null}
         loading={busy}
-        iconLeft={icon ?? <Sparkles size={16} aria-hidden />}
+        iconLeft={
+          icon ?? <Sparkle size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+        }
         data-testid={testId}
         aria-describedby={disabledReason ? `${testId ?? label}-reason` : undefined}
       >
