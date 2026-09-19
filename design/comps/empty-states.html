@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<title>Helix CRM — Empty states</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/styles/globals.css">
+<link rel="stylesheet" href="comp.css">
+<style>
+  /* Scoped to this comp only. Uses tokens exclusively — no hex, no rgb. */
+  .specimen { display: flex; flex-direction: column; gap: var(--space-2); }
+  .specimen-caption { font-size: var(--text-sm); color: var(--color-text-faint); }
+
+  .variant-tag {
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+    padding: var(--space-3) var(--space-6) 0;
+  }
+
+  .empty + .empty,
+  .variant-tag + .empty {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .search-palette {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .search-palette .field-search {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 36px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-base);
+  }
+  .field-search .query { flex: 1 1 auto; }
+  .field-search .icon { color: var(--color-text-faint); }
+
+  .did-you-mean {
+    font-size: var(--text-sm);
+    color: var(--color-text-faint);
+    margin-top: var(--space-1);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <aside class="sidebar">
+    <div class="ws">
+      <div class="ws-mark">AR</div>
+      <div style="min-width:0">
+        <div class="ws-name" title="Alpine Ridge Landscape">Alpine Ridge Landscape</div>
+        <div class="ws-sub">Draper, UT</div>
+      </div>
+      <button class="btn-icon btn" aria-label="Switch workspace" title="Switch workspace" style="margin-left:auto">
+        <svg class="icon icon-sm"><use href="#i-chevronDown"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg class="icon"><use href="#i-sun"/></svg> Today
+        <span class="nav-count" data-needs>5</span>
+      </a>
+      <a class="nav-item" href="contact.html">
+        <svg class="icon"><use href="#i-users"/></svg> Contacts
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-building"/></svg> Companies
+      </a>
+      <a class="nav-item" href="pipeline.html">
+        <svg class="icon"><use href="#i-kanban"/></svg> Pipeline
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-checks"/></svg> Tasks
+        <span class="nav-count">12</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-chart"/></svg> Reports
+      </a>
+      <a class="nav-item" href="import.html">
+        <svg class="icon"><use href="#i-upload"/></svg> Import
+      </a>
+
+      <div class="nav-group-label">Pinned views</div>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-3)"></span> Estimates out
+        <span class="nav-count">7</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-5)"></span> Won this month
+        <span class="nav-count">4</span>
+      </a>
+    </nav>
+
+    <div style="padding:var(--space-2);border-top:1px solid var(--color-border)">
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-settings"/></svg> Settings
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN ==================== -->
+  <div class="main">
+
+    <header class="topbar">
+      <div class="crumbs">
+        <strong>Empty states</strong>
+        <span>Design reference</span>
+      </div>
+      <div class="search">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg>
+        Search contacts, deals, notes
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="btn">
+        <svg class="icon icon-sm"><use href="#i-plus"/></svg> Quick add <kbd>⌘N</kbd>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <div class="stack gap-7" style="max-width:1100px">
+
+        <!-- ========== SPECIMEN 1: TODAY ========== -->
+        <div class="specimen">
+          <p class="specimen-caption">Today — first run, before any data exists</p>
+          <div class="panel">
+            <div class="empty">
+              <svg class="icon icon-lg"><use href="#i-sun"/></svg>
+              <h3>Nothing due yet</h3>
+              <p>Today fills with overdue work, new website leads, and deals that have gone quiet.</p>
+              <p>Import your contacts or connect your website and the first ones start showing up here.</p>
+              <div class="actions">
+                <button class="btn btn-primary">Import a spreadsheet</button>
+                <a href="#" style="font-size:var(--text-base);color:var(--color-text-muted)">Connect your website</a>
+              </div>
+            </div>
+
+            <p class="specimen-caption variant-tag">Today — caught up, after clearing today’s queue (a reward state, not the accent)</p>
+            <div class="empty empty-ok">
+              <svg class="icon icon-lg"><use href="#i-checkCircle"/></svg>
+              <h3>Everything is caught up</h3>
+              <p>No overdue work, new leads, or quiet deals are waiting on you right now.</p>
+              <div class="actions">
+                <a href="#" style="font-size:var(--text-base);color:var(--color-text-muted)">See all tasks</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== SPECIMEN 2: CONTACTS LIST ========== -->
+        <div class="specimen">
+          <p class="specimen-caption">Contacts — the list before any contact exists</p>
+          <div class="panel">
+            <div class="empty">
+              <svg class="icon icon-lg"><use href="#i-users"/></svg>
+              <h3>No contacts yet</h3>
+              <p>Import a spreadsheet from your old CRM or from Google Contacts in about five minutes.</p>
+              <p>Leads from your website land here automatically once you connect it.</p>
+              <div class="actions">
+                <button class="btn btn-primary">Import contacts</button>
+                <a href="#" style="font-size:var(--text-base);color:var(--color-text-muted)">Add one by hand</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== SPECIMEN 3: SEARCH, ZERO RESULTS ========== -->
+        <div class="specimen">
+          <p class="specimen-caption">Search — zero results for a typed query</p>
+          <div class="panel">
+            <div class="search-palette">
+              <div class="field-search">
+                <svg class="icon icon-sm"><use href="#i-search"/></svg>
+                <span class="query">hendrix retaining wall</span>
+                <button class="btn btn-icon" aria-label="Clear search" title="Clear search">
+                  <svg class="icon icon-sm"><use href="#i-x"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="empty">
+              <svg class="icon icon-lg"><use href="#i-search"/></svg>
+              <h3>No results for “hendrix retaining wall”</h3>
+              <p>Search looks across names, companies, phone numbers, emails, notes, and deal titles.</p>
+              <p>Check the spelling, or add it as a new contact.</p>
+              <div class="actions">
+                <button class="btn btn-primary">Add “hendrix retaining wall” as a contact</button>
+                <button class="btn">Clear filters</button>
+              </div>
+              <a href="#" class="did-you-mean">Did you mean Hendrickson?</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== SPECIMEN 4: REPORTS ========== -->
+        <div class="specimen">
+          <p class="specimen-caption">Reports — no closed deals yet</p>
+          <div class="panel">
+            <div class="empty">
+              <svg class="icon icon-lg"><use href="#i-chart"/></svg>
+              <h3>No closed deals yet</h3>
+              <p>Reports compare what you have won against what you have lost, and need at least one closed deal to show anything.</p>
+              <p>There is nothing you need to set up.</p>
+              <div class="actions">
+                <button class="btn btn-primary">Open the pipeline</button>
+                <a href="#" style="font-size:var(--text-base);color:var(--color-text-muted)">See what reports will show</a>
+              </div>
+            </div>
+
+            <p class="specimen-caption variant-tag">Reports — filtered to a date range with nothing closed</p>
+            <div class="empty">
+              <h3>No deals closed between 1 July and 30 September</h3>
+              <p>Try a wider date range, or check back after your next deal closes.</p>
+              <div class="actions">
+                <button class="btn">Show the last 12 months instead</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== STATUS BAR ==================== -->
+  <div class="statusbar">
+    <span>Alpine Ridge Landscape</span>
+    <span class="right">
+      <span>Website checked 3 min ago</span>
+      <span>Backed up 08:02</span>
+      <span>1,204 contacts</span>
+    </span>
+  </div>
+</div>
+
+<script src="comp.js"></script>
+</body>
+</html>

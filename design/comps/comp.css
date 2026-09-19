@@ -1,0 +1,960 @@
+/* ============================================================================
+   Comp-only component layer for design/comps/*.html
+   Uses ONLY variables from ../../src/styles/tokens.css. No hex, no rgb, no
+   named colours. This is the visual reference the TypeScript agent builds
+   src/ui/ against; it is not shipped.
+   ========================================================================= */
+
+/* --- Shell ---------------------------------------------------------------- */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 28px;
+  grid-template-areas: "side main" "status status";
+  height: 100vh;
+  min-width: 1024px;
+}
+
+.sidebar {
+  grid-area: side;
+  background: var(--color-sidebar);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ws {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--topbar-h);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  flex: none;
+}
+
+.ws-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-text);
+  color: var(--color-surface);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.ws-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+
+.nav {
+  padding: var(--space-3) var(--space-2);
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.nav-group-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-faint);
+  padding: var(--space-4) var(--space-3) var(--space-1);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 34px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.nav-item .icon { color: var(--color-text-faint); }
+.nav-item:hover { background: var(--color-hover); }
+
+.nav-item[aria-current="page"] {
+  background: var(--color-selected);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.nav-item[aria-current="page"] .icon { color: var(--color-text); }
+
+.nav-count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-count[data-needs] {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+/* --- Top bar -------------------------------------------------------------- */
+
+.main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+.topbar {
+  height: var(--topbar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-5);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-faint);
+  min-width: 0;
+}
+
+.crumbs strong {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 300px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-faint);
+  font-size: var(--text-sm);
+}
+
+.search kbd { margin-left: auto; }
+
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-5) var(--space-9);
+}
+
+/* --- Status bar ----------------------------------------------------------- */
+
+.statusbar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-4);
+  background: var(--color-sidebar);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+}
+
+.statusbar .right { margin-left: auto; display: flex; gap: var(--space-5); }
+
+/* --- Icons ---------------------------------------------------------------- */
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-sm { width: 16px; height: 16px; }
+.icon-lg { width: 24px; height: 24px; }
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex: none;
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out);
+}
+
+.btn:hover { background: var(--color-hover); }
+.btn:active { background: var(--color-selected); }
+
+.btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.btn-primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+.btn-primary:active { background: var(--color-accent-hover); }
+
+.btn-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-surface);
+}
+
+.btn-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.btn-quiet:hover { background: var(--color-hover); color: var(--color-text); }
+
+.btn-sm { height: var(--control-h-sm); padding: 0 var(--space-3); font-size: var(--text-sm); }
+
+.btn-icon {
+  width: var(--control-h);
+  min-width: var(--control-h);
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-faint);
+}
+
+.btn-icon:hover { background: var(--color-hover); color: var(--color-text); }
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+}
+
+/* --- Inputs --------------------------------------------------------------- */
+
+.field { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.field > label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.field .req { color: var(--color-text-faint); font-weight: 400; }
+
+.input,
+.select {
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-base);
+  width: 100%;
+}
+
+/* The select keeps its native disclosure arrow. Drawing our own would need a
+   colour outside tokens.css, and this audience reads a platform-native control
+   as "this is real software". */
+.select {
+  padding-right: var(--space-2);
+}
+
+.input::placeholder { color: var(--color-text-faint); }
+
+.hint { font-size: var(--text-xs); color: var(--color-text-faint); }
+
+.error-text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-danger-ink);
+}
+
+.input[aria-invalid="true"] { border-color: var(--color-danger); }
+
+/* --- Panels and cards ----------------------------------------------------- */
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-head h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.panel-head .spacer { margin-left: auto; }
+
+.panel-body { padding: var(--space-4); }
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+}
+
+/* The one attention treatment: a 3px accent rail. Never a background wash.
+   Drawn as a pseudo-element so it composes with whatever box-shadow the host
+   already has (a .card and a .row need different elevation but the same rail). */
+.rail-accent,
+.rail-focus { position: relative; }
+
+.rail-accent::before,
+.rail-focus::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-top-left-radius: inherit;
+  border-bottom-left-radius: inherit;
+  pointer-events: none;
+}
+
+.rail-accent::before { background: var(--color-accent); }
+.rail-focus::before  { background: var(--color-focus); }
+
+/* --- Rows ----------------------------------------------------------------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--row-h);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.row:last-child { border-bottom: 0; }
+.row:hover { background: var(--color-hover); }
+
+.row-main { min-width: 0; flex: 1 1 auto; }
+
+.row-title {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-sub {
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+/* --- Tables --------------------------------------------------------------- */
+
+.table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: auto;
+}
+
+table.data { width: 100%; }
+
+table.data thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: var(--space-3) var(--space-4);
+  white-space: nowrap;
+}
+
+table.data tbody td {
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-4);
+  height: var(--row-h);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  color: var(--color-text-muted);
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+table.data tbody tr:last-child td { border-bottom: 0; }
+table.data tbody tr:hover td { background: var(--color-hover); }
+
+table.data td.primary {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+/* The name column takes the leftover width so it is the last thing to truncate. */
+table.data th.primary,
+table.data td.primary { width: 40%; }
+
+/* A cell holding only a badge sizes to its content. Truncating a stage badge
+   into an ellipsis destroys the one cue the colour is paired with. */
+table.data th.shrink,
+table.data td.shrink { width: 1%; max-width: none; overflow: visible; }
+
+table.data [data-numeric] {
+  text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
+  white-space: nowrap;
+  width: 1%;
+}
+
+table.data tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: var(--color-surface);
+  border-top: 2px solid var(--color-border-strong);
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--text-base);
+}
+
+tr[aria-selected="true"] td { background: var(--color-selected); }
+
+/* --- Badges --------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+}
+
+.badge-danger  { background: var(--color-danger-soft);  color: var(--color-danger-ink);  border-color: transparent; }
+.badge-success { background: var(--color-success-soft); color: var(--color-success-ink); border-color: transparent; }
+.badge-warning { background: var(--color-warning-soft); color: var(--color-warning-ink); border-color: transparent; }
+.badge-accent  { background: var(--color-accent-soft);  color: var(--color-accent-ink);  border-color: transparent; }
+
+.badge-stage {
+  background: var(--stage-soft, var(--color-hover));
+  color: var(--color-text);
+  border-color: transparent;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--stage, var(--color-border-strong));
+  flex: none;
+}
+
+.count-pill {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.count-pill[data-needs] { background: var(--color-accent); color: var(--color-accent-text); }
+
+/* --- Money and figures ---------------------------------------------------- */
+
+.money {
+  font-variant-numeric: tabular-nums lining-nums;
+  white-space: nowrap;
+}
+
+.fig-xl { font-size: var(--text-2xl); font-weight: 600; line-height: var(--leading-tight); }
+.fig-lg { font-size: var(--text-lg); font-weight: 600; }
+
+
+/* --- Section heading on Today --------------------------------------------- */
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+}
+
+.section-head h2 { font-size: var(--text-lg); font-weight: 600; }
+.section-head .spacer { margin-left: auto; }
+
+/* --- Empty states --------------------------------------------------------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: var(--content-max);
+  padding: var(--space-8) var(--space-6);
+}
+
+.empty .icon-lg { color: var(--color-text-faint); }
+.empty h3 { font-size: var(--text-lg); font-weight: 600; }
+.empty p { font-size: var(--text-base); color: var(--color-text-muted); margin: 0; }
+.empty .actions { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+
+.empty-ok .icon-lg { color: var(--color-success); }
+
+/* --- Timeline ------------------------------------------------------------- */
+
+.timeline { display: flex; flex-direction: column; }
+
+.tl-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tl-item:last-child { border-bottom: 0; }
+
+.tl-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+}
+
+.tl-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.tl-kind { font-size: var(--text-sm); font-weight: 600; }
+.tl-when { font-size: var(--text-xs); color: var(--color-text-faint); margin-left: auto; }
+.tl-body { font-size: var(--text-base); color: var(--color-text-muted); margin-top: var(--space-1); max-width: var(--content-max); }
+.tl-item[data-system] .tl-body { color: var(--color-text-faint); font-size: var(--text-sm); }
+
+/* --- Record identity block ------------------------------------------------ */
+
+.record-head {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+
+.record-name {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+}
+
+.record-key {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.key-block {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.key-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.key-value {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin-top: var(--space-1);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.key-value a { text-decoration: none; }
+
+/* --- Pipeline board ------------------------------------------------------- */
+
+.board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(180px, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  min-height: 0;
+}
+
+.col {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.col-head {
+  padding: var(--space-3) var(--space-3) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  border-top: 3px solid var(--stage, var(--color-border-strong));
+}
+
+.col-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  min-width: 0;
+}
+
+.col-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-total {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: var(--space-1);
+}
+
+.col-count { font-size: var(--text-xs); color: var(--color-text-faint); }
+
+.col-body {
+  background: var(--stage-soft, var(--color-surface));
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 120px;
+}
+
+.deal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.deal-title {
+  font-size: var(--text-base);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deal-co {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Value on its own line, next step under it. Side by side, a 180px column
+   truncates the due date away, and the due date is the promise. */
+.deal-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin-top: var(--space-1);
+  min-width: 0;
+}
+
+.deal-value { font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.deal-next {
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Drag affordance: a grip that appears on hover, plus a grab cursor. */
+.deal { position: relative; }
+.grip {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  color: var(--color-text-faint);
+  opacity: 0.45;
+  cursor: grab;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.deal:hover .grip { opacity: 1; }
+.deal[data-dragging] { box-shadow: var(--shadow-lg); border-color: var(--color-border-strong); cursor: grabbing; }
+.deal[data-dragging] .grip { opacity: 1; cursor: grabbing; }
+
+.drop-target {
+  border: 2px dashed var(--color-focus);
+  border-radius: var(--radius-md);
+  min-height: 62px;
+  display: grid;
+  place-items: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+/* --- Dialog --------------------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  display: grid;
+  place-items: center;
+  padding: var(--space-8);
+  z-index: 20;
+}
+
+.dialog {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 520px;
+  padding: var(--space-6);
+}
+
+.dialog h2 { font-size: var(--text-xl); font-weight: 600; }
+.dialog p { margin-top: var(--space-3); color: var(--color-text-muted); }
+.dialog .actions { display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-6); }
+
+/* --- Toast ---------------------------------------------------------------- */
+
+.toast-stack {
+  position: fixed;
+  left: var(--space-5);
+  bottom: calc(28px + var(--space-4));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 30;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: 420px;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-base);
+}
+
+.toast .msg { flex: 1 1 auto; }
+
+/* --- Progress ------------------------------------------------------------- */
+
+.bar {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.bar > i { display: block; height: 100%; background: var(--color-accent); }
+
+/* --- Banner --------------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-ink);
+}
+
+.banner .spacer { margin-left: auto; }
+
+/* --- Layout helpers (comp only) ------------------------------------------- */
+
+.stack   { display: flex; flex-direction: column; }
+.gap-2   { gap: var(--space-2); }
+.gap-3   { gap: var(--space-3); }
+.gap-4   { gap: var(--space-4); }
+.gap-6   { gap: var(--space-6); }
+.gap-7   { gap: var(--space-7); }
+.inline  { display: flex; align-items: center; }
+.between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.spacer  { margin-left: auto; }
+.two-col { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-5); align-items: start; }
+.mt-2 { margin-top: var(--space-2); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-6 { margin-top: var(--space-6); }
+
+/* --- Theme / density switch (comp chrome, not part of the product) -------- */
+
+.comp-switch {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(28px + var(--space-3));
+  z-index: 40;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-xs);
+}
+
+.comp-switch button {
+  height: 26px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.comp-switch button:hover { background: var(--color-hover); color: var(--color-text); }
+
+/* --- Colour utilities ----------------------------------------------------
+   Last in the file on purpose: these override a component's own text colour
+   (a .deal-next that says "No next step" must read as the accent, not as
+   faint). Keep them here; moving them up silently breaks that.             */
+
+.muted       { color: var(--color-text-muted); }
+.faint       { color: var(--color-text-faint); }
+.accent-ink  { color: var(--color-accent-ink); }
+.danger-ink  { color: var(--color-danger-ink); }
+.success-ink { color: var(--color-success-ink); }
+.warning-ink { color: var(--color-warning-ink); }

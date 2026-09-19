@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<title>Helix CRM — Pipeline</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/styles/globals.css">
+<link rel="stylesheet" href="comp.css">
+<style>
+  /* Scoped to this comp only. Uses tokens exclusively. */
+  .view-toggle {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .view-toggle button {
+    height: 32px;
+    padding: 0 var(--space-3);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    border: 0;
+    border-right: 1px solid var(--color-border);
+  }
+  .view-toggle button:last-child { border-right: 0; }
+  .view-toggle button:hover { background: var(--color-hover); }
+  .view-toggle button[aria-pressed="true"] {
+    background: var(--color-selected);
+    color: var(--color-text);
+  }
+  .board-summary {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .board-summary .fig-lg { color: var(--color-text); }
+  .col-name .success-check {
+    color: var(--color-success);
+    flex: none;
+  }
+  .col-empty-note {
+    /* Muted, not faint: faint text fails AA on a dark stage tint. */
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: var(--space-6) var(--space-3);
+  }
+  .board-wrap {
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <aside class="sidebar">
+    <div class="ws">
+      <div class="ws-mark">AR</div>
+      <div style="min-width:0">
+        <div class="ws-name" title="Alpine Ridge Landscape">Alpine Ridge Landscape</div>
+        <div class="ws-sub">Draper, UT</div>
+      </div>
+      <button class="btn-icon btn" aria-label="Switch workspace" title="Switch workspace" style="margin-left:auto">
+        <svg class="icon icon-sm"><use href="#i-chevronDown"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg class="icon"><use href="#i-sun"/></svg> Today
+        <span class="nav-count" data-needs>5</span>
+      </a>
+      <a class="nav-item" href="contact.html">
+        <svg class="icon"><use href="#i-users"/></svg> Contacts
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-building"/></svg> Companies
+      </a>
+      <a class="nav-item" href="pipeline.html" aria-current="page">
+        <svg class="icon"><use href="#i-kanban"/></svg> Pipeline
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-checks"/></svg> Tasks
+        <span class="nav-count">12</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-chart"/></svg> Reports
+      </a>
+      <a class="nav-item" href="import.html">
+        <svg class="icon"><use href="#i-upload"/></svg> Import
+      </a>
+
+      <div class="nav-group-label">Pinned views</div>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-3)"></span> Estimates out
+        <span class="nav-count">7</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-5)"></span> Won this month
+        <span class="nav-count">4</span>
+      </a>
+    </nav>
+
+    <div style="padding:var(--space-2);border-top:1px solid var(--color-border)">
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-settings"/></svg> Settings
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN ==================== -->
+  <div class="main">
+
+    <header class="topbar">
+      <div class="crumbs">
+        <strong>Pipeline</strong>
+        <span>Deals</span>
+      </div>
+
+      <div class="view-toggle" role="group" aria-label="Pipeline view">
+        <button type="button" aria-pressed="true">Board</button>
+        <button type="button" aria-pressed="false">List</button>
+      </div>
+      <button class="btn btn-sm">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg> Filter
+      </button>
+
+      <div class="search">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg>
+        Search contacts, deals, notes
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="btn">
+        <svg class="icon icon-sm"><use href="#i-plus"/></svg> Quick add <kbd>⌘N</kbd>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <div class="stack gap-4">
+
+        <div class="board-summary">
+          <span>6 stages · 19 open deals ·</span>
+          <span class="fig-lg money">$89,420.00</span>
+          <span>open value</span>
+          <span class="faint">· 3 won this month, <span class="money">$8,000.00</span></span>
+        </div>
+
+        <div class="board-wrap">
+          <div class="board">
+
+            <!-- ========== 1. NEW LEAD ========== -->
+            <div class="col" style="--stage:var(--stage-1);--stage-soft:var(--stage-1-soft)">
+              <div class="col-head">
+                <div class="col-name"><span class="dot" style="--stage:var(--stage-1)"></span><span title="New lead">New lead</span></div>
+                <div class="col-total money">$9,870.00</div>
+                <div class="col-count">4 deals</div>
+              </div>
+              <div class="col-body">
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Xeriscape conversion, front yard">Xeriscape conversion, front yard</div>
+                  <div class="deal-co" title="Rosalind Whitaker-Nguyen · Herriman">Rosalind Whitaker-Nguyen · Herriman</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$4,900.00</span>
+                    <span class="deal-next">Call Fri</span>
+                  </div>
+                </div>
+
+                <div class="deal rail-accent">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="French drain and regrade">French drain and regrade</div>
+                  <div class="deal-co" title="Kaleb Fairbanks · South Jordan">Kaleb Fairbanks · South Jordan</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$2,400.00</span>
+                    <span class="deal-next accent-ink">No next step</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Spring startup, 9 zones">Spring startup, 9 zones</div>
+                  <div class="deal-co" title="Whitney Okelberry · Alpine">Whitney Okelberry · Alpine</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$1,850.00</span>
+                    <span class="deal-next">Call Mon</span>
+                  </div>
+                </div>
+
+                <div class="deal rail-accent">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Fall aeration and overseed">Fall aeration and overseed</div>
+                  <div class="deal-co" title="Priya Deshmukh · Highland">Priya Deshmukh · Highland</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$720.00</span>
+                    <span class="deal-next accent-ink">No next step</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ========== 2. CONTACTED ========== -->
+            <div class="col" style="--stage:var(--stage-2);--stage-soft:var(--stage-2-soft)">
+              <div class="col-head">
+                <div class="col-name"><span class="dot" style="--stage:var(--stage-2)"></span><span title="Contacted">Contacted</span></div>
+                <div class="col-total money">$21,310.00</div>
+                <div class="col-count">5 deals</div>
+              </div>
+              <div class="col-body">
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Spring startup, 14 zones">Spring startup, 14 zones</div>
+                  <div class="deal-co" title="Maricela Villanueva-Escobar · Cottonwood Heights">Maricela Villanueva-Escobar · Cottonwood Heights</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$2,340.00</span>
+                    <span class="deal-next">Confirm valve access</span>
+                  </div>
+                </div>
+
+                <div class="deal rail-accent">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Fall cleanup contract, 32 units">Fall cleanup contract, 32 units</div>
+                  <div class="deal-co" title="Mountain Shadows Assisted Living · Sandy">Mountain Shadows Assisted Living · Sandy</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$6,780.00</span>
+                    <span class="deal-next accent-ink">No next step</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Sprinkler system repair">Sprinkler system repair</div>
+                  <div class="deal-co" title="Tanner Whitlock · Draper">Tanner Whitlock · Draper</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$1,290.00</span>
+                    <span class="deal-next">Quote by Fri</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Backyard putting green">Backyard putting green</div>
+                  <div class="deal-co" title="Colton Ivie · Lehi">Colton Ivie · Lehi</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$6,400.00</span>
+                    <span class="deal-next">Site visit 23 Sep</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Median irrigation upgrade, Phase 1">Median irrigation upgrade, Phase 1</div>
+                  <div class="deal-co" title="Sandy City Parks Dept · Sandy">Sandy City Parks Dept · Sandy</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$4,500.00</span>
+                    <span class="deal-next">Follow up 25 Sep</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ========== 3. ESTIMATE SENT ========== -->
+            <div class="col" style="--stage:var(--stage-3);--stage-soft:var(--stage-3-soft)">
+              <div class="col-head">
+                <div class="col-name"><span class="dot" style="--stage:var(--stage-3)"></span><span title="Estimate sent">Estimate sent</span></div>
+                <div class="col-total money">$38,420.00</div>
+                <div class="col-count">6 deals</div>
+              </div>
+              <div class="col-body">
+
+                <div class="deal" data-dragging>
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Irrigation retrofit, 14 zones">Irrigation retrofit, 14 zones</div>
+                  <div class="deal-co" title="Little Cottonwood Canyon Homeowners Association">Little Cottonwood Canyon Homeowners Association</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$12,450.00</span>
+                    <span class="deal-next accent-ink">Call due 12 Sep</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Retaining wall + regrade, Deer Hollow Ct">Retaining wall + regrade, Deer Hollow Ct</div>
+                  <div class="deal-co" title="Brent Hendrickson · Draper">Brent Hendrickson · Draper</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$8,200.00</span>
+                    <span class="deal-next">Revised bid by Fri</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Paver patio, backyard">Paver patio, backyard</div>
+                  <div class="deal-co" title="Nguyen Family Trust · Draper">Nguyen Family Trust · Draper</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$5,200.00</span>
+                    <span class="deal-next">Follow up 24 Sep</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Xeriscape conversion, common areas">Xeriscape conversion, common areas</div>
+                  <div class="deal-co" title="Cascade Ridge HOA · Cottonwood Heights">Cascade Ridge HOA · Cottonwood Heights</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$6,100.00</span>
+                    <span class="deal-next">Board review 7 Oct</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Parking lot island regrade">Parking lot island regrade</div>
+                  <div class="deal-co" title="Highland Community Church · Highland">Highland Community Church · Highland</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$3,970.00</span>
+                    <span class="deal-next">Call 26 Sep</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Retaining wall, backyard terrace">Retaining wall, backyard terrace</div>
+                  <div class="deal-co" title="Kessler Family · Bluffdale">Kessler Family · Bluffdale</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$2,500.00</span>
+                    <span class="deal-next">Follow up 30 Sep</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ========== 4. SCHEDULED ========== -->
+            <div class="col" style="--stage:var(--stage-4);--stage-soft:var(--stage-4-soft)">
+              <div class="col-head">
+                <div class="col-name"><span class="dot" style="--stage:var(--stage-4)"></span><span title="Scheduled">Scheduled</span></div>
+                <div class="col-total money">$19,820.00</div>
+                <div class="col-count">4 deals</div>
+              </div>
+              <div class="col-body">
+
+                <div class="drop-target">Move here</div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Snow removal, November to March">Snow removal, November to March</div>
+                  <div class="deal-co" title="Sandy City Public Works · Sandy">Sandy City Public Works · Sandy</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$18,000.00</span>
+                    <span class="deal-next">Start 1 Nov</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Fall cleanup, common areas">Fall cleanup, common areas</div>
+                  <div class="deal-co" title="Alpine Meadows HOA · Alpine">Alpine Meadows HOA · Alpine</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$920.00</span>
+                    <span class="deal-next">Crew out 22 Sep</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Foundation planting refresh">Foundation planting refresh</div>
+                  <div class="deal-co" title="Whitmore Dental · Draper">Whitmore Dental · Draper</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$600.00</span>
+                    <span class="deal-next">Crew out 29 Sep</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Playground border edging">Playground border edging</div>
+                  <div class="deal-co" title="Sandy Elementary PTA · Sandy">Sandy Elementary PTA · Sandy</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$300.00</span>
+                    <span class="deal-next">Crew out 3 Oct</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ========== 5. WON ========== -->
+            <div class="col" style="--stage:var(--stage-5);--stage-soft:var(--stage-5-soft)">
+              <div class="col-head">
+                <div class="col-name">
+                  <span class="dot" style="--stage:var(--stage-5)"></span>
+                  <span title="Won">Won</span>
+                  <svg class="icon icon-sm success-check" aria-hidden="true"><use href="#i-check"/></svg>
+                </div>
+                <div class="col-total money">$8,000.00</div>
+                <div class="col-count">3 deals</div>
+              </div>
+              <div class="col-body">
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Sod install, 4,200 sq ft">Sod install, 4,200 sq ft</div>
+                  <div class="deal-co" title="Fairbanks Property Group · South Jordan">Fairbanks Property Group · South Jordan</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$3,150.00</span>
+                    <span class="deal-next">Invoiced</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Spring cleanup and mulch">Spring cleanup and mulch</div>
+                  <div class="deal-co" title="Highland Baptist Church · Highland">Highland Baptist Church · Highland</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$2,100.00</span>
+                    <span class="deal-next">Invoiced</span>
+                  </div>
+                </div>
+
+                <div class="deal">
+                  <span class="grip"><svg class="icon icon-sm"><use href="#i-grip"/></svg></span>
+                  <div class="deal-title" title="Spring startup, 6 zones">Spring startup, 6 zones</div>
+                  <div class="deal-co" title="Garrison Family · South Jordan">Garrison Family · South Jordan</div>
+                  <div class="deal-foot">
+                    <span class="deal-value money">$2,750.00</span>
+                    <span class="deal-next">Invoiced</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- ========== 6. LOST ========== -->
+            <div class="col" style="--stage:var(--stage-6);--stage-soft:var(--stage-6-soft)">
+              <div class="col-head">
+                <div class="col-name"><span class="dot" style="--stage:var(--stage-6)"></span><span title="Lost">Lost</span></div>
+                <div class="col-total money">$0.00</div>
+                <div class="col-count">No deals</div>
+              </div>
+              <div class="col-body">
+                <div class="col-empty-note">Nothing lost this month.</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== STATUS BAR ==================== -->
+  <div class="statusbar">
+    <span>Alpine Ridge Landscape</span>
+    <span class="right">
+      <span>Website checked 3 min ago</span>
+      <span>Backed up 08:02</span>
+      <span>1,204 contacts</span>
+    </span>
+  </div>
+</div>
+
+<!-- Undo toast, 10 seconds -->
+<div class="toast-stack">
+  <div class="toast" role="status">
+    <span class="msg">Moved Irrigation retrofit, 14 zones to Scheduled</span>
+    <button class="btn btn-sm">
+      <svg class="icon icon-sm"><use href="#i-undo"/></svg> Undo
+    </button>
+    <button class="btn btn-icon" aria-label="Dismiss" title="Dismiss">
+      <svg class="icon icon-sm"><use href="#i-x"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="comp.js"></script>
+</body>
+</html>

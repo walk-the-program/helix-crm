@@ -487,3 +487,120 @@ None to the interfaces already in CONTRACTS. Four things the orchestrator should
    history the plan's item 15 requires (survivor, loser, batch_id, at, reversed_at). It is
    in `0000_init.sql`, so nothing downstream needs to change; noting it so the data model
    in PLAN.md and the schema do not silently disagree.
+
+---
+
+## 2026-09-18 — Design agent
+
+Scope touched: `docs/DESIGN.md`, `src/styles/tokens.css`, `src/styles/globals.css`,
+`design/**`. Nothing else.
+
+### Did
+
+**`design/research.md`** — the evidence the direction rests on, cited. Who the owner is,
+what he scans for, what the literature says about his eyes (16 px floor, 7:1 preferred for
+older readers, pale blue loses apparent contrast as the lens yellows) and about why he
+would quit (36% of CRM users abandon over complexity; 23% name manual data entry; poor
+adoption is the leading cause of CRM failure). Three reference patterns described in words
+— the ledger, the day list, the record with a fixed identity block — with what each
+contributes and what we reject from it. The two-sentence test from PLAN.md applied screen
+by screen in a table.
+
+**`docs/DESIGN.md`** — the direction contract. Audience, eight principles, hierarchy law,
+the type scale on the system stack, the colour system in both themes, spacing/radius/
+elevation, density, motion, component rules for buttons, inputs, tables, cards, badges,
+empty states, dialogs, toasts and the status bar, iconography, a do/don't list, and a
+rationale section naming what was rejected and why.
+
+The direction, in one line: **paper-white panels on a cool grey canvas, ink-dark text at
+16 px, one saturated equipment orange that only ever means "this needs you", and a cool
+stage ramp that never borrows the accent's hue.**
+
+**`src/styles/tokens.css`** — every variable in CONTRACTS.md for `:root`,
+`[data-theme="dark"]` and `[data-density="compact"]`, plus additions (never renames):
+`--color-sidebar`, `--color-hover`, `--color-selected`, `--color-overlay`,
+`--color-accent-ink`, `--color-danger-ink`, `--color-success-ink`, `--color-warning-ink`,
+`--stage-1-soft` … `--stage-8-soft`, `--control-h`, `--control-h-sm`, `--content-max`,
+`--focus-ring-w`, `--dur-fast/base/slow`, `--ease-out`, `--ease-in-out`. Every text/
+background pair the product can produce is stated in a comment with its measured ratio.
+
+The stage ramp was solved numerically, not picked: hues held out of the 5–100° warm band
+the accent owns, lightness and chroma chosen to maximise the worst pairwise CIE Lab ΔE
+across normal, protanope, deuteranope and tritanope simulation (Viénot 1999). Worst case
+over all 28 pairs and all four vision types is **ΔE 11.1**. Every value clears 3:1 against
+both canvases, so the ramp is shared by the light and dark themes.
+
+**`src/styles/globals.css`** — reset, base typography, the focus ring on `--color-focus`,
+always-visible scrollbars (so macOS and Windows do not lay out differently), selection
+colour, `html, body { min-width: 1024px }`, tabular-nums utilities, reduced-motion, and a
+print block.
+
+**`design/comps/`** — `today.html`, `contact.html`, `pipeline.html`, `import.html`,
+`empty-states.html`, sharing `comp.css` (the component layer) and `comp.js` (an inline
+lucide sprite, so there is no CDN, plus the theme/density switch). Each comp accepts
+`?theme=dark&density=compact&chrome=off` so a capture can request a mode directly. Content
+is a Utah landscaping company with a 47-character company name, a $12,450.00 deal, long
+hyphenated names, an unparseable phone extension, an empty email cell and a zero-result
+search.
+
+**`design/screenshots/`** — 40 captures: five comps × 1024/1280/1440 × light/dark, plus
+each comp at 1280 in both themes in compact.
+
+**`design/review.md`** — the review. **`design/contrast-audit.js`** — the tool that ran it.
+
+### Verified
+
+- **Contrast: zero failures.** `design/contrast-audit.js` walks every element that paints
+  text, resolves the real background by climbing to the first opaque ancestor, and applies
+  the right WCAG threshold for size and weight. Run on all five comps × light/dark ×
+  comfortable/compact: 0 failures out of roughly 550 measured text elements per mode.
+- **No horizontal page scroll at 1024** on any comp (`scrollWidth == innerWidth`). The
+  pipeline board scrolls inside its own wrapper at 1024 and 1280, which is intended.
+- **Zero console errors and zero failed requests** on all five comps in all modes.
+- **Focus ring** measured on tab: `rgb(29, 111, 209) 2px solid`, offset 1 px.
+- **Hit targets** measured: minimum 32 px comfortable, 28 px compact, matching the spec.
+- **No hex, rgb() or hsl()** anywhere in `globals.css` or in `design/comps/` (the only
+  `#` matches are sprite hrefs and a fixture gate code).
+- **All 47 token names referenced by `src/ui`, `src/app` and `src/features` are defined**
+  in `tokens.css`. No component has invented a name, and no hex appears outside
+  `tokens.css` anywhere in `src/`.
+- Review found and fixed 19 defects, four of which were errors in DESIGN.md itself
+  (the accent was in the global chrome; overdue was styled as danger; the compact-density
+  claim was overstated; dark stage tints failed AA under muted text). All are itemised in
+  `design/review.md` with the measurement that caught each one.
+- A static server on port 4790 was started for the capture pass and stopped afterwards.
+  `.playwright-cli/` is gitignored. No process I did not start was touched.
+
+### Not done
+
+- **No Tailwind `@theme` mapping.** CONTRACTS says "Tailwind config maps utilities to
+  those variables", but `src/styles/app.css` belongs to foundations and there is no config
+  file. Today `src/ui` uses `var(--token)` directly and it works. If first-class utilities
+  like `bg-surface` or `text-muted` are wanted, foundations needs an `@theme` block in
+  `app.css`; Tailwind 4 only generates a utility for a custom property declared inside
+  `@theme`, not in a plain `:root`. Worth knowing: the contract's names for `--text-*`,
+  `--radius-*`, `--shadow-*`, `--font-*`, `--leading-*` collide with Tailwind 4's own
+  theme namespace. That collision is benign and useful — `base` is declared after `theme`,
+  so our values win and `text-lg`, `shadow-md`, `rounded-md` already emit our scale.
+- **No dark/compact review of `src/ui` itself.** The comps are the reference; the real
+  components were built in parallel and have not been screenshotted against this contract.
+  That belongs in the session-7 polish pass.
+- **No Reports comp.** The brief asked for five comps and reports was not one of them.
+  The empty and filtered-to-nothing report states are in `empty-states.html`; the charts
+  are not designed yet and will need the dataviz skill.
+- **No motion prototype.** Motion is specified in DESIGN.md §8 but nothing in the comps
+  animates, so the durations and curves are unverified in use.
+- **No printed-page check.** `globals.css` has a print block; it has not been rendered.
+
+### Contract changes needed
+
+None. `tokens.css` adds names and renames none, as CONTRACTS.md requires. Two notes for
+the component builders:
+
+1. **`--color-accent` is for fills, rails, dots and borders. Accent-coloured *text* uses
+   `--color-accent-ink`.** `#C1440E` measures 4.44:1 on the grey canvas and fails AA;
+   `#8F3008` measures 7.02:1. The same split exists for danger, success and warning.
+2. **Use `--control-h` and `--control-h-sm` for every button, input and select height.**
+   They are what makes a control shrink correctly under `[data-density="compact"]`, and
+   they are the hit-target floor. Also give buttons `flex: none` — without it a flex row
+   squeezes an icon button to 27 px, which this review caught.

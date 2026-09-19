@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<title>Helix CRM — Today</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/styles/globals.css">
+<link rel="stylesheet" href="comp.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <aside class="sidebar">
+    <div class="ws">
+      <div class="ws-mark">AR</div>
+      <div style="min-width:0">
+        <div class="ws-name" title="Alpine Ridge Landscape">Alpine Ridge Landscape</div>
+        <div class="ws-sub">Draper, UT</div>
+      </div>
+      <button class="btn-icon btn" aria-label="Switch workspace" title="Switch workspace" style="margin-left:auto">
+        <svg class="icon icon-sm"><use href="#i-chevronDown"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="today.html" aria-current="page">
+        <svg class="icon"><use href="#i-sun"/></svg> Today
+        <span class="nav-count" data-needs>5</span>
+      </a>
+      <a class="nav-item" href="contact.html">
+        <svg class="icon"><use href="#i-users"/></svg> Contacts
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-building"/></svg> Companies
+      </a>
+      <a class="nav-item" href="pipeline.html">
+        <svg class="icon"><use href="#i-kanban"/></svg> Pipeline
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-checks"/></svg> Tasks
+        <span class="nav-count">12</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-chart"/></svg> Reports
+      </a>
+      <a class="nav-item" href="import.html">
+        <svg class="icon"><use href="#i-upload"/></svg> Import
+      </a>
+
+      <div class="nav-group-label">Pinned views</div>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-3)"></span> Estimates out
+        <span class="nav-count">7</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-5)"></span> Won this month
+        <span class="nav-count">4</span>
+      </a>
+    </nav>
+
+    <div style="padding:var(--space-2);border-top:1px solid var(--color-border)">
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-settings"/></svg> Settings
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN ==================== -->
+  <div class="main">
+
+    <header class="topbar">
+      <div class="crumbs">
+        <strong>Today</strong>
+        <span>Thursday, 18 September</span>
+      </div>
+      <div class="search">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg>
+        Search contacts, deals, notes
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="btn">
+        <svg class="icon icon-sm"><use href="#i-plus"/></svg> Quick add <kbd>⌘N</kbd>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <div class="stack gap-7" style="max-width:1100px">
+
+        <!-- ---------- NEEDS YOU ---------- -->
+        <section>
+          <div class="section-head">
+            <h2>Needs you</h2>
+            <span class="count-pill" data-needs>5</span>
+            <span class="spacer faint" style="font-size:var(--text-sm)">2 overdue</span>
+          </div>
+
+          <div class="panel">
+            <div class="row rail-accent">
+              <span class="badge badge-accent">
+                <svg class="icon icon-sm"><use href="#i-alert"/></svg> Overdue 6 days
+              </span>
+              <div class="row-main">
+                <div class="row-title" title="Call Maricela Villanueva-Escobar about the sprinkler bid">
+                  Call Maricela Villanueva-Escobar about the sprinkler bid
+                </div>
+                <div class="row-sub" title="Little Cottonwood Canyon Homeowners Association">
+                  Little Cottonwood Canyon Homeowners Association · Irrigation retrofit, 14 zones
+                </div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$12,450.00</div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="tel:+18015550147">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Call
+                </a>
+                <button class="btn btn-sm">Done</button>
+                <button class="btn btn-icon" aria-label="Snooze to tomorrow" title="Snooze to tomorrow">
+                  <svg class="icon icon-sm"><use href="#i-clock"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="row rail-accent">
+              <span class="badge badge-accent">
+                <svg class="icon icon-sm"><use href="#i-alert"/></svg> Overdue 1 day
+              </span>
+              <div class="row-main">
+                <div class="row-title">Send revised estimate to Brent Hendrickson</div>
+                <div class="row-sub">Hendrickson Orthodontics · Retaining wall + regrade, Deer Hollow Ct</div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$8,200.00</div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="mailto:brent@hendricksonortho.example">
+                  <svg class="icon icon-sm"><use href="#i-mail"/></svg> Email
+                </a>
+                <button class="btn btn-sm">Done</button>
+                <button class="btn btn-icon" aria-label="Snooze to tomorrow" title="Snooze to tomorrow">
+                  <svg class="icon icon-sm"><use href="#i-clock"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="row">
+              <span class="badge">Due today</span>
+              <div class="row-main">
+                <div class="row-title">Walk the Bluffdale job with DeAnn Sorensen</div>
+                <div class="row-sub">Sorensen Family Trust · 3:00 pm · 14892 S Loumis Pkwy, Bluffdale</div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$4,900.00</div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="tel:+18015550188">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Call
+                </a>
+                <button class="btn btn-sm">Done</button>
+                <button class="btn btn-icon" aria-label="Snooze to tomorrow" title="Snooze to tomorrow">
+                  <svg class="icon icon-sm"><use href="#i-clock"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="row">
+              <span class="badge">Due today</span>
+              <div class="row-main">
+                <div class="row-title">Order 4,200 sq ft of Kentucky bluegrass sod</div>
+                <div class="row-sub">Fairbanks Property Group · Sod install, 4,200 sq ft</div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$3,150.00</div>
+              <div class="row-actions">
+                <button class="btn btn-sm">Done</button>
+                <button class="btn btn-icon" aria-label="Snooze to tomorrow" title="Snooze to tomorrow">
+                  <svg class="icon icon-sm"><use href="#i-clock"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="row">
+              <span class="badge">Due today</span>
+              <div class="row-main">
+                <div class="row-title">Confirm November start with Sandy City Public Works</div>
+                <div class="row-sub">Tui Fa'alogo · Snow removal contract, November to March</div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$18,000.00</div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="tel:+18015550119">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Call
+                </a>
+                <button class="btn btn-sm">Done</button>
+                <button class="btn btn-icon" aria-label="Snooze to tomorrow" title="Snooze to tomorrow">
+                  <svg class="icon icon-sm"><use href="#i-clock"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- NEW LEADS ---------- -->
+        <section>
+          <div class="section-head">
+            <h2>New leads</h2>
+            <span class="count-pill">3</span>
+            <span class="spacer faint" style="font-size:var(--text-sm)">From alpineridgelandscape.com, last 7 days</span>
+          </div>
+
+          <div class="panel">
+            <div class="row rail-accent">
+              <span class="dot" style="--stage:var(--color-accent);width:10px;height:10px" aria-hidden="true"></span>
+              <div class="row-main">
+                <div class="row-title">Rosalind Whitaker-Nguyen</div>
+                <div class="row-sub">Xeriscape conversion, front yard · Herriman · 2 hours ago · Not contacted</div>
+              </div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="tel:+18015550163">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Call
+                </a>
+                <button class="btn btn-sm">Log a call</button>
+              </div>
+            </div>
+
+            <div class="row rail-accent">
+              <span class="dot" style="--stage:var(--color-accent);width:10px;height:10px" aria-hidden="true"></span>
+              <div class="row-main">
+                <div class="row-title">Kaleb Fairbanks</div>
+                <div class="row-sub">French drain and regrade · South Jordan · Yesterday, 7:12 pm · Not contacted</div>
+              </div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="tel:+18015550104">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Call
+                </a>
+                <button class="btn btn-sm">Log a call</button>
+              </div>
+            </div>
+
+            <div class="row rail-accent">
+              <span class="dot" style="--stage:var(--color-accent);width:10px;height:10px" aria-hidden="true"></span>
+              <div class="row-main">
+                <div class="row-title">Whitney Okelberry</div>
+                <div class="row-sub">Spring startup, 9 zones · Alpine · Monday, 6:48 am · Not contacted</div>
+              </div>
+              <div class="row-actions">
+                <a class="btn btn-sm" href="tel:+18015550171">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Call
+                </a>
+                <button class="btn btn-sm">Log a call</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- GONE QUIET ---------- -->
+        <section>
+          <div class="section-head">
+            <h2>Gone quiet</h2>
+            <span class="count-pill">2</span>
+            <span class="spacer faint" style="font-size:var(--text-sm)">Open deals with no activity past their stage’s limit</span>
+          </div>
+
+          <div class="panel">
+            <div class="row">
+              <span class="badge badge-stage" style="--stage-soft:var(--stage-3-soft)">
+                <span class="dot" style="--stage:var(--stage-3)"></span> Estimate sent
+              </span>
+              <div class="row-main">
+                <div class="row-title" title="Little Cottonwood Canyon Homeowners Association">
+                  Little Cottonwood Canyon Homeowners Association
+                </div>
+                <div class="row-sub">Irrigation retrofit, 14 zones · No activity for 21 days · Limit 14</div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$12,450.00</div>
+              <div class="row-actions">
+                <button class="btn btn-sm">Log a call</button>
+                <button class="btn btn-sm">Snooze a week</button>
+              </div>
+            </div>
+
+            <div class="row">
+              <span class="badge badge-stage" style="--stage-soft:var(--stage-2-soft)">
+                <span class="dot" style="--stage:var(--stage-2)"></span> Contacted
+              </span>
+              <div class="row-main">
+                <div class="row-title">Mountain Shadows Assisted Living</div>
+                <div class="row-sub">Fall cleanup contract, 32 units · No activity for 17 days · Limit 14</div>
+              </div>
+              <div class="money muted" style="width:110px;text-align:right">$6,780.00</div>
+              <div class="row-actions">
+                <button class="btn btn-sm">Log a call</button>
+                <button class="btn btn-sm">Snooze a week</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- RECENT ACTIVITY ---------- -->
+        <section>
+          <div class="section-head">
+            <h2>Recent activity</h2>
+            <a class="spacer" href="#" style="font-size:var(--text-sm);color:var(--color-text-muted)">See all activity</a>
+          </div>
+
+          <div class="panel">
+            <div class="panel-body timeline" style="padding-top:var(--space-2);padding-bottom:var(--space-2)">
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-checkCircle"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Deal won</span>
+                    <span class="badge badge-success">Won</span>
+                    <span class="tl-when">Today, 9:14 am</span>
+                  </div>
+                  <div class="tl-body">Sod install, 4,200 sq ft — Fairbanks Property Group — <span class="money">$3,150.00</span></div>
+                </div>
+              </div>
+
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-phone"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Call logged</span>
+                    <span class="tl-when">Today, 7:52 am</span>
+                  </div>
+                  <div class="tl-body">Brent Hendrickson wants the wall dropped to 4 ft and asked for a revised number by Friday.</div>
+                </div>
+              </div>
+
+              <div class="tl-item" data-system>
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-globe"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Lead received</span>
+                    <span class="tl-when">Today, 6:31 am</span>
+                  </div>
+                  <div class="tl-body">Rosalind Whitaker-Nguyen from alpineridgelandscape.com/xeriscape</div>
+                </div>
+              </div>
+
+              <div class="tl-item" data-system>
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-swap"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Stage changed</span>
+                    <span class="tl-when">Yesterday, 4:07 pm</span>
+                  </div>
+                  <div class="tl-body">Snow removal, November to March — Contacted to Estimate sent</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- CONNECT YOUR WEBSITE (dismissible, shown until connected) ---------- -->
+        <section>
+          <div class="card" style="display:flex;gap:var(--space-4);align-items:flex-start">
+            <svg class="icon icon-lg faint" style="margin-top:2px"><use href="#i-globe"/></svg>
+            <div style="flex:1 1 auto;min-width:0">
+              <h3 style="font-size:var(--text-lg)">Send quote-form leads straight here</h3>
+              <p class="muted mt-2" style="font-size:var(--text-base)">
+                Paste your site address and the token from your website settings. Helix checks for new
+                quote requests when it opens and every five minutes while it is running.
+              </p>
+              <div class="inline gap-3 mt-4">
+                <button class="btn">Connect website</button>
+                <button class="btn btn-quiet">Not now</button>
+              </div>
+            </div>
+            <button class="btn btn-icon" aria-label="Dismiss" title="Dismiss">
+              <svg class="icon icon-sm"><use href="#i-x"/></svg>
+            </button>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== STATUS BAR ==================== -->
+  <div class="statusbar">
+    <span>Alpine Ridge Landscape</span>
+    <span class="right">
+      <span>Website checked 3 min ago</span>
+      <span>Backed up 08:02</span>
+      <span>1,204 contacts</span>
+    </span>
+  </div>
+</div>
+
+<!-- Undo toast, 10 seconds -->
+<div class="toast-stack">
+  <div class="toast" role="status">
+    <span class="msg">Snoozed 1 task to tomorrow</span>
+    <button class="btn btn-sm">
+      <svg class="icon icon-sm"><use href="#i-undo"/></svg> Undo
+    </button>
+    <button class="btn btn-icon" aria-label="Dismiss" title="Dismiss">
+      <svg class="icon icon-sm"><use href="#i-x"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="comp.js"></script>
+</body>
+</html>

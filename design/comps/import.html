@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<title>Helix CRM — Map your columns</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/styles/globals.css">
+<link rel="stylesheet" href="comp.css">
+<style>
+  /* Scoped to this comp only. Uses tokens exclusively — no hex, no rgb. */
+  .steps {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+  .steps .step { display: flex; align-items: center; gap: var(--space-1); color: var(--color-text-faint); }
+  .steps .step[data-current] { color: var(--color-text); font-weight: 600; }
+  .steps .step[data-done] svg { color: var(--color-success); }
+  .steps svg.sep { color: var(--color-text-faint); }
+
+  .choice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    font-size: var(--text-base);
+    color: var(--color-text);
+    cursor: default;
+  }
+  .choice input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    flex: none;
+    accent-color: var(--color-text);
+  }
+
+  .map-table th, .map-table td { vertical-align: middle; }
+  .map-table td.col-arrow,
+  .map-table td.col-field,
+  .map-table td.col-action {
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+  }
+  .map-table .col-file { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-text); white-space: nowrap; }
+  .map-table td.col-value {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .map-table .col-field { min-width: 190px; }
+  .map-table .col-action { text-align: right; white-space: nowrap; }
+
+  .import-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-bg);
+    padding: var(--space-4) 0 0;
+    margin-top: var(--space-2);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .em-dash { color: var(--color-text-faint); }
+
+  /* Preview table: phone and city are short and fixed-form, so they should
+     never truncate the way a name/company/email can — shrink-to-fit like a
+     numeric column instead of splitting the remaining width evenly. */
+  /* Preview table: let it size to its content and scroll inside the panel
+     rather than crushing every column to fit — names, companies and emails
+     still truncate with an ellipsis, but a phone number and a city never do. */
+  .preview-table { width: auto; min-width: 100%; }
+  .preview-table th:nth-child(1), .preview-table td:nth-child(1) { min-width: 100px; }
+  .preview-table th:nth-child(2), .preview-table td:nth-child(2) { min-width: 130px; }
+  .preview-table th:nth-child(3), .preview-table td:nth-child(3) { min-width: 160px; }
+  .preview-table th:nth-child(4), .preview-table td:nth-child(4) { min-width: 190px; }
+  .preview-table th:nth-child(5), .preview-table td:nth-child(5),
+  .preview-table th:nth-child(6), .preview-table td:nth-child(6) {
+    width: 1%;
+    max-width: none;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <aside class="sidebar">
+    <div class="ws">
+      <div class="ws-mark">AR</div>
+      <div style="min-width:0">
+        <div class="ws-name" title="Alpine Ridge Landscape">Alpine Ridge Landscape</div>
+        <div class="ws-sub">Draper, UT</div>
+      </div>
+      <button class="btn-icon btn" aria-label="Switch workspace" title="Switch workspace" style="margin-left:auto">
+        <svg class="icon icon-sm"><use href="#i-chevronDown"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg class="icon"><use href="#i-sun"/></svg> Today
+        <span class="nav-count" data-needs>5</span>
+      </a>
+      <a class="nav-item" href="contact.html">
+        <svg class="icon"><use href="#i-users"/></svg> Contacts
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-building"/></svg> Companies
+      </a>
+      <a class="nav-item" href="pipeline.html">
+        <svg class="icon"><use href="#i-kanban"/></svg> Pipeline
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-checks"/></svg> Tasks
+        <span class="nav-count">12</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-chart"/></svg> Reports
+      </a>
+      <a class="nav-item" href="import.html" aria-current="page">
+        <svg class="icon"><use href="#i-upload"/></svg> Import
+      </a>
+
+      <div class="nav-group-label">Pinned views</div>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-3)"></span> Estimates out
+        <span class="nav-count">7</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-5)"></span> Won this month
+        <span class="nav-count">4</span>
+      </a>
+    </nav>
+
+    <div style="padding:var(--space-2);border-top:1px solid var(--color-border)">
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-settings"/></svg> Settings
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN ==================== -->
+  <div class="main">
+
+    <header class="topbar">
+      <div class="crumbs">
+        <span>Import</span>
+        <svg class="icon icon-sm"><use href="#i-chevronRight"/></svg>
+        <strong>Map your columns</strong>
+      </div>
+      <div class="search">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg>
+        Search contacts, deals, notes
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="btn">
+        <svg class="icon icon-sm"><use href="#i-plus"/></svg> Quick add <kbd>⌘N</kbd>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <div class="stack gap-7" style="max-width:1100px">
+
+        <!-- ---------- PROGRESS STRIP ---------- -->
+        <div class="steps">
+          <span class="step" data-done>
+            <svg class="icon icon-sm"><use href="#i-check"/></svg> Choose file
+          </span>
+          <svg class="icon icon-sm sep"><use href="#i-chevronRight"/></svg>
+          <span class="step" data-current>Map columns</span>
+          <svg class="icon icon-sm sep"><use href="#i-chevronRight"/></svg>
+          <span class="step">Preview</span>
+          <svg class="icon icon-sm sep"><use href="#i-chevronRight"/></svg>
+          <span class="step">Import</span>
+        </div>
+
+        <!-- ---------- FILE SUMMARY ---------- -->
+        <div class="card" style="display:flex;align-items:center;gap:var(--space-4)">
+          <svg class="icon faint"><use href="#i-file"/></svg>
+          <div style="flex:1 1 auto;min-width:0">
+            <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="hubspot-contacts-export-2026-09-18.csv">
+              hubspot-contacts-export-2026-09-18.csv
+            </div>
+            <div class="faint" style="font-size:var(--text-sm)">
+              1,204 rows · comma-separated · UTF-8 with BOM · detected automatically
+            </div>
+          </div>
+          <button class="btn btn-quiet">Choose a different file</button>
+        </div>
+
+        <!-- ---------- COLUMN MAPPING ---------- -->
+        <section class="panel">
+          <div class="panel-head"><h2>Match your columns to Helix fields</h2></div>
+          <div class="panel-body">
+            <div class="table-wrap map-table">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th>Column in your file</th>
+                    <th>First value</th>
+                    <th></th>
+                    <th>Helix field</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+
+                  <!-- First Name -->
+                  <tr>
+                    <td class="col-file">First Name</td>
+                    <td class="col-value">Maricela</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option selected>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for First Name" title="Reset to detected mapping for First Name">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Last Name -->
+                  <tr>
+                    <td class="col-file">Last Name</td>
+                    <td class="col-value">Villanueva-Escobar</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option selected>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Last Name" title="Reset to detected mapping for Last Name">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Company Name -->
+                  <tr>
+                    <td class="col-file">Company Name</td>
+                    <td class="col-value trunc" title="Little Cottonwood Canyon Homeowners Association">Little Cottonwood Canyon Homeowners Association</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option selected>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Company Name" title="Reset to detected mapping for Company Name">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Email -->
+                  <tr>
+                    <td class="col-file">Email</td>
+                    <td class="col-value">maricela.villanueva@example.com</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option selected>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                      <div style="margin-top:var(--space-2)">
+                        <span class="badge">Used to match duplicates</span>
+                      </div>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Email" title="Reset to detected mapping for Email">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Phone Number -->
+                  <tr>
+                    <td class="col-file">Phone Number</td>
+                    <td class="col-value">(801) 555-0147</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option selected>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                      <div style="margin-top:var(--space-2)">
+                        <span class="badge">Used to match duplicates</span>
+                      </div>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Phone Number" title="Reset to detected mapping for Phone Number">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Work Phone: wrong guess, needs correcting to Phone, office -->
+                  <tr>
+                    <td class="col-file">Work Phone</td>
+                    <td class="col-value">(801) 555-0199</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option selected>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Work Phone" title="Reset to detected mapping for Work Phone">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Street Address -->
+                  <tr>
+                    <td class="col-file">Street Address</td>
+                    <td class="col-value">2140 E Danish Rd</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option selected>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Street Address" title="Reset to detected mapping for Street Address">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- City: wrong guess, needs correcting to Address, city -->
+                  <tr>
+                    <td class="col-file">City</td>
+                    <td class="col-value">Draper</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option selected>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for City" title="Reset to detected mapping for City">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Lifecycle Stage: genuinely unmapped -->
+                  <tr>
+                    <td class="col-file">Lifecycle Stage</td>
+                    <td class="col-value">Customer</td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option selected>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Lifecycle Stage" title="Reset to detected mapping for Lifecycle Stage">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Associated Deal Amount: unmapped, with hint -->
+                  <tr>
+                    <td class="col-file">Associated Deal Amount</td>
+                    <td class="col-value"><span class="money">$12,450.00</span></td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option>Notes</option>
+                        <option selected>Don’t import</option>
+                      </select>
+                      <p class="hint" style="margin-top:var(--space-2)">Deals are not imported yet. The amount stays in your file.</p>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Associated Deal Amount" title="Reset to detected mapping for Associated Deal Amount">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Notes -->
+                  <tr>
+                    <td class="col-file">Notes</td>
+                    <td class="col-value trunc" title="Bid walk done 9/12. Wants a xeriscape strip along the back fence line; budget flexible up to $12,450.00 for phase one.">
+                      Bid walk done 9/12. Wants a xeriscape strip along the back fence line; budget flexible up to <span class="money">$12,450.00</span> for phase one.
+                    </td>
+                    <td class="col-arrow"><svg class="icon icon-sm faint"><use href="#i-arrowRight"/></svg></td>
+                    <td class="col-field">
+                      <select class="select">
+                        <option>First name</option>
+                        <option>Last name</option>
+                        <option>Company</option>
+                        <option>Email</option>
+                        <option>Phone, mobile</option>
+                        <option>Phone, office</option>
+                        <option>Address</option>
+                        <option>Address, city</option>
+                        <option selected>Notes</option>
+                        <option>Don’t import</option>
+                      </select>
+                    </td>
+                    <td class="col-action">
+                      <button class="btn btn-icon" aria-label="Reset to detected mapping for Notes" title="Reset to detected mapping for Notes">
+                        <svg class="icon icon-sm"><use href="#i-undo"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- DUPLICATES ---------- -->
+        <section class="panel">
+          <div class="panel-head"><h2>Duplicates</h2></div>
+          <div class="panel-body stack gap-3">
+            <label class="choice">
+              <input type="radio" name="dupe">
+              <span>Skip anyone already in Helix</span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="dupe" checked>
+              <span>Update the contact already in Helix with the new values</span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="dupe">
+              <span>Add them again as a second contact</span>
+            </label>
+            <p class="hint" style="margin-top:var(--space-1)">
+              Matched on email first, then phone. 38 of 1,204 rows look like people you already have.
+            </p>
+          </div>
+        </section>
+
+        <!-- ---------- PREVIEW ---------- -->
+        <section class="panel">
+          <div class="panel-head"><h2>Preview — first 20 rows</h2></div>
+          <div class="table-wrap" style="max-height:320px">
+            <table class="data preview-table">
+              <thead>
+                <tr>
+                  <th>First name</th>
+                  <th>Last name</th>
+                  <th>Company</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>City</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="primary">Maricela</td>
+                  <td>Villanueva-Escobar</td>
+                  <td title="Little Cottonwood Canyon Homeowners Association">Little Cottonwood Canyon Homeowners Association</td>
+                  <td>maricela.villanueva@example.com</td>
+                  <td>(801) 555-0147</td>
+                  <td>Draper</td>
+                </tr>
+                <tr>
+                  <td class="primary">Brent</td>
+                  <td>Hendrickson</td>
+                  <td>Hendrickson Orthodontics</td>
+                  <td>brent@hendricksonortho.example</td>
+                  <td>(801) 555-0198</td>
+                  <td>Sandy</td>
+                </tr>
+                <tr>
+                  <td class="primary">DeAnn</td>
+                  <td>Sorensen</td>
+                  <td>Sorensen Family Trust</td>
+                  <td>deann.sorensen@example.com</td>
+                  <td style="height:auto;white-space:normal;padding-top:var(--space-2);padding-bottom:var(--space-2)">
+                    <div class="stack gap-1">
+                      <span style="white-space:nowrap">801-555-0132 x14</span>
+                      <span class="badge badge-warning" style="align-self:flex-start">Kept as written</span>
+                    </div>
+                  </td>
+                  <td>Bluffdale</td>
+                </tr>
+                <tr>
+                  <td class="primary">Kaleb</td>
+                  <td>Fairbanks</td>
+                  <td>Fairbanks Property Group</td>
+                  <td><span class="em-dash">—</span></td>
+                  <td>(801) 555-0104</td>
+                  <td>South Jordan</td>
+                </tr>
+                <tr>
+                  <td class="primary">Tui</td>
+                  <td>Fa'alogo</td>
+                  <td>Sandy City Public Works</td>
+                  <td>tui.faalogo@example.com</td>
+                  <td>(801) 555-0119</td>
+                  <td>Sandy</td>
+                </tr>
+                <tr>
+                  <td class="primary">Rosalind</td>
+                  <td>Whitaker-Nguyen</td>
+                  <td><span class="em-dash">—</span></td>
+                  <td>rosalind.wn@example.com</td>
+                  <td>(801) 555-0163</td>
+                  <td>Herriman</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ---------- FOOTER ACTION BAR ---------- -->
+        <div class="import-footer between">
+          <span class="faint" style="font-size:var(--text-sm)">
+            1,204 rows ready · 38 will be updated · 2 will be skipped
+          </span>
+          <div class="inline gap-3">
+            <button class="btn">Back</button>
+            <button class="btn btn-primary">Import 1,204 contacts</button>
+          </div>
+        </div>
+
+        <!-- ================================================================
+             WHILE IT RUNS — running-state specimen (PLAN.md item 9: the
+             import holds the write lock; other writes queue behind it and
+             the backup / lead-poll / duplicate-scan timers pause).
+             ================================================================ -->
+        <section class="stack gap-3">
+          <p class="faint" style="font-size:var(--text-sm)">While it runs:</p>
+          <div class="card stack gap-4">
+            <div class="bar"><i style="width:62%"></i></div>
+            <div style="font-size:var(--text-base)">Importing 1,204 contacts — 748 done</div>
+            <div class="banner">
+              <svg class="icon icon-sm"><use href="#i-warn"/></svg>
+              <span>Other changes are queued until this finishes.</span>
+            </div>
+            <div>
+              <button class="btn">Cancel import</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== STATUS BAR ==================== -->
+  <div class="statusbar">
+    <span>Alpine Ridge Landscape</span>
+    <span class="right">
+      <span>Website checked 3 min ago</span>
+      <span>Backed up 08:02</span>
+      <span>1,204 contacts</span>
+    </span>
+  </div>
+</div>
+
+<script src="comp.js"></script>
+</body>
+</html>

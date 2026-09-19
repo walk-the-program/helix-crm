@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<title>Helix CRM — Maricela Villanueva-Escobar</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../src/styles/globals.css">
+<link rel="stylesheet" href="comp.css">
+<style>
+  /* Scoped to this comp only. Uses tokens exclusively. */
+  .record-name-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .record-name-row .badges {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .record-co-line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    margin-top: var(--space-1);
+    min-width: 0;
+    max-width: 100%;
+  }
+  .record-co-line .co-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-base);
+  }
+  .record-co-line .co-town {
+    flex: none;
+    color: var(--color-text-faint);
+    font-size: var(--text-base);
+  }
+  .key-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .key-next-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .key-next-meta .faint-when {
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+  }
+  .record-secondary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+  }
+  .rail-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .rail-card h3 {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+  .dl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .dl-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .dl-row dt {
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+  }
+  .dl-row dd {
+    font-size: var(--text-base);
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .dl-row dd a {
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .cf-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+  }
+  .cf-row dt { color: var(--color-text-faint); }
+  .cf-row dd { color: var(--color-text); font-weight: 500; text-align: right; }
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    min-width: 0;
+  }
+  .file-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <aside class="sidebar">
+    <div class="ws">
+      <div class="ws-mark">AR</div>
+      <div style="min-width:0">
+        <div class="ws-name" title="Alpine Ridge Landscape">Alpine Ridge Landscape</div>
+        <div class="ws-sub">Draper, UT</div>
+      </div>
+      <button class="btn-icon btn" aria-label="Switch workspace" title="Switch workspace" style="margin-left:auto">
+        <svg class="icon icon-sm"><use href="#i-chevronDown"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg class="icon"><use href="#i-sun"/></svg> Today
+        <span class="nav-count" data-needs>5</span>
+      </a>
+      <a class="nav-item" href="contact.html" aria-current="page">
+        <svg class="icon"><use href="#i-users"/></svg> Contacts
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-building"/></svg> Companies
+      </a>
+      <a class="nav-item" href="pipeline.html">
+        <svg class="icon"><use href="#i-kanban"/></svg> Pipeline
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-checks"/></svg> Tasks
+        <span class="nav-count">12</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-chart"/></svg> Reports
+      </a>
+      <a class="nav-item" href="import.html">
+        <svg class="icon"><use href="#i-upload"/></svg> Import
+      </a>
+
+      <div class="nav-group-label">Pinned views</div>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-3)"></span> Estimates out
+        <span class="nav-count">7</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="dot" style="--stage:var(--stage-5)"></span> Won this month
+        <span class="nav-count">4</span>
+      </a>
+    </nav>
+
+    <div style="padding:var(--space-2);border-top:1px solid var(--color-border)">
+      <a class="nav-item" href="#">
+        <svg class="icon"><use href="#i-settings"/></svg> Settings
+      </a>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN ==================== -->
+  <div class="main">
+
+    <header class="topbar">
+      <div class="crumbs">
+        <span>Contacts</span>
+        <svg class="icon icon-sm"><use href="#i-chevronRight"/></svg>
+        <strong title="Maricela Villanueva-Escobar">Maricela Villanueva-Escobar</strong>
+      </div>
+      <div class="search">
+        <svg class="icon icon-sm"><use href="#i-search"/></svg>
+        Search contacts, deals, notes
+        <kbd>⌘K</kbd>
+      </div>
+      <button class="btn">
+        <svg class="icon icon-sm"><use href="#i-plus"/></svg> Quick add <kbd>⌘N</kbd>
+      </button>
+    </header>
+
+    <div class="scroll">
+      <div class="two-col" style="max-width:1280px">
+
+        <!-- ===================== MAIN COLUMN ===================== -->
+        <div class="stack gap-6" style="min-width:0">
+
+          <!-- ---------- FIXED IDENTITY BLOCK ---------- -->
+          <div class="record-head rail-accent">
+            <div class="record-name-row">
+              <div class="record-name">Maricela Villanueva-Escobar</div>
+              <div class="badges">
+                <span class="badge badge-stage" style="--stage-soft:var(--stage-3-soft)">
+                  <span class="dot" style="--stage:var(--stage-3)"></span> Estimate sent
+                </span>
+                <span class="badge">
+                  <svg class="icon icon-sm"><use href="#i-globe"/></svg> Website
+                </span>
+              </div>
+            </div>
+            <div class="record-co-line">
+              <span class="co-name" title="Little Cottonwood Canyon Homeowners Association">Little Cottonwood Canyon Homeowners Association</span>
+              <span class="co-town">&nbsp;· Cottonwood Heights, UT</span>
+            </div>
+
+            <div class="record-key">
+              <div class="key-block">
+                <div class="key-label">
+                  <svg class="icon icon-sm"><use href="#i-phone"/></svg> Mobile phone
+                </div>
+                <div class="key-value"><a href="tel:+18015550147">(801) 555-0147</a></div>
+                <div class="key-actions">
+                  <button class="btn btn-sm">
+                    <svg class="icon icon-sm"><use href="#i-phone"/></svg> Log this call
+                  </button>
+                  <button class="btn btn-sm">
+                    <svg class="icon icon-sm"><use href="#i-message"/></svg> Text
+                  </button>
+                </div>
+              </div>
+
+              <div class="key-block">
+                <div class="key-label">
+                  <svg class="icon icon-sm"><use href="#i-calendar"/></svg> Next step
+                </div>
+                <div class="key-value">Call about the sprinkler bid</div>
+                <div class="key-next-meta">
+                  <span class="badge badge-accent">
+                    <svg class="icon icon-sm"><use href="#i-alert"/></svg> Overdue 6 days
+                  </span>
+                  <span class="faint-when">Due Friday 12 September</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="record-secondary">
+              <button class="btn">
+                <svg class="icon icon-sm"><use href="#i-mail"/></svg> Email
+              </button>
+              <button class="btn">
+                <svg class="icon icon-sm"><use href="#i-note"/></svg> Add a note
+              </button>
+              <button class="btn">
+                <svg class="icon icon-sm"><use href="#i-checks"/></svg> Add a task
+              </button>
+              <button class="btn btn-quiet btn-icon" aria-label="More actions" title="More actions">
+                <svg class="icon icon-sm"><use href="#i-chevronDown"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- ---------- OPEN DEALS ---------- -->
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Open deals</h2>
+            </div>
+            <div class="table-wrap" style="border:0;border-radius:0;box-shadow:none">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th>Deal</th>
+                    <th class="shrink">Stage</th>
+                    <th>Next step</th>
+                    <th data-numeric>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="primary" title="Irrigation retrofit, 14 zones">Irrigation retrofit, 14 zones</td>
+                    <td class="shrink">
+                      <span class="badge badge-stage" style="--stage-soft:var(--stage-3-soft)">
+                        <span class="dot" style="--stage:var(--stage-3)"></span> Estimate sent
+                      </span>
+                    </td>
+                    <td title="Call about the sprinkler bid">Call about the sprinkler bid</td>
+                    <td data-numeric><span class="money">$12,450.00</span></td>
+                  </tr>
+                  <tr>
+                    <td class="primary" title="Spring startup, 14 zones">Spring startup, 14 zones</td>
+                    <td class="shrink">
+                      <span class="badge badge-stage" style="--stage-soft:var(--stage-2-soft)">
+                        <span class="dot" style="--stage:var(--stage-2)"></span> Contacted
+                      </span>
+                    </td>
+                    <td title="Confirm valve box access with the HOA groundskeeper">Confirm valve box access with groundskeeper</td>
+                    <td data-numeric><span class="money">$2,340.00</span></td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="3">2 open deals</td>
+                    <td data-numeric><span class="money">$14,790.00</span></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- ---------- TIMELINE ---------- -->
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Timeline</h2>
+              <span class="spacer"></span>
+              <button class="btn btn-sm">
+                <svg class="icon icon-sm"><use href="#i-note"/></svg> Add a note
+              </button>
+            </div>
+            <div class="panel-body timeline" style="padding-top:var(--space-2);padding-bottom:var(--space-2)">
+
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-note"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Note</span>
+                    <span class="tl-when">Today, 7:52 am</span>
+                  </div>
+                  <div class="tl-body">Walked all 14 zones with Maricela and the groundskeeper. Zones 6 and 9 have cracked valve boxes near the clubhouse — those two need replacing regardless of what the board decides on the rest. She wants the bid broken out by zone so the board can approve it in phases. Board meets 2nd Tuesday; she wants numbers in hand by then.</div>
+                </div>
+              </div>
+
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-phone"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Call logged</span>
+                    <span class="tl-when">2 Sept</span>
+                  </div>
+                  <div class="tl-body">Left a voicemail confirming she got the estimate. No callback yet.</div>
+                </div>
+              </div>
+
+              <div class="tl-item" data-system>
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-swap"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Stage changed</span>
+                    <span class="tl-when">28 Aug</span>
+                  </div>
+                  <div class="tl-body">Contacted to Estimate sent</div>
+                </div>
+              </div>
+
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-mail"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Email sent</span>
+                    <span class="tl-when">28 Aug</span>
+                  </div>
+                  <div class="tl-body">Sent the 14-zone retrofit estimate at <span class="money">$12,450.00</span>, broken out by zone, plus the annual water allocation numbers she asked for.</div>
+                </div>
+              </div>
+
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-calendar"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Meeting</span>
+                    <span class="tl-when">21 Aug</span>
+                  </div>
+                  <div class="tl-body">Presented the retrofit plan at the HOA board meeting. Board wants the total under the 41,000 gal/yr water allocation before they vote.</div>
+                </div>
+              </div>
+
+              <div class="tl-item">
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-message"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Text</span>
+                    <span class="tl-when">14 Aug</span>
+                  </div>
+                  <div class="tl-body">Maricela: "Board meets the 2nd Tuesday, can you have something ready before then?"</div>
+                </div>
+              </div>
+
+              <div class="tl-item" data-system>
+                <div class="tl-mark"><svg class="icon icon-sm"><use href="#i-globe"/></svg></div>
+                <div>
+                  <div class="tl-head">
+                    <span class="tl-kind">Lead received</span>
+                    <span class="tl-when">4 Mar 2024</span>
+                  </div>
+                  <div class="tl-body">Maricela Villanueva-Escobar from alpineridgelandscape.com/irrigation</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ===================== RIGHT RAIL ===================== -->
+        <div class="stack gap-4" style="min-width:0">
+
+          <div class="card rail-card">
+            <h3>Details</h3>
+            <dl class="dl">
+              <div class="dl-row">
+                <dt>Work email</dt>
+                <dd><a href="mailto:maricela@lccanyonhoa.example" title="maricela@lccanyonhoa.example">maricela@lccanyonhoa.example</a></dd>
+              </div>
+              <div class="dl-row">
+                <dt>Personal email</dt>
+                <dd><a href="mailto:mvillanuevaescobar@example.com" title="mvillanuevaescobar@example.com">mvillanuevaescobar@example.com</a></dd>
+              </div>
+              <div class="dl-row">
+                <dt>Office phone</dt>
+                <dd><a href="tel:+18015550190">(801) 555-0190</a></dd>
+              </div>
+              <div class="dl-row">
+                <dt>Address</dt>
+                <dd>
+                  <a href="#" aria-label="Open in maps" title="14892 S Loumis Pkwy, Cottonwood Heights, UT 84121">
+                    <svg class="icon icon-sm" style="flex:none"><use href="#i-pin"/></svg>
+                    14892 S Loumis Pkwy, Cottonwood Heights, UT 84121
+                  </a>
+                </dd>
+              </div>
+              <div class="dl-row">
+                <dt>Source</dt>
+                <dd>Website</dd>
+              </div>
+              <div class="dl-row">
+                <dt>Added</dt>
+                <dd>4 March 2024</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="card rail-card">
+            <h3>Tags</h3>
+            <div class="inline gap-2" style="flex-wrap:wrap">
+              <span class="badge">HOA</span>
+              <span class="badge">Irrigation</span>
+              <span class="badge">Repeat customer</span>
+            </div>
+          </div>
+
+          <div class="card rail-card">
+            <h3>Custom fields</h3>
+            <dl class="stack gap-3">
+              <div class="cf-row">
+                <dt>Water allocation</dt>
+                <dd>41,000 gal/yr</dd>
+              </div>
+              <div class="cf-row">
+                <dt>Board meets</dt>
+                <dd>2nd Tuesday</dd>
+              </div>
+              <div class="cf-row">
+                <dt>Gate code</dt>
+                <dd>#4417</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="card rail-card">
+            <h3>Files</h3>
+            <div class="stack gap-3">
+              <div class="file-row">
+                <svg class="icon icon-sm" style="flex:none;color:var(--color-text-faint)"><use href="#i-file"/></svg>
+                <span title="cottonwood-zone-map.pdf">cottonwood-zone-map.pdf · 1.2 MB</span>
+              </div>
+              <div class="file-row">
+                <svg class="icon icon-sm" style="flex:none;color:var(--color-text-faint)"><use href="#i-file"/></svg>
+                <span title="2024-irrigation-invoice.pdf">2024-irrigation-invoice.pdf · 88 KB</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== STATUS BAR ==================== -->
+  <div class="statusbar">
+    <span>Alpine Ridge Landscape</span>
+    <span class="right">
+      <span>Website checked 3 min ago</span>
+      <span>Backed up 08:02</span>
+      <span>1,204 contacts</span>
+    </span>
+  </div>
+</div>
+
+<!-- Undo toast, 10 seconds -->
+<div class="toast-stack">
+  <div class="toast" role="status">
+    <span class="msg">Logged a call with Maricela Villanueva-Escobar</span>
+    <button class="btn btn-sm">
+      <svg class="icon icon-sm"><use href="#i-undo"/></svg> Undo
+    </button>
+    <button class="btn btn-icon" aria-label="Dismiss" title="Dismiss">
+      <svg class="icon icon-sm"><use href="#i-x"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="comp.js"></script>
+</body>
+</html>

@@ -1,0 +1,307 @@
+/* ============================================================================
+   Helix CRM base styles
+   Owner: design agent. Loads after tokens.css and before Tailwind's utilities.
+   Only tokens from tokens.css may be used here. No hex values.
+   ========================================================================= */
+
+@import "./tokens.css";
+
+/* --- Reset ----------------------------------------------------------------
+   Small and deliberate. Removes the browser defaults that fight a desktop app
+   and nothing else.                                                          */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  /* The Tauri window enforces a 1024px minimum; this is the belt to that
+     braces, and it keeps the layout honest in a browser during design review. */
+  min-width: 1024px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-width: 1024px;
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-synthesis-weight: none;
+}
+
+/* A desktop app is not a document. Text selection is opt-in on content, and
+   the window chrome does not rubber-band or drag-select.                     */
+body {
+  overscroll-behavior: none;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+[contenteditable],
+[data-selectable],
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: auto;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+svg {
+  flex: none;
+}
+
+/* --- Base typography ------------------------------------------------------ */
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  letter-spacing: -0.011em;   /* the system stack tracks a touch wide at size */
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--text-2xl); }
+h2 { font-size: var(--text-xl); }
+h3 { font-size: var(--text-lg); }
+h4, h5, h6 { font-size: var(--text-base); }
+
+p, li {
+  text-wrap: pretty;
+}
+
+p {
+  max-width: var(--content-max);
+}
+
+small {
+  font-size: var(--text-sm);
+}
+
+b, strong {
+  font-weight: 600;
+}
+
+a {
+  color: var(--color-text);
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0 var(--space-1);
+  min-width: 1.5em;
+  text-align: center;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Form controls inherit the app's type instead of the platform's 13px default. */
+button,
+input,
+select,
+textarea,
+optgroup {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+}
+
+/* --- Numbers --------------------------------------------------------------
+   Money, counts, dates and phone numbers are set in tabular figures so digits
+   stack into columns. This is the single most load-bearing typographic rule in
+   the product: the audience reads columns of amounts for a living.           */
+
+.tabular,
+[data-tabular],
+td[data-numeric],
+th[data-numeric] {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: 0;
+}
+
+td[data-numeric],
+th[data-numeric] {
+  text-align: right;
+}
+
+/* Money never wraps and never breaks across a line. */
+.money {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  white-space: nowrap;
+}
+
+/* --- Focus ----------------------------------------------------------------
+   One ring, everywhere, keyboard-only. Drawn as 2px of --color-focus with a
+   1px surface-coloured offset so it stays visible on top of a stage colour, a
+   soft tint, or a selected row. It is never removed - if a control needs a
+   different ring, it changes --color-focus locally, not the outline.         */
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--focus-ring-w) solid var(--color-focus);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+/* Inside a dense table the offset ring would clip against the row above, so
+   rows draw the ring inside their own box. */
+tr:focus-visible,
+td:focus-visible,
+[role="row"]:focus-visible,
+[role="gridcell"]:focus-visible {
+  outline-offset: -2px;
+}
+
+/* A focused element must never sit behind a sticky header or toolbar. */
+:focus-visible {
+  scroll-margin-block: calc(var(--topbar-h) + var(--space-4));
+  scroll-margin-inline: var(--space-4);
+}
+
+/* --- Selection ------------------------------------------------------------ */
+
+::selection {
+  background: var(--color-selected);
+  color: var(--color-text);
+}
+
+/* --- Scrollbars -----------------------------------------------------------
+   Always visible and always the same on both platforms, because a Windows
+   scrollbar and a macOS overlay scrollbar shift the layout by different
+   amounts. Sized to be grabbable by someone who is not precise with a
+   trackpad.                                                                  */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: var(--radius-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-faint);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --- Motion ---------------------------------------------------------------
+   Nothing moves on its own. No entrances, no scroll reveals, no hover lifts.
+   Motion exists to show what changed when the owner did something.           */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Print ----------------------------------------------------------------
+   Owners print lists and take them out to the truck.                         */
+
+@media print {
+  html, body {
+    min-width: 0;
+    background: none;
+    color: black;
+  }
+
+  [data-print-hide],
+  nav,
+  aside {
+    display: none !important;
+  }
+}

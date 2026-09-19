@@ -1,0 +1,329 @@
+/* ============================================================================
+   Helix CRM design tokens
+   Owner: design agent. Contract: docs/CONTRACTS.md "Design tokens".
+   Direction and rationale: docs/DESIGN.md. Research: design/research.md.
+
+   No hex colour may appear anywhere in the codebase except this file.
+
+   Contrast: every text/background pair the product actually produces is stated
+   below with its measured WCAG 2.1 ratio. Body text clears 4.5:1 on every
+   surface it can land on; most clears 7:1. Stage colours are graphic-only and
+   are held to 3:1 against both the light and the dark canvas.
+   Ratios computed with the sRGB relative-luminance formula; the stage ramp was
+   additionally solved against Vienot 1999 CVD simulation (see docs/DESIGN.md).
+   ========================================================================= */
+
+:root {
+  /* --- Type ---------------------------------------------------------------
+     System stack only. The app runs offline; there are no webfonts, ever.
+     "Segoe UI Variable Text" is listed before "Segoe UI" so Windows 11 picks
+     up the optical-size-corrected text face at 16 px.                       */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    system-ui, "Helvetica Neue", Arial, "Noto Sans", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --text-xs:   0.8125rem;  /* 13px - the floor. Badges, table meta, helper text. */
+  --text-sm:   0.875rem;   /* 14px - secondary row text, labels               */
+  --text-base: 1rem;       /* 16px - body, table cells, inputs, buttons       */
+  --text-lg:   1.125rem;   /* 18px - customer names in lists, section heads   */
+  --text-xl:   1.375rem;   /* 22px - record name, dialog title                */
+  --text-2xl:  1.75rem;    /* 28px - money on a record, Today's counts        */
+  --text-3xl:  2.125rem;   /* 34px - report headline figures only             */
+
+  --leading-tight:  1.25;
+  --leading-normal: 1.55;  /* >= 1.5x, per WCAG and the older-reader research */
+
+  /* --- Space (4 px scale) ------------------------------------------------- */
+  --space-1:  0.25rem;   /*  4 */
+  --space-2:  0.5rem;    /*  8 */
+  --space-3:  0.75rem;   /* 12 */
+  --space-4:  1rem;      /* 16 */
+  --space-5:  1.25rem;   /* 20 */
+  --space-6:  1.5rem;    /* 24 */
+  --space-7:  2rem;      /* 32 */
+  --space-8:  2.5rem;    /* 40 */
+  --space-9:  3rem;      /* 48 */
+  --space-10: 4rem;      /* 64 */
+
+  /* --- Radius -------------------------------------------------------------
+     Deliberately modest. This is a tool, not a consumer app; large radii make
+     dense rows read as loose cards.                                         */
+  --radius-sm:   4px;    /* inputs, badges, small buttons                     */
+  --radius-md:   6px;    /* buttons, cards, table container                   */
+  --radius-lg:   10px;   /* dialogs, popovers, the Today panels               */
+  --radius-full: 9999px; /* avatars, count pills only                         */
+
+  /* --- Elevation ----------------------------------------------------------
+     Three levels, each with a job. Nothing else casts a shadow.             */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 10px -2px rgba(16, 24, 40, 0.10), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 16px 32px -8px rgba(16, 24, 40, 0.18), 0 4px 8px -4px rgba(16, 24, 40, 0.08);
+
+  /* --- Layout ------------------------------------------------------------- */
+  --sidebar-w:  232px;
+  --topbar-h:   56px;
+  --row-h:      48px;    /* comfortable table / list row                      */
+  --control-h:    36px;  /* button, input, select                             */
+  --control-h-sm: 32px;  /* row-action button. The hit-target floor.          */
+  --content-max: 72ch;   /* prose measure cap (notes, empty-state copy)       */
+  --focus-ring-w: 2px;
+
+  /* --- Motion -------------------------------------------------------------
+     Motion answers an action or it does not happen. All of it is disabled
+     under prefers-reduced-motion in globals.css.                            */
+  --dur-fast: 90ms;      /* hover, press, checkbox                            */
+  --dur-base: 160ms;     /* popover, dropdown, toast in                       */
+  --dur-slow: 240ms;     /* dialog, drawer                                    */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0.14, 0.3, 1);
+
+  /* ==========================================================================
+     LIGHT THEME (default)
+     Paper-white panels on a cool grey canvas. Ink is a blue-black, never a
+     tinted near-black; nothing here is cream.
+     ======================================================================== */
+
+  /* Surfaces */
+  --color-bg:             #ECEFF3;  /* window canvas, behind every panel      */
+  --color-surface:        #FFFFFF;  /* panels, rows, cards, inputs            */
+  --color-surface-raised: #FFFFFF;  /* dialogs, popovers, toasts. Same value
+                                       in light, separated by --shadow-lg and
+                                       a border; genuinely lighter in dark.   */
+  --color-sidebar:        #E8ECF1;  /* nav rail, one step deeper than canvas  */
+  --color-hover:          #F2F5F8;  /* row hover                              */
+  --color-selected:       #E4EDF8;  /* selected row / active nav item         */
+  --color-overlay:        rgba(16, 24, 40, 0.38);   /* dialog scrim           */
+
+  --color-border:         #D3DAE2;  /* hairlines: row rules, input borders    */
+  --color-border-strong:  #A9B5C1;  /* input focus outline base, table foot   */
+
+  /* Ink
+     #16202B on #FFFFFF ............ 16.46:1   AAA
+     #16202B on #ECEFF3 ............ 14.27:1   AAA
+     #16202B on #E8ECF1 ............ 13.88:1   AAA
+     #16202B on #E4EDF8 ............ 13.93:1   AAA
+     #42525F on #FFFFFF .............. 8.07:1  AAA
+     #42525F on #ECEFF3 .............. 6.99:1  AAA
+     #42525F on #E8ECF1 .............. 6.80:1  AAA
+     #5C6B79 on #FFFFFF .............. 5.48:1  AA
+     #5C6B79 on #ECEFF3 .............. 4.75:1  AA
+     #5C6B79 on #E8ECF1 .............. 4.62:1  AA
+     #5C6B79 on #E4EDF8 .............. 4.63:1  AA    <- worst text pair, light */
+  --color-text:       #16202B;
+  --color-text-muted: #42525F;
+  --color-text-faint: #5C6B79;
+
+  /* Accent - "needs you", and nothing else.
+     Equipment orange: L* 46, chroma 72, hue 48. Not terracotta (#D97757 is
+     L* 61, chroma 49) and not amber. See docs/DESIGN.md for the rules on where
+     it may appear.
+     #FFFFFF on #C1440E .............. 5.12:1  AA    (filled control)
+     #FFFFFF on #A33709 .............. 6.37:1  AA    (hover)
+     #8F3008 on #FFFFFF .............. 8.09:1  AAA   (accent-coloured text)
+     #8F3008 on #ECEFF3 .............. 7.02:1  AAA
+     #8F3008 on #FDECE3 .............. 7.05:1  AAA   (text on the soft tint)
+     #C1440E on #ECEFF3 .............. 4.44:1  FAILS - which is why accent text
+        uses --color-accent-ink and --color-accent is fills, rails and dots only. */
+  --color-accent:       #C1440E;
+  --color-accent-hover: #A33709;
+  --color-accent-text:  #FFFFFF;   /* text/icon placed ON --color-accent      */
+  --color-accent-soft:  #FDECE3;   /* badge and row-tint background           */
+  --color-accent-ink:   #8F3008;   /* accent-coloured TEXT on light surfaces  */
+
+  /* Semantics
+     #FFFFFF on #A61B2B .............. 7.47:1  AAA
+     #8A1424 on #FFFFFF .............. 9.52:1  AAA
+     #8A1424 on #FCECEE .............. 8.33:1  AAA
+     #FFFFFF on #1F7A3D .............. 5.37:1  AA
+     #155F30 on #FFFFFF .............. 7.74:1  AAA
+     #155F30 on #E6F4EA .............. 6.82:1  AAA
+     #FFFFFF on #8A5A00 .............. 5.93:1  AA
+     #6B4400 on #FFFFFF .............. 8.56:1  AAA
+     #6B4400 on #FBF1DC .............. 7.63:1  AAA                            */
+  --color-danger:       #A61B2B;
+  --color-danger-soft:  #FCECEE;
+  --color-danger-ink:   #8A1424;
+  --color-success:      #1F7A3D;
+  --color-success-soft: #E6F4EA;
+  --color-success-ink:  #155F30;
+  --color-warning:      #8A5A00;
+  --color-warning-soft: #FBF1DC;
+  --color-warning-ink:  #6B4400;
+
+  /* Focus. One colour, one job, never used for anything else.
+     #1D6FD1 on #FFFFFF .............. 4.95:1  (needs 3:1, non-text)
+     #1D6FD1 on #ECEFF3 .............. 4.29:1  (needs 3:1, non-text)
+     The ring is drawn as 2px focus + 1px surface offset, so it survives even
+     where the underlying colours are close.                                  */
+  --color-focus: #1D6FD1;
+
+  /* --- Pipeline stage ramp -------------------------------------------------
+     Eight defaults for user-created stages. Solved numerically: hues held out
+     of the 5-100 degree warm band the accent owns, lightness and chroma chosen
+     to maximise the WORST pairwise CIE Lab deltaE across normal, protanope,
+     deuteranope and tritanope simulation (Vienot 1999).
+
+     Worst-case deltaE over all 28 pairs and all four vision types: 11.1
+       normal   worst pair (2,4)  deltaE 16.5
+       protan   worst pair (2,7)  deltaE 11.1
+       deutan   worst pair (4,7)  deltaE 11.3
+       tritan   worst pair (3,4)  deltaE 11.2
+
+     Every value clears 3:1 against BOTH canvases, so the ramp is shared by the
+     light and dark themes and a stage keeps its identity when the theme flips:
+       1 #789695  vs white 3.18  vs dark 5.51
+       2 #009BD4  vs white 3.16  vs dark 5.54
+       3 #4F62B6  vs white 5.59  vs dark 3.14
+       4 #0082A3  vs white 4.45  vs dark 3.94
+       5 #44A26E  vs white 3.16  vs dark 5.54
+       6 #925D77  vs white 5.18  vs dark 3.39
+       7 #BF6DC4  vs white 3.39  vs dark 5.18
+       8 #47733A  vs white 5.55  vs dark 3.16
+
+     Stage colour is NEVER the only cue: the stage name is always present in
+     full-strength text beside it. These are graphic tokens; they are not text
+     colours.                                                                 */
+  --stage-1: #789695;  /* sage      - default "New lead"                      */
+  --stage-2: #009BD4;  /* cyan      - default "Contacted"                     */
+  --stage-3: #4F62B6;  /* indigo    - default "Estimate sent"                 */
+  --stage-4: #0082A3;  /* deep teal - default "Scheduled"                     */
+  --stage-5: #44A26E;  /* green     - default "Won"                           */
+  --stage-6: #925D77;  /* mauve     - default "Lost"                          */
+  --stage-7: #BF6DC4;  /* orchid    - spare                                   */
+  --stage-8: #47733A;  /* moss      - spare                                   */
+
+  /* Column-body tints: the stage colour at 12% over the surface.
+       --color-text  (#16202B) worst 14.86:1  AAA
+       --color-text-muted (#42525F) worst 7.28:1  AAA
+       --color-text-faint (#5C6B79) worst 4.94:1  AA
+     Light tints are safe for all three inks; the dark ones are not. The rule
+     below is written for the stricter case.                                  */
+  --stage-1-soft: #F4F5F5;
+  --stage-2-soft: #F1F6FA;
+  --stage-3-soft: #F2F3F8;
+  --stage-4-soft: #F1F4F6;
+  --stage-5-soft: #F2F6F3;
+  --stage-6-soft: #F5F3F4;
+  --stage-7-soft: #F8F3F9;
+  --stage-8-soft: #F2F4F2;
+}
+
+/* ============================================================================
+   DARK THEME
+   For the owner doing paperwork at 10 pm. It is a setting, not the product's
+   identity. Cool charcoal, never a tinted near-black, never pure black.
+   ========================================================================= */
+[data-theme="dark"] {
+  --color-bg:             #131A21;
+  --color-surface:        #1B242D;
+  --color-surface-raised: #242F39;   /* genuinely lighter here                */
+  --color-sidebar:        #171F27;
+  --color-hover:          #232D37;
+  --color-selected:       #1E3247;
+  --color-overlay:        rgba(4, 8, 12, 0.60);
+
+  --color-border:         #313E4A;
+  --color-border-strong:  #4A5A68;
+
+  /* #E7ECF1 on #131A21 ............ 14.75:1  AAA
+     #E7ECF1 on #1B242D ............ 13.21:1  AAA
+     #E7ECF1 on #242F39 ............ 11.47:1  AAA
+     #E7ECF1 on #232D37 ............ 11.76:1  AAA
+     #A9B6C2 on #131A21 ............. 8.48:1  AAA
+     #A9B6C2 on #1B242D ............. 7.60:1  AAA
+     #A9B6C2 on #242F39 ............. 6.59:1  AAA
+     #8B9AA8 on #131A21 ............. 6.08:1  AAA
+     #8B9AA8 on #1B242D ............. 5.45:1  AA
+     #8B9AA8 on #232D37 ............. 4.85:1  AA
+     #8B9AA8 on #242F39 ............. 4.73:1  AA   <- worst text pair, dark    */
+  --color-text:       #E7ECF1;
+  --color-text-muted: #A9B6C2;
+  --color-text-faint: #8B9AA8;
+
+  /* #16202B on #F0742E ............. 6.05:1  AA   (filled control)
+     #16202B on #FF8A4C ............. 7.51:1  AAA  (hover)
+     #FF9A6B on #1B242D ............. 7.55:1  AAA  (accent-coloured text)
+     #FF9A6B on #3A2314 ............. 7.05:1  AAA  (text on the soft tint)
+     #F0742E on #131A21 ............. 6.05:1        (rail against canvas)      */
+  --color-accent:       #F0742E;
+  --color-accent-hover: #FF8A4C;
+  --color-accent-text:  #16202B;
+  --color-accent-soft:  #3A2314;
+  --color-accent-ink:   #FF9A6B;
+
+  /* #16202B on #E45A6B ............. 4.68:1  AA
+     #FF8C9B on #1B242D ............. 7.09:1  AAA
+     #FF8C9B on #3A1C22 ............. 6.92:1  AAA
+     #16202B on #4FBF7B ............. 7.58:1  AAA
+     #6FD79A on #1B242D ............. 8.87:1  AAA
+     #6FD79A on #17301F ............. 8.02:1  AAA
+     #16202B on #E3A93C ............. 8.36:1  AAA
+     #F0BE5C on #1B242D ............. 9.14:1  AAA
+     #F0BE5C on #332714 ............. 8.48:1  AAA                              */
+  --color-danger:       #E45A6B;
+  --color-danger-soft:  #3A1C22;
+  --color-danger-ink:   #FF8C9B;
+  --color-success:      #4FBF7B;
+  --color-success-soft: #17301F;
+  --color-success-ink:  #6FD79A;
+  --color-warning:      #E3A93C;
+  --color-warning-soft: #332714;
+  --color-warning-ink:  #F0BE5C;
+
+  /* #5A9BF0 on #131A21 ............. 6.16:1
+     #5A9BF0 on #1B242D ............. 5.52:1                                   */
+  --color-focus: #5A9BF0;
+
+  /* Stage hues are unchanged across themes (see the light block). Only the
+     column tints change: the stage colour at 14% over --color-surface.
+     14% and not 22%: at 22% these tints are light enough that
+     --color-text-muted lands at 4.04:1 on the sage and green columns, which
+     fails AA. At 14% the worst muted pair is 4.86:1.
+       --color-text  (#E7ECF1) worst 9.05:1  AAA
+       --color-text-muted (#A9B6C2) worst 4.86:1  AA
+       --color-text-faint (#8B9AA8) worst 3.48:1  FAILS - so faint text is not
+       allowed on a stage tint. See docs/DESIGN.md section 5.                  */
+  --stage-1-soft: #354448;
+  --stage-2-soft: #19465F;
+  --stage-3-soft: #273254;
+  --stage-4-soft: #193D4D;
+  --stage-5-soft: #24493B;
+  --stage-6-soft: #3F313E;
+  --stage-7-soft: #513659;
+  --stage-8-soft: #25382F;
+
+  /* Shadows carry less weight in the dark; a top hairline does the lifting.  */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-lg: 0 20px 40px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+/* ============================================================================
+   COMPACT DENSITY
+   Roughly 30% more rows on screen. Type never drops below 15px body / 13px
+   meta: density comes out of padding and row height, never out of legibility.
+   ========================================================================= */
+[data-density="compact"] {
+  --text-base: 0.9375rem;  /* 15px */
+
+  --space-1:  0.1875rem;   /*  3 */
+  --space-2:  0.375rem;    /*  6 */
+  --space-3:  0.5625rem;   /*  9 */
+  --space-4:  0.75rem;     /* 12 */
+  --space-5:  0.9375rem;   /* 15 */
+  --space-6:  1.125rem;    /* 18 */
+  --space-7:  1.5rem;      /* 24 */
+  --space-8:  1.875rem;    /* 30 */
+  --space-9:  2.25rem;     /* 36 */
+  --space-10: 3rem;        /* 48 */
+
+  --row-h:    34px;
+  --topbar-h: 48px;
+  --control-h:    32px;
+  --control-h-sm: 28px;
+  --leading-normal: 1.45;
+}
