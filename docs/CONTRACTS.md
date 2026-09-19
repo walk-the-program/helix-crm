@@ -262,6 +262,19 @@ without a real site.
 - Repo tests get a fresh in-memory better-sqlite3 database with all migrations applied
   through the same migrator code used in production.
 
+## Clarifications made during the build (binding)
+
+- `db_rollback` outside a transaction returns `TX_STATE`. Callers that roll back
+  defensively in a `catch` must tolerate that error.
+- Backup file names use dashes in the time part (`2026-09-18T19-05-03Z-<reason>.db`)
+  because Windows rejects `:` in file names.
+- `leads_fetch` omits the `after` query parameter entirely when the cursor is null. The
+  site endpoint and the fake site treat a missing `after` as "from the beginning".
+- `db_info.sizeBytes` includes the `-wal` file.
+- `db_open` returns the path absolutised but not canonicalised (Windows `\\?\` prefixes
+  would otherwise leak into Diagnostics).
+- `reqwest` is pinned to 0.12 to match `tauri-plugin-http`.
+
 ## Status reporting
 
 Each agent appends a dated entry to `docs/STATUS.md` when it finishes: what it built,
