@@ -1196,3 +1196,210 @@ fail at `browserContext.close` with an ENOENT on its own trace file. Passing
 `--output tests/e2e-mac/.cache/results-records` on the command line avoids it
 without touching the shared config; the config should probably derive
 `outputDir` from `E2E_OUT` the way it already derives the port.
+
+---
+
+## 2026-09-18 — Leads and reports agent (website lead poller, site connection, reports)
+
+### Did
+
+**`drizzle/0002_report_views.sql`** — one custom migration (generated with
+`npx drizzle-kit generate --custom --name report_views`, with its journal entry
+and snapshot) creating the five report views the plan's item 14 asks for. The
+views do the joins and the derivations; the period filter and the final
+aggregation belong to the caller, because a period picker cannot be baked into a
+view. Every view hides soft-deleted rows, keeps money in integer cents, and
+defines "open" as no `closed_at` in a stage that is neither won nor lost.
+- `v_report_pipeline_stage` — open deals per stage. LEFT JOIN from `stages`, so a
+  stage with nothing in it still gets a row: an empty column is information and
+  the chart needs the slot.
+- `v_report_closed_deals` — one row per closed deal, with `outcome` derived from
+  the stage flags rather than a column on the deal (so renaming or recolouring a
+  stage cannot rewrite history) and `period_month` / `period_quarter` /
+  `period_year` as string prefixes of `closed_at`.
+- `v_report_deal_sources` — one row per live deal with its source resolved. A
+  deal with no source, or whose source was deleted, lands in a single "Unknown"
+  bucket instead of disappearing from the total.
+- `v_report_stage_transitions` — one row per (deal, consecutive stage pair) for
+  every deal that entered the earlier stage, with `advanced` set when the deal
+  entered the next stage *afterwards*, so a deal that bounced back and then went
+  forward still counts. "Consecutive" is by `position`, so reordering the board
+  reshapes the report and deleting a stage closes the gap. A won or lost stage is
+  never the `from` side: a closed deal has nowhere left to convert to, and
+  "Won -> Lost" is not a funnel step. It can still be the `to` side, because
+  "Scheduled -> Won" is the most interesting number on the page.
+- `v_report_stage_dwell` — one row per stage entry. `left_at` is the next event
+  for that deal (a same-millisecond tie breaks on id, which is UUID v7 and so in
+  creation order); `days_in_stage` runs to `left_at`, or to now for the deal's
+  current stage. That is what separates "how long a visit takes" from "how long
+  this has been sitting there", which the report shows side by side.
+
+**The poller** — `src/features/leads/poller.ts` plus `lib/`. Started from the
+feature's `onBoot` after the first paint, idempotent, and with no site configured
+the timer never starts at all. Each tick pages `leads_fetch(cursor, 200)` until
+`nextCursor` is null or the page comes back short, applies each page inside one
+`withTransaction`, saves the cursor after every page (so an interrupted run
+resumes instead of re-reading from the beginning), mirrors `lastPolledAt` into
+helix.json through `touchWorkspace`, and skips the tick entirely while
+`timersPaused()` — an import holds the write lock and a poll must not queue
+behind it. 401/403 writes `last_error`, shows the banner and stops the timer
+until the settings change; anything else backs off 1, 2, 4, 8 minutes and stays
+silent until the third consecutive failure. Start, end, counts and named errors
+go through `@tauri-apps/plugin-log`, imported lazily and swallowed on failure so
+a missing log plugin can never be the reason a poll died. A small store
+(`subscribe` / `getStatus`, and the `usePollStatus` hook) plus `PollBanner` are
+exported for Today and Diagnostics.
+
+Two dependencies are injected rather than imported, and both exist for the tests:
+`setLeadsFetch` lets the integration test point the poller at `tools/fake-site`
+over plain `fetch` and the e2e harness at its stub, and `setSecretStore` stands
+in for the keychain, which has no Tauri runtime under Vitest. A null cursor is
+passed as null and never as an empty string; the Rust command omits `after`
+entirely.
+
+**`lib/applyLeads.ts`** — one page of leads in one transaction: skip when
+`deals.findByExternalId("<origin>:<lead id>")` already exists, else dedupe the
+contact on email then phone, create it with source Website when neither matches,
+create the deal in the first stage with source Website and the external id, and
+write one immutable system activity holding the original message, the service and
+the page URL. It builds statements instead of calling repository writes, because
+the write lock is not reentrant: a repo write inside `withTransaction` would queue
+behind the transaction already holding the lock and both would wait forever.
+
+**Site connection at `/settings/site`** — `screens/SiteConnectionScreen.tsx`, also
+exported as `SiteConnectionScreen` for the settings feature to mount. The origin
+is validated with the same rule as `validate_origin` in Rust, restated in the UI
+so the owner gets the message before the round trip rather than after it. The
+token goes through `secret_set` with kind "site" and the open workspace id; it is
+write-only in the UI, so the screen can say a token is stored but never shows it
+again. Then "Test connection" (`leads_fetch(null, 1)`, writes nothing), the fixed
+five-minute interval, last polled time and last error from `lead_sync`, "Poll
+now", and "Disconnect", which forgets the address and deletes the key but keeps
+every contact and deal the site ever sent.
+
+**Reports at `/reports`** — a period picker (this month, quarter, year, custom),
+then five cards, each with a chart, a table view with tabular numbers, a "Copy as
+CSV" button (CRLF, quoted, with the formula-injection guard the plan requires on
+every export) and its own worded empty state. Money goes through
+`src/lib/money.ts` throughout.
+
+Chart decisions follow the dataviz skill, and the categorical palette was run
+through its validator rather than eyeballed:
+- Pipeline value by stage, leads by source, conversion and both days-in-stage
+  small multiples are single-series, so identity is carried by the axis label and
+  colour is redundant. The per-stage charts fill each bar from that stage's own
+  `color` column; leads by source uses one hue (`--stage-2`) and conversion one
+  hue (`--stage-4`).
+- Won and lost is the only two-series chart: `--stage-5` and `--stage-6`, the
+  ramp's own won and lost slots. Validated light and dark — CVD separation dE
+  10.8 and normal-vision dE 21.8, both passing; the only failing check is the
+  chroma floor on the mauve `--stage-6` (0.077 against a 0.1 floor), which is a
+  property of a design token this agent does not own. It ships with a legend and
+  direct labels, so identity is never colour alone.
+- The won and lost card leads with two stat tiles and draws no chart at all when
+  the period yields a single bucket, which is the skill's "is it even a chart"
+  rule: one bucket is a number, not a trend.
+- Charts never animate. `docs/DESIGN.md` section 8 forbids entrance animations
+  outright, which is stricter than `prefers-reduced-motion` and satisfies it by
+  construction. That also fixed a real defect: recharts 3.10 withholds a
+  `LabelList` until the series animation finishes, so an animating chart showed
+  its bars a second before their values.
+- `formatAxisMoney` keeps a value axis in one shape. `formatMoneyCompact` only
+  compacts above $1,000, so an axis was reading "$0.00, $400.00, $800.00, $1.2K,
+  $1.6K" — three shapes in one row of ticks, which reads as sloppy bookkeeping to
+  this audience. Axis ticks are now always compact and never carry cents; the
+  exact figure with its two decimals is on the bar's own label, in the tooltip
+  and in the table.
+
+### Verified
+
+```
+$ npm run typecheck
+(no output)
+
+$ npm test
+ Test Files  52 passed (52)
+      Tests  692 passed (692)
+
+$ E2E_PORT=4184 E2E_OUT=dist-leads npx playwright test \
+    -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/leads.e2e.ts
+  12 passed (7.5s)
+
+$ npx vite build
+✓ built in 513ms
+```
+
+New tests: 79 unit (backoff schedule and the 1/2/4/8 ceiling, the auth-versus-
+network split, cursor handling including the binding rule that a null cursor
+sends no `after` at all, lead-to-record mapping, the period model, origin
+validation), 30 repo (each of the five views asserted on a hand-built history,
+and applying a page of leads — idempotent on re-poll, dedupe on email then phone,
+external_id set, whole page rolled back when one lead fails), and 12 e2e.
+
+The integration test in `tests/repo/leads/pollerIntegration.test.ts` runs the real
+poller against `tools/fake-site`, which it starts on 4711 with `--seed 25` and
+stops itself. It pages at 7 a request so the cursor genuinely has to be carried
+back (4 round trips, 25 unique external ids, the seed's deliberate `createdAt`
+tie survives), re-polls to nothing, picks up a lead posted to the site in between,
+resumes from a saved cursor, stops on a wrong token with `LeadPollAuthError` in
+`lead_sync`, and stays silent for two network failures before speaking on the
+third.
+
+Screenshots at 1280 in both themes are in
+`tests/e2e-mac/.cache/screens/leads/` (gitignored) and were looked at. Three
+things they caught and that are now fixed: the missing chart value labels (the
+recharts animation issue above), an axis mixing compact and full money, and
+"Won -> Lost" appearing as a conversion step.
+
+### Not done
+
+- The five report views are not indexed and nothing has been run against a large
+  workspace. `v_report_stage_dwell` does a correlated subquery per stage event,
+  which is fine for the thousands of events a solo owner will have and is not
+  fine for a million. Worth measuring before anyone imports a decade of history.
+- Reports are not exported as a file, only copied to the clipboard as CSV. The
+  data agent owns export; if reports should land in the zip, that is a
+  cross-feature decision.
+- No saved views on reports, and the period is not remembered between visits.
+- The poller only runs for the open workspace while the app is open, which is
+  the known consequence of approach B in the plan, not a gap in this work.
+- `secret_set` is exercised only through the e2e stub and the in-memory test
+  store. The real macOS keychain round trip is still unproven, as the Rust
+  foundations agent also noted.
+- The reports screen has not been checked at 1024 px, only at 1280. The
+  two-column small multiples in "Average days in stage" are the part most likely
+  to want a stacked fallback there.
+
+### Contract changes needed
+
+1. **Two shared test files were edited, and they are in this commit.**
+   `tests/repo/migrations.test.ts` and `tests/repo/boot.test.ts` both asserted a
+   hard-coded `["0000_init", "0001_search"]`, so any new migration turned them
+   red. Both now read the journal through `diskMigrationSource` and compare
+   against that, which means the next agent to add a migration does not have to
+   come and edit them. No behaviour changed.
+2. **Repository functions this feature wrote for itself, under
+   `src/features/leads/lib/`, for promotion if anyone else needs them:**
+   `applyLeads.ts` builds the deal and `deal_stage_events` insert statements by
+   hand because `deals.ts` exposes `create` (which takes the write lock) but no
+   `createStatements`, unlike `contacts.ts` and `activities.ts`. A
+   `deals.createStatements` would let the poller drop that duplication, and the
+   CSV import will want the same thing if deals are ever importable.
+   `reportQueries.ts` is the read layer over the new views and would sit
+   naturally in `src/db/repos/reports.ts`.
+3. **`/settings/site` is registered by this feature as well as being exported.**
+   The settings feature still registers `/settings/:section`, and the registry
+   puts leads ahead of settings, so wouter's Switch matches the exact path first.
+   That works, but it means the screen renders outside whatever chrome the
+   settings shell puts around its other sections. Once settings mounts
+   `SiteConnectionScreen` itself, the route here should be removed.
+4. **Sonner's `<Toaster>` in `src/app/Shell.tsx` has no `theme` prop**, so toasts
+   render light on a dark app — visible in
+   `tests/e2e-mac/.cache/screens/leads/site-dark.png`. It needs
+   `theme={resolvedTheme}` from the shell's appearance state. Foundations owns
+   that file, so it is reported rather than changed.
+5. **`--stage-6` is below the dataviz chroma floor** (0.077 against 0.1) and reads
+   close to grey at small sizes. Not a blocker — it passes every separation and
+   contrast check and only the two-series won/lost chart uses it — but if the
+   design agent ever revisits the ramp, that is the slot with the least chroma to
+   spend.

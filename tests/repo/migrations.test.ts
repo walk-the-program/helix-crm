@@ -13,7 +13,11 @@ afterEach(() => {
 describe("migrations", () => {
   it("applies every journal entry once", async () => {
     h = await createHarness();
-    expect(await appliedVersions()).toEqual(["0000_init", "0001_search"]);
+    // Journal-driven rather than a hard-coded list: every agent that adds a
+    // custom migration would otherwise have to edit this assertion.
+    const journalTags = (await diskMigrationSource.list()).map((f) => f.tag);
+    expect(journalTags.slice(0, 2)).toEqual(["0000_init", "0001_search"]);
+    expect(await appliedVersions()).toEqual(journalTags);
     const again = await migrate({ source: diskMigrationSource, backup: false });
     expect(again.applied).toEqual([]);
   });

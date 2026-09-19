@@ -15,6 +15,16 @@ import {
 } from "../../src/app/appSettings";
 import { __resetWriteLockForTests } from "../../src/db/writeLock";
 import { createTestDriver, type TestDriver } from "./driver";
+import { diskMigrationSource } from "./harness";
+
+/**
+ * The journal decides which migrations exist, so these assertions read it
+ * rather than repeating the tag list: any agent adding a custom migration
+ * would otherwise have to come and edit this file.
+ */
+async function journalTags(): Promise<string[]> {
+  return (await diskMigrationSource.list()).map((file) => file.tag);
+}
 
 let driver: TestDriver;
 
@@ -50,9 +60,9 @@ describe("boot", () => {
     expect(registry.lastOpened).toBe(result.workspace.id);
   });
 
-  it("applies both migrations and seeds the workspace", async () => {
+  it("applies every migration and seeds the workspace", async () => {
     const result = await boot();
-    expect(result.migration.applied).toEqual(["0000_init", "0001_search"]);
+    expect(result.migration.applied).toEqual(await journalTags());
 
     const stages = await raw.query(
       `SELECT s.name AS s_name FROM stages s WHERE s.deleted_at IS NULL ORDER BY s.position`,
@@ -89,7 +99,10 @@ describe("boot", () => {
   it("opening a workspace again is idempotent", async () => {
     const first = await boot();
     const reopened = await openWorkspace(first.workspace);
-    expect(reopened.migration.applied).toEqual(["0000_init", "0001_search"]);
+    // The in-memory driver hands back a fresh database on every open, so the
+    // full set is applied again rather than nothing; what matters is that the
+    // second run is a clean, complete apply and does not double-seed.
+    expect(reopened.migration.applied).toEqual(await journalTags());
 
     const pipelines = await raw.query(
       `SELECT count(*) AS pipeline_count FROM pipelines WHERE deleted_at IS NULL`,
