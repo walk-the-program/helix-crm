@@ -1,0 +1,217 @@
+/**
+ * The full-screen states from docs/PLAN.md's error map: the database would not
+ * open, this build has no FTS5, a migration failed, and the top-level error
+ * boundary. Each one names the problem in plain words, shows the path, and
+ * never swallows the detail.
+ */
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { AlertTriangle, DatabaseZap, HardDriveDownload } from "lucide-react";
+import { MigrationError } from "@/db/migrator";
+import { DbOpenError, Fts5MissingError } from "@/db/client";
+import { Button, Card, CardBody, Spinner } from "@/ui";
+
+function FullScreen({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] p-[var(--space-8)] text-[var(--color-text)]">
+      <Card className="w-full max-w-[640px]">
+        <CardBody>
+          <div className="flex items-start gap-[var(--space-4)]">
+            <div className="text-[var(--color-danger)]">{icon}</div>
+            <div className="min-w-0 flex-1">
+              <h1 className="m-0 text-[length:var(--text-xl)] leading-[var(--leading-tight)]">
+                {title}
+              </h1>
+              <div className="mt-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+                {children}
+              </div>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+function Detail({ children }: { children: ReactNode }) {
+  return (
+    <pre className="mt-[var(--space-4)] max-h-[220px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+      {children}
+    </pre>
+  );
+}
+
+export function BootingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg)] text-[var(--color-text-muted)]">
+      <Spinner size={24} label="Opening your data" />
+    </div>
+  );
+}
+
+export function DbOpenErrorScreen({
+  error,
+  path,
+  onRetry,
+}: {
+  error: DbOpenError;
+  path?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <FullScreen icon={<DatabaseZap size={28} />} title="Helix can't open your data">
+      <p className="m-0">
+        The workspace file could not be opened. Another copy of Helix may have
+        it, or the folder may not be writable.
+      </p>
+      {path ? <Detail>{path}</Detail> : null}
+      <Detail>{error.message}</Detail>
+      {onRetry ? (
+        <div className="mt-[var(--space-4)]">
+          <Button variant="primary" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : null}
+    </FullScreen>
+  );
+}
+
+export function Fts5MissingScreen({ error }: { error: Fts5MissingError }) {
+  return (
+    <FullScreen icon={<AlertTriangle size={28} />} title="This build is missing search">
+      <p className="m-0">
+        Helix was built against a copy of SQLite without FTS5, so search cannot
+        work. This should never reach a release; please report the build you
+        downloaded.
+      </p>
+      <Detail>{error.message}</Detail>
+    </FullScreen>
+  );
+}
+
+export function MigrationErrorScreen({ error }: { error: MigrationError }) {
+  return (
+    <FullScreen
+      icon={<HardDriveDownload size={28} />}
+      title="This update could not finish"
+    >
+      <p className="m-0">
+        Nothing was changed: the update was rolled back.
+        {error.backupPath
+          ? " Your data was backed up first, and that backup is untouched."
+          : ""}{" "}
+        Install the previous version to keep working, and send us the detail
+        below.
+      </p>
+      {error.backupPath ? <Detail>{error.backupPath}</Detail> : null}
+      <Detail>
+        {error.tag}
+        {"\n"}
+        {error.message}
+      </Detail>
+    </FullScreen>
+  );
+}
+
+/** Whatever else went wrong at boot. */
+export function BootErrorScreen({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry?: () => void;
+}) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    <FullScreen icon={<AlertTriangle size={28} />} title="Helix could not start">
+      <p className="m-0">Something failed before the first screen could load.</p>
+      <Detail>{message}</Detail>
+      {onRetry ? (
+        <div className="mt-[var(--space-4)]">
+          <Button variant="primary" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : null}
+    </FullScreen>
+  );
+}
+
+/** Pick the right full-screen state for a boot failure. */
+export function BootFailure({
+  error,
+  path,
+  onRetry,
+}: {
+  error: unknown;
+  path?: string;
+  onRetry?: () => void;
+}) {
+  if (error instanceof Fts5MissingError) return <Fts5MissingScreen error={error} />;
+  if (error instanceof DbOpenError)
+    return <DbOpenErrorScreen error={error} path={path} onRetry={onRetry} />;
+  if (error instanceof MigrationError) return <MigrationErrorScreen error={error} />;
+  return <BootErrorScreen error={error} onRetry={onRetry} />;
+}
+
+/* -------------------------------------------------------------------------- */
+/* the one top-level error boundary                                           */
+/* -------------------------------------------------------------------------- */
+
+type BoundaryProps = { children: ReactNode };
+type BoundaryState = { error: Error | null; stack: string | null };
+
+/**
+ * A single top-level boundary: it shows what broke and never swallows it.
+ * Services have no catch-all handlers, by design.
+ */
+export class AppErrorBoundary extends Component<BoundaryProps, BoundaryState> {
+  constructor(props: BoundaryProps) {
+    super(props);
+    this.state = { error: null, stack: null };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<BoundaryState> {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error("[helix] unhandled error", error, info.componentStack);
+    this.setState({ stack: info.componentStack ?? null });
+  }
+
+  private reset = () => {
+    this.setState({ error: null, stack: null });
+  };
+
+  render(): ReactNode {
+    const { error, stack } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <FullScreen icon={<AlertTriangle size={28} />} title="Something broke">
+        <p className="m-0">
+          Helix hit an error it did not expect. Your data is untouched. Here is
+          the log; copy it into an issue and we will fix it.
+        </p>
+        <Detail>
+          {error.message}
+          {stack ? `\n${stack}` : ""}
+        </Detail>
+        <div className="mt-[var(--space-4)] flex gap-[var(--space-3)]">
+          <Button variant="primary" onClick={this.reset}>
+            Back to the app
+          </Button>
+          <Button onClick={() => window.location.reload()}>Reload Helix</Button>
+        </div>
+      </FullScreen>
+    );
+  }
+}

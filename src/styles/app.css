@@ -1,0 +1,16 @@
+/*
+ * The stylesheet main.tsx loads. Owned by the foundations agent.
+ *
+ * Tailwind first, so its theme, base and utilities layers exist; then the
+ * design agent's globals.css (which imports tokens.css) pulled into the base
+ * layer, so its reset cannot out-rank a utility class. Layer order below is
+ * explicit rather than implied, because the cascade here decides whether
+ * every component in src/ui gets its spacing.
+ *
+ * tokens.css and globals.css belong to the design agent: this file never
+ * edits them, it only decides where they sit in the cascade.
+ */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss";
+@import "./globals.css" layer(base);

@@ -316,3 +316,174 @@ is a string (the template's column is a serial integer, stringified, so
 over `storage.listLeads()` rather than pushing the cursor into SQL — deliberate,
 to keep the port to a single file, and documented as the thing to revisit if a
 site ever holds thousands of leads.
+
+---
+
+## 2026-09-18 — Foundations (TypeScript) agent
+
+### Did
+
+**Schema and migrations**
+- `src/db/schema.ts`: every table in the plan's data model as Drizzle SQLite tables —
+  contacts, contact_phones, contact_emails, companies, pipelines, stages, deals,
+  deal_stage_events, activities, tasks, tags, tag_links, custom_fields, custom_values,
+  attachments, sources, saved_views, settings, lead_sync, schema_migrations, change_log,
+  plus a `merges` table the merge-reversal history needs. Every entity table carries
+  `id TEXT PRIMARY KEY` (UUID v7), `created_at`, `updated_at`, `deleted_at`. Cascades and
+  SET NULLs exactly as the plan states; stage references are RESTRICT so a stage cannot be
+  deleted out from under a deal (the repository raises StageInUseError first). Every index
+  the Performance section names, plus `(stage_id, position)` for the board.
+- `drizzle.config.ts` + `npm run drizzle:generate` → `drizzle/0000_init.sql` and
+  `drizzle/meta/_journal.json`. Re-running it reports "No schema changes".
+- `drizzle/0001_search.sql`, hand-written and registered in the journal as a custom
+  migration: `search_docs` with an INTEGER PRIMARY KEY rowid, `search_index` as FTS5
+  external content over `search_docs.text` with
+  `tokenize='unicode61 remove_diacritics 2'`, the three standard content-sync triggers,
+  and rebuild triggers on contacts, contact_phones, contact_emails, companies, deals and
+  activities. Each rebuild deletes the entity's row and re-inserts it only
+  `WHERE deleted_at IS NULL`, so soft delete removes it from search and restore brings it
+  back with no repository code involved. A contact's text is name + company name + every
+  phone (raw and e164) + every email + notes. Changing a company name also rebuilds that
+  company's contacts.
+
+**The database layer**
+- `src/db/client.ts`: the `raw` RawDriver facade, `setDriver`, the production driver over
+  `@tauri-apps/api` invoke (command names and shapes straight from CONTRACTS), typed
+  errors (DbError, DbClosedError, DbOpenError, Fts5MissingError), and `db` as a Drizzle
+  sqlite-proxy whose callback maps run/all/values/get correctly. A Drizzle batch of pure
+  writes goes out as one `db_batch`; a mixed batch falls back to sequential calls.
+- `src/db/drivers/e2e.ts`: the driver over `window.__helixDb`, matching the ten methods
+  the Playwright harness in `tests/e2e-mac/fixtures.ts` binds, so the app boots in a plain
+  browser.
+- `src/db/migrator.ts`: journal-driven exactly as the plan describes — backup via
+  `raw.backup("pre-migration")` only when something is pending, `PRAGMA foreign_keys=OFF`
+  outside any transaction, split on `--> statement-breakpoint`, the
+  `INSERT INTO schema_migrations` appended as the last statement of the same `db_batch`,
+  then `foreign_key_check` and `foreign_keys=ON`. SQL is bundled via Vite `?raw` in the
+  app and read from disk in tests (`diskMigrationSource`). Comment-only chunks are dropped
+  because SQLite cannot prepare them.
+- `src/db/writeLock.ts` (`withWrite`, `withTransaction`, `pauseTimers`, `writeState`) and
+  `src/db/changeLog.ts` (`logChange`, `logChanges`, `listBatch`, `undoBatch`).
+- `src/db/errors.ts`: the named errors from the plan's rescue map.
+
+**Repositories** (`src/db/repos/`, every write through `withWrite`, every write logged to
+change_log with actor_id "owner", every join column aliased, no `SELECT *`)
+contacts (phones/emails as child rows, dedupe warning on email_lower then e164, no unique
+constraints), companies, deals (stage moves write deal_stage_events and stage_entered_at,
+position within stage, won/lost from stage flags, reopen, gone-quiet), stages (reorder,
+delete requires a target stage), pipelines, activities (system entries immutable), tasks
+(snooze, complete, uncomplete), tags + tag links, customFields + custom values,
+attachments (rows only), sources, savedViews, settings (typed get/set over zod, vocabulary
+key), leadSync (opaque cursor, stored verbatim), search, trash (list, restore, purge in the
+plan's order), merge (contacts and companies, field picks, system activity, batch id,
+reversal including the refused case), seed (one pipeline with New/Contacted/Quoted/
+Scheduled/Won/Lost and the four sources, idempotent).
+
+**Helpers** `src/lib/`: ids (UUID v7), phone (libphonenumber-js, `{raw, e164|null}`, never
+rejects), email, dates (local-time `todayLocal`, the plan's overdue rule), money (integer
+cents both ways).
+
+**App shell** `src/app/`: feature.ts (FeatureModule), registry.ts (all six features),
+boot.ts (app_paths → helix.json registry → first workspace → `raw.open` → FTS5 check →
+migrate → seed → clear the TanStack Query cache; `switchWorkspace` reruns it), Shell.tsx
+(wouter, sidebar from the registry in contract order, topbar with a search trigger, sonner
+toaster, theme and density attributes on `<html>`), CommandPalette.tsx (cmdk, fed by the
+registry), queryClient.ts (with shared query keys), vocabulary.ts (`useVocabulary`),
+appSettings.ts (helix.json: workspaces, lastOpened, theme, density), hooks.ts
+(`useWriteState`, `useAppearance`, `useShortcut`), BootScreens.tsx (DbOpenError,
+Fts5MissingError, MigrationError full-screen states and the one top-level error boundary).
+
+**UI primitives** `src/ui/`: Button, IconButton, Input, Textarea, Select, Checkbox, Switch,
+Tabs, Dialog (+ConfirmDialog), DropdownMenu, Popover, Tooltip, Badge, Card, EmptyState,
+Table, VirtualList, Field/FormRow/FieldSet, Kbd, toast, PageHeader, Sidebar/NavItem/Topbar,
+Spinner, and a barrel. Tokens only — no hex, no Tailwind palette classes anywhere in
+`src/ui` — keyboard accessible, 44 px targets.
+
+**Feature stubs** `src/features/{records,today,data,leads,ai,settings}/index.tsx`, one
+placeholder route each, nav items in the contract's order (Today 10 … Settings 90). Feature
+agents replace these files and never touch the registry.
+
+**Tests** `tests/repo/driver.ts` (better-sqlite3 behind RawDriver, with the pipe's savepoint
+nesting, TX_STATE on a rollback outside a transaction, and `VACUUM INTO` backups),
+`tests/repo/harness.ts` (fresh database, real migrator, optional seed), 13 repo suites and
+7 unit suites.
+
+### Verified
+
+```
+$ npm run typecheck
+> tsc --noEmit
+(no output)
+
+$ npm test
+ Test Files  20 passed (20)
+      Tests  233 passed (233)
+   Duration  2.48s
+
+$ npx vite build
+dist/index.html                     0.55 kB │ gzip:   0.34 kB
+dist/assets/index-E3Edz6cc.css     30.48 kB │ gzip:   6.97 kB
+dist/assets/index-C0o8d3OM.js     647.18 kB │ gzip: 188.87 kB
+✓ built in 343ms
+
+$ npm run drizzle:generate
+No schema changes, nothing to migrate
+```
+
+Also checked by hand in a browser on port 1420 (dev server started and stopped by this
+agent): with no Tauri runtime the app reaches the DbOpenError full-screen state, styled
+from the design agent's tokens in dark mode — which proves the boot sequence, the error
+screens, the token wiring and the Tailwind build all work end to end.
+
+Three bugs were found by the tests and fixed in src:
+- `deals.moveToStage` left a hole in the source stage's positions after a cross-stage move.
+  Added `compactStage` and called it on the stage the deal left.
+- `merge.reversalRefusal` compared `merges.at` with `>`, so two merges inside the same
+  millisecond did not trigger the "survivor has been merged again" refusal. Ties now break
+  on the id, which is UUID v7 and therefore in creation order.
+- `deals.moveToStage` treated an explicit `outcomeReason: null` as "keep the old reason"
+  in its validation but wrote null to the row. One effective-reason value now decides both.
+
+### Not done
+
+- `src/lib/csv.ts` is not written. CONTRACTS lists it under `src/lib`, but nothing in the
+  foundations scope needed it; the data feature agent should write it in its own folder and
+  report it for promotion.
+- No repository function for reports. The plan wants them as SQL views over `deals` and
+  `deal_stage_events`; the leads/reports agent should add the views in a new migration
+  (`drizzle-kit generate --custom`) rather than aggregating in memory.
+- No backup, duplicate-scan or lead-poll timers. `pauseTimers()` and the `onBoot` hook exist
+  for whoever adds them; `runFeatureBoot()` already runs after the first paint.
+- `tests/e2e-mac` and `tests/e2e-win` were not touched (another agent owns them). The e2e
+  driver they need is in place and matches their bridge.
+- `src-tauri`, `tools/`, `tests/fixtures`, `package.json` untouched, as scoped.
+
+### Contract changes needed
+
+None to the interfaces already in CONTRACTS. Four things the orchestrator should know:
+
+1. **`src/styles/app.css` is new and belongs to foundations.** The design agent's
+   `globals.css` does not `@import "tailwindcss"`, so no Tailwind utility was reaching the
+   page and every `src/ui` component rendered unstyled. Rather than edit a file I do not
+   own, `main.tsx` now imports `src/styles/app.css`, which declares the layer order,
+   imports Tailwind, then imports `globals.css` **into the base layer** so the reset cannot
+   out-rank a utility class (`* { margin: 0 }` unlayered would otherwise beat `mt-*`).
+   `tokens.css` and `globals.css` remain the design agent's, untouched. If they would rather
+   own the entry, they can move the two `@import` lines into `globals.css` and delete
+   `app.css`.
+2. **The write lock is not reentrant.** A repository write must never call another
+   repository's write function: the inner call queues behind the outer one and both wait
+   forever. Compose by building statements into one `raw.batch`, or wrap the whole thing in
+   a single `withTransaction`. `writeLock.ts` now logs a named warning after ten seconds of
+   waiting so the mistake shows up as a console line instead of a hang. Worth repeating to
+   every feature agent.
+3. **Repository functions feature agents will likely ask for, which I did not build:** CSV
+   import writers (bulk `createStatements` exists on contacts only), export queries, report
+   views, an attachment purge that also deletes files (the repository returns
+   `trash.attachmentFilesFor()` so the caller can delete them through Rust first), and a
+   contacts/companies "recently viewed" list. Deals cannot be imported from CSV in v1 by
+   design.
+4. **`merges` is a table the plan's data model does not list.** It carries the 30-day merge
+   history the plan's item 15 requires (survivor, loser, batch_id, at, reversed_at). It is
+   in `0000_init.sql`, so nothing downstream needs to change; noting it so the data model
+   in PLAN.md and the schema do not silently disagree.

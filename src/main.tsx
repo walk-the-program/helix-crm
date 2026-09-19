@@ -1,9 +1,19 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
+/**
+ * Entry point. Styles first, then the app; the boot sequence itself lives in
+ * src/app/boot.ts and runs inside <App/> so its failures can be drawn.
+ */
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "@/styles/app.css";
+import { App } from "@/app/App";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
+const container = document.getElementById("root");
+if (!container) {
+  throw new Error("index.html is missing the #root element.");
+}
+
+createRoot(container).render(
+  <StrictMode>
     <App />
-  </React.StrictMode>,
+  </StrictMode>,
 );
