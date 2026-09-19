@@ -45,6 +45,7 @@
   --tok-border:         var(--color-border);
   --tok-border-strong:  var(--color-border-strong);
 
+  --tok-heading:        var(--color-heading);
   --tok-text:           var(--color-text);
   --tok-text-muted:     var(--color-text-muted);
   --tok-text-faint:     var(--color-text-faint);
@@ -57,6 +58,18 @@
   --tok-accent-ink:     var(--color-accent-ink);
   --tok-link:           var(--color-link);
   --tok-tint:           var(--color-tint);
+
+  --tok-brand-primary:           var(--brand-primary);
+  --tok-brand-secondary:         var(--brand-secondary);
+  --tok-brand-accent:            var(--brand-accent);
+  --tok-brand-neutral-dark:      var(--brand-neutral-dark);
+  --tok-brand-neutral-light:     var(--brand-neutral-light);
+  --tok-brand-primary-soft:      var(--color-brand-primary-soft);
+  --tok-brand-primary-ink:       var(--color-brand-primary-ink);
+  --tok-brand-secondary-soft:    var(--color-brand-secondary-soft);
+  --tok-brand-secondary-ink:     var(--color-brand-secondary-ink);
+  --tok-brand-accent-soft:       var(--color-brand-accent-soft);
+  --tok-brand-accent-ink:        var(--color-brand-accent-ink);
 
   --tok-danger:         var(--color-danger);
   --tok-danger-soft:    var(--color-danger-soft);
@@ -125,6 +138,7 @@
   --color-border:         var(--tok-border);
   --color-strong:         var(--tok-border-strong);
 
+  --color-heading:        var(--tok-heading);
   --color-text:           var(--tok-text);
   --color-muted:          var(--tok-text-muted);
   --color-faint:          var(--tok-text-faint);
@@ -137,6 +151,18 @@
   --color-accent-ink:     var(--tok-accent-ink);
   --color-link:           var(--tok-link);
   --color-tint:           var(--tok-tint);
+
+  --color-brand-primary:        var(--tok-brand-primary);
+  --color-brand-secondary:      var(--tok-brand-secondary);
+  --color-brand-accent:         var(--tok-brand-accent);
+  --color-brand-neutral-dark:   var(--tok-brand-neutral-dark);
+  --color-brand-neutral-light:  var(--tok-brand-neutral-light);
+  --color-brand-primary-soft:   var(--tok-brand-primary-soft);
+  --color-brand-primary-ink:    var(--tok-brand-primary-ink);
+  --color-brand-secondary-soft: var(--tok-brand-secondary-soft);
+  --color-brand-secondary-ink:  var(--tok-brand-secondary-ink);
+  --color-brand-accent-soft:    var(--tok-brand-accent-soft);
+  --color-brand-accent-ink:     var(--tok-brand-accent-ink);
 
   --color-danger:         var(--tok-danger);
   --color-danger-soft:    var(--tok-danger-soft);
@@ -181,5 +207,6 @@
  * `border-strong`, `text-accent-ink` and the stage ramp are always available.
  * ------------------------------------------------------------------------ */
 
-@source inline("{bg,text,border}-{bg,surface,surface-raised,sidebar,hover,selected,overlay,border,strong,text,muted,faint,disabled,accent,accent-hover,accent-text,accent-soft,accent-ink,link,tint,danger,danger-soft,danger-ink,success,success-soft,success-ink,warning,warning-soft,warning-ink,info,info-soft,info-ink,focus}");
+@source inline("{bg,text,border}-{bg,surface,surface-raised,sidebar,hover,selected,overlay,border,strong,heading,text,muted,faint,disabled,accent,accent-hover,accent-text,accent-soft,accent-ink,link,tint,danger,danger-soft,danger-ink,success,success-soft,success-ink,warning,warning-soft,warning-ink,info,info-soft,info-ink,focus}");
+@source inline("{bg,text,border}-brand-{primary,secondary,accent,neutral-dark,neutral-light,primary-soft,primary-ink,secondary-soft,secondary-ink,accent-soft,accent-ink}");
 @source inline("{bg,text,border}-stage-{1,2,3,4,5,6,7,8}{,-soft}");

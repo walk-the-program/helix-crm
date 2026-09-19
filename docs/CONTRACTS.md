@@ -227,7 +227,9 @@ Components in `src/ui/` use only tokens; feature code uses only `src/ui/` compon
 `tokens.css`.
 
 Minimum window width 1024 px, design target 1280. Body text 15 px comfortable / 13 px
-compact. System font stack, no webfont, no serif. Tabular numbers on money and counts.
+compact. Two self-hosted webfonts, and no third: Zilla Slab for headings, Poppins for body
+(`public/fonts/*.woff2`, latin subset, OFL 1.1, declared in `globals.css`, no CDN because
+the app is offline). Tabular numbers on money and counts.
 
 The design agent owns `tokens.css`, `globals.css` and `src/ui/icons.ts`. Both the design
 agent and the foundations agent use exactly these variable names (the design agent may
@@ -245,11 +247,20 @@ add more, never rename):
 --color-warning  --color-warning-soft  --color-warning-ink
 --color-info  --color-info-soft  --color-info-ink
 --color-focus
+--color-heading                    (the near-black headings are set in)
 --stage-1 ... --stage-8            (the pipeline stage ink)
 --stage-1-soft ... --stage-8-soft  (its pastel fill)
---font-sans  --font-mono
+--brand-primary  --brand-secondary  --brand-accent
+--brand-neutral-dark  --brand-neutral-light  --brand-primary-tint
+--color-brand-primary-soft    --color-brand-primary-ink
+--color-brand-secondary-soft  --color-brand-secondary-ink
+--color-brand-accent-soft     --color-brand-accent-ink
+--font-heading  --font-body  --font-sans  --font-mono
+--text-display  --text-heading  --text-subhead  --text-body  --text-caption
+--leading-display  --leading-heading  --leading-subhead  --leading-body  --leading-caption
 --text-label  --text-xs  --text-sm  --text-base  --text-lg  --text-xl  --text-2xl  --text-3xl
 --leading-tight  --leading-normal  --tracking-title  --tracking-label
+--shadow-sticker                   (the mark's offset accent shadow)
 --space-1 ... --space-10           (4 px scale)
 --radius-sm  --radius-md  --radius-lg  --radius-full
 --shadow-sm  --shadow-md  --shadow-lg
@@ -260,9 +271,32 @@ add more, never rename):
 
 Added in revision 2 of `docs/DESIGN.md`: `--text-label` (the 11 px small-capitals section
 label), `--tracking-title` / `--tracking-label`, `--color-text-disabled` (the platform grey
-that may not carry text), `--color-link` and `--color-info*` (the pale-blue pastel pair),
-`--color-tint`, `--hairline` and `--press-scale`. `--shadow-sm` is now `none`: only a
-floating layer casts a shadow.
+that may not carry text), `--color-link` and `--color-info*`, `--color-tint`, `--hairline`
+and `--press-scale`. `--shadow-sm` is `none`: only a floating layer casts a shadow.
+
+Added in revision 3 (the brand guide): the five `--brand-*` colours and
+`--brand-primary-tint`; `--color-heading`; `--font-heading` / `--font-body`;
+the guide's own five-step scale `--text-display|heading|subhead|body|caption` with a
+matching `--leading-*` for each; the three `--color-brand-*-soft` / `-ink` tint pairs;
+and `--shadow-sticker`. Nothing was renamed. What the mapping now means:
+
+- **Every `--radius-*` is `0`.** The names survive so no call site breaks; they all
+  resolve to a hard edge, which is the guide's corner language.
+- **`--color-accent` is the brand primary `#97B1C3`, and it is the one saturated block a
+  view gets.** Its ink is `--color-accent-text` `#141414` (8.24:1). White on the primary
+  measures 2.24:1 and is never used. In practice the block is the selected sidebar row,
+  plus the primary button on a screen that has a primary action.
+- **`--color-selected` is a quiet tint, not the primary.** A selected table row, a
+  highlighted menu item and a palette row all use it; only the sidebar paints
+  `--color-accent`.
+- **`--color-focus` is the brand secondary `#8B85C2`** (3.37:1 on white, over the 3:1
+  non-text bar). **`--color-link` is `#5F58A6`**, the same hue darkened until it clears
+  AA for 15 px text, because the pure secondary does not.
+- **`--shadow-md` / `--shadow-lg` are a hairline with no blur.** `--shadow-sticker` is not
+  part of that ramp: it belongs to the `Brand` lockup and at most one hero element per
+  screen.
+- **`--font-sans` is `--font-body`**, so every existing component picks up Poppins with no
+  edit. Headings opt in to `--font-heading`.
 
 Themes: `:root` is light, `[data-theme="dark"]` overrides colours,
 `[data-density="compact"]` overrides the type scale, `--space-*`, `--row-h`, `--topbar-h`

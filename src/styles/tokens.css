@@ -1,61 +1,122 @@
 /* ============================================================================
    Helix CRM design tokens
    Owner: design agent. Contract: docs/CONTRACTS.md "Design tokens".
-   Direction and rationale: docs/DESIGN.md.
+   Direction and rationale: docs/DESIGN.md (revision 3, "Brand guide").
+   Source of truth for the brand: assets/brand/guide/helix-crm-brand-guide.html
 
-   Direction: a native-feeling macOS/Windows desktop app. Warm near-white
-   canvas, white content surfaces, 1px hairlines, off-black ink, one black
-   primary control, muted pastels for every tag and stage, near-zero shadow.
-   No gradients, no decoration, no second accent.
+   Revision 3 puts the supplied brand guide on top of the revision-2 desktop
+   chassis. What the guide decides:
+
+     Primary        #97B1C3   Secondary  #8B85C2   Accent  #EDF0A3
+     Neutral dark   #4E555A   Neutral light #FAFAFF
+
+     "Neutrals carry the layout. Primary appears once per view as a single
+      confident block; accent is a detail, never a background."
+     "Flat fills only. Tints are the primary mixed into the neutral at 8% or
+      less."
+     "Anything under 4.5:1 is reserved for large type and graphic shapes."
+     Headings Zilla Slab, body Poppins.
+     Marks: hard edges with an offset sticker shadow in the accent colour.
+     Radius 0 for controls, cards, panels and full-bleed blocks.
+
+   What the guide is silent about is kept from revision 2: generous air,
+   hairline separators, calm hierarchy, 40px rows, comfortable/compact
+   density, a real dark mode, and the eight-hue pipeline stage ramp.
 
    No hex or rgba colour may appear anywhere in the codebase except this file.
 
    Contrast: every text/background pair the product can actually produce is
    stated below with its measured WCAG 2.1 ratio (sRGB relative luminance).
-   Apple's own label greys (#86868B, #A1A1A6) measure 3.62:1 and 2.57:1 on
-   white and cannot legally carry text, so the ink ramp below is the accessible
-   cousin of the platform's: same hue family, darkened until it clears 4.5:1 on
-   every surface it can land on.
+   Two of the brand's five colours cannot legally carry small text on a light
+   surface - #97B1C3 measures 2.24:1 on white and #8B85C2 measures 3.37:1 - so
+   both appear as fills and rings rather than as ink, and link text uses a
+   darkened cousin of the secondary. That is the guide's own rule, applied.
    ========================================================================= */
 
 :root {
+  /* ==========================================================================
+     BRAND
+     The five colours exactly as the guide states them, plus the one derived
+     value the guide defines in words: the tint.
+     ======================================================================== */
+  --brand-primary:       #97B1C3;
+  --brand-secondary:     #8B85C2;
+  --brand-accent:        #EDF0A3;
+  --brand-neutral-dark:  #4E555A;
+  --brand-neutral-light: #FAFAFF;
+
+  /* "Tints are the primary mixed into the neutral at 8% or less."
+     #97B1C3 at 8% over #FAFAFF, resolved to a flat hex so it is a fill and
+     not a translucency that changes with whatever is behind it.             */
+  --brand-primary-tint: #F2F4FA;
+
+  /* The mark's offset "sticker" shadow. Hard edge, no blur, accent colour.
+     Reserved for the logo lockup and at most one hero element per screen -
+     it is the loudest thing the brand owns and it stops being a signature
+     the moment a second element wears it.                                   */
+  --shadow-sticker: 4px 4px 0 var(--brand-accent);
+
   /* --- Type ---------------------------------------------------------------
-     The platform's own text face and nothing else. The app is offline; there
-     are no webfonts, ever, and there is no serif anywhere in the product.
-     -apple-system resolves to SF Pro Text below 20px and SF Pro Display above
-     it, which is exactly the switch a native app gets for free.
-     "Segoe UI Variable Text" precedes "Segoe UI" so Windows 11 picks the
-     optical-size-corrected text face.                                       */
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-    "Segoe UI Variable Text", "Segoe UI", system-ui, "Helvetica Neue", Arial,
-    "Noto Sans", sans-serif;
+     Headings in Zilla Slab, body in Poppins, both self-hosted as woff2 in
+     public/fonts and declared in globals.css. The app is offline; there is no
+     CDN and no network font.
+
+     The serif fallbacks matter: Zilla Slab is a slab, and falling back to a
+     humanist sans would change the page's voice rather than just its shape.  */
+  --font-heading: "Zilla Slab", Georgia, "Times New Roman", "Noto Serif", serif;
+  --font-body:
+    "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Segoe UI", system-ui, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+
+  /* --font-sans is the contract name the whole kit already reaches for; it is
+     the body face. Nothing in src/ui needs to change to pick up Poppins.     */
+  --font-sans: var(--font-body);
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 
-  /* The scale. Comfortable density; [data-density="compact"] shifts it down.
-     Body is 15px, not 14: the owner is 40-65 with likely presbyopia, the
-     window is 1280 wide with room to spare, and 15px is the size macOS uses
-     for Notes and Mail body copy. 14px is the floor for secondary row text. */
-  --text-label:  0.6875rem;  /* 11px - section labels, uppercase, tracked     */
+  /* The guide's scale, verbatim: Display 52/1.0, Heading 32/1.1,
+     Subhead 20/1.3, Body 15/1.65, Caption 11/1.4.                            */
+  --text-display: 3.25rem;    /* 52px - the boot lockup and nothing else      */
+  --text-heading: 2rem;       /* 32px - the page title                        */
+  --text-subhead: 1.25rem;    /* 20px - dialog title, section heading         */
+  --text-body:    0.9375rem;  /* 15px - body copy, cells, inputs, buttons     */
+  --text-caption: 0.6875rem;  /* 11px - labels, table headers, metadata       */
+
+  --leading-display: 1.0;
+  --leading-heading: 1.1;
+  --leading-subhead: 1.3;
+  --leading-body:    1.65;
+  --leading-caption: 1.4;
+
+  /* The revision-2 UI scale stays, because a desktop app needs sizes between
+     the guide's five steps and because docs/CONTRACTS.md fixes these names.
+     Where the two scales meet they now agree: --text-base IS the guide's
+     body, --text-label IS its caption, --text-xl IS its subhead.             */
+  --text-label:  0.6875rem;  /* 11px = caption - section labels, tracked      */
   --text-xs:     0.75rem;    /* 12px - badges, meta, helper text, kbd         */
   --text-sm:     0.875rem;   /* 14px - secondary row text, field labels       */
-  --text-base:   0.9375rem;  /* 15px - body, cells, inputs, buttons, menus    */
+  --text-base:   0.9375rem;  /* 15px = body - cells, inputs, buttons, menus   */
   --text-lg:     1.0625rem;  /* 17px - card titles, primary name in a list    */
-  --text-xl:     1.25rem;    /* 20px - dialog title, page title               */
+  --text-xl:     1.25rem;    /* 20px = subhead - dialog title                 */
   --text-2xl:    1.5rem;     /* 24px - record name, money on a record         */
-  --text-3xl:    1.75rem;    /* 28px - report headline figures only           */
+  --text-3xl:    2rem;       /* 32px = heading - page title, report figures   */
 
+  /* --leading-normal is the UI leading: it sets the inside of a 40px row and
+     a 32px control, where the guide's 1.65 would push the text off its own
+     baseline. Prose - a paragraph, a description, an empty state - takes
+     --leading-body (1.65), which is what the guide specifies body copy at.   */
   --leading-tight:  1.25;
   --leading-normal: 1.5;
 
-  /* Tracking. The system face tracks a touch wide at title sizes and a touch
-     tight at label sizes; these two values are the whole correction.         */
+  /* Tracking. Zilla Slab is tracked in slightly at title sizes, and the 11px
+     caption label is tracked out, which is the only capitals in the product. */
   --tracking-title: -0.01em;
   --tracking-label: 0.05em;
 
-  /* --- Space (4 px scale) ------------------------------------------------- */
+  /* --- Space (4 px scale) -------------------------------------------------
+     Unchanged. The guide is silent on space, and air is what keeps a flat,
+     square, zero-radius UI from reading as a wireframe.                      */
   --space-1:  0.25rem;   /*  4 */
   --space-2:  0.5rem;    /*  8 */
   --space-3:  0.75rem;   /* 12 */
@@ -68,21 +129,23 @@
   --space-10: 4rem;      /* 64 */
 
   /* --- Radius -------------------------------------------------------------
-     Two radii carry the product: 6px on anything you click, 10px on anything
-     that contains things. Nothing in the app is a pill except a status tag
-     and a count.                                                            */
-  --radius-sm:   4px;    /* tags, dots, the checkbox box                      */
-  --radius-md:   6px;    /* buttons, inputs, selects, nav rows, menu items    */
-  --radius-lg:   10px;   /* cards, grouped lists, dialogs, menus, popovers    */
-  --radius-full: 9999px; /* status tags and count pills only                  */
+     "Radius 0px for controls and cards, 0px for panels and full-bleed
+     blocks." Every radius in the product is zero. The names stay so no call
+     site breaks and so the contract holds; they all resolve to a hard edge.  */
+  --radius-sm:   0;
+  --radius-md:   0;
+  --radius-lg:   0;
+  --radius-full: 0;
 
   /* --- Elevation ----------------------------------------------------------
-     One shadow in the whole product, and only a floating layer may wear it.
-     Cards, rows, tables, inputs and buttons cast nothing: they are separated
-     by a hairline and by air.                                               */
+     Flat fills only, so there is no blurred shadow anywhere. A floating layer
+     is lifted by a second hairline drawn outside its border - crisp, no blur,
+     no grey haze over the content it covers. --shadow-sm is nothing at all.
+     --shadow-sticker (above) is the brand's one hard offset and is NOT part
+     of this ramp: it belongs to the mark, not to the elevation system.       */
   --shadow-sm: none;
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 0 0 1px rgba(78, 85, 90, 0.16);
+  --shadow-lg: 0 0 0 1px rgba(78, 85, 90, 0.16);
 
   /* --- Layout ------------------------------------------------------------- */
   --sidebar-w:  240px;
@@ -90,109 +153,161 @@
   --row-h:      40px;    /* comfortable table / list row                      */
   --control-h:    32px;  /* button, input, select                             */
   --control-h-sm: 28px;  /* row-action button. The hit-target floor.          */
-  --content-max: 68ch;   /* prose measure cap (notes, empty-state copy)       */
+  --content-max: 68ch;   /* prose measure cap (the guide's 60-75 characters)  */
   --focus-ring-w: 2px;
   --hairline: 1px;
 
   /* --- Motion -------------------------------------------------------------
-     150 to 200 ms, ease-out, and only ever in answer to something the owner
-     did. Nothing animates on scroll or on mount. All of it is switched off
-     under prefers-reduced-motion in globals.css.                            */
-  --dur-fast: 150ms;     /* hover, press, checkbox                            */
-  --dur-base: 180ms;     /* popover, dropdown, toast in                       */
-  --dur-slow: 200ms;     /* dialog, sheet                                     */
+     Unchanged: 150 to 200 ms, ease-out, only ever in answer to something the
+     owner did. All of it switched off under prefers-reduced-motion.          */
+  --dur-fast: 150ms;
+  --dur-base: 180ms;
+  --dur-slow: 200ms;
   --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-in-out: cubic-bezier(0.4, 0.14, 0.3, 1);
-  --press-scale: 0.98;   /* :active on a button. The only transform in the UI */
+  --press-scale: 0.98;
 
   /* ==========================================================================
      LIGHT THEME (default)
-     A warm near-white canvas with white content on it, the way a native
-     sidebar app is built. Nothing here is cream, and nothing is pure white
-     except the content surface itself.
+     The neutrals carry it: a #FAFAFF canvas, white content, the primary tint
+     for the sidebar and every quiet fill. The primary itself appears once.
      ======================================================================== */
 
   /* Surfaces */
-  --color-bg:             #FBFBFA;  /* window canvas, behind the content      */
+  --color-bg:             #FAFAFF;  /* neutral light: the window canvas       */
   --color-surface:        #FFFFFF;  /* content panels, rows, cards, fields    */
-  --color-surface-raised: #FFFFFF;  /* menus, dialogs, popovers. Separated by
-                                       --shadow-md and a hairline, not by a
+  --color-surface-raised: #FFFFFF;  /* menus, dialogs, popovers - separated by
+                                       a hairline and --shadow-md, not by a
                                        different fill; genuinely lighter in
                                        the dark theme.                        */
-  --color-sidebar:        #F7F6F3;  /* the sidebar's warm translucent grey    */
-  --color-hover:          #F2F2F0;  /* row and control hover                  */
-  --color-selected:       #E9EFF9;  /* selected sidebar row / selected list
-                                       row: system blue at 10% over the
-                                       sidebar. A tint, never a fill.         */
-  --color-overlay:        rgba(0, 0, 0, 0.22);  /* dialog scrim               */
+  --color-sidebar:        #F2F4FA;  /* the primary tint: primary at 8% over
+                                       the neutral light. A tint, per the
+                                       guide's 8% ceiling, never a fill.      */
+  --color-hover:          #EAEDF3;  /* row and control hover                  */
+  --color-selected:       #EEF1F8;  /* a selected list row, a highlighted menu
+                                       item, a palette row. A quiet tint with
+                                       full ink - NOT the primary block. The
+                                       one primary block per view is the
+                                       selected sidebar row, which paints
+                                       --color-accent directly.               */
+  --color-overlay:        rgba(20, 20, 20, 0.24);  /* dialog scrim            */
 
-  /* Hairlines. 1px, and almost not there. --color-border is every separator
-     and card edge; --color-border-strong is the edge of something you type
-     into, which has to be findable on white.                                */
-  --color-border:         rgba(0, 0, 0, 0.06);
-  --color-border-strong:  rgba(0, 0, 0, 0.13);
+  /* Hairlines, derived from the neutral dark at low alpha so every separator
+     is the same grey the ink is. --color-border is every separator and panel
+     edge; --color-border-strong is the edge of something you type into or
+     push, which has to be findable on white.
+       --color-border        = rgba(78, 85, 90, 0.14)  -> #E6E7E8 over white
+       --color-border-strong = rgba(78, 85, 90, 0.30)  -> #C8CACC over white  */
+  --color-border:         rgba(78, 85, 90, 0.14);
+  --color-border-strong:  rgba(78, 85, 90, 0.30);
 
-  /* Ink
-     #1D1D1F on #FFFFFF ............ 16.83:1  AAA
-     #1D1D1F on #FBFBFA ............ 16.25:1  AAA
-     #1D1D1F on #F7F6F3 ............ 15.57:1  AAA
-     #1D1D1F on #E9EFF9 ............ 14.57:1  AAA
-     #56565A on #FFFFFF ............. 7.31:1  AAA
-     #56565A on #FBFBFA ............. 7.06:1  AAA
-     #56565A on #F7F6F3 ............. 6.76:1  AAA
-     #56565A on #E9EFF9 ............. 6.32:1  AAA
-     #6E6E73 on #FFFFFF ............. 5.07:1  AA
-     #6E6E73 on #FBFBFA ............. 4.90:1  AA
-     #6E6E73 on #F7F6F3 ............. 4.69:1  AA
-     #6E6E73 on #F2F2F0 ............. 4.52:1  AA
-     #6E6E73 on #E9EFF9 ............. 4.39:1  FAILS -> tertiary ink is not
-        allowed on the selected tint; the selected row uses full ink.         */
-  --color-text:       #1D1D1F;
-  --color-text-muted: #56565A;
-  --color-text-faint: #6E6E73;
+  /* Ink.
+     Headings are the near-black the guide sets its own headings in (#141414);
+     body is the brand's neutral dark. Everything below it is that same grey
+     lightened until it stops clearing AA, and no further.
 
-  /* The platform greys, kept for the one job they can legally do: a glyph or
-     a rule that carries no information on its own.                          */
-  --color-text-disabled: #A1A1A6;
+     #141414 on #FFFFFF ........... 18.42:1  AAA   (heading on a panel)
+     #141414 on #FAFAFF ........... 17.71:1  AAA   (heading on the canvas)
+     #141414 on #F2F4FA ........... 16.75:1  AAA   (heading on a tint)
+     #141414 on #EEF1F8 ........... 16.29:1  AAA   (heading on a selected row)
+     #141414 on #97B1C3 ............ 8.24:1  AAA   (ink on the primary block)
+     #4E555A on #FFFFFF ............ 7.58:1  AAA   (body on a panel)
+     #4E555A on #FAFAFF ............ 7.28:1  AAA   (body on the canvas)
+     #4E555A on #F2F4FA ............ 6.89:1  AAA   (body on the sidebar)
+     #4E555A on #EAEDF3 ............ 6.46:1  AAA   (body on hover)
+     #4E555A on #EEF1F8 ............ 6.70:1  AAA   (body on a selected row)
+     #5C6368 on #FFFFFF ............ 6.11:1  AAA
+     #5C6368 on #FAFAFF ............ 5.87:1  AAA
+     #5C6368 on #F2F4FA ............ 5.55:1  AAA
+     #6A7278 on #FFFFFF ............ 4.89:1  AA
+     #6A7278 on #FAFAFF ............ 4.70:1  AA
+     #6A7278 on #F2F4FA ............ 4.45:1  FAILS -> tertiary ink is not
+        allowed on a tint; a label on the sidebar or on a selected row steps
+        up to --color-text-muted.                                             */
+  --color-heading:    #141414;
+  --color-text:       #4E555A;
+  --color-text-muted: #5C6368;
+  --color-text-faint: #6A7278;
 
-  /* Primary control. A solid near-black button, white label, no shadow. This
-     is the only filled control in the product, and "accent" is its token name
-     for contract reasons - there is no coloured accent any more.
-     #FFFFFF on #111111 ............ 18.88:1  AAA
-     #FFFFFF on #2A2A2A ............ 14.35:1  AAA  (hover)                    */
-  --color-accent:       #111111;
-  --color-accent-hover: #2A2A2A;
-  --color-accent-text:  #FFFFFF;
-  --color-accent-soft:  #F2F2F0;   /* the quiet neutral tint: pressed ghost,
-                                      search field, grouped-list header        */
-  /* Interactive blue TEXT: links, and the one word in a row that is a link.
-     Apple's #007AFF measures 4.02:1 on white and fails AA for 15px text, so
-     text blue is darkened and #007AFF survives as the focus ring only.
-     #0B62D6 on #FFFFFF .............. 5.63:1  AA
-     #0B62D6 on #FBFBFA .............. 5.43:1  AA
-     #0B62D6 on #F7F6F3 .............. 5.21:1  AA                             */
-  --color-accent-ink:   #0B62D6;
-  --color-link:         #0B62D6;
+  /* The one grey that carries no information: a disabled glyph, a scrollbar
+     thumb, a placeholder. Never text the owner has to read.
+     #8B9196 on #FFFFFF ............ 3.19:1  (non-text only)                  */
+  --color-text-disabled: #8B9196;
 
-  /* Focus. System blue, one ring, one job. Non-text, so 3:1 is the bar.
-     #007AFF on #FFFFFF .............. 4.02:1
-     #007AFF on #FBFBFA .............. 3.88:1                                 */
-  --color-focus: #007AFF;
-  /* System blue at 10%, for the selected sidebar row and the link hover
-     background. Named separately from --color-selected so a feature can tint
-     something without claiming it is selected.                              */
-  --color-tint: #E9EFF9;
+  /* THE SINGLE CONFIDENT BLOCK.
+     --color-accent is the brand primary, and it is the one saturated fill a
+     view is allowed: the selected sidebar row, and the primary button on the
+     screens that have a primary action. Its ink is the near-black the guide
+     puts on the primary on its own cover page - white measures 2.24:1 on
+     #97B1C3 and is not an option.
+     #141414 on #97B1C3 ............ 8.24:1  AAA
+     #141414 on #86A3B8 ............ 6.97:1  AAA   (hover)                    */
+  --color-accent:       #97B1C3;
+  --color-accent-hover: #86A3B8;
+  --color-accent-text:  #141414;
+  --color-accent-soft:  #F2F4FA;   /* the tint: search field, pressed ghost,
+                                      kbd, code block. Not an accent - the
+                                      absence of one.                         */
 
-  /* Semantics. Every one is a muted pastel fill with its own dark text
-     partner; the `-ink` value is the only one allowed to carry text and the
-     bare value is the fill behind white text on the rare filled control.
-     #9F2F2D on #FDEBEC .............. 6.26:1  AAA   (danger tag)
-     #9F2F2D on #FFFFFF .............. 7.20:1  AAA
-     #FFFFFF on #9F2F2D .............. 7.20:1  AAA   (destructive fill)
-     #346538 on #EDF3EC .............. 6.08:1  AAA
-     #346538 on #FFFFFF .............. 6.85:1  AAA
-     #956400 on #FBF3DB .............. 4.62:1  AA
-     #956400 on #FFFFFF .............. 5.12:1  AA                            */
+  /* Interactive text. The secondary at full strength measures 3.37:1 on white
+     and cannot carry 15px text, so links are the same hue darkened until they
+     clear AA on every surface a link can land on. The pure secondary survives
+     as the focus ring, where 3:1 is the bar.
+     #5F58A6 on #FFFFFF ............ 6.12:1  AAA
+     #5F58A6 on #FAFAFF ............ 5.88:1  AAA
+     #5F58A6 on #F2F4FA ............ 5.56:1  AAA
+     #5F58A6 on #EEF1F8 ............ 5.42:1  AAA                              */
+  --color-accent-ink:   #5F58A6;
+  --color-link:         #5F58A6;
+
+  /* Focus: the brand secondary, one ring, one job. Non-text, so 3:1 is the
+     bar, and it is measured against everything the ring can be drawn over.
+     #8B85C2 on #FFFFFF ............ 3.37:1  (ring, needs 3:1)
+     #8B85C2 on #FAFAFF ............ 3.24:1  (ring)
+     #8B85C2 on #F2F4FA ............ 3.06:1  (ring)                           */
+  --color-focus: #8B85C2;
+
+  /* The tint, named separately from --color-selected so a feature can wash a
+     surface without claiming it is selected.                                 */
+  --color-tint: #F2F4FA;
+
+  /* --- Brand tint pairs ----------------------------------------------------
+     The three brand colours mixed into white at 10% with the AA ink partner
+     they are always shown with. These are what a square badge wears.
+     #2C5670 on #F5F7F9 ............ 7.32:1  AAA   (primary tint)
+     #2C5670 on #FFFFFF ............ 7.86:1  AAA
+     #5F58A6 on #F3F3F9 ............ 5.53:1  AAA   (secondary tint)
+     #5F58A6 on #FFFFFF ............ 6.12:1  AAA
+     #5A5D18 on #FDFEF6 ............ 6.86:1  AAA   (accent tint)
+     #5A5D18 on #FFFFFF ............ 6.97:1  AAA
+     The accent is a detail and never a background, so its tint is the one
+     surface it is allowed to make, and it is nearly white by design.         */
+  --color-brand-primary-soft:   #F5F7F9;
+  --color-brand-primary-ink:    #2C5670;
+  --color-brand-secondary-soft: #F3F3F9;
+  --color-brand-secondary-ink:  #5F58A6;
+  --color-brand-accent-soft:    #FDFEF6;
+  --color-brand-accent-ink:     #5A5D18;
+
+  /* Semantics. Info is now the brand primary's tint pair - it is the same
+     family as the chrome, which is what "info" should look like. Danger,
+     success and warning keep their revision-2 muted pastels: the guide is
+     silent on state colour, and these are the only three hues in the product
+     that mean something on their own. Each `-ink` is the only value allowed
+     to carry text; the bare value is a fill for white text on the one filled
+     control that uses it.
+     #9F2F2D on #FDEBEC ............ 6.26:1  AAA   (danger tag)
+     #9F2F2D on #FFFFFF ............ 7.20:1  AAA
+     #9F2F2D on #FAFAFF ............ 6.92:1  AAA
+     #FFFFFF on #9F2F2D ............ 7.20:1  AAA   (destructive fill)
+     #346538 on #EDF3EC ............ 6.08:1  AAA
+     #346538 on #FFFFFF ............ 6.85:1  AAA
+     #346538 on #FAFAFF ............ 6.59:1  AAA
+     #956400 on #FBF3DB ............ 4.62:1  AA
+     #956400 on #FFFFFF ............ 5.12:1  AA
+     #956400 on #FAFAFF ............ 4.92:1  AA
+     #2C5670 on #F5F7F9 ............ 7.32:1  AAA
+     #FFFFFF on #2C5670 ............ 7.86:1  AAA   (info fill)                */
   --color-danger:       #9F2F2D;
   --color-danger-soft:  #FDEBEC;
   --color-danger-ink:   #9F2F2D;
@@ -202,23 +317,17 @@
   --color-warning:      #956400;
   --color-warning-soft: #FBF3DB;
   --color-warning-ink:  #956400;
-  --color-info:         #1F6C9F;
-  --color-info-soft:    #E1F3FE;
-  --color-info-ink:     #1F6C9F;
+  --color-info:         #2C5670;
+  --color-info-soft:    #F5F7F9;
+  --color-info-ink:     #2C5670;
 
   /* --- Pipeline stage ramp -------------------------------------------------
-     Eight muted pastels in one washed-out family, each with the dark text
-     partner it is always paired with. `--stage-N` is the readable ink: the
-     8px dot, the stage name, the board column rule. `--stage-N-soft` is the
-     pastel fill behind it.
-
-     Pale blue, green, yellow and red come from the minimalist-ui palette
-     verbatim; lavender, teal, clay and slate are derived in the same family
-     (same chroma band, same lightness band, hues spaced to stay separable).
-
-     Every ink clears 4.5:1 on its own tint AND on white, so a stage badge is
-     readable wherever it lands, and stage colour is never the only cue - the
-     stage name is spelled out beside it in every place it appears.
+     Unchanged from revision 2. The guide is silent on the stage ramp, and a
+     pipeline needs eight separable hues that a five-colour brand cannot
+     supply. They are held in the same washed-out family so they sit under the
+     brand rather than fighting it, every ink clears 4.5:1 on its own tint and
+     on white, and stage colour is never the only cue - the stage name is
+     spelled out beside it everywhere it appears.
        1 slate    #41546B on #ECEFF3  6.73  on white 7.76
        2 blue     #1F6C9F on #E1F3FE  4.98  on white 5.67
        3 lavender #4B4397 on #EFEDFB  7.13  on white 8.24
@@ -248,61 +357,98 @@
 
 /* ============================================================================
    DARK THEME
-   True Apple-dark greys: a #1E1E1E canvas with #2A2A2A content on it, white
-   hairlines at 8%. Never pure black, never a blue-black, never a tint.
+   The canvas is the guide's own near-black, #141414 - the colour it measured
+   the palette against. Surfaces step up from it in flat greys. The primary and
+   the accent do not change: 8.24:1 and 15.43:1 on this canvas are the numbers
+   printed on the palette page, so the brand is literally at its stated
+   contrast here.
    ========================================================================= */
 [data-theme="dark"] {
-  --color-bg:             #1E1E1E;
-  --color-surface:        #2A2A2A;
-  --color-surface-raised: #323232;   /* genuinely lighter here                */
-  --color-sidebar:        #232323;
-  --color-hover:          #323232;
-  --color-selected:       #24344A;   /* system blue at 10% over the sidebar   */
-  --color-overlay:        rgba(0, 0, 0, 0.55);
+  --color-bg:             #141414;   /* the guide's near-black                */
+  --color-surface:        #1E1E1E;   /* one step lighter                      */
+  --color-surface-raised: #282828;   /* genuinely lighter here                */
+  --color-sidebar:        #191919;
+  --color-hover:          #242424;
+  --color-selected:       #2A2D2E;   /* the primary at 10% over the surface   */
+  --color-overlay:        rgba(0, 0, 0, 0.60);
 
-  --color-border:         rgba(255, 255, 255, 0.08);
-  --color-border-strong:  rgba(255, 255, 255, 0.16);
+  /* Hairlines from the neutral light at low alpha, the mirror of the light
+     theme's neutral-dark hairlines.
+       --color-border        = rgba(250, 250, 255, 0.12)
+       --color-border-strong = rgba(250, 250, 255, 0.24)                      */
+  --color-border:         rgba(250, 250, 255, 0.12);
+  --color-border-strong:  rgba(250, 250, 255, 0.24);
 
-  /* #F5F5F7 on #1E1E1E ............ 15.31:1  AAA
-     #F5F5F7 on #2A2A2A ............ 13.18:1  AAA
-     #F5F5F7 on #323232 ............ 11.78:1  AAA
-     #F5F5F7 on #24344A ............ 11.58:1  AAA
-     #B0B0B5 on #1E1E1E ............. 7.72:1  AAA
-     #B0B0B5 on #2A2A2A ............. 6.65:1  AAA
-     #B0B0B5 on #323232 ............. 5.94:1  AAA
-     #9A9AA0 on #1E1E1E ............. 5.96:1  AAA
-     #9A9AA0 on #2A2A2A ............. 5.13:1  AA
-     #9A9AA0 on #323232 ............. 4.58:1  AA   <- worst text pair, dark    */
-  --color-text:       #F5F5F7;
-  --color-text-muted: #B0B0B5;
-  --color-text-faint: #9A9AA0;
-  --color-text-disabled: #6E6E73;
+  /* Ink is the brand's neutral light, and the heading is the same value: on a
+     near-black canvas the heading/body split is carried by the slab face and
+     the size, not by a second grey.
+     #FAFAFF on #141414 ........... 17.71:1  AAA   (the guide's own figure)
+     #FAFAFF on #1E1E1E ........... 16.02:1  AAA
+     #FAFAFF on #282828 ........... 14.17:1  AAA
+     #FAFAFF on #191919 ........... 16.90:1  AAA
+     #FAFAFF on #242424 ........... 14.92:1  AAA
+     #FAFAFF on #2A2D2E ........... 13.34:1  AAA
+     #B4B5BE on #141414 ............ 9.03:1  AAA
+     #B4B5BE on #1E1E1E ............ 8.17:1  AAA
+     #B4B5BE on #282828 ............ 7.23:1  AAA
+     #A6A7B1 on #141414 ............ 7.71:1  AAA
+     #A6A7B1 on #1E1E1E ............ 6.97:1  AAA
+     #A6A7B1 on #282828 ............ 6.17:1  AAA
+     #A6A7B1 on #2A2D2E ............ 5.80:1  AAA   <- worst text pair, dark   */
+  --color-heading:    #FAFAFF;
+  --color-text:       #FAFAFF;
+  --color-text-muted: #B4B5BE;
+  --color-text-faint: #A6A7B1;
+  --color-text-disabled: #6E7278;
 
-  /* The primary control inverts: a near-white fill with dark ink is what a
-     native dark app uses for its default button. A #111111 button would be
-     invisible on a #1E1E1E canvas.
-     #1D1D1F on #F5F5F7 ............ 15.31:1  AAA
-     #1D1D1F on #E4E4E7 ............ 13.17:1  AAA  (hover)                    */
-  --color-accent:       #F5F5F7;
-  --color-accent-hover: #E4E4E7;
-  --color-accent-text:  #1D1D1F;
-  --color-accent-soft:  #323232;
-  /* #64ABFF on #1E1E1E ............. 6.99:1  AAA
-     #64ABFF on #2A2A2A ............. 6.02:1  AAA                             */
-  --color-accent-ink:   #64ABFF;
-  --color-link:         #64ABFF;
+  /* The primary block does NOT invert. #97B1C3 with #141414 ink is 8.24:1 on
+     both themes, which means the one confident block is literally the same
+     block in light and dark - the strongest thing the brand can do.
+     #141414 on #97B1C3 ............ 8.24:1  AAA
+     #141414 on #A8BECD ............ 9.75:1  AAA   (hover)                    */
+  --color-accent:       #97B1C3;
+  --color-accent-hover: #A8BECD;
+  --color-accent-text:  #141414;
+  --color-accent-soft:  #282A2B;   /* the primary at 8% over the surface      */
 
-  /* #0A84FF on #1E1E1E ............. 4.57:1  (ring, needs 3:1)               */
-  --color-focus: #0A84FF;
-  --color-tint:  #24344A;
+  /* Link text lightens: the pure secondary measures 4.38:1 on the raised
+     surface and would fail inside a dialog.
+     #A39CD2 on #141414 ............ 7.23:1  AAA
+     #A39CD2 on #1E1E1E ............ 6.54:1  AAA
+     #A39CD2 on #282828 ............ 5.79:1  AAA                              */
+  --color-accent-ink:   #A39CD2;
+  --color-link:         #A39CD2;
 
-  /* Dark pastels: the same eight hues held at ~12% lightness with their light
-     ink partners. Every ink clears 6:1 on its own tint and on both dark
-     surfaces.
-     #FF9FA4 on #3A2427  7.35   on #2A2A2A  7.35
-     #9AD2A0 on #22301F  8.01   on #2A2A2A  8.27
-     #E8C77A on #332B1B  8.58   on #2A2A2A  8.80
-     #8FC6F2 on #1F2E3D  7.60   on #2A2A2A  7.88                              */
+  /* The ring stays the pure brand secondary; it clears 3:1 everywhere.
+     #8B85C2 on #141414 ............ 5.47:1  (the guide's own figure)
+     #8B85C2 on #1E1E1E ............ 4.95:1
+     #8B85C2 on #282828 ............ 4.38:1                                   */
+  --color-focus: #8B85C2;
+  --color-tint:  #282A2B;
+
+  /* Brand tint pairs, dark: each brand colour at 12% over the surface with
+     its own light ink. The accent is unchanged from the guide, where it
+     measures 15.43:1 on the near-black.
+     #97B1C3 on #2D3032 ............ 5.94:1  AAA
+     #97B1C3 on #1E1E1E ............ 7.46:1  AAA
+     #A39CD2 on #2B2A32 ............ 5.57:1  AAA
+     #A39CD2 on #1E1E1E ............ 6.54:1  AAA
+     #EDF0A3 on #37372E ........... 10.06:1  AAA
+     #EDF0A3 on #141414 ........... 15.43:1  AAA  (the guide's own figure)    */
+  --color-brand-primary-soft:   #2D3032;
+  --color-brand-primary-ink:    #97B1C3;
+  --color-brand-secondary-soft: #2B2A32;
+  --color-brand-secondary-ink:  #A39CD2;
+  --color-brand-accent-soft:    #37372E;
+  --color-brand-accent-ink:     #EDF0A3;
+
+  /* Dark semantics. Info follows the brand primary; the other three keep the
+     revision-2 dark pastels.
+     #FF9FA4 on #3A2427 ............ 7.35:1  AAA
+     #9AD2A0 on #22301F ............ 8.01:1  AAA
+     #E8C77A on #332B1B ............ 8.58:1  AAA
+     #97B1C3 on #2D3032 ............ 5.94:1  AAA
+     #141414 on #97B1C3 ............ 8.24:1  AAA   (info fill, dark)          */
   --color-danger:       #FF9FA4;
   --color-danger-soft:  #3A2427;
   --color-danger-ink:   #FF9FA4;
@@ -312,21 +458,21 @@
   --color-warning:      #E8C77A;
   --color-warning-soft: #332B1B;
   --color-warning-ink:  #E8C77A;
-  --color-info:         #8FC6F2;
-  --color-info-soft:    #1F2E3D;
-  --color-info-ink:     #8FC6F2;
+  --color-info:         #97B1C3;
+  --color-info-soft:    #2D3032;
+  --color-info-ink:     #97B1C3;
 
   /* The stage ramp keeps its identity across themes: same eight hues, lifted
      to the light side so they read on a dark surface, with the dark tint as
      the fill.
-       1 slate    #A9B6C6 on #262C33  6.84  on #2A2A2A  6.97
-       2 blue     #8FC6F2 on #1F2E3D  7.60  on #2A2A2A  7.88
-       3 lavender #B7B0EE on #2A2740  7.15  on #2A2A2A  7.15
-       4 teal     #8FCBC7 on #1E302F  7.59  on #2A2A2A  7.88
-       5 green    #9AD2A0 on #22301F  8.01  on #2A2A2A  8.27
-       6 red      #FF9FA4 on #3A2427  7.35  on #2A2A2A  7.35
-       7 clay     #D9A57E on #332821  6.57  on #2A2A2A  6.58
-       8 yellow   #E8C77A on #332B1B  8.58  on #2A2A2A  8.80                  */
+       1 slate    #A9B6C6 on #262C33  6.84  on #1E1E1E  6.97
+       2 blue     #8FC6F2 on #1F2E3D  7.60  on #1E1E1E  7.88
+       3 lavender #B7B0EE on #2A2740  7.15  on #1E1E1E  7.15
+       4 teal     #8FCBC7 on #1E302F  7.59  on #1E1E1E  7.88
+       5 green    #9AD2A0 on #22301F  8.01  on #1E1E1E  8.27
+       6 red      #FF9FA4 on #3A2427  7.35  on #1E1E1E  7.35
+       7 clay     #D9A57E on #332821  6.57  on #1E1E1E  6.58
+       8 yellow   #E8C77A on #332B1B  8.58  on #1E1E1E  8.80                  */
   --stage-1: #A9B6C6;
   --stage-2: #8FC6F2;
   --stage-3: #B7B0EE;
@@ -345,21 +491,26 @@
   --stage-7-soft: #332821;
   --stage-8-soft: #332B1B;
 
-  /* In the dark a shadow does nothing; the hairline and the lighter surface
-     do the lifting. The floating shadow stays, deeper, to keep a menu off the
-     canvas it overlaps.                                                     */
+  /* The floating hairline inverts with the rest of the theme. Still no blur.
+     --shadow-sticker does not change: the accent is the accent in both. */
   --shadow-sm: none;
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.40);
-  --shadow-lg: 0 2px 8px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 0 0 1px rgba(250, 250, 255, 0.16);
+  --shadow-lg: 0 0 0 1px rgba(250, 250, 255, 0.16);
 }
 
 /* ============================================================================
    COMPACT DENSITY
-   The only other mode. Roughly 25% more rows on screen, taken out of row
-   height and padding. Body drops 15px -> 13px, which is the macOS list size;
-   nothing drops below 11px.
+   Unchanged in intent: roughly 25% more rows on screen, taken out of row
+   height and padding. Body drops 15px -> 13px and nothing drops below 10px.
+   The guide's five steps come down with the rest, keeping their ratios.
    ========================================================================= */
 [data-density="compact"] {
+  --text-display: 2.5rem;    /* 40px */
+  --text-heading: 1.625rem;  /* 26px */
+  --text-subhead: 1.125rem;  /* 18px */
+  --text-body:    0.8125rem; /* 13px */
+  --text-caption: 0.625rem;  /* 10px */
+
   --text-label:  0.625rem;   /* 10px */
   --text-xs:     0.6875rem;  /* 11px */
   --text-sm:     0.75rem;    /* 12px */
@@ -367,7 +518,7 @@
   --text-lg:     0.9375rem;  /* 15px */
   --text-xl:     1.125rem;   /* 18px */
   --text-2xl:    1.375rem;   /* 22px */
-  --text-3xl:    1.5rem;     /* 24px */
+  --text-3xl:    1.625rem;   /* 26px */
 
   --space-1:  0.1875rem;   /*  3 */
   --space-2:  0.375rem;    /*  6 */
@@ -385,4 +536,8 @@
   --control-h:    28px;
   --control-h-sm: 24px;
   --leading-normal: 1.45;
+  --leading-body:   1.55;
+
+  /* The sticker offset comes down with the type it sits behind. */
+  --shadow-sticker: 3px 3px 0 var(--brand-accent);
 }

@@ -6,6 +6,79 @@
 
 @import "./tokens.css";
 
+/* --- Fonts ----------------------------------------------------------------
+   Zilla Slab for headings, Poppins for body: the brand guide's two faces,
+   self-hosted from public/fonts as woff2, latin subset. The app runs offline
+   and ships as a Tauri bundle, so there is no CDN, no Google Fonts link and
+   no network request at first paint - the files sit next to index.html and
+   are served from /fonts/.
+
+   Both families are SIL Open Font License 1.1; the licence texts live beside
+   the files in public/fonts/.
+
+   font-display: swap, so a cold start paints in the fallback rather than
+   holding the first frame blank. The fallbacks in --font-heading are serifs
+   for exactly that moment: a slab swapping out of a sans changes the page's
+   voice, a slab swapping out of Georgia only changes its shape.
+
+   index.html preloads the two faces the first screen actually uses - Zilla
+   Slab 700 and Poppins 400 - and the other three are fetched on demand.     */
+
+@font-face {
+  font-family: "Zilla Slab";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/zilla-slab-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Zilla Slab";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/zilla-slab-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/poppins-400.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/poppins-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/poppins-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* --- Reset ----------------------------------------------------------------
    Small and deliberate. Removes the browser defaults that fight a desktop app
    and nothing else.                                                          */
@@ -75,26 +148,36 @@ svg {
 
 /* --- Base typography ------------------------------------------------------ */
 
+/* Headings are the slab, in the near-black, at the weights the brand guide
+   ships (600 and 700 are the only Zilla Slab faces bundled, so nothing here
+   can ask for a weight that has to be synthesised).                          */
 h1, h2, h3, h4, h5, h6 {
-  font-weight: 600;
-  line-height: var(--leading-tight);
+  font-family: var(--font-heading);
+  font-weight: 700;
+  line-height: var(--leading-heading);
   letter-spacing: var(--tracking-title);
+  color: var(--color-heading);
   text-wrap: balance;
 }
 
-h1 { font-size: var(--text-xl); }
-h2 { font-size: var(--text-lg); }
-h3 { font-size: var(--text-base); }
-h4, h5, h6 { font-size: var(--text-base); }
+h1 { font-size: var(--text-heading); }                              /* 32 */
+h2 { font-size: var(--text-subhead); line-height: var(--leading-subhead); }  /* 20 */
+h3 { font-size: var(--text-lg); font-weight: 600; line-height: var(--leading-tight); }
+h4, h5, h6 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+}
 
-/* The only all-caps type in the product: the grouped-list section header, the
-   way a native settings pane labels a group. 11px, tracked, tertiary ink,
-   never longer than three words. */
+/* The only all-caps type in the product: the grouped-list section header and
+   the table column header. The guide's caption step, in Poppins, tracked out.
+   Never longer than three words. */
 .section-label,
 [data-section-label] {
-  font-size: var(--text-label);
-  font-weight: 590;
-  line-height: var(--leading-tight);
+  font-family: var(--font-body);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  line-height: var(--leading-caption);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--color-text-faint);
@@ -104,8 +187,12 @@ p, li {
   text-wrap: pretty;
 }
 
+/* Prose takes the guide's body setting: 15/1.65, capped at the measure it
+   names (roughly 60 to 75 characters). The 1.5 UI leading stays on rows and
+   controls, where 1.65 would push a label off the centre of a 32px control. */
 p {
   max-width: var(--content-max);
+  line-height: var(--leading-body);
 }
 
 small {
