@@ -300,10 +300,13 @@ function whereFor(filter: ContactFilter): { sql: string; params: unknown[] } {
     clauses.push("(trim(c.first_name) <> '' OR trim(c.last_name) <> '')");
   }
   if (filter.search && filter.search.trim().length > 0) {
+    // Escaped and paired with ESCAPE '\', or a literal % or _ the owner
+    // typed acts as a wildcard instead of matching itself (LR-SEC packet
+    // item 5; see companies.ts's whereFor for the fuller note).
     clauses.push(
-      "(c.first_name LIKE ? OR c.last_name LIKE ? OR co.name LIKE ?)",
+      "(c.first_name LIKE ? ESCAPE '\\' OR c.last_name LIKE ? ESCAPE '\\' OR co.name LIKE ? ESCAPE '\\')",
     );
-    const like = `%${filter.search.trim()}%`;
+    const like = contains(filter.search.trim());
     params.push(like, like, like);
   }
 

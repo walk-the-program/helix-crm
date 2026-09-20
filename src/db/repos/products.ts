@@ -164,8 +164,11 @@ function whereFor(filter: ProductFilter): { sql: string; params: unknown[] } {
     params.push(filter.kind);
   }
   if (filter.search && filter.search.trim().length > 0) {
-    clauses.push("p.name LIKE ?");
-    params.push(`%${filter.search.trim()}%`);
+    // See companies.ts's whereFor: LIKE needs an explicit ESCAPE and an
+    // escaped pattern, or a literal % or _ in the search text acts as a
+    // wildcard instead of matching itself (LR-SEC packet item 5).
+    clauses.push("p.name LIKE ? ESCAPE '\\'");
+    params.push(contains(filter.search.trim()));
   }
 
   return {

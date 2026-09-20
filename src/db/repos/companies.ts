@@ -142,8 +142,12 @@ function whereFor(filter: CompanyFilter): { sql: string; params: unknown[] } {
     params.push(filter.sourceId);
   }
   if (filter.search && filter.search.trim().length > 0) {
-    clauses.push("co.name LIKE ?");
-    params.push(`%${filter.search.trim()}%`);
+    // LIKE has no default escape character in SQLite: an unescaped % or _ in
+    // the owner's own search text would otherwise act as a wildcard instead
+    // of matching itself (docs/CONTRACTS.md, LR-SEC packet item 5). `contains`
+    // is the same escaping the pickers in _pickers.ts already use.
+    clauses.push("co.name LIKE ? ESCAPE '\\'");
+    params.push(contains(filter.search.trim()));
   }
   return {
     sql: clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "",

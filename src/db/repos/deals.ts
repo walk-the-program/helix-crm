@@ -23,6 +23,7 @@ import { newId } from "@/lib/ids";
 import { systemStatement } from "@/db/repos/activities";
 import * as settingsRepo from "@/db/repos/settings";
 import { vocabularyFor } from "@/lib/vocabulary";
+import { contains } from "@/db/repos/_pickers";
 import {
   countRows,
   insertStatement,
@@ -239,8 +240,13 @@ function whereFor(filter: DealFilter): { sql: string; params: unknown[] } {
     params.push(filter.expectedTo);
   }
   if (filter.search && filter.search.trim().length > 0) {
-    clauses.push("(d.title LIKE ? OR co.name LIKE ? OR c.last_name LIKE ?)");
-    const like = `%${filter.search.trim()}%`;
+    // Escaped and paired with ESCAPE '\', or a literal % or _ the owner
+    // typed acts as a wildcard instead of matching itself (LR-SEC packet
+    // item 5; see companies.ts's whereFor for the fuller note).
+    clauses.push(
+      "(d.title LIKE ? ESCAPE '\\' OR co.name LIKE ? ESCAPE '\\' OR c.last_name LIKE ? ESCAPE '\\')",
+    );
+    const like = contains(filter.search.trim());
     params.push(like, like, like);
   }
 

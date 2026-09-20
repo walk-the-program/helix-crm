@@ -34,6 +34,7 @@ import * as deals from "@/db/repos/deals";
 import * as settings from "@/db/repos/settings";
 import { vocabularyFor, DEFAULT_VOCABULARY, type Vocabulary } from "@/lib/vocabulary";
 import * as activities from "@/db/repos/activities";
+import { contains } from "@/db/repos/_pickers";
 import {
   countRows,
   insertStatement,
@@ -405,10 +406,13 @@ function whereFor(filter: DocumentFilter): { sql: string; params: unknown[] } {
   }
   const search = (filter.search ?? "").trim();
   if (search.length > 0) {
+    // Escaped and paired with ESCAPE '\', or a literal % or _ the owner
+    // typed acts as a wildcard instead of matching itself (LR-SEC packet
+    // item 5; see companies.ts's whereFor for the fuller note).
     clauses.push(
-      `(d.number LIKE ? OR co.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR dl.title LIKE ?)`,
+      `(d.number LIKE ? ESCAPE '\\' OR co.name LIKE ? ESCAPE '\\' OR c.first_name LIKE ? ESCAPE '\\' OR c.last_name LIKE ? ESCAPE '\\' OR dl.title LIKE ? ESCAPE '\\')`,
     );
-    const like = `%${search}%`;
+    const like = contains(search);
     params.push(like, like, like, like, like);
   }
 
