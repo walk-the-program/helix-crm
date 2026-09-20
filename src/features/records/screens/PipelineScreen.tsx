@@ -49,6 +49,7 @@ import {
   ViewsToolbar,
   type ViewQuery,
 } from "@/features/today/views";
+import { SampleDataNote } from "@/features/onboarding";
 
 const ALL = "__all__";
 
@@ -257,6 +258,13 @@ export function PipelineScreen() {
             board={board ?? []}
             nextStepByDealId={nextStepByDealId}
           />
+          {/* A board card names the customer, the value and the next step and
+              nothing else, so a made-up job and a real one look identical on
+              it. The Sample tag every example row carries is on the record,
+              not on the card. Rather than put a fifth thing on every card,
+              the screen says it once, here, and only while the example set is
+              actually in the workspace (LR-CS, F-CS-6). */}
+          <SampleDataNote className="mt-[var(--space-4)] flex-none" />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">

@@ -107,3 +107,39 @@ export function SampleDataHost() {
     />
   );
 }
+
+/**
+ * The line that says, wherever the owner is looking, that some of what is on
+ * the screen is the example set rather than his own work.
+ *
+ * It began as a private component on Today. It is here now because Today was
+ * not the screen where the confusion happened: a sample job on the jobs board
+ * is a card with a real customer's name, a real price and a real next step,
+ * and nothing on that card says it was invented. Every sample row carries the
+ * Sample tag, which the contacts list shows and a board card deliberately does
+ * not (a card is four things and no more, DESIGN.md section 3) - so the honest
+ * fix is to mark the screen rather than to put a fifth thing on every card.
+ *
+ * It draws nothing at all when the example set is not in this workspace, which
+ * is what makes it safe to mount anywhere.
+ */
+export function SampleDataNote({ className }: { className?: string }) {
+  const hasSampleData = useHasSampleData();
+  if (!hasSampleData) return null;
+  return (
+    <div
+      data-testid="sample-data-note"
+      className={[
+        "flex flex-wrap items-center gap-[var(--space-3)]",
+        "border-t border-[var(--color-border)] pt-[var(--space-4)]",
+        className ?? "mt-[var(--space-6)]",
+      ].join(" ")}
+    >
+      <p className="flex-1 text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        Some of what you can see is the example Helix put in so the screens had
+        something on them. Take it out whenever you like; your own records stay.
+      </p>
+      <RemoveSampleDataButton size="sm" />
+    </div>
+  );
+}

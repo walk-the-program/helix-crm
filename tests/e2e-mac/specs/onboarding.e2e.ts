@@ -174,6 +174,11 @@ test.describe("first run", () => {
       await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
     }
 
+    // F-CS-6: a board card names the customer, the value and the next step
+    // and nothing else, so a made-up job looks exactly like a real one. The
+    // board itself has to say which is which while the example set is in.
+    await expect(page.getByTestId("sample-data-note")).toBeVisible();
+
     /* -- and the example comes back out ---------------------------------- */
 
     // Through the command palette. Settings' Workspace section and Today both
@@ -187,6 +192,10 @@ test.describe("first run", () => {
       page.getByRole("heading", { name: "Remove the sample data?" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Remove it" }).click();
+
+    // ...and the board stops saying it, because there is nothing left to warn
+    // about. A marker that outlives the thing it marks is its own bug.
+    await expect(page.getByTestId("sample-data-note")).toHaveCount(0);
 
     await sidebar.getByRole("link", { name: "Today" }).click();
     await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();

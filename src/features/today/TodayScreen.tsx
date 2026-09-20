@@ -80,7 +80,7 @@ import {
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useConnectCard, useTodayScreenState } from "@/features/today/lib/useToday";
 import { useVocabulary } from "@/app/vocabulary";
-import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
+import { SampleDataNote } from "@/features/onboarding";
 import { UnpaidInvoicesSection } from "@/features/invoices";
 import { PollNotice } from "@/features/leads";
 
@@ -197,24 +197,6 @@ const secondaryLinkClasses = [
   "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
   "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
 ].join(" ");
-
-/**
- * The sample-data footer. Draws nothing at all unless the example set is in
- * this workspace, which is what makes it safe to sit under every Today.
- */
-function SampleDataNote() {
-  const hasSampleData = useHasSampleData();
-  if (!hasSampleData) return null;
-  return (
-    <div className="mt-[var(--space-6)] flex flex-wrap items-center gap-[var(--space-3)] border-t border-[var(--color-border)] pt-[var(--space-4)]">
-      <p className="flex-1 text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-        Some of what you can see is the example Helix put in so the screens had
-        something on them. Take it out whenever you like; your own records stay.
-      </p>
-      <RemoveSampleDataButton size="sm" />
-    </div>
-  );
-}
 
 /**
  * The first-run screen: the three actions that put something on Today.
