@@ -133,7 +133,10 @@ export function StageMoveDialog(props: {
             Cancel
           </Button>
           <Button variant="primary" loading={saving} onClick={() => void confirm()}>
-            {props.confirmLabel ?? "Confirm"}
+            {/* A button names what happens. "Confirm" describes the dialog, not
+                the move; "Move to Paid" is the sentence the owner is agreeing
+                to (phase two: every button names what happens). */}
+            {props.confirmLabel ?? `Move to ${props.stageName}`}
           </Button>
         </DialogFooter>
       </DialogContent>

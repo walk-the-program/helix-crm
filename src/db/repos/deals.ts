@@ -21,6 +21,8 @@ import { NotFoundError, ValidationError } from "@/db/errors";
 import { nowIso, formatDateDisplay } from "@/lib/dates";
 import { newId } from "@/lib/ids";
 import { systemStatement } from "@/db/repos/activities";
+import * as settingsRepo from "@/db/repos/settings";
+import { vocabularyFor } from "@/lib/vocabulary";
 import {
   countRows,
   insertStatement,
@@ -564,7 +566,12 @@ export async function moveToStage(
         ? options.outcomeReason
         : before.outcomeReason;
     if (target.isLost && trimmed(effectiveReason).length === 0) {
-      throw new ValidationError("Losing a deal needs a reason.", [
+      // The owner's own word for these. A workspace that calls them jobs
+      // should not be told a "deal" needs anything (phase two, copy: the
+      // vocabulary reaches every string the owner reads, including the ones a
+      // repository writes).
+      const word = vocabularyFor(await settingsRepo.get("vocabulary")).lower;
+      throw new ValidationError(`Losing a ${word} needs a reason.`, [
         { path: "outcomeReason", message: "Say why it was lost." },
       ]);
     }
