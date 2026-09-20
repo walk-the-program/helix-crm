@@ -203,6 +203,10 @@ two. Packet CPO-LC-IMPL rev 2 sent 00:3x.
 | F-P2-LB-3 | medium | defect | "Send" reappeared on a paid invoice after F-LB-4 made paid → sent legal (`canSend` asked `canTransition`); pressing it would re-send the PDF and overwrite a live `paid_on`. | Send is a draft action | lead-money | implemented |
 | F-P2-LB-4 | low | usability | A draft offered both Void and Delete (two red buttons, different consequences); paid invoices read "Due in 14 days"; "Paid · bank" echoed a stored value; the TAX column said "Yes" on every line while the rate was 0. | draft offers Delete only; due line hidden once paid; method labels; tax column follows `hasMixedTaxability` | lead-money (+W2) | implemented |
 
+| F-P2-LA-1 | medium | kit | Contacts/Companies (hand-rolled VirtualList) paint an empty white slab below the last row; dropping `flex-1` at the call site blanks the list (virtualiser measures 0). Kit rule: `VirtualList fit` (`5c1fc4a`); the partner panel class change blanked the list under a percentage-height ancestor (repro in listNav.e2e.ts). | ruling: `fit` owns the whole arrangement, one prop, no class contract; lead-platform closes it and may edit the two panel lines | lead-platform | in progress |
+| F-P2-LC-1 | low | copy | "Connect a website" is 180 characters of developer language on a landscaper's card, and stretches its onboarding grid neighbour (`dense-onboarding-3.png`); pinned to one string in three files by a test. | replaced everywhere by "Leads from your website land here on their own. ClearPath sites work straight away; Help covers any other site." in one commit (two Today lines transferred for that commit) | lead-platform | in progress |
+| F-P2-LC-2 | low | perf | One 3.04 MB main chunk. jszip and papaparse split at their points of use (`1db875c`, `f25e586`); one Suspense and `lazyScreen()` in the shell (`c167dc1`): 2,923 kB / 849 kB gzip so far. recharts and pdf-lib (the remaining weight) are lead-money's routes. | measured after each change; nothing on the boot path lazy | lead-platform → lead-money | in progress |
+
 Further phase-two findings are appended from each lead's return.
 
 ## 5. Decisions
