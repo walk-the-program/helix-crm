@@ -107,6 +107,13 @@ export type ContactFilter = {
   sourceId?: string;
   includeDeleted?: boolean;
   onlyDeleted?: boolean;
+  /**
+   * True excludes a contact whose first and last name are both blank — the
+   * company-only rows a website or CSV import tends to create. Done in SQL,
+   * not filtered in JS after the fact, so `list`'s count and the virtualised
+   * list it feeds stay in agreement.
+   */
+  hasName?: boolean;
 };
 
 const CONTACT_COLS: readonly Col<Contact>[] = [
@@ -212,6 +219,9 @@ function whereFor(filter: ContactFilter): { sql: string; params: unknown[] } {
   if (filter.sourceId) {
     clauses.push("c.source_id = ?");
     params.push(filter.sourceId);
+  }
+  if (filter.hasName) {
+    clauses.push("(trim(c.first_name) <> '' OR trim(c.last_name) <> '')");
   }
   if (filter.search && filter.search.trim().length > 0) {
     clauses.push(

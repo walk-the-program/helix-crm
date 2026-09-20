@@ -75,6 +75,11 @@ const SETTINGS = {
   "quotes.prefix": { schema: z.string(), default: "QUO" },
   "invoices.taxRateBp": { schema: z.number().int().min(0).max(100_000), default: 0 },
   "invoices.dueDays": { schema: z.number().int().min(0).max(365), default: 14 },
+  // The Contacts list's own display preferences. Not saved-view state — a
+  // saved view is a named, explicitly-saved filter set, and these two persist
+  // automatically as soon as the owner touches them, workspace-wide.
+  "contacts.showAs": { schema: z.enum(["name", "company"]), default: "name" },
+  "contacts.hideUnnamed": { schema: z.boolean(), default: false },
 };
 
 export type SettingKey = keyof typeof SETTINGS;

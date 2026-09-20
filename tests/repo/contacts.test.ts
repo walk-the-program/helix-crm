@@ -87,6 +87,50 @@ describe("contacts: update, softDelete, restore, purge", () => {
   });
 });
 
+describe("contacts: hasName filter", () => {
+  it("excludes a contact whose first and last name are both blank", async () => {
+    h = await createHarness();
+    const named = await contacts.create({ firstName: "Ada", lastName: "Lovelace" });
+    const companyOnly = await contacts.create({ firstName: "", lastName: "" });
+
+    const all = await contacts.list();
+    expect(all.rows.map((c) => c.id).sort()).toEqual([companyOnly.id, named.id].sort());
+
+    const named_ = await contacts.list({ hasName: true });
+    expect(named_.rows.map((c) => c.id)).toEqual([named.id]);
+    expect(named_.total).toBe(1);
+  });
+
+  it("treats a name of only whitespace as no name", async () => {
+    h = await createHarness();
+    const named = await contacts.create({ firstName: "Grace", lastName: "Hopper" });
+    // create() trims on save, so write the blank-but-whitespace row directly.
+    await raw.execute(
+      `UPDATE contacts SET first_name = '   ', last_name = '  ' WHERE id <> ?`,
+      [named.id],
+    );
+    const whitespaceOnly = await contacts.create({ firstName: "", lastName: "" });
+    await raw.execute(`UPDATE contacts SET first_name = '  ', last_name = ' ' WHERE id = ?`, [
+      whitespaceOnly.id,
+    ]);
+
+    const result = await contacts.list({ hasName: true });
+    expect(result.rows.map((c) => c.id)).toEqual([named.id]);
+  });
+
+  it("keeps the count and the rows in agreement (not filtered in JS)", async () => {
+    h = await createHarness();
+    await contacts.create({ firstName: "", lastName: "" });
+    await contacts.create({ firstName: "", lastName: "" });
+    const named = await contacts.create({ firstName: "One", lastName: "Named" });
+
+    const result = await contacts.list({ hasName: true }, { limit: 1 });
+    expect(result.total).toBe(1);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].id).toBe(named.id);
+  });
+});
+
 describe("contacts: findDuplicates", () => {
   it("matches on email_lower and allows the duplicate to be created", async () => {
     h = await createHarness();

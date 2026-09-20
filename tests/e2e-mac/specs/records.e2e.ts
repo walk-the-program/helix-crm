@@ -392,6 +392,68 @@ test.describe("records", () => {
     ]) as [string | null][];
     expect(rows[0][0]).toBeNull();
   });
+
+  // ContactsScreen.tsx's "Show as" and "Hide contacts without a name": a
+  // company-only row (what a website or CSV import creates when there is no
+  // person's name) can be hidden without touching the SQL count, and grouped
+  // under its company's header when the list is shown "By company".
+  test("hides unnamed contacts and groups the rest by company", async ({ page, helix }) => {
+    await page.goto("/");
+    await waitForShell(page);
+
+    // A company-only contact, the shape a website/CSV import creates — there
+    // is no UI path to this today, so it is written straight through the
+    // bridge, the same way tests/e2e-mac/specs/depth.e2e.ts seeds a company.
+    helix.bridge.execute(
+      `INSERT INTO companies (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      ["co-acme", "Acme Corp", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"],
+    );
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, first_name, last_name, company_id, created_at, updated_at)
+       VALUES (?, '', '', ?, ?, ?)`,
+      ["c-company-only", "co-acme", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"],
+    );
+    await quickAddContact(page, "Priya Shah");
+
+    await page.getByRole("navigation").getByRole("link", { name: "Contacts" }).click();
+    const contactsList = page.getByRole("list", { name: "Contacts" });
+    await expect(contactsList.getByText("Priya Shah")).toBeVisible();
+    await expect(page.getByText("2 of 2 people")).toBeVisible();
+
+    // Toggle the filter: the company-only row disappears and only the named
+    // contact is left.
+    await page.getByRole("switch", { name: "Hide contacts without a name" }).click();
+    await expect(page.getByText("1 of 1 person")).toBeVisible();
+    await expect(contactsList.getByText("Priya Shah")).toBeVisible();
+
+    // Switch to "By company": Priya has no company, so she groups under the
+    // "No company" header.
+    await page.getByRole("combobox", { name: "Show as" }).click();
+    await page.getByRole("option", { name: "By company" }).click();
+    await expect(contactsList.getByText("No company")).toBeVisible();
+    await expect(contactsList.getByText("Priya Shah")).toBeVisible();
+
+    // Both settings persist across a reload — they are workspace settings,
+    // not component state.
+    await page.reload();
+    await expect(
+      page.getByRole("switch", { name: "Hide contacts without a name" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("combobox", { name: "Show as" })).toHaveText("By company");
+    await expect(page.getByRole("list", { name: "Contacts" }).getByText("No company")).toBeVisible();
+
+    // Turning the filter back off brings the company-only contact back,
+    // grouped under Acme Corp.
+    await page.getByRole("switch", { name: "Hide contacts without a name" }).click();
+    await expect(page.getByRole("list", { name: "Contacts" }).getByText("Acme Corp")).toBeVisible();
+
+    const rows = helix.bridge.query(
+      "SELECT first_name, last_name, company_id FROM contacts ORDER BY created_at",
+      [],
+    ) as [string, string, string | null][];
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r[2] === "co-acme")).toEqual(["", "", "co-acme"]);
+  });
 });
 
 /**

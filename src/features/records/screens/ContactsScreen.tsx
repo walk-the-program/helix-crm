@@ -10,9 +10,17 @@
  * the sidebar's Views group, and it arrives here as `?view=<id>`, which
  * `useSavedViews` reads — hence the effect that applies the active view once
  * the row has loaded.
+ *
+ * "Show as" and "Hide contacts without a name" are display preferences, not
+ * saved-view state — a saved view is a named filter set the owner explicitly
+ * saves, and these two persist the moment they are touched, workspace-wide.
+ * They live in `settings.ts` as `contacts.showAs` / `contacts.hideUnnamed`.
+ * Hiding unnamed contacts is done in SQL (`ContactFilter.hasName`), not
+ * filtered out here in JS, so the header count and the virtualised list agree.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "@/ui/icons";
 import {
   Badge,
@@ -22,9 +30,12 @@ import {
   Input,
   PageHeader,
   Select,
+  Switch,
   VirtualList,
 } from "@/ui";
 import { contactName, type Contact } from "@/db/repos/contacts";
+import * as settingsRepo from "@/db/repos/settings";
+import { qk } from "@/app/queryClient";
 import {
   useContacts,
   useDebounced,
@@ -41,6 +52,18 @@ import {
   ViewsToolbar,
   type ViewQuery,
 } from "@/features/today/views";
+
+const SHOW_AS_OPTIONS = [
+  { value: "name", label: "By name" },
+  { value: "company", label: "By company" },
+];
+
+const NO_COMPANY_LABEL = "No company";
+
+/** A flattened row for the virtualised list: either a group header or a contact. */
+type ListRow =
+  | { kind: "header"; key: string; label: string }
+  | { kind: "contact"; key: string; contact: Contact };
 
 const SORTS = [
   { value: "name-asc", label: "Name A to Z" },
@@ -63,12 +86,55 @@ const FILTER_DEFAULTS = {
 
 export function ContactsScreen() {
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState(FILTER_DEFAULTS.search);
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [tagId, setTagId] = useState(FILTER_DEFAULTS.tagId);
   const [sourceId, setSourceId] = useState(FILTER_DEFAULTS.sourceId);
   const [showArchived, setShowArchived] = useState(FILTER_DEFAULTS.showArchived);
   const [creating, setCreating] = useState(false);
+
+  // "Show as" and "Hide contacts without a name": workspace settings, not
+  // component state — they read once from `settings.ts` and every change
+  // writes straight back, the same pattern VocabularyScreen uses.
+  const showAsQuery = useQuery({
+    queryKey: qk.setting("contacts.showAs"),
+    queryFn: () => settingsRepo.get("contacts.showAs"),
+  });
+  const hideUnnamedQuery = useQuery({
+    queryKey: qk.setting("contacts.hideUnnamed"),
+    queryFn: () => settingsRepo.get("contacts.hideUnnamed"),
+  });
+  const [showAs, setShowAsState] = useState(showAsQuery.data ?? "name");
+  const [hideUnnamed, setHideUnnamedState] = useState(hideUnnamedQuery.data ?? false);
+  useEffect(() => {
+    if (showAsQuery.data) setShowAsState(showAsQuery.data);
+  }, [showAsQuery.data]);
+  useEffect(() => {
+    if (hideUnnamedQuery.data !== undefined) setHideUnnamedState(hideUnnamedQuery.data);
+  }, [hideUnnamedQuery.data]);
+
+  const showAsMutation = useMutation({
+    mutationFn: (value: "name" | "company") => settingsRepo.set("contacts.showAs", value),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.setting("contacts.showAs") });
+    },
+  });
+  const hideUnnamedMutation = useMutation({
+    mutationFn: (value: boolean) => settingsRepo.set("contacts.hideUnnamed", value),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.setting("contacts.hideUnnamed") });
+    },
+  });
+
+  function setShowAs(value: "name" | "company") {
+    setShowAsState(value);
+    showAsMutation.mutate(value);
+  }
+  function setHideUnnamed(value: boolean) {
+    setHideUnnamedState(value);
+    hideUnnamedMutation.mutate(value);
+  }
 
   const currentView: ViewQuery = useMemo(
     () => queryFromState({ search, tagId, sourceId, showArchived }, FILTER_DEFAULTS, sort),
@@ -104,6 +170,7 @@ export function ContactsScreen() {
       search: debouncedSearch.trim() || undefined,
       sourceId: sourceId === ALL ? undefined : sourceId,
       onlyDeleted: showArchived ? true : undefined,
+      hasName: hideUnnamed ? true : undefined,
     },
     20000,
   );
@@ -117,6 +184,11 @@ export function ContactsScreen() {
     }
     return sortContacts(list, sort);
   }, [data, sort, tagId, tagIndex]);
+
+  const listRows = useMemo(
+    () => (showAs === "company" ? groupByCompany(rows) : rows.map(contactRow)),
+    [rows, showAs],
+  );
 
   const filtered = debouncedSearch.trim().length > 0 || tagId !== ALL || sourceId !== ALL;
   const total = data?.total ?? 0;
@@ -165,11 +237,18 @@ export function ContactsScreen() {
           />
         </div>
 
-        <div className="w-[190px]">
+        <div className="w-[170px]">
           <label htmlFor="contact-sort" className="sr-only">
             Sort
           </label>
-          <Select id="contact-sort" ariaLabel="Sort" value={sort} options={SORTS} onValueChange={setSort} />
+          <Select
+            id="contact-sort"
+            ariaLabel="Sort"
+            value={sort}
+            options={SORTS}
+            onValueChange={setSort}
+            disabled={showAs === "company"}
+          />
         </div>
 
         <div className="w-[170px]">
@@ -204,6 +283,28 @@ export function ContactsScreen() {
           />
         </div>
 
+        <div className="w-[140px]">
+          <label htmlFor="contact-show-as" className="sr-only">
+            Show as
+          </label>
+          <Select
+            id="contact-show-as"
+            ariaLabel="Show as"
+            value={showAs}
+            options={SHOW_AS_OPTIONS}
+            onValueChange={(value) => setShowAs(value as "name" | "company")}
+          />
+        </div>
+
+        <label className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          <Switch
+            checked={hideUnnamed}
+            onCheckedChange={setHideUnnamed}
+            ariaLabel="Hide contacts without a name"
+          />
+          Hide unnamed
+        </label>
+
         <label className="flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
           <Checkbox
             checked={showArchived}
@@ -215,7 +316,17 @@ export function ContactsScreen() {
       </div>
 
       {rows.length === 0 && !isLoading ? (
-        filtered ? (
+        hideUnnamed ? (
+          <EmptyState
+            title="Every contact here has no name"
+            description="Show them again?"
+            action={
+              <Button variant="secondary" onClick={() => setHideUnnamed(false)}>
+                Show them again
+              </Button>
+            }
+          />
+        ) : filtered ? (
           <EmptyState
             title={`Nothing matches "${search.trim() || "those filters"}"`}
             description="Clear the filters to see everyone, or add this person now."
@@ -264,21 +375,26 @@ export function ContactsScreen() {
               how a native list view labels a column (DESIGN.md §4). */}
           <div className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]" aria-hidden="true">
             <span className="min-w-0 flex-1">Name</span>
-            <span className="w-[200px] flex-none">Company</span>
+            {showAs === "name" ? <span className="w-[200px] flex-none">Company</span> : null}
             <span className="hidden w-[180px] flex-none text-right md:block">Tags</span>
           </div>
           <VirtualList
-            items={rows}
+            items={listRows}
             ariaLabel="Contacts"
             className="min-h-0 flex-1 max-h-[calc(100vh-280px)]"
-            getKey={(contact) => contact.id}
-            renderRow={(contact) => (
-              <ContactRow
-                contact={contact}
-                tagNames={(tagIndex?.get(contact.id) ?? []).map((tag) => tag.name)}
-                onOpen={() => navigate(`/contacts/${contact.id}`)}
-              />
-            )}
+            getKey={(row) => row.key}
+            renderRow={(row) =>
+              row.kind === "header" ? (
+                <GroupHeaderRow label={row.label} />
+              ) : (
+                <ContactRow
+                  contact={row.contact}
+                  showCompany={showAs === "name"}
+                  tagNames={(tagIndex?.get(row.contact.id) ?? []).map((tag) => tag.name)}
+                  onOpen={() => navigate(`/contacts/${row.contact.id}`)}
+                />
+              )
+            }
           />
         </div>
       )}
@@ -292,8 +408,13 @@ export function ContactsScreen() {
   );
 }
 
-function ContactRow(props: { contact: Contact; tagNames: string[]; onOpen: () => void }) {
-  const { contact, tagNames, onOpen } = props;
+function ContactRow(props: {
+  contact: Contact;
+  tagNames: string[];
+  showCompany: boolean;
+  onOpen: () => void;
+}) {
+  const { contact, tagNames, showCompany, onOpen } = props;
   const name = contactName(contact);
 
   return (
@@ -320,12 +441,14 @@ function ContactRow(props: { contact: Contact; tagNames: string[]; onOpen: () =>
       >
         {name}
       </div>
-      <div
-        className="w-[200px] shrink-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-        title={contact.companyName ?? ""}
-      >
-        {contact.companyName ?? "No company"}
-      </div>
+      {showCompany ? (
+        <div
+          className="w-[200px] shrink-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+          title={contact.companyName ?? ""}
+        >
+          {contact.companyName ?? NO_COMPANY_LABEL}
+        </div>
+      ) : null}
 
       <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] md:flex">
         {tagNames.slice(0, 2).map((tag) => (
@@ -353,4 +476,64 @@ function sortContacts(rows: Contact[], sort: string): Contact[] {
     return copy.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   return copy.sort((a, b) => contactName(a).localeCompare(contactName(b)));
+}
+
+function contactRow(contact: Contact): ListRow {
+  return { kind: "contact", key: contact.id, contact };
+}
+
+/**
+ * "By company": one header per company, sorted by company name then contact
+ * name, with contacts that have no company grouped last under "No company"
+ * regardless of where that label would otherwise sort alphabetically.
+ */
+function groupByCompany(contacts: Contact[]): ListRow[] {
+  const withCompany = contacts.filter((c) => c.companyId);
+  const withoutCompany = contacts.filter((c) => !c.companyId);
+
+  const sortedWithCompany = [...withCompany].sort((a, b) => {
+    const byCompany = (a.companyName ?? "").localeCompare(b.companyName ?? "");
+    return byCompany !== 0 ? byCompany : contactName(a).localeCompare(contactName(b));
+  });
+
+  const out: ListRow[] = [];
+  let currentCompanyId: string | null = null;
+  for (const contact of sortedWithCompany) {
+    if (contact.companyId !== currentCompanyId) {
+      currentCompanyId = contact.companyId;
+      out.push({
+        kind: "header",
+        key: `header:${contact.companyId}`,
+        label: contact.companyName ?? NO_COMPANY_LABEL,
+      });
+    }
+    out.push(contactRow(contact));
+  }
+
+  if (withoutCompany.length > 0) {
+    out.push({ kind: "header", key: "header:none", label: NO_COMPANY_LABEL });
+    const sortedWithoutCompany = [...withoutCompany].sort((a, b) =>
+      contactName(a).localeCompare(contactName(b)),
+    );
+    for (const contact of sortedWithoutCompany) {
+      out.push(contactRow(contact));
+    }
+  }
+
+  return out;
+}
+
+/**
+ * The group header row: the caption style, same as the column strip above it
+ * (DESIGN.md §4/§9 "the caption style for the label above a group").
+ */
+function GroupHeaderRow(props: { label: string }) {
+  return (
+    <div
+      className="section-label flex h-[var(--control-h-sm)] w-full flex-none items-center border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] px-[var(--space-4)]"
+      role="presentation"
+    >
+      {props.label}
+    </div>
+  );
 }
