@@ -537,7 +537,13 @@ function ContactRow(props: {
       })}`
     : null;
 
-  const companyLabel = contact.companyName ?? NO_COMPANY_LABEL;
+  // An absent company is an absent value, not a fact about the person. It used
+  // to print "No company" in the same ink as a real company name, so a list of
+  // sole traders read as a column of content saying nothing (phase two,
+  // direction rule 1). The em dash the Next step column already uses is what
+  // "nothing here" looks like in this product. The group heading in the "by
+  // company" view keeps the words, because there it IS the heading.
+  const companyLabel = contact.companyName ?? EMPTY_CELL;
   const companyTitle = contact.companyName
     ? `${contact.companyName}${trashSuffix(contact.companyDeletedAt)}`
     : NO_COMPANY_LABEL;
@@ -585,7 +591,12 @@ function ContactRow(props: {
 
       {showCompany ? (
         <div
-          className="hidden w-[200px] shrink-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)] xl:block"
+          className={cn(
+            "hidden w-[200px] shrink-0 truncate text-[length:var(--text-sm)] xl:block",
+            contact.companyName
+              ? "text-[var(--color-text-muted)]"
+              : "text-[var(--color-text-faint)]",
+          )}
           title={companyTitle}
         >
           {companyLabel}

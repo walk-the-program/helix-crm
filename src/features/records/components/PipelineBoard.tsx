@@ -364,7 +364,8 @@ function StageColumn(props: {
           data-testid="stage-total"
           className="money text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
         >
-          Upfront {formatMoneyTrim(upfront, currency)}
+          {monthly > 0 ? "Upfront " : null}
+          {formatMoneyTrim(upfront, currency)}
           {monthly > 0 ? ` \u00b7 ${formatMonthly(monthly, currency)}` : null}
         </div>
       </header>

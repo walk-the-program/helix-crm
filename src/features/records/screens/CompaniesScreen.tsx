@@ -258,7 +258,7 @@ export function CompaniesScreen() {
             description={
               showArchived
                 ? "Companies you delete stay here until you restore them."
-                : "A company groups the people you deal with at one business, and every job you have quoted them."
+                : `A company groups the people you work with at one business, and every ${vocabulary.lower} you have quoted them.`
             }
             action={
               showArchived ? (

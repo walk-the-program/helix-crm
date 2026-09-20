@@ -38,6 +38,8 @@ import {
 } from "@/features/records/lib/hooks";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { PipelineBoard } from "@/features/records/components/PipelineBoard";
+import { dealCustomer } from "@/features/records/components/DealCard";
+import { TrashMark } from "@/features/records/components/RecordChip";
 import { NewDealDialog } from "@/features/records/components/NewDealDialog";
 import { StageManagerDialog } from "@/features/records/components/StageManagerDialog";
 import {
@@ -286,7 +288,7 @@ export function PipelineScreen() {
               <THead>
                 <TR>
                   <TH className="w-[34%]">{vocabulary.one}</TH>
-                  <TH className="w-[22%]">Company</TH>
+                  <TH className="w-[22%]">Customer</TH>
                   <TH className="w-[18%]">Stage</TH>
                   <TH align="right" className="w-[13%]">
                     Value
@@ -300,9 +302,19 @@ export function PipelineScreen() {
                     <TD primary title={deal.title}>
                       {deal.title}
                     </TD>
+                    {/* The same customer the board card names. The list used to
+                        print the COMPANY here, so a job for a person with no
+                        company read as an em dash in the list and as "Priya
+                        Raghunathan" on the board - two views of one thing
+                        disagreeing about whose job it is (F-LA-12 fixed the
+                        card; this is its other half). */}
                     <TD muted>
-                      <span className="block max-w-[220px] truncate" title={deal.companyName ?? ""}>
-                        {deal.companyName ?? "—"}
+                      <span
+                        className="block max-w-[220px] truncate"
+                        title={dealCustomer(deal).tooltip}
+                      >
+                        {dealCustomer(deal).name}
+                        <TrashMark deletedAt={dealCustomer(deal).deletedAt} />
                       </span>
                     </TD>
                     <TD>

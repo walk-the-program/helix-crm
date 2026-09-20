@@ -205,7 +205,7 @@ export function StageManagerDialog(props: {
           <span className="min-w-[180px] flex-1">Name</span>
           <span className="w-[160px]">Colour</span>
           <span className="w-[110px]">Quiet days</span>
-          <span className="w-[70px]">Deals</span>
+          <span className="w-[70px]">{props.vocabularyMany}</span>
           <span className="w-[108px]" />
         </div>
 
