@@ -599,7 +599,14 @@ test.describe("audited findings (F-LB-1, F-LB-6, F-LB-8, F-LB-16, F-LB-17)", () 
     );
     expect(lastError).toMatch(/^LeadPollAuthError/);
     expect(lastError).not.toContain("[object Object]");
-    expect(lastError).toContain("The website answered HTTP 401.");
+    // F-LB-6's subject is the two assertions above: a plain {code, message}
+    // rejection must reach the screen as real text. It used to also assert the
+    // site's own sentence came through verbatim; F-SEC-6 deliberately stops
+    // that on a 401/403, because a rejection body commonly echoes the
+    // credential it rejected and this string is shown on the Settings screen
+    // and was written to the plaintext log. The status is what the owner acts
+    // on, and the row above still proves "HTTP 401" reaches the screen.
+    expect(lastError).toBe("LeadPollAuthError: HTTP 401");
   });
 
   test("F-LB-8: two leads in one page sharing a real id create exactly one deal", async ({
