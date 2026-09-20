@@ -87,6 +87,19 @@ function formatPercent(rate: number | null): string {
   return rate === null ? "—" : `${(rate * 100).toFixed(1)}%`;
 }
 
+/**
+ * The Conversion card's Rate column for CSV (F-LB-20): a plain decimal
+ * (0.452), not `formatPercent`'s "45.2%" - reportKeys.ts's `toCsv` guards
+ * against formula injection but does not know a "%"-suffixed string was ever
+ * meant to be a number, so this was the one column in Reports that pasted as
+ * text. The rendered chart and table both still call `formatPercent`; only
+ * the export is different. Exported so the exact value is unit testable
+ * without rendering the card.
+ */
+export function rateForCsv(rate: number | null): number | string {
+  return rate === null ? "" : rate;
+}
+
 function formatDays(value: number | null): string {
   return value === null ? "—" : value.toFixed(1);
 }
@@ -747,13 +760,7 @@ function ConversionCard(props: { rows: ConversionRow[] }) {
   function csv() {
     return toCsv(
       ["From", "To", "Entered", "Advanced", "Rate"],
-      rows.map((row) => [
-        row.fromStageName,
-        row.toStageName,
-        row.entered,
-        row.advanced,
-        formatPercent(row.rate),
-      ]),
+      rows.map((row) => [row.fromStageName, row.toStageName, row.entered, row.advanced, rateForCsv(row.rate)]),
     );
   }
 
