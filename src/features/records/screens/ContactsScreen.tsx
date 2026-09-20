@@ -19,6 +19,7 @@
  * filtered out here in JS, so the header count and the virtualised list agree.
  */
 import { useEffect, useMemo, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "@/ui/icons";
@@ -26,13 +27,18 @@ import {
   Badge,
   Button,
   Checkbox,
+  ColumnHeaderCell,
   EmptyState,
   Input,
   PageHeader,
   Select,
   Switch,
   VirtualList,
+  type RowNavProps,
+  type SortDirection,
 } from "@/ui";
+import { focusRingInset } from "@/ui/styles";
+import { cn } from "@/ui/cn";
 import { contactName, type Contact } from "@/db/repos/contacts";
 import * as settingsRepo from "@/db/repos/settings";
 import { qk } from "@/app/queryClient";
@@ -372,18 +378,44 @@ export function ContactsScreen() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           {/* The column strip: the one uppercase type in the product, which is
-              how a native list view labels a column (DESIGN.md §4). */}
-          <div className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]" aria-hidden="true">
-            <span className="min-w-0 flex-1">Name</span>
-            {showAs === "name" ? <span className="w-[200px] flex-none">Company</span> : null}
-            <span className="hidden w-[180px] flex-none text-right md:block">Tags</span>
+              how a native list view labels a column (DESIGN.md §4). Name is
+              the only header that can sort - it is the only column the
+              "Sort" Select below can also express - and clicking it drives
+              that same `sort` state, so the two never disagree. Grouped "by
+              company" ignores `sort` entirely (groupByCompany always sorts by
+              company then name), so the header goes inert there too, exactly
+              like the Select does. */}
+          <div
+            role="row"
+            className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]"
+          >
+            <ColumnHeaderCell
+              className="min-w-0 flex-1"
+              sortable={showAs === "name"}
+              sortDirection={nameSortDirection(sort)}
+              onSort={() => setSort(sort === "name-asc" ? "name-desc" : "name-asc")}
+            >
+              Name
+            </ColumnHeaderCell>
+            {showAs === "name" ? (
+              <ColumnHeaderCell className="w-[200px] flex-none">Company</ColumnHeaderCell>
+            ) : null}
+            <ColumnHeaderCell align="right" className="hidden w-[180px] flex-none md:block">
+              Tags
+            </ColumnHeaderCell>
           </div>
           <VirtualList
             items={listRows}
             ariaLabel="Contacts"
             className="min-h-0 flex-1 max-h-[calc(100vh-280px)]"
             getKey={(row) => row.key}
-            renderRow={(row) =>
+            keyboardNav={{
+              isFocusable: (row) => row.kind === "contact",
+              onActivate: (row) => {
+                if (row.kind === "contact") navigate(`/contacts/${row.contact.id}`);
+              },
+            }}
+            renderRow={(row, _index, nav) =>
               row.kind === "header" ? (
                 <GroupHeaderRow label={row.label} />
               ) : (
@@ -392,6 +424,7 @@ export function ContactsScreen() {
                   showCompany={showAs === "name"}
                   tagNames={(tagIndex?.get(row.contact.id) ?? []).map((tag) => tag.name)}
                   onOpen={() => navigate(`/contacts/${row.contact.id}`)}
+                  nav={nav}
                 />
               )
             }
@@ -413,27 +446,40 @@ function ContactRow(props: {
   tagNames: string[];
   showCompany: boolean;
   onOpen: () => void;
+  /** Roving-tabindex + arrow-key props from VirtualList's `keyboardNav`
+   *  (apple-hig-review.md finding 6). Falls back to the row's own Enter/Space
+   *  handling so ContactRow still works stand-alone (gallery specimens,
+   *  tests). */
+  nav?: RowNavProps;
 }) {
-  const { contact, tagNames, showCompany, onOpen } = props;
+  const { contact, tagNames, showCompany, onOpen, nav } = props;
   const name = contactName(contact);
+  const rowNav: {
+    tabIndex: 0 | -1;
+    onFocus?: () => void;
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+    "data-row-focus"?: "true";
+  } = nav ?? {
+    tabIndex: 0,
+    onKeyDown: (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen();
+      }
+    },
+  };
 
   return (
     <div
       role="button"
-      tabIndex={0}
       onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
-      className={[
+      className={cn(
         "flex min-h-[var(--row-h)] w-full cursor-default items-center gap-[var(--space-4)]",
         "border-b border-[var(--color-border)] px-[var(--space-4)]",
         "hover:bg-[var(--color-hover)]",
-        "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]",
-      ].join(" ")}
+        focusRingInset,
+      )}
+      {...rowNav}
     >
       <div
         className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
@@ -462,6 +508,15 @@ function ContactRow(props: {
       </div>
     </div>
   );
+}
+
+/** The "Name" column header's direction, or null when the list is sorted by
+ *  something the header cannot express (newest/updated) - the header only
+ *  ever offers the two orders the SORTS options already cover. */
+function nameSortDirection(sort: string): SortDirection {
+  if (sort === "name-asc") return "asc";
+  if (sort === "name-desc") return "desc";
+  return null;
 }
 
 function sortContacts(rows: Contact[], sort: string): Contact[] {

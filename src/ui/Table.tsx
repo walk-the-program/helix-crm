@@ -5,9 +5,9 @@ import type {
   TdHTMLAttributes,
   ThHTMLAttributes,
 } from "react";
-import { CaretDown, CaretUp, CaretUpDown } from "@/ui/icons";
 import { cn } from "@/ui/cn";
-import { focusRing, focusRingInset, sectionLabel } from "@/ui/styles";
+import { focusRingInset, sectionLabel } from "@/ui/styles";
+import { ariaSortValue, SortHeaderButton, type SortDirection } from "@/ui/SortableHeader";
 
 /**
  * The list (docs/DESIGN.md §9 "Tables").
@@ -122,34 +122,15 @@ export function TH({
 }: ThHTMLAttributes<HTMLTableCellElement> & {
   align?: "left" | "right";
   sortable?: boolean;
-  sortDirection?: "asc" | "desc" | null;
+  sortDirection?: SortDirection;
   onSort?: () => void;
 }) {
-  const sorted = sortDirection === "asc" || sortDirection === "desc";
-
-  const icon = !sortable ? null : sortDirection === "asc" ? (
-    <CaretUp size={10} weight="bold" className="flex-none" aria-hidden="true" />
-  ) : sortDirection === "desc" ? (
-    <CaretDown size={10} weight="bold" className="flex-none" aria-hidden="true" />
-  ) : (
-    <CaretUpDown size={10} weight="bold" className="flex-none opacity-0 group-hover:opacity-100" aria-hidden="true" />
-  );
-
+  // The button, caret and aria-sort mapping are shared with the column strip
+  // above Contacts' and Companies' virtualised lists - see SortableHeader.tsx.
   const content: ReactNode = sortable ? (
-    <button
-      type="button"
-      onClick={onSort}
-      className={cn(
-        "group inline-flex items-center gap-[var(--space-1)]",
-        sectionLabel,
-        sorted ? "text-[var(--color-text-muted)]" : "hover:text-[var(--color-text-muted)]",
-        focusRing,
-        align === "right" && "flex-row-reverse",
-      )}
-    >
+    <SortHeaderButton sortDirection={sortDirection} onSort={onSort} align={align}>
       {children}
-      {icon}
-    </button>
+    </SortHeaderButton>
   ) : (
     children
   );
@@ -157,15 +138,7 @@ export function TH({
   return (
     <th
       scope="col"
-      aria-sort={
-        !sortable
-          ? undefined
-          : sortDirection === "asc"
-            ? "ascending"
-            : sortDirection === "desc"
-              ? "descending"
-              : "none"
-      }
+      aria-sort={ariaSortValue(sortable, sortDirection)}
       // The column header is the section-label style: 11px, uppercase, tracked
       // 0.05em, tertiary ink. It is the only uppercase type in the product
       // (docs/DESIGN.md §4).

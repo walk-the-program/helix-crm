@@ -16,6 +16,8 @@ export * from "./Badge";
 export * from "./Card";
 export * from "./EmptyState";
 export * from "./Table";
+export * from "./SortableHeader";
+export * from "./useRovingRowNav";
 export * from "./VirtualList";
 export * from "./Field";
 export * from "./Kbd";

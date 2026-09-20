@@ -10,6 +10,7 @@ import { useState } from "react";
 import { render } from "@testing-library/react";
 import type { RenderResult } from "@testing-library/react";
 import {
+  ColumnHeaderCell,
   ConfirmDialog,
   Dialog,
   DialogContent,
@@ -23,6 +24,12 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Select,
+  Table,
+  TH,
+  THead,
+  TR,
+  VirtualList,
 } from "@/ui";
 
 // ---------------------------------------------------------------------------
@@ -154,5 +161,115 @@ export function renderDropdownMenuFixture(props?: {
       onOpenChangeSpy={props?.onOpenChangeSpy}
       defaultOpen={props?.defaultOpen}
     />,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sortable header: the same "Name" column, click-to-sort state driving both
+// TH (a real <table>, the pipeline's list view) and ColumnHeaderCell (the
+// flex column strip above Contacts/Companies) - and, for ColumnHeaderCell,
+// the very same "Sort" Select those two screens keep in sync with the header
+// (apple-hig-review.md finding 6 / top-ten item 9).
+// ---------------------------------------------------------------------------
+
+const NAME_SORTS = [
+  { value: "name-asc", label: "Name A to Z" },
+  { value: "name-desc", label: "Name Z to A" },
+];
+
+function nameDirection(sort: string): "asc" | "desc" | null {
+  if (sort === "name-asc") return "asc";
+  if (sort === "name-desc") return "desc";
+  return null;
+}
+
+export function TableSortFixture(props: { initialSort?: string }) {
+  const [sort, setSort] = useState(props.initialSort ?? "newest");
+  return (
+    <Table>
+      <THead>
+        <TR>
+          <TH
+            sortable
+            sortDirection={nameDirection(sort)}
+            onSort={() => setSort(sort === "name-asc" ? "name-desc" : "name-asc")}
+          >
+            Name
+          </TH>
+        </TR>
+      </THead>
+    </Table>
+  );
+}
+
+export function renderTableSortFixture(props?: { initialSort?: string }): RenderResult {
+  return render(<TableSortFixture initialSort={props?.initialSort} />);
+}
+
+export function ColumnHeaderSortFixture(props: { initialSort?: string }) {
+  const [sort, setSort] = useState(props.initialSort ?? "newest");
+  return (
+    <>
+      <div role="row">
+        <ColumnHeaderCell
+          sortable
+          sortDirection={nameDirection(sort)}
+          onSort={() => setSort(sort === "name-asc" ? "name-desc" : "name-asc")}
+        >
+          Name
+        </ColumnHeaderCell>
+      </div>
+      <Select
+        ariaLabel="Sort"
+        value={sort}
+        options={NAME_SORTS}
+        onValueChange={setSort}
+      />
+    </>
+  );
+}
+
+export function renderColumnHeaderSortFixture(props?: { initialSort?: string }): RenderResult {
+  return render(<ColumnHeaderSortFixture initialSort={props?.initialSort} />);
+}
+
+// ---------------------------------------------------------------------------
+// Roving-tabindex row navigation: a VirtualList with `keyboardNav` wired the
+// way ContactsScreen/CompaniesScreen wire it - a plain row that spreads its
+// `nav` props, so Up/Down/Home/End move the roving tabIndex and Enter/Space
+// activate it (apple-hig-review.md finding 6 / top-ten item 9).
+// ---------------------------------------------------------------------------
+
+export type RovingListRow = { id: string; label: string };
+
+export function RovingListFixture(props: {
+  items: RovingListRow[];
+  onActivate: (id: string) => void;
+  estimateSize?: number;
+}) {
+  const { items, onActivate, estimateSize } = props;
+  return (
+    <VirtualList<RovingListRow>
+      items={items}
+      ariaLabel="Rows"
+      estimateSize={estimateSize ?? 48}
+      getKey={(item) => item.id}
+      keyboardNav={{ onActivate: (item) => onActivate(item.id) }}
+      renderRow={(item, _index, nav) => (
+        <div role="button" data-testid={item.id} {...nav}>
+          {item.label}
+        </div>
+      )}
+    />
+  );
+}
+
+export function renderRovingListFixture(props: {
+  items: RovingListRow[];
+  onActivate: (id: string) => void;
+  estimateSize?: number;
+}): RenderResult {
+  return render(
+    <RovingListFixture items={props.items} onActivate={props.onActivate} estimateSize={props.estimateSize} />,
   );
 }

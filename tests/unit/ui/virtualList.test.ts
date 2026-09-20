@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { VirtualList } from "@/ui";
 import { installRadixStubs } from "./radixSetup";
+import { renderRovingListFixture } from "./fixtures";
 
 installRadixStubs();
 
@@ -120,5 +121,57 @@ describe("VirtualList", () => {
     expect(getKey).toHaveBeenCalledWith(items[0], 0);
 
     expect(screen.getByRole("list", { name: "Companies" })).toBeTruthy();
+  });
+});
+
+/**
+ * `keyboardNav`: roving tabIndex, arrow-key movement, and Enter/Space
+ * activation over VirtualList's own rows (apple-hig-review.md finding 6 /
+ * top-ten item 9 - "arrow-key row navigation with Enter to open, matching the
+ * keyboard path the pipeline board already has"). ContactsScreen and
+ * CompaniesScreen wire this exact prop; RovingListFixture (fixtures.tsx)
+ * mirrors that wiring with a plain row.
+ */
+describe("VirtualList keyboardNav", () => {
+  function makeRows(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `row-${index}`,
+      label: `Item ${index}`,
+    }));
+  }
+
+  it("gives exactly one row tabIndex 0 - the roving stop, not one tab stop per row", () => {
+    const items = makeRows(5);
+    renderRovingListFixture({ items, onActivate: vi.fn() });
+
+    const rows = items.map((item) => screen.getByTestId(item.id));
+    const tabbable = rows.filter((row) => row.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(rows[0].tabIndex).toBe(0);
+    rows.slice(1).forEach((row) => expect(row.tabIndex).toBe(-1));
+  });
+
+  it("ArrowDown moves DOM focus to the next row and updates the roving tabIndex", async () => {
+    const items = makeRows(5);
+    renderRovingListFixture({ items, onActivate: vi.fn() });
+
+    const rows = items.map((item) => screen.getByTestId(item.id));
+    rows[0].focus();
+    fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+
+    await waitFor(() => expect(document.activeElement).toBe(rows[1]));
+    expect(rows[1].tabIndex).toBe(0);
+    expect(rows[0].tabIndex).toBe(-1);
+  });
+
+  it("Enter on the focused row fires the activate handler with that row's item", () => {
+    const items = makeRows(3);
+    const onActivate = vi.fn();
+    renderRovingListFixture({ items, onActivate });
+
+    const rows = items.map((item) => screen.getByTestId(item.id));
+    fireEvent.keyDown(rows[0], { key: "Enter" });
+
+    expect(onActivate).toHaveBeenCalledWith("row-0");
   });
 });

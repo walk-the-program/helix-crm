@@ -4,12 +4,14 @@
  * lists.
  */
 import { useEffect, useMemo, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { useLocation } from "wouter";
 import { Plus } from "@/ui/icons";
 import {
   Badge,
   Button,
   Checkbox,
+  ColumnHeaderCell,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,7 +25,11 @@ import {
   PageHeader,
   Select,
   VirtualList,
+  type RowNavProps,
+  type SortDirection,
 } from "@/ui";
+import { focusRingInset } from "@/ui/styles";
+import { cn } from "@/ui/cn";
 import * as companiesRepo from "@/db/repos/companies";
 import type { Company } from "@/db/repos/companies";
 import { formatPhone } from "@/lib/phone";
@@ -267,22 +273,41 @@ export function CompaniesScreen() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           {/* The column strip: the one uppercase type in the product, which is
-              how a native list view labels a column (DESIGN.md §4). */}
-          <div className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]" aria-hidden="true">
-            <span className="min-w-0 flex-1">Name</span>
-            <span className="w-[200px] flex-none">Phone</span>
-            <span className="hidden w-[180px] flex-none text-right md:block">Tags</span>
+              how a native list view labels a column (DESIGN.md §4). Name is
+              the only header that can sort - the only column the "Sort"
+              Select below can also express - and clicking it drives that
+              same `sort` state, so the two never disagree. */}
+          <div
+            role="row"
+            className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]"
+          >
+            <ColumnHeaderCell
+              className="min-w-0 flex-1"
+              sortable
+              sortDirection={nameSortDirection(sort)}
+              onSort={() => setSort(sort === "name-asc" ? "name-desc" : "name-asc")}
+            >
+              Name
+            </ColumnHeaderCell>
+            <ColumnHeaderCell className="w-[200px] flex-none">Phone</ColumnHeaderCell>
+            <ColumnHeaderCell align="right" className="hidden w-[180px] flex-none md:block">
+              Tags
+            </ColumnHeaderCell>
           </div>
           <VirtualList
             items={rows}
             ariaLabel="Companies"
             className="min-h-0 flex-1 max-h-[calc(100vh-280px)]"
             getKey={(company) => company.id}
-            renderRow={(company) => (
+            keyboardNav={{
+              onActivate: (company) => navigate(`/companies/${company.id}`),
+            }}
+            renderRow={(company, _index, nav) => (
               <CompanyRow
                 company={company}
                 tagNames={(tagIndex?.get(company.id) ?? []).map((tag) => tag.name)}
                 onOpen={() => navigate(`/companies/${company.id}`)}
+                nav={nav}
               />
             )}
           />
@@ -298,25 +323,51 @@ export function CompaniesScreen() {
   );
 }
 
-function CompanyRow(props: { company: Company; tagNames: string[]; onOpen: () => void }) {
-  const { company, tagNames, onOpen } = props;
+/** The "Name" column header's direction, or null when the list is sorted by
+ *  something the header cannot express (newest) - it only ever offers the
+ *  two orders the SORTS options already cover. */
+function nameSortDirection(sort: string): SortDirection {
+  if (sort === "name-asc") return "asc";
+  if (sort === "name-desc") return "desc";
+  return null;
+}
+
+function CompanyRow(props: {
+  company: Company;
+  tagNames: string[];
+  onOpen: () => void;
+  /** Roving-tabindex + arrow-key props from VirtualList's `keyboardNav`
+   *  (apple-hig-review.md finding 6). Falls back to the row's own Enter/Space
+   *  handling so CompanyRow still works stand-alone. */
+  nav?: RowNavProps;
+}) {
+  const { company, tagNames, onOpen, nav } = props;
+  const rowNav: {
+    tabIndex: 0 | -1;
+    onFocus?: () => void;
+    onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+    "data-row-focus"?: "true";
+  } = nav ?? {
+    tabIndex: 0,
+    onKeyDown: (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen();
+      }
+    },
+  };
+
   return (
     <div
       role="button"
-      tabIndex={0}
       onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
-      className={[
+      className={cn(
         "flex min-h-[var(--row-h)] w-full cursor-default items-center gap-[var(--space-4)]",
         "border-b border-[var(--color-border)] px-[var(--space-4)]",
         "hover:bg-[var(--color-hover)]",
-        "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]",
-      ].join(" ")}
+        focusRingInset,
+      )}
+      {...rowNav}
     >
       <div
         className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
