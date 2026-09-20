@@ -40,7 +40,9 @@ backups, logs, and the site-lead ingestion path (untrusted input from a public f
 Format: `F-<role>-<n>` | class (Blocker / Required / Follow-up) | finding | why that class | fix commit(s) | evidence.
 Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
-(Populated by each phase below.)
+### SEC (accepted by Fable; full table in `launch-returns/sec.md`)
+
+1 Blocker (F-SEC-1: a corrupt keychain item made the app mint a new key over the real one, destroying the workspace), 16 Required (plaintext pre-encryption copy kept; lost key overwritten instead of reported; site 401 body with echoed token reaching helix.log; purge left notes/tasks orphaned and searchable; unbounded lead response body, redirects off-origin with the token, unbounded lead count/field length, JSON-depth stack overflow, infinite poll loop on a stuck cursor; attachment display names with bidi overrides; change_log unbounded; purged documents' PDFs left on disk; CSV formula guard missed LF and leading whitespace; no import size/row limit; unescaped mailto; false claims in CHANGELOG and Help), 12 Follow-ups (delete-workspace command, external_id UNIQUE migration, backoff persistence, export-moment disclosure, etc.). All Blocker/Required fixed with tests. Not applicable by design: accounts, sessions, roles, tenants, webhooks, public rate limits, in-app billing. CI requests handed to OPS: npm audit, cargo audit. Escalations: signing (spending), CONTRACTS.md edits for F-SEC-1/2/3/5 (accepted by Fable).
 
 ## 3. Decisions
 
@@ -54,8 +56,8 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
 | task | role | owner | state | children | writable areas | return |
 | --- | --- | --- | --- | --- | --- | --- |
-| LR-SEC | CSPO | Opus lead | running (12:1x, packet rev 1) | ≤3 Sonnet | see packet | `launch-returns/sec.md` |
-| LR-OPS | CROO | Opus lead | planned (after SEC) | ≤3 | | `launch-returns/ops.md` |
+| LR-SEC | CSPO | Opus lead | accepted 13:xx (24 commits, 552177f..7652ee9) | ≤3 Sonnet | see packet | `launch-returns/sec.md` |
+| LR-OPS | CROO | Opus lead | running (packet rev 1) | ≤3 | | `launch-returns/ops.md` |
 | LR-REV | CRevOps | Opus lead | planned (after OPS) | ≤2 | | `launch-returns/rev.md` |
 | LR-CS | CCSO | Opus lead | planned (after REV) | ≤3 | | `launch-returns/cs.md` |
 | LR-PX | CPEO | up to 3 Opus leads | planned (after CS) | ≤9 total | | `launch-returns/px-*.md` |
@@ -65,6 +67,7 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
 | when | what | result |
 | --- | --- | --- |
+| 13:xx | SEC gate (Fable, 7652ee9): typecheck clean; vitest 170 files / 2221 passed / 3 skipped; cargo 102 passed; vite build clean; tree clean | SEC accepted |
 | 12:0x | baseline `e8e7650`: typecheck clean; vitest 2102 passed / 3 skipped; CI + e2e-win green on GitHub; release app built and installed locally | baseline |
 
 ## 6. Remaining blockers and operating conditions
