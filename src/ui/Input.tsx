@@ -5,18 +5,19 @@ import { disabledState, focusRing, quietTransition } from "@/ui/styles";
 
 export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   invalid?: boolean;
-  /** The soft grey rounded field of a macOS search bar, for search only. */
+  /** The soft grey field of a macOS search bar, square like every other
+   *  control (radius 0), for search only. */
   search?: boolean;
 };
 
 /**
  * A macOS text field: white fill, one visible hairline
- * (--color-border-strong), --radius-md, --control-h tall, body type
- * (docs/DESIGN.md §9 "Fields").
+ * (--color-border-strong), square corners (--radius-md resolves to 0),
+ * --control-h tall, body type (docs/DESIGN.md §9 "Fields").
  *
- * Focus is the system-blue ring and nothing else — the border does not thicken
- * and the field does not change colour, because a field that redraws itself on
- * focus reads as a web form.
+ * Focus is the brand-secondary ring (--color-focus) and nothing else — the
+ * border does not thicken and the field does not change colour, because a
+ * field that redraws itself on focus reads as a web form.
  *
  * An invalid field turns its BORDER --color-danger. It never recolours the
  * ring: the ring means "the keyboard is here", and nothing else.
