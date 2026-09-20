@@ -46,6 +46,7 @@ import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useTodayIsUnstarted } from "@/features/today/lib/useToday";
 import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
 import { UnpaidInvoicesSection } from "@/features/invoices";
+import { PollNotice } from "@/features/leads";
 
 /**
  * Quick add belongs to the records agent and is registered as a palette
@@ -86,6 +87,9 @@ function todayLabel(locale?: string): string {
 function TodayPanels() {
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
+      {/* Renders nothing unless the website poller has something to say, and
+          then it says it at the top, where the owner is already looking. */}
+      <PollNotice />
       <DueNowSection />
       <ComingUpSection />
       <UnpaidInvoicesSection />
