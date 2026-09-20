@@ -35,6 +35,12 @@ import {
   CardBody,
   CardGroupLabel,
   ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   EmptyState,
   Spinner,
 } from "@/ui";
@@ -42,7 +48,9 @@ import * as contactsRepo from "@/db/repos/contacts";
 import type { ActivityKind } from "@/db/repos/activities";
 import { formatPhone } from "@/lib/phone";
 import { SummarizeButton } from "@/features/ai";
-import { useContact, useCustomerMoney, useTasks } from "@/features/records/lib/hooks";
+import { useContact, useCustomerMoney, useDeals, useTasks } from "@/features/records/lib/hooks";
+import * as dealsRepo from "@/db/repos/deals";
+import { useVocabulary } from "@/app/vocabulary";
 import {
   deleteWithUndo,
   invalidateRecords,
@@ -55,6 +63,7 @@ import { todayLocal } from "@/lib/dates";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { CompanyPicker, SourcePicker } from "@/features/records/components/Pickers";
 import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
+import { DealsCard } from "@/features/records/components/DealsCard";
 import { PhoneList, EmailList } from "@/features/records/components/ContactMethods";
 import { AddressPanel } from "@/features/records/components/AddressPanel";
 import { TagEditor } from "@/features/records/components/TagEditor";
@@ -87,8 +96,23 @@ export function ContactPage() {
   // company must not each appear to be worth the company's whole history.
   const { data: money } = useCustomerMoney({ contactId: id });
   const { data: openTasks } = useTasks({ contactId: id, openOnly: true }, 20);
+  const vocabulary = useVocabulary();
+  const { data: openDeals } = useDeals({ contactId: id, openOnly: true }, 200);
+  const { data: closedDeals } = useDeals({ contactId: id, closedOnly: true }, 200);
   const [composing, setComposing] = useState<ActivityKind | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  /**
+   * A pending company change, waiting on the question below.
+   *
+   * Moving a contact to another company used to write one column and stop
+   * there: their open jobs kept the old company_id, and so did the documents
+   * raised against those jobs, because `documents.syncCustomerFromDeal` only
+   * runs from `deals.update`. The job was then invoiced and reported against a
+   * company the customer had left, silently (CPO audit, F-LA-4).
+   */
+  const [pendingCompany, setPendingCompany] = useState<{
+    companyId: string | null;
+  } | null>(null);
 
   const nextTask = useMemo(() => (openTasks?.rows ?? [])[0] ?? null, [openTasks]);
 
@@ -123,6 +147,7 @@ export function ContactPage() {
   const primaryPhone = contact.phones.find((phone) => phone.isPrimary) ?? contact.phones[0] ?? null;
   const primaryEmail = contact.emails.find((email) => email.isPrimary) ?? contact.emails[0] ?? null;
   const archived = contact.deletedAt !== null;
+  const openCount = openDeals?.rows.length ?? 0;
   const phoneLabel = primaryPhone
     ? formatPhone(primaryPhone.raw) || primaryPhone.raw
     : null;
@@ -303,6 +328,17 @@ export function ContactPage() {
             <RecurringPanel contactId={id} aboutLabel={name} reference={todayLocal()} />
           </div>
 
+          <DealsCard
+            title={`Open ${vocabulary.lowerMany}`}
+            deals={openDeals?.rows ?? []}
+            emptyText={`Nothing open for ${name} right now.`}
+          />
+          <DealsCard
+            title={`Closed ${vocabulary.lowerMany}`}
+            deals={closedDeals?.rows ?? []}
+            emptyText="Nothing won or lost yet."
+          />
+
           <Group label="Details">
             <CardBody className="flex flex-col gap-[var(--space-4)]">
               <div className="grid grid-cols-2 gap-[var(--space-4)]">
@@ -326,6 +362,13 @@ export function ContactPage() {
                   label="Company"
                   value={contact.companyId}
                   onChange={(companyId) => {
+                    // With open jobs on the person, moving them is a decision
+                    // about the jobs too, so ask once rather than leaving the
+                    // two records disagreeing (F-LA-4).
+                    if ((openDeals?.rows ?? []).length > 0) {
+                      setPendingCompany({ companyId });
+                      return;
+                    }
                     void patch({ companyId }).catch((err: unknown) =>
                       reportError(err, "That change did not save."),
                     );
@@ -397,6 +440,79 @@ export function ContactPage() {
           <AttachmentList entityType="contact" entityId={id} />
         </div>
       </div>
+
+      {/* Three honest answers, not two: moving the jobs is the usual one, but
+          a contact who genuinely changed employer mid-quote keeps the old
+          company on the old work, and cancelling leaves everything alone. */}
+      <Dialog
+        open={pendingCompany !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingCompany(null);
+        }}
+      >
+        <DialogContent size="sm">
+          <DialogHeader>
+            <DialogTitle>
+              Move {name}&rsquo;s {openCount === 1 ? vocabulary.lower : vocabulary.lowerMany} as
+              well?
+            </DialogTitle>
+            <DialogDescription>
+              {name} has {openCount} open{" "}
+              {openCount === 1 ? vocabulary.lower : vocabulary.lowerMany}. Moving them keeps the
+              work with the customer. Anything already won or lost stays where it is.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setPendingCompany(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const next = pendingCompany;
+                setPendingCompany(null);
+                if (!next) return;
+                void patch({ companyId: next.companyId }).catch((err: unknown) =>
+                  reportError(err, "That change did not save."),
+                );
+              }}
+            >
+              Just the contact
+            </Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                const next = pendingCompany;
+                setPendingCompany(null);
+                if (!next) return;
+                try {
+                  // One batch across the contact and every open job, so a
+                  // single Cmd+Z puts all of it back. Each job goes through
+                  // `deals.update`, which is what re-syncs its documents.
+                  await writeWithUndo({
+                    label: `moved ${name} and their open ${vocabulary.lowerMany}`,
+                    write: async (batchId) => {
+                      await contactsRepo.update(id, { companyId: next.companyId }, { batchId });
+                      for (const deal of openDeals?.rows ?? []) {
+                        await dealsRepo.update(
+                          deal.id,
+                          { companyId: next.companyId },
+                          { batchId },
+                        );
+                      }
+                    },
+                  });
+                  await invalidateRecords();
+                } catch (err) {
+                  reportError(err, "That change did not save.");
+                }
+              }}
+            >
+              Move the {vocabulary.lowerMany} too
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmingDelete}
