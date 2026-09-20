@@ -282,6 +282,10 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 
 | 01:3x | Lead A CPO-LA-4: `e2813d2` the first-run gate counts every Today section (tasks, open deals, activities, documents of any status, reminders) through a pure `todayIsUnstarted(counts)` with a per-section unit test; invoices+today e2e 27 passed on 4231; full vitest 2049 passed. | accepted; Lead A finished phase one |
 
+| 01:5x | **Gate 1 (phase-one integration, Fable, port 4221):** typecheck clean; vitest 146 files / 2049 passed / 3 skipped; cargo 49 passed; vite build clean (chunk-size warning only, deferred to phase two); full e2e **148 passed** (baseline 121) including `cpoWalk.e2e.ts` re-run on the finished product. Two stranded spec changes from lead-platform committed after passing. | phase one verified |
+
+| 02:0x | Phase one reconciled against the re-run walk (`cpo/` vs `cpo-before/`): won deal reads Won $3,610 · Upfront $1,450 + $180/mo · Invoiced/Collected $1,450 · Outstanding $0; Today lists the overdue invoice; Contacts shows phone and next step; Invoices list true; Revenue Quoted $65,530 / Won $4,530; AI narration gone; quick add in the toolbar. Two leftovers noted for phase two (board column subtotals say "Upfront"; "No company" as content). | phase two dispatched: lead-platform (kit first), lead-records, lead-money |
+
 Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
 with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
 into `c0bd452 test(leads): …` (content correct, attribution wrong, left as is), then ran
