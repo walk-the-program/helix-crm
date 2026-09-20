@@ -53,6 +53,7 @@ function bundle(overrides: Partial<OverviewBundle> = {}): OverviewBundle {
     },
     money: {
       quotedCents: 150_000,
+      openCents: 150_000,
       wonCents: 0,
       invoicedCents: 0,
       collectedCents: 0,
@@ -194,7 +195,7 @@ describe("OverviewScreen", () => {
           medianDaysToWin: null,
         },
         people: { contacts: 0, companies: 0, contactsWithDeal: 0, companiesWithDeal: 0, newContacts: 0, newCompanies: 0 },
-        money: { quotedCents: 0, wonCents: 0, invoicedCents: 0, collectedCents: 0, outstandingCents: 0 },
+        money: { quotedCents: 0, openCents: 0, wonCents: 0, invoicedCents: 0, collectedCents: 0, outstandingCents: 0 },
         mrrCents: 0,
         arrCents: 0,
         openByStage: [],
