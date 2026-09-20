@@ -164,6 +164,46 @@ pub fn db_key(workspace_id: &str) -> AppResult<DbKey> {
 // ---------------------------------------------------------------------------
 // The store
 // ---------------------------------------------------------------------------
+//
+// ONE KEYCHAIN ITEM PER WORKSPACE (round 3, acceptance criterion 9).
+//
+// Walker's report: launching a new build asks for Keychain access twice. The
+// cause is not a duplicated call. macOS authorises a keychain ITEM against the
+// binary that asks for it, and an unsigned build gets a fresh identity on every
+// rebuild — so the count of prompts on the first launch of a new build is
+// simply the count of DISTINCT items that build reads. A workspace with a
+// database key and a site token is two items, so two prompts.
+//
+// The fix that actually bounds the number is to stop spending an item per
+// secret. A workspace now keeps ONE item, `<workspaceId>:bundle`, holding a
+// small JSON object of kind -> value. It is read once per run and cached for
+// the lifetime of the process, so however many secrets the app wants, the OS is
+// asked at most once.
+//
+// Migration is lazy and one-directional. When the bundle has no entry for a
+// kind, the old per-kind item is read; if it is there, it is folded into the
+// bundle and the old item is removed once the bundle write has succeeded. So
+// the single launch that migrates an existing install still pays one prompt per
+// legacy item it actually touches, and every launch after that pays one in
+// total. A fresh install never has legacy items, and `get_password` on an item
+// that does not exist returns NoEntry without prompting, so the probe is free.
+//
+// The ORDER of the two operations matters and is not negotiable: the legacy
+// item is deleted only after the bundle write returns Ok. Losing a dbkey makes
+// a workspace's file unreadable forever, which is the worst thing this module
+// can do.
+//
+// Signing removes the prompt entirely, which is the real cure: a signed,
+// notarised build keeps one stable code identity across versions, so the ACL
+// the owner approves once stays approved for every later build. Until TODO E5
+// lands, one prompt per build is the floor, and this is how we sit on it.
+
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+/// The single item each workspace keeps. Not a `kind` the frontend can name:
+/// `js_kind` below refuses everything except "anthropic" and "site".
+const BUNDLE_KIND: &str = "bundle";
 
 /// `kind` is validated rather than trusted so the frontend cannot invent an
 /// unbounded set of keychain entries. `"dbkey"` is accepted here because
@@ -178,7 +218,7 @@ fn user_name(workspace_id: &str, kind: &str) -> AppResult<String> {
     if workspace_id.trim().is_empty() {
         return Err(AppError::secret("No workspace id was given."));
     }
-    if !matches!(kind, "anthropic" | "site" | "dbkey") {
+    if !matches!(kind, "anthropic" | "site" | "dbkey" | "bundle") {
         return Err(AppError::secret(format!(
             "Unknown secret kind {kind:?}; expected \"anthropic\" or \"site\"."
         )));
@@ -186,7 +226,23 @@ fn user_name(workspace_id: &str, kind: &str) -> AppResult<String> {
     Ok(format!("{workspace_id}:{kind}"))
 }
 
-pub fn set(workspace_id: &str, kind: &str, value: &str) -> AppResult<()> {
+/* --- the raw item operations: the only three that touch the OS ----------- */
+
+fn raw_get(workspace_id: &str, kind: &str) -> AppResult<Option<String>> {
+    let user = user_name(workspace_id, kind)?;
+    #[cfg(debug_assertions)]
+    if memory_store_selected() {
+        return Ok(memory::get(&user));
+    }
+    let _ = &user;
+    match entry(workspace_id, kind)?.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(AppError::secret(format!("Can't read from the keychain: {e}"))),
+    }
+}
+
+fn raw_set(workspace_id: &str, kind: &str, value: &str) -> AppResult<()> {
     let user = user_name(workspace_id, kind)?;
     #[cfg(debug_assertions)]
     if memory_store_selected() {
@@ -199,28 +255,7 @@ pub fn set(workspace_id: &str, kind: &str, value: &str) -> AppResult<()> {
         .map_err(|e| AppError::secret(format!("Can't save the key securely on this machine: {e}")))
 }
 
-/// A missing entry is not an error: it is `None`, which is what "no token yet"
-/// looks like to the settings screen, and what "this workspace has no database
-/// key yet" looks like to `db_open`.
-pub fn get(workspace_id: &str, kind: &str) -> AppResult<SecretValue> {
-    let user = user_name(workspace_id, kind)?;
-    #[cfg(debug_assertions)]
-    if memory_store_selected() {
-        return Ok(SecretValue {
-            value: memory::get(&user),
-        });
-    }
-    let _ = &user;
-    match entry(workspace_id, kind)?.get_password() {
-        Ok(value) => Ok(SecretValue { value: Some(value) }),
-        Err(keyring::Error::NoEntry) => Ok(SecretValue { value: None }),
-        Err(e) => Err(AppError::secret(format!("Can't read from the keychain: {e}"))),
-    }
-}
-
-/// Deleting something that is not there succeeds, so the settings screen can
-/// clear a field without checking first.
-pub fn delete(workspace_id: &str, kind: &str) -> AppResult<()> {
+fn raw_delete(workspace_id: &str, kind: &str) -> AppResult<()> {
     let user = user_name(workspace_id, kind)?;
     #[cfg(debug_assertions)]
     if memory_store_selected() {
@@ -235,6 +270,113 @@ pub fn delete(workspace_id: &str, kind: &str) -> AppResult<()> {
             "Can't remove the key from the keychain: {e}"
         ))),
     }
+}
+
+/* --- the bundle ----------------------------------------------------------- */
+
+type Bundle = HashMap<String, String>;
+
+fn bundle_cache() -> &'static Mutex<HashMap<String, Bundle>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Bundle>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cached_bundle(workspace_id: &str) -> Option<Bundle> {
+    let cache = bundle_cache().lock().unwrap_or_else(|p| p.into_inner());
+    cache.get(workspace_id).cloned()
+}
+
+fn cache_bundle(workspace_id: &str, bundle: &Bundle) {
+    let mut cache = bundle_cache().lock().unwrap_or_else(|p| p.into_inner());
+    cache.insert(workspace_id.to_string(), bundle.clone());
+}
+
+/// Forget the cache, so the next read hits the store again. Only the tests need
+/// this; the running app wants the cache to live for the whole process.
+#[cfg(debug_assertions)]
+pub fn reset_bundle_cache() {
+    bundle_cache()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clear();
+}
+
+/// The workspace's one item, read at most once per run.
+///
+/// A bundle that will not parse is treated as empty rather than as an error: it
+/// was not written by this app, and refusing to start is a worse answer than
+/// asking the owner to reconnect a site. The dbkey is protected from that by
+/// the legacy fall-back below and, once written here, by the fact that nothing
+/// rewrites the item except this module.
+fn load_bundle(workspace_id: &str) -> AppResult<Bundle> {
+    if let Some(cached) = cached_bundle(workspace_id) {
+        return Ok(cached);
+    }
+    let bundle: Bundle = match raw_get(workspace_id, BUNDLE_KIND)? {
+        Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+        None => Bundle::new(),
+    };
+    cache_bundle(workspace_id, &bundle);
+    Ok(bundle)
+}
+
+fn save_bundle(workspace_id: &str, bundle: &Bundle) -> AppResult<()> {
+    let json = serde_json::to_string(bundle)
+        .map_err(|e| AppError::secret(format!("Could not encode the workspace's secrets: {e}")))?;
+    raw_set(workspace_id, BUNDLE_KIND, &json)?;
+    cache_bundle(workspace_id, bundle);
+    Ok(())
+}
+
+pub fn set(workspace_id: &str, kind: &str, value: &str) -> AppResult<()> {
+    // Validate before anything is written, so a bad kind never reaches the store.
+    user_name(workspace_id, kind)?;
+    let mut bundle = load_bundle(workspace_id)?;
+    bundle.insert(kind.to_string(), value.to_string());
+    save_bundle(workspace_id, &bundle)?;
+    // Best effort: an old per-kind item left behind is stale, not dangerous,
+    // and failing the write because the cleanup failed would be worse.
+    let _ = raw_delete(workspace_id, kind);
+    Ok(())
+}
+
+/// A missing entry is not an error: it is `None`, which is what "no token yet"
+/// looks like to the settings screen, and what "this workspace has no database
+/// key yet" looks like to `db_open`.
+pub fn get(workspace_id: &str, kind: &str) -> AppResult<SecretValue> {
+    user_name(workspace_id, kind)?;
+    let bundle = load_bundle(workspace_id)?;
+    if let Some(value) = bundle.get(kind) {
+        return Ok(SecretValue {
+            value: Some(value.clone()),
+        });
+    }
+
+    // Not in the bundle. Either this workspace predates the bundle, or the
+    // secret genuinely is not set. `raw_get` answers both without minting
+    // anything, and an absent item does not prompt.
+    let legacy = raw_get(workspace_id, kind)?;
+    let Some(value) = legacy else {
+        return Ok(SecretValue { value: None });
+    };
+
+    let mut migrated = bundle;
+    migrated.insert(kind.to_string(), value.clone());
+    // Write first, delete second. Never the other way round.
+    save_bundle(workspace_id, &migrated)?;
+    let _ = raw_delete(workspace_id, kind);
+    Ok(SecretValue { value: Some(value) })
+}
+
+/// Deleting something that is not there succeeds, so the settings screen can
+/// clear a field without checking first.
+pub fn delete(workspace_id: &str, kind: &str) -> AppResult<()> {
+    user_name(workspace_id, kind)?;
+    let mut bundle = load_bundle(workspace_id)?;
+    if bundle.remove(kind).is_some() {
+        save_bundle(workspace_id, &bundle)?;
+    }
+    raw_delete(workspace_id, kind)
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +572,98 @@ mod tests {
         let err = db_key(ws).unwrap_err();
         assert_eq!(err.code, "SECRET_ERROR");
         assert!(err.message.contains("not in the expected form"));
+    }
+
+    /// Acceptance criterion 9: however many secrets a workspace has, the OS is
+    /// asked for ONE item. Counting store touches is the closest a test can get
+    /// to counting Keychain prompts, and it is the right proxy: macOS prompts
+    /// per item, per binary identity.
+    #[test]
+    fn every_secret_lives_in_one_item() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-one-item";
+
+        let _ = db_key(ws).expect("key");
+        set(ws, "site", "site-token").expect("site");
+        set(ws, "anthropic", "sk-ant-x").expect("anthropic");
+
+        // One item, holding all three.
+        assert!(raw_get(ws, "bundle").expect("bundle").is_some());
+        for kind in ["dbkey", "site", "anthropic"] {
+            assert!(
+                raw_get(ws, kind).expect("legacy").is_none(),
+                "{kind} must not keep an item of its own"
+            );
+        }
+
+        assert_eq!(get(ws, "site").unwrap().value.as_deref(), Some("site-token"));
+        assert_eq!(
+            get(ws, "anthropic").unwrap().value.as_deref(),
+            Some("sk-ant-x")
+        );
+    }
+
+    /// An install made by an older build keeps its per-kind items. The first
+    /// read folds each one into the bundle and removes it, and the value is
+    /// never lost on the way.
+    #[test]
+    fn a_legacy_per_kind_item_is_folded_into_the_bundle() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-legacy";
+        let hex = "a".repeat(64);
+        raw_set(ws, "dbkey", &hex).expect("write the old-style item");
+        raw_set(ws, "site", "old-token").expect("write the old-style item");
+
+        // db_open's path: it must find the existing key, not mint a new one.
+        let key = db_key(ws).expect("key");
+        assert!(key.key_pragma().contains(&hex));
+        assert!(raw_get(ws, "dbkey").expect("legacy dbkey").is_none());
+
+        assert_eq!(get(ws, "site").unwrap().value.as_deref(), Some("old-token"));
+        assert!(raw_get(ws, "site").expect("legacy site").is_none());
+        assert!(raw_get(ws, "bundle").expect("bundle").is_some());
+    }
+
+    #[test]
+    fn the_bundle_is_read_once_and_then_cached() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-cached";
+        set(ws, "site", "t").expect("set");
+
+        // Tear the item out from under the cache: a cached run must not notice.
+        raw_delete(ws, "bundle").expect("remove the item behind the cache");
+        assert_eq!(get(ws, "site").unwrap().value.as_deref(), Some("t"));
+
+        // And a fresh run does notice, so the cache is a cache and not a store.
+        reset_bundle_cache();
+        assert_eq!(get(ws, "site").unwrap().value, None);
+    }
+
+    #[test]
+    fn deleting_clears_the_kind_and_leaves_the_others() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-delete";
+        set(ws, "site", "t").expect("set");
+        set(ws, "anthropic", "k").expect("set");
+
+        delete(ws, "site").expect("delete");
+        assert_eq!(get(ws, "site").unwrap().value, None);
+        assert_eq!(get(ws, "anthropic").unwrap().value.as_deref(), Some("k"));
+        // Deleting what is not there still succeeds.
+        delete(ws, "site").expect("second delete");
+    }
+
+    #[test]
+    fn an_unreadable_bundle_does_not_stop_the_app() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-garbled";
+        raw_set(ws, "bundle", "{not json").expect("write");
+        assert_eq!(get(ws, "site").unwrap().value, None);
     }
 
     #[test]
