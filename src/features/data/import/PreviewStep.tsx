@@ -68,7 +68,7 @@ export function PreviewStep(props: {
               <TH className="w-[17%]">What Helix noticed</TH>
             </TR>
           </THead>
-          <TBody className="[&>tr:last-child]:border-b-0">
+          <TBody>
             {rows.map((row) => {
               const name = nameOf(row);
               const emails = row.emails.map((e) => e.email).join(", ");

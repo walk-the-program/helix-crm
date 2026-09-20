@@ -189,7 +189,7 @@ export function BackupsScreen() {
                     </TH>
                   </TR>
                 </THead>
-                <TBody className="[&>tr:last-child]:border-b-0">
+                <TBody>
                   {files.map((file) => (
                     <TR key={file.path}>
                       <TD primary>{formats.dateTime(file.at)}</TD>

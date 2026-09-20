@@ -88,7 +88,7 @@ export function MergesHistory() {
               <TH align="right">Reverse</TH>
             </TR>
           </THead>
-          <TBody className="[&>tr:last-child]:border-b-0">
+          <TBody>
             {rows.map((row) => (
               <TR key={row.id}>
                 <TD>{formats.dateTime(row.at)}</TD>

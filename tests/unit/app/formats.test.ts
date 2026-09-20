@@ -12,6 +12,7 @@ import {
   FALLBACK_LOCALE,
   FALLBACK_REGION,
   makeFormats,
+  ZERO_DASH,
 } from "@/app/formats";
 
 /** Intl uses a non-breaking space in some locales; compare without caring. */
@@ -23,6 +24,26 @@ describe("makeFormats", () => {
   it("formats money in the workspace's currency and locale", () => {
     const f = makeFormats({ currency: "CAD", locale: "en-GB" });
     expect(plain(f.money(1245000))).toBe("CA$12,450.00");
+  });
+
+  /**
+   * The period-table rule (phase two, design direction rule 1 / Fable's A.3
+   * addendum): a zero in a money table covering a period is an em dash, so the
+   * eye only reads the figures that happened. A headline figure is NOT this
+   * helper and still says "$0.00".
+   */
+  it("writes a zero in a period money table as an em dash", () => {
+    const f = makeFormats({ currency: "CAD", locale: "en-GB" });
+    expect(f.moneyOrDash(0)).toBe(ZERO_DASH);
+    expect(plain(f.moneyOrDash(1245000))).toBe("CA$12,450.00");
+    // Not the same thing as money(): the headline keeps its zero.
+    expect(plain(f.money(0))).toBe("CA$0.00");
+  });
+
+  it("honours a currency override on the dashed form too", () => {
+    const f = makeFormats({ currency: "CAD", locale: "en-US" });
+    expect(plain(f.moneyOrDash(5000, "USD"))).toBe("$50.00");
+    expect(f.moneyOrDash(0, "USD")).toBe(ZERO_DASH);
   });
 
   it("formats dates in the workspace's locale", () => {

@@ -40,8 +40,49 @@ export function THead({ className, ...props }: HTMLAttributes<HTMLTableSectionEl
   );
 }
 
+/**
+ * The bounded region a long list scrolls inside, so `THead`'s `position:
+ * sticky` has a scrollport to stick to.
+ *
+ * `sticky` resolves against the nearest scrolling ancestor. A table dropped
+ * straight into a `Card` has none — the page scrolls instead — so the header
+ * scrolls away with the rows, and a `Card` with `overflow: hidden` is worse:
+ * it IS a scroll container, but it cannot scroll, so the header is pinned to a
+ * viewport that never moves. Wrap the table in this and the header behaves the
+ * way a native list view's column strip does.
+ *
+ * `maxHeight` is the caller's decision (it is the only thing a shared
+ * primitive cannot know) and is passed as a CSS length, never a hard-coded
+ * pixel class, so density and the window still decide the rest.
+ */
+export function TableScroll({
+  className,
+  maxHeight,
+  style,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { maxHeight?: string }) {
+  return (
+    <div
+      className={cn("min-h-0 overflow-y-auto overflow-x-hidden", className)}
+      style={maxHeight ? { maxHeight, ...style } : style}
+      {...props}
+    />
+  );
+}
+
+/**
+ * The rows.
+ *
+ * The last row does NOT draw its hairline. The surface a table sits on — a
+ * `Card`, a settings panel, a dialog — already ends in a border of its own, and
+ * a row rule immediately above it read as a double line with a 1px white band
+ * trapped between them, which is the "empty panel below the last row" that
+ * every screen was patching out by hand with
+ * `className="[&>tr:last-child]:border-b-0"`. It belongs here once: the surface
+ * ends at the last hairline, everywhere, and a screen never has to know.
+ */
 export function TBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody className={className} {...props} />;
+  return <tbody className={cn("[&>tr:last-child]:border-b-0", className)} {...props} />;
 }
 
 /**
@@ -161,23 +202,36 @@ export function TH({
  * a larger size. A native list keeps one size down a column and separates the
  * name from its meta with weight and colour. `muted` is every subordinate
  * cell. `align="right"` stamps data-numeric, which is what turns on tabular
- * figures in globals.css.
+ * figures in globals.css — a money or count column asks for `align="right"`
+ * and never for its own `text-right tabular-nums` classes.
+ *
+ * `dashZero` is the money-table rule: over a period, a zero is an em dash in
+ * muted ink rather than a row of "$0.00" that the eye has to read before it
+ * can discard it. A headline figure still says "$0.00", because there the zero
+ * is the answer. The caller supplies the text — `useFormats().moneyOrDash` in
+ * src/app/formats.ts returns the dash — and sets `dashZero` for the same
+ * condition, so the cell knows to drop the ink without the kit having to
+ * inspect its own children. A dashed cell still sums as zero; nothing about
+ * the arithmetic changes.
  */
 export function TD({
   className,
   align = "left",
   primary,
   muted,
+  dashZero,
   children,
   ...props
 }: TdHTMLAttributes<HTMLTableCellElement> & {
   align?: "left" | "right";
   primary?: boolean;
   muted?: boolean;
+  dashZero?: boolean;
 }) {
   return (
     <td
       data-numeric={align === "right" ? "" : undefined}
+      data-zero={dashZero ? "" : undefined}
       className={cn(
         "h-[var(--row-h)] px-[var(--space-3)]",
         // A name truncates at one line and carries a title attribute; it never
@@ -190,6 +244,9 @@ export function TD({
             ? "text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
             : "text-[var(--color-text)]",
         align === "right" ? "text-right tabular-nums" : "text-left",
+        // Last, so it wins over `primary`/`muted`: a zero placeholder is the
+        // quietest thing in the column whatever else the cell is.
+        dashZero && "text-[var(--color-text-faint)]",
         className,
       )}
       {...props}

@@ -101,7 +101,7 @@ export function TypedMappingStep(props: {
               <TH>Import as</TH>
             </TR>
           </THead>
-          <TBody className="[&>tr:last-child]:border-b-0">
+          <TBody>
             {mapping.map((column) => {
               const sample = sampleFor(sampleRows, column.index);
               const hint = hintFor(column.field);

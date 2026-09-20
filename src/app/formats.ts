@@ -43,9 +43,27 @@ export const FALLBACK_CURRENCY = "USD";
 export const FALLBACK_LOCALE = "en-US";
 export const FALLBACK_REGION = "US";
 
+/**
+ * What a zero looks like inside a money table covering a period.
+ *
+ * A column of "$0.00" is eleven characters the eye has to read before it can
+ * throw them away; an em dash says "nothing happened here" at a glance and
+ * leaves the figures that matter as the only ink in the column. This is the
+ * table rule only — a headline figure keeps "$0.00", because there the zero is
+ * the answer to the question the screen asked. A dashed cell still sums as
+ * zero, so no total moves.
+ */
+export const ZERO_DASH = "—";
+
 export type Formats = {
   /** Integer cents → the workspace's currency and locale. */
   money: (cents: number, currency?: string) => string;
+  /**
+   * The same, except that a zero is `ZERO_DASH`. For a cell in a money table
+   * covering a period; pair it with `dashZero` on the kit's `TD` so the dash
+   * is drawn in faint ink.
+   */
+  moneyOrDash: (cents: number, currency?: string) => string;
   /** Integer cents → the same, abbreviated over $100k ("CA$1.2M"). */
   moneyCompact: (cents: number, currency?: string) => string;
   /** An ISO date or date-only string → the workspace's locale. */
@@ -75,6 +93,8 @@ export function makeFormats(input: {
   const region = input.region || FALLBACK_REGION;
   return {
     money: (cents, override) => formatMoney(cents, override || currency, locale),
+    moneyOrDash: (cents, override) =>
+      cents === 0 ? ZERO_DASH : formatMoney(cents, override || currency, locale),
     moneyCompact: (cents, override) =>
       formatMoneyCompact(cents, override || currency, locale),
     date: (value) => formatDateDisplay(value, locale),

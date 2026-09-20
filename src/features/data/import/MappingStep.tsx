@@ -119,7 +119,7 @@ export function MappingStep(props: {
               <TH>Import as</TH>
             </TR>
           </THead>
-          <TBody className="[&>tr:last-child]:border-b-0">
+          <TBody>
             {mapping.map((column) => {
               const sample = sampleFor(sampleRows, column.index);
               const options = FIELDS.map((field) => ({

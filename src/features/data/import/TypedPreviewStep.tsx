@@ -91,7 +91,7 @@ export function TypedPreviewStep(props: {
               <TH className="w-[20%]">What Helix noticed</TH>
             </TR>
           </THead>
-          <TBody className="[&>tr:last-child]:border-b-0">
+          <TBody>
             {rows.map((row) => (
               <TR key={row.rowNumber}>
                 <TD align="right" muted>
