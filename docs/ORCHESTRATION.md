@@ -38,3 +38,9 @@
 - Phase R3: final integration (AI buttons on record pages, /settings/site and /settings/backups mounted from Settings, vite watch ignores), full e2e, manual checklist in the real window, docs refresh, release.
 - Dev window relaunched at 23:5x without a pipe (the first launch died when `| head` closed).
 - settings+ai (7acff56): 17 e2e green. Final integration: promote the three AI settings keys and deals.createStatements (check if the reconciliation already did the latter); shell should bind registry command shortcuts generically instead of each feature mounting an overlay host from onBoot; FeatureModule needs an overlay slot; DialogContent height bound (sent to the redesign agent).
+
+## Brand guide + depth (2026-09-19)
+- Brand guide implemented: foundation (42e2bc6, fa221ab), sweep A (eb9ff1f), sweep B running (leads/settings/ai/docs).
+- Decisions D16-D19: industry-first onboarding with trade presets and sample data (running); no lock/account for now; SQLCipher at rest keyed from keychain (running); recurring reminders, templates, add-to-calendar, week summary, help (running). Signed installers still deferred.
+- After these land: mount RemoveSampleDataButton and the Templates/Recurring links in Settings; Diagnostics shows encrypted/cipherVersion/disk encryption; full e2e; re-tag v0.1.0 (or v0.2.0) so the published release carries the brand and encryption; rebuild the local app.
+- Windows e2e agent iterating on branch e2e-win/fix-session (budget 8 runs).
