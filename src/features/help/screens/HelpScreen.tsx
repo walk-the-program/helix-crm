@@ -26,8 +26,9 @@
  *    the GitHub issues page. The issues link is external, so it goes through
  *    the OS opener rather than a bare href that would navigate the whole
  *    webview away from the app — the same pattern DraftFollowUpButton uses
- *    for mailto: links. The URL is also printed as plain text beside the
- *    button so the owner can type it into another machine by hand.
+ *    for mailto: links. The URL is the button's `title` rather than a line of
+ *    text on the page, and the toast that fires if the browser refuses to open
+ *    prints it in full — the one moment it is needed.
  *
  * One hairline, at most, separates the everyday sections from the "something
  * is wrong" one; every other gap is air, not a rule.
@@ -60,8 +61,8 @@ async function openIssues(): Promise<void> {
     await openUrl(ISSUES_URL);
   } catch {
     // Never `window.location` as a fallback: that would navigate the app's own
-    // webview to GitHub and leave the owner with no way back. The URL is
-    // already printed beside the button, so say so and let him type it.
+    // webview to GitHub and leave the owner with no way back. Say the address
+    // instead, which is the only place it needs to be spelled out.
     toast.error(`Your browser did not open. The address is ${ISSUES_URL}`);
   }
 }
@@ -81,14 +82,22 @@ function Paragraphs(props: { paragraphs: string[] }) {
   );
 }
 
+/**
+ * A heading sits closer to its own paragraphs than the paragraphs sit to each
+ * other, or it reads as floating between two bodies of text rather than
+ * belonging to the one below it. Both gaps used to be `--space-3` and the
+ * hierarchy went flat at every width.
+ */
 function HelpSectionBlock(props: { section: HelpSection }) {
   const { section } = props;
   return (
-    <section id={section.id} className="flex flex-col gap-[var(--space-3)]">
+    <section id={section.id} className="flex flex-col gap-[var(--space-2)]">
       <h2>{section.title}</h2>
-      <Paragraphs paragraphs={section.paragraphs} />
+      <div className="flex flex-col gap-[var(--space-3)]">
+        <Paragraphs paragraphs={section.paragraphs} />
+      </div>
       {section.id === "shortcuts" ? (
-        <div className="mt-[var(--space-1)]">
+        <div className="mt-[var(--space-2)]">
           <Button type="button" variant="secondary" onClick={openShortcuts}>
             Show the shortcuts
           </Button>
@@ -102,26 +111,37 @@ function TroubleSection() {
   return (
     <section
       id={HELP_TROUBLE.id}
-      className="flex flex-col gap-[var(--space-3)] border-t border-[var(--color-border)] pt-[var(--space-6)]"
+      className="flex flex-col gap-[var(--space-2)] border-t border-[var(--color-border)] pt-[var(--space-6)]"
     >
       <h2>{HELP_TROUBLE.title}</h2>
-      <Paragraphs paragraphs={HELP_TROUBLE.paragraphs} />
-      <div className="mt-[var(--space-1)] flex flex-col gap-[var(--space-2)]">
-        <div className="flex flex-wrap items-center gap-[var(--space-3)]">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => navigate("/settings/diagnostics")}
-          >
-            Open Diagnostics
-          </Button>
-          <Button type="button" variant="secondary" onClick={() => void openIssues()}>
-            Report an issue on GitHub
-          </Button>
-        </div>
-        <p className="break-all text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-          {ISSUES_URL}
-        </p>
+      <div className="flex flex-col gap-[var(--space-3)]">
+        <Paragraphs paragraphs={HELP_TROUBLE.paragraphs} />
+      </div>
+      {/*
+        The address used to be printed underneath as a line of `break-all`
+        faint text, so the owner could type it into another machine by hand.
+        Nobody types a GitHub issues URL by hand, and a raw URL sitting on a
+        page is the kind of permanent explanation the design direction is
+        against (rule 3). It is the button's `title` instead, and the toast
+        that fires when the browser refuses to open still prints it in full —
+        which is the one moment it is actually needed.
+      */}
+      <div className="mt-[var(--space-2)] flex flex-wrap items-center gap-[var(--space-3)]">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => navigate("/settings/diagnostics")}
+        >
+          Open Diagnostics
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          title={ISSUES_URL}
+          onClick={() => void openIssues()}
+        >
+          Report an issue on GitHub
+        </Button>
       </div>
     </section>
   );

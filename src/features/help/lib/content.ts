@@ -34,7 +34,9 @@ export const HELP_SECTIONS: HelpSection[] = [
       // old "drag it to a new stage" sentence rather than joining it — the
       // section is held to six sentences, and this one says more.
       "On the jobs board, drag a card to another stage, or focus a card and hold shift with an arrow key to move it.",
-      "Moving a job to a lost stage asks you for a reason first, so you remember why later without having to guess. The Text and Email buttons on a customer each have a small arrow beside them: that picks one of your saved templates, fills in the name, the job and the price, and opens the message ready for you to read and send. If job is not the word you use, open Settings and go to Vocabulary to call these deals, jobs or quotes instead; the change is instant and only relabels the screen, nothing about your data moves.",
+      "Moving a job to a lost stage asks you for a reason first, so you remember why later without having to guess.",
+      "The Text and Email buttons on a customer each have a small arrow beside them: that picks one of your saved templates, fills in the name, the job and the price, and opens the message ready for you to read and send.",
+      "If job is not the word you use, open Settings and go to Vocabulary to call these deals, jobs or quotes instead; the change is instant and only relabels the screen, and nothing about your data moves.",
     ],
   },
   {
