@@ -12,6 +12,8 @@ import { raw } from "@/db/client";
 import { withTransaction, withWrite } from "@/db/writeLock";
 import { logChange } from "@/db/changeLog";
 import { nowIso, todayLocal } from "@/lib/dates";
+import { ValidationError } from "@/db/errors";
+import * as deals from "@/db/repos/deals";
 
 export type TrashEntityType =
   | "contact"
@@ -23,7 +25,10 @@ export type TrashEntityType =
   | "saved_view"
   | "attachment"
   | "recurring_rule"
-  | "template";
+  | "template"
+  | "product"
+  | "custom_field"
+  | "document";
 
 const TABLES: Record<TrashEntityType, string> = {
   contact: "contacts",
@@ -36,6 +41,9 @@ const TABLES: Record<TrashEntityType, string> = {
   attachment: "attachments",
   recurring_rule: "recurring_rules",
   template: "templates",
+  product: "products",
+  custom_field: "custom_fields",
+  document: "documents",
 };
 
 /** How the row is labelled in the trash list, per type. */
@@ -50,6 +58,10 @@ const LABELS: Record<TrashEntityType, string> = {
   attachment: "file_name",
   recurring_rule: "title",
   template: "name",
+  product: "'Service ' || name",
+  custom_field: "'Field ' || name",
+  // "Invoice INV-2026-0004" or "Quote QUO-2026-0007", per documents.ts's `kind`.
+  document: "CASE WHEN kind = 'invoice' THEN 'Invoice ' || number ELSE 'Quote ' || number END",
 };
 
 export type TrashItem = {
@@ -57,6 +69,14 @@ export type TrashItem = {
   entityId: string;
   label: string;
   deletedAt: string;
+  /**
+   * Set only on a "deal" row that a real (SENT or later) quote or invoice
+   * still refers to: the blocking document's number, so the screen can say
+   * "Kept: INV-2026-0004 refers to it" (ruling R6b). Undefined for every
+   * other type, and for a deal that is not blocked. Optional so an existing
+   * caller that builds a TrashItem by hand keeps compiling.
+   */
+  blockedBy?: string | null;
 };
 
 export const PURGE_AFTER_DAYS = 30;
@@ -72,12 +92,18 @@ export async function list(
      ORDER BY x.deleted_at DESC LIMIT ?`,
     [limit],
   );
-  return rows.map((r) => ({
+  const items: TrashItem[] = rows.map((r) => ({
     entityType,
     entityId: String(r[0]),
     label: String(r[1] ?? "").trim() || "(untitled)",
     deletedAt: String(r[2]),
   }));
+  if (entityType === "deal") {
+    for (const item of items) {
+      item.blockedBy = await deals.purgeBlockedBy(item.entityId);
+    }
+  }
+  return items;
 }
 
 export async function listAll(limitPerType = 50): Promise<TrashItem[]> {
@@ -144,6 +170,20 @@ export async function purge(
   entityId: string,
   options: { batchId?: string } = {},
 ): Promise<void> {
+  // A quote or invoice that left draft is a real piece of paper the owner
+  // sent someone; purging its deal would silently cut it loose (ruling R6b).
+  // `deals.purgeBlockedBy` is the one place that check lives - reused here,
+  // not reimplemented. The 30-day sweep never reaches this: `expired()`
+  // already leaves a blocked deal out of what it hands the sweep.
+  if (entityType === "deal") {
+    const blocker = await deals.purgeBlockedBy(entityId);
+    if (blocker) {
+      throw new ValidationError(
+        `${blocker} refers to this one, so it stays until that document is void or deleted.`,
+        [{ path: "id", message: `${blocker} refers to it.` }],
+      );
+    }
+  }
   await withTransaction(async () => {
     await raw.batch([
       { sql: `DELETE FROM custom_values WHERE entity_id = ?`, params: [entityId] },
@@ -167,7 +207,16 @@ export async function purge(
   }, "Emptying the trash");
 }
 
-/** Everything soft-deleted longer ago than the retention window. */
+/**
+ * Everything soft-deleted longer ago than the retention window - what the
+ * nightly sweep is free to purge.
+ *
+ * A deal a real (SENT or later) document still refers to is genuinely
+ * expired, but is left out here rather than handed to a sweep that would
+ * call `purge()` on it and throw (ruling R6b): the sweep purges every other
+ * expired row and never has to know this one exists. It still shows up in
+ * `trash.list("deal")`, with `blockedBy` set, so the owner can see it.
+ */
 export async function expired(
   olderThanDays = PURGE_AFTER_DAYS,
   today: string = todayLocal(),
@@ -184,9 +233,13 @@ export async function expired(
       [cutoffIso],
     );
     for (const r of rows) {
+      const entityId = String(r[0]);
+      if (type === "deal" && (await deals.purgeBlockedBy(entityId)) !== null) {
+        continue;
+      }
       out.push({
         entityType: type,
-        entityId: String(r[0]),
+        entityId,
         label: String(r[1] ?? "").trim() || "(untitled)",
         deletedAt: String(r[2]),
       });
