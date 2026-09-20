@@ -137,6 +137,13 @@ screens full, and take it out again with one click. Skip all of it and you
 land on the Today screen with three ways to start: import a CSV, add a
 contact, or connect your website.
 
+Today then asks you for one thing before it settles down: your **recovery
+key**. Your workspace and every backup of it are encrypted with a key that
+lives on this computer and nowhere else, so if the computer dies that key is
+the only way to open your backups on the next one. The card shows it, lets you
+copy, save or print it, and goes away for good once you confirm you have kept
+it. Nobody can send you another copy, including us.
+
 ## Importing your data
 
 From the Import screen (or the "Import a CSV" command), drop in an export
