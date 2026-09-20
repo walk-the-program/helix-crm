@@ -572,18 +572,18 @@ export const sample: SampleSet = {
       dealKey: "dl-cobblestone-window",
       status: "paid",
       lines: "one_time",
-      issuedDaysAgo: 24,
+      issuedDaysAgo: 8,
       dueInDays: 14,
-      paidDaysAgo: 24,
+      paidDaysAgo: 5,
       paidMethod: "card",
     },
     {
-      // Issued 26 days ago on 14-day terms: twelve days over, worth chasing.
+      // Issued 20 days ago on 14-day terms: six days over, worth chasing.
       kind: "invoice",
       dealKey: "dl-oakhill-mirror",
       status: "sent",
       lines: "one_time",
-      issuedDaysAgo: 26,
+      issuedDaysAgo: 20,
       dueInDays: 14,
     },
   ],

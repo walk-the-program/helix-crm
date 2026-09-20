@@ -487,14 +487,14 @@ export const sample: SampleSet = {
       dealKey: "dl-quintessa-onramp",
       status: "paid",
       lines: "one_time",
-      issuedDaysAgo: 20,
+      issuedDaysAgo: 8,
       dueInDays: 14,
-      paidDaysAgo: 17,
+      paidDaysAgo: 5,
       paidMethod: "card",
     },
     {
       /*
-       * Issued 30 days ago on 14-day terms: sixteen days over, same as the
+       * Issued 20 days ago on 14-day terms: six days over, same as the
        * landscaping example, on the one signup who never came back to book
        * the free class in the first place.
        */
@@ -502,7 +502,7 @@ export const sample: SampleSet = {
       dealKey: "dl-rutherford-wentcold",
       status: "sent",
       lines: "one_time",
-      issuedDaysAgo: 30,
+      issuedDaysAgo: 20,
       dueInDays: 14,
     },
   ],

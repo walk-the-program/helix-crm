@@ -484,7 +484,7 @@ export const sample: SampleSet = {
     },
     {
       kind: "note",
-      body: "Summit paid the fence line the day it was invoiced. Ask about the back lot.",
+      body: "Summit paid the fence line within the week. Ask about the back lot.",
       daysAgo: 8,
       contactKey: "ct-royce",
       dealKey: "dl-summit-fence",
@@ -590,29 +590,34 @@ export const sample: SampleSet = {
     {
       /*
        * The invoice the set's own timeline already talks about: "Summit paid
-       * the fence line the day it was invoiced. Ask about the back lot."
-       * Until now that note described an invoice that did not exist.
+       * the fence line within the week. Ask about the back lot." Until this
+       * existed, that note described an invoice that did not.
        */
       kind: "invoice",
       dealKey: "dl-summit-fence",
       status: "paid",
       lines: "one_time",
-      issuedDaysAgo: 26,
+      issuedDaysAgo: 8,
       dueInDays: 14,
-      paidDaysAgo: 26,
+      paidDaysAgo: 5,
       paidMethod: "bank",
     },
     {
       /*
-       * Issued 30 days ago on 14-day terms, so it is sixteen days over and
-       * lands in the 1-30 bucket: late enough to be worth chasing, not so late
-       * that the example looks like a failing business.
+       * Issued 20 days ago on 14-day terms, so it is six days over and lands
+       * in the 1-30 bucket: late enough to be worth chasing, not so late that
+       * the example looks like a failing business.
+       *
+       * Both invoices sit inside the current month for most of any month.
+       * They used to be 26 and 30 days old, which put them in LAST month, so
+       * Revenue's default "This month" still read Invoiced $0 and Collected
+       * $0 — most of what giving the example money was for.
        */
       kind: "invoice",
       dealKey: "dl-sprinkler-zone",
       status: "sent",
       lines: "one_time",
-      issuedDaysAgo: 30,
+      issuedDaysAgo: 20,
       dueInDays: 14,
     },
   ],
