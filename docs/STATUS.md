@@ -4012,3 +4012,112 @@ tests/unit/today tests/unit/help` 469 passed; the leads, onboarding and today
 e2e specs 32 passed on port 4212; `npx vite build` clean. Screenshots at 1280
 in light and dark in `design/round3/` — every report tab, and onboarding
 screens 1 and 2.
+
+---
+
+## 2026-09-19 — Round 3, L3: invoices and quotes
+
+### Did
+
+**The status moves without sending.** `DocumentPage` carries a Status control
+beside the total: Draft to Sent to Paid on an invoice, Draft to Sent to
+Accepted or Declined on a quote. Walker's complaint was "It wouldn't let me
+change its status without hitting the send button" — an invoice handed over on
+paper had no way into Receivables, because Send was also the thing that wrote
+and opened a PDF. The control is the same repository call with the same dates
+and no file. Void is deliberately not in it: it spends a number and cannot be
+walked back, so it keeps its own destructive button and its own confirmation.
+The rule lives in `src/features/invoices/lib/documentActions.ts`
+(`statusChoices`), reading the repository's own transition table, so the
+control can never offer a move the repository will refuse.
+
+**One busy state per action.** The page held a single `busy` boolean that every
+header button read, which is why "when I hit the download PDF button, a thing
+appeared for both download PDF and send". `BusyState` is now the one action in
+flight and each button asks whether it is the one.
+
+**Bill-to.** `src/features/invoices/lib/billTo.ts` decides who a document names:
+the contact's name, else the company, else the email, else "No customer yet" —
+and never repeats whichever of those became the title as a detail line under
+it. The PDF's bill-to block and the document page's Details card both ask it,
+so the screen cannot promise a name the document does not carry. Walker: "if
+there's no name, it shouldn't say that on the invoice… default to having the
+business be the title."
+
+**"Add a line" opens the catalog.** `ServicesPicker` is a search box and a
+checkbox list over the services catalog; ticks survive retyping the search, so
+the owner can search "mulch", tick it, search "edging", tick that, and add
+both. Beside it are "Custom line" for a blank row and "New service…", which
+saves a real catalog row through `products.create` and adds it as a line in the
+same action. Both the document page and New document use it, because both now
+use the same `DocumentLines` editor.
+
+**New document was rebuilt.** It had its own copy of the line table; it now
+renders `DocumentLines`, so there is one line editor in the feature rather than
+two that drift. Contact and company are the shared type-ahead pickers, and
+choosing a contact fills the company from that contact. Every date field is the
+in-app `DatePicker` — there is no `input[type=date]` left anywhere in
+`src/features/invoices`.
+
+**Every document belongs to a deal.** New document has a required Job field: a
+combobox of that customer's deals, open work first, with "New job" creating one
+inline from the lines already on screen. `documents.create` refuses a document
+without a `deal_id`, and `insertDocument` reads the contact and company off the
+deal and ignores whatever the caller passed, so a document and its deal cannot
+name two different customers. `syncCustomerFromDeal(dealId)` re-copies the
+customer onto a deal's live documents. The one path exempt from the rule is
+`accept()` converting a quote that predates it.
+
+**Timeline entries.** Creating, sending, paying, voiding, accepting and
+declining each write one system activity on the deal and its customer, in the
+same batch as the document write — `Invoice INV-2026-0003 sent · $1,042.36`,
+`Paid $1,042.36 by bank transfer`. The wording is one pure function,
+`documentActivityBody`.
+
+**Spacing and the sticker.** The line editor's description and detail rows are
+`--space-2` apart inside a row with real vertical padding, instead of two boxes
+jammed together in a fixed-height cell — Walker: "this seems really scrunched
+together". `--shadow-sticker` is gone from every invoice screen; the primary
+block is the flat brand fill.
+
+**Receivables wears the reports frame.** The route is registered here but the
+page is a report, so it renders inside `ReportsFrame` and drops its own
+`PageHeader`. Before this it was a dead end: the owner could reach Receivables
+and had no way back to the other report tabs.
+
+### Verification
+
+`npm run typecheck` clean. `npm test` 1778 passed, 2 skipped, 124 files. The
+invoices e2e spec 10 passed on port 4213 —
+`E2E_PORT=4213 E2E_OUT=dist-r3l3 npx playwright test -c
+tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/invoices.e2e.ts`.
+`npx vite build --outDir dist-r3l3` clean (folder deleted after).
+`HELIX_PDF_SAMPLE=1 npx vitest run tests/unit/invoices/pdfSample.test.ts`
+writes two PDFs now: the full one, and a company-only invoice added this round
+so the bill-to fallback can be looked at rather than only asserted on. Looked
+at it: "Ridgeway Farms" is the bold first line, no blank line above it, and the
+company is not repeated underneath. Screenshots at 1280 in light and dark in
+`design/round3/` — the document page with the Status control, the services
+picker open, and New document with the contact combobox open.
+
+The line editor needed one more pass after the first screenshots: the
+description column was collapsing to the width of the word "Description",
+because four fixed-width columns sat beside it and the table sized itself off
+its content. It now claims 40% and the numeric columns carry minimum widths, so
+the two inputs are readable at 1280.
+
+### One thing for another owner
+
+`documents.syncCustomerFromDeal(dealId)` is written and tested but has no
+production caller. It needs one in `deals.update` (the records lead's file):
+after a patch that changes `contactId` or `companyId`, call it once the write
+has committed, since it opens its own transaction and the write lock is not
+reentrant. Until that lands, a document keeps the customer its deal had when
+the document was created, which is right in every case except a deal whose
+customer is corrected afterwards.
+
+The services picker opens the catalog feature's own `NewServiceDialog` rather
+than a second copy of that form. Both leads reached for one in the same round;
+the catalog's is the one that survived, because the deal page's services panel
+opens the same form and a service created from an invoice line has to be the
+same catalog row either way.
