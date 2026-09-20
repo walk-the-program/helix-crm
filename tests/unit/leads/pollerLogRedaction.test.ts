@@ -115,9 +115,29 @@ describe("recordFailure log redaction (LR-SEC-W1 item 9 correction)", () => {
     }
   });
 
-  it("still logs the status and the failure count for a non-auth failure", async () => {
+  // LR-REV split the single non-auth branch in two: a status the site
+  // actually answered with is a LeadPollSiteError, and only a failure with no
+  // status at all is a LeadPollNetworkError. The subject of this test is
+  // unchanged - the log still carries enough to act on and still carries no
+  // body - so both halves are now asserted instead of one.
+  it("still logs the status for a site failure, with no body", async () => {
     poller.setLeadsFetch(async () => {
       throw { code: "HTTP_STATUS", message: "HTTP 500 from the site: boom" };
+    });
+
+    await poller.tick("manual");
+
+    const siteLine = pollLogCalls.find((call) =>
+      call.message.includes("LeadPollSiteError"),
+    );
+    expect(siteLine).toBeDefined();
+    expect(siteLine?.message).toContain("500");
+    expect(siteLine?.message).not.toContain("boom");
+  });
+
+  it("still logs the failure count for a failure with no status at all", async () => {
+    poller.setLeadsFetch(async () => {
+      throw { code: "NET_ERROR", message: "Could not reach the site: dns error" };
     });
 
     await poller.tick("manual");
@@ -127,6 +147,7 @@ describe("recordFailure log redaction (LR-SEC-W1 item 9 correction)", () => {
     );
     expect(networkLine).toBeDefined();
     expect(networkLine?.message).toContain("1/3");
+    expect(networkLine?.message).not.toContain("dns error");
   });
 
   it("an auth failure's body never reaches the log either (existing item 9 behaviour)", async () => {

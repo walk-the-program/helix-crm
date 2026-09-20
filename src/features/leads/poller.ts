@@ -5,7 +5,11 @@
  *          --> [idle, cursor saved, lastPolledAt mirrored into helix.json]
  *          --401/403--> [stopped: banner "check the token", timer off until
  *                        the settings change]
- *          --network--> [idle, retry in 1, 2, 4, 8 min; banner after 3 in a row]
+ *          --keychain--> [stopped: banner "save the token again", timer off]
+ *          --404--> [idle, retry, banner at once: the site has no lead feed]
+ *          --400--> [idle, cursor dropped, start again from the first lead]
+ *          --other HTTP--> [idle, retry, banner at once: the site answered]
+ *          --no answer--> [idle, retry in 1, 2, 4, 8 min; banner after 3 in a row]
  *
  * docs/PLAN.md, Core item 10 and the LEAD POLL state machine.
  *
@@ -28,11 +32,15 @@ import { nowIso } from "@/lib/dates";
 import {
   FAILURES_BEFORE_BANNER,
   POLL_INTERVAL_MS,
-  isAuthStatus,
   nextDelayMs,
   shouldShowNetworkBanner,
   statusFromError,
 } from "@/features/leads/lib/backoff";
+import {
+  STORED_PREFIX,
+  classifyPollFailure,
+  type PollFailureKind,
+} from "@/features/leads/lib/pollMessages";
 import { applyLeadPage, prepareApply } from "@/features/leads/lib/applyLeads";
 import {
   assertValidLeadPage,
@@ -317,21 +325,36 @@ function invalidateAffectedQueries(): void {
 }
 
 /**
- * The two error branches of the state machine.
+ * The error branches of the state machine, one per person who can fix it
+ * (`lib/pollMessages.ts` holds the words; this holds the behaviour).
  *
- *   401 / 403  -> stop the timer, show the banner now. Nothing the app can do
- *                 on its own will fix a rejected token.
- *   anything else -> back off 1, 2, 4, 8 minutes, stay silent until the third
- *                 failure in a row. A laptop that drove through a canyon must
- *                 not put a banner on the screen.
+ *   401 / 403   stop the timer, banner now. Nothing the app does on its own
+ *               fixes a rejected token.
+ *   keychain    stop the timer, banner now. Same reason, different door.
+ *   404         keep retrying so it heals when ClearPath redeploys, but
+ *               banner at once: this is not a blip.
+ *   400         drop the cursor and start again from the first lead, once.
+ *               Re-reading history is safe; staying stuck was not.
+ *   other HTTP  back off, banner at once - the site answered, so silence
+ *               would be hiding a real answer.
+ *   no answer   back off 1, 2, 4, 8 minutes, stay silent until the third
+ *               failure in a row. A laptop that drove through a canyon must
+ *               not put a banner on the screen.
  */
 async function recordFailure(err: unknown, syncKey: string): Promise<PollError> {
   const stat = statusFromError(err);
   const raw = messageFrom(err);
+  // A LeadShapeError is the site answering 200 with something Helix cannot
+  // use. It has no status, but it is emphatically not "your internet is
+  // down" - it is the site's problem, and the error already carries the
+  // sentence that says so.
+  const siteAnswered = err instanceof LeadShapeError;
+  const kind = classifyPollFailure(stat, { siteAnswered, code: codeFrom(err) });
 
-  if (isAuthStatus(stat)) {
+  if (kind === "auth") {
     const error: PollError = {
-      kind: "auth",
+      kind,
+      status: stat,
       message:
         "Your website turned the connection down. Check the token in Settings, then try again.",
     };
@@ -351,17 +374,117 @@ async function recordFailure(err: unknown, syncKey: string): Promise<PollError> 
     // in Settings. `lead_sync.last_error` and helix.log (plaintext, and
     // exactly what Diagnostics invites the owner to send to support) must
     // never carry it (LR-SEC-W1 item 9, 2026-09-20).
-    await saveError(syncKey, `LeadPollAuthError: HTTP ${stat}`);
+    await saveError(syncKey, `${STORED_PREFIX.auth}: HTTP ${stat}`);
     pollLog.error(`LeadPollAuthError HTTP ${stat}`);
     return error;
   }
 
+  if (kind === "config") {
+    // The keychain refused between `readSiteConnection`'s check and the
+    // request. Retrying on a timer cannot fix it, and the owner has to be
+    // sent to the keychain prompt, not to his website (LR-REV, F-REV-6).
+    const error: PollError = {
+      kind,
+      status: null,
+      message:
+        "Helix could not read your website token from this computer. Open Settings, then Website, and save the token again.",
+    };
+    consecutiveFailures = 0;
+    clearTimer();
+    publish({
+      phase: "stopped",
+      lastError: error,
+      bannerVisible: true,
+      consecutiveFailures: 0,
+      nextPollAt: null,
+    });
+    await saveError(syncKey, `${STORED_PREFIX.config}: the keychain refused`);
+    pollLog.error("LeadPollConfigError: the keychain refused");
+    return error;
+  }
+
+  if (kind === "endpoint") {
+    // 404: Helix reached the site and the site has no lead feed on it. Most
+    // often a ClearPath site deployed without CRM_API_TOKEN's endpoint block,
+    // or with the route registered after the /api catch-all. Keep retrying -
+    // that is what makes it heal by itself the moment Walker redeploys - but
+    // say so at once rather than after three silent tries, because this is
+    // not a blip and nothing the owner does will change it (F-REV-1).
+    consecutiveFailures += 1;
+    const error: PollError = {
+      kind,
+      status: stat,
+      message:
+        "Your website is not set up to send leads yet. Ask ClearPath to switch on the lead connection.",
+    };
+    publish({
+      phase: "idle",
+      lastError: error,
+      consecutiveFailures,
+      bannerVisible: true,
+    });
+    // No body: a 404 body is the site's own 404 page, which is long, useless
+    // and third-party text.
+    await saveError(syncKey, `${STORED_PREFIX.endpoint}: HTTP ${stat}`);
+    pollLog.error(`LeadPollEndpointError HTTP ${stat}`);
+    return error;
+  }
+
+  if (kind === "cursor") {
+    // 400 is, by the site contract, exactly one thing: the site could not
+    // read the `after` marker Helix sent it. Before LR-REV this backed off
+    // like any other failure and then sent the same unreadable cursor every
+    // eight minutes forever - an unrecoverable stop that survived even a
+    // disconnect and reconnect, because `disconnectSite` deliberately keeps
+    // the lead_sync row (F-REV-2). Drop the cursor once and start again from
+    // the first lead. That is safe precisely because applying a page is
+    // idempotent: `applyLeadPage` matches on `deals.external_id`, which
+    // carries a partial UNIQUE index (drizzle/0005), so a re-read of history
+    // creates nothing and overwrites nothing the owner has edited.
+    consecutiveFailures += 1;
+    try {
+      await leadSync.saveCursor(syncKey, null);
+    } catch (resetErr) {
+      pollLog.warn(`could not reset the lead cursor: ${String(resetErr)}`);
+    }
+    const error: PollError = {
+      kind,
+      status: stat,
+      message:
+        "Your website could not read where Helix left off. Helix will start again from your first lead; nothing will be duplicated.",
+    };
+    publish({
+      phase: "idle",
+      lastError: error,
+      consecutiveFailures,
+      bannerVisible: true,
+    });
+    await saveError(syncKey, `${STORED_PREFIX.cursor}: HTTP ${stat}`);
+    pollLog.error(`LeadPollCursorError HTTP ${stat}: cursor reset`);
+    return error;
+  }
+
   consecutiveFailures += 1;
-  const visible = shouldShowNetworkBanner(consecutiveFailures);
-  const error: PollError = {
-    kind: "network",
-    message: `Helix has not been able to reach your website (${consecutiveFailures} tries). It will keep trying.`,
-  };
+  const visible =
+    kind === "site" ? true : shouldShowNetworkBanner(consecutiveFailures);
+  const error: PollError =
+    kind === "site"
+      ? {
+          kind,
+          status: stat,
+          // A LeadShapeError already says what is wrong in the owner's own
+          // words; there is nothing better to write over it, so it becomes
+          // both the toast and the banner's second line.
+          message: siteAnswered
+            ? raw
+            : `Your website answered with an error (${stat}). Helix keeps trying on its own.`,
+          detail: siteAnswered ? raw : null,
+        }
+      : {
+          kind: "network",
+          status: null,
+          message: `Helix has not been able to reach your website (${consecutiveFailures} tries). It will keep trying.`,
+        };
   publish({
     phase: "idle",
     lastError: error,
@@ -379,12 +502,25 @@ async function recordFailure(err: unknown, syncKey: string): Promise<PollError> 
   // plaintext on disk, exactly what Diagnostics invites the owner to send to
   // support. The log's job is to record that a poll failed and how often,
   // not to quote the far end (LR-SEC-W1 item 9 correction, 2026-09-20).
-  await saveError(syncKey, `LeadPollNetworkError: ${raw}`);
+  await saveError(syncKey, `${storedPrefixFor(kind)}: ${raw}`);
   const level = visible ? "error" : "warn";
   pollLog[level](
-    `LeadPollNetworkError (${consecutiveFailures}/${FAILURES_BEFORE_BANNER})`,
+    kind === "site"
+      ? `LeadPollSiteError (HTTP ${stat ?? "no status"})`
+      : `LeadPollNetworkError (${consecutiveFailures}/${FAILURES_BEFORE_BANNER})`,
   );
   return error;
+}
+
+function storedPrefixFor(kind: PollFailureKind): string {
+  return STORED_PREFIX[kind] ?? STORED_PREFIX.network;
+}
+
+/** The `code` a rejected Tauri command carries, when it carries one. */
+function codeFrom(err: unknown): string | null {
+  if (typeof err !== "object" || err === null) return null;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
 }
 
 /**

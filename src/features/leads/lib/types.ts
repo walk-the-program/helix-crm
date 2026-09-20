@@ -37,13 +37,42 @@ export type LeadsFetch = (
   limit: number,
 ) => Promise<LeadPage>;
 
-/** Why a poll stopped. The names come from docs/PLAN.md's error map. */
-export type PollErrorKind = "auth" | "network" | "config" | "write";
+/**
+ * Why a poll stopped. The names come from docs/PLAN.md's error map, widened by
+ * LR-REV: "network" used to absorb every failure that was not a 401, so a site
+ * with no lead endpoint (404), a site mid-deploy (502), a site that could not
+ * read Helix's page marker (400) and a site sending a malformed body all told
+ * the owner his computer could not reach the internet. Each of those has a
+ * different person who can fix it, so each gets its own kind.
+ *
+ *   auth      401/403             the owner, by pasting the new token
+ *   endpoint  404                 ClearPath, by switching the lead feed on
+ *   cursor    400                 Helix, by starting again from the first lead
+ *   site      other status / body ClearPath, or nobody
+ *   network   no answer at all    the connection, or nobody
+ *   config    keychain refused    the owner, by saving the token again
+ */
+export type PollErrorKind =
+  | "auth"
+  | "endpoint"
+  | "cursor"
+  | "site"
+  | "network"
+  | "config"
+  | "write";
 
 export type PollError = {
   kind: PollErrorKind;
   /** What the owner reads. Plain words, says what to do. */
   message: string;
+  /** The HTTP status behind it, when there was one. Null for transport failures. */
+  status?: number | null;
+  /**
+   * The site's own sentence, when it produced one worth repeating under the
+   * headline. Only a malformed-page failure sets this; everything else lets
+   * `pollBannerCopy` write the second line.
+   */
+  detail?: string | null;
 };
 
 export type PollPhase = "idle" | "fetching" | "applying" | "stopped";

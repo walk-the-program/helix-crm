@@ -1,6 +1,10 @@
 /**
- * The lead-poll banner (docs/PLAN.md error map: LeadPollAuthError and
- * LeadPollNetworkError).
+ * The lead-poll banner (docs/PLAN.md error map, widened by LR-REV).
+ *
+ * The words are not here: `lib/pollMessages.ts` owns every string the owner
+ * reads about a failed poll, so this banner, Today's one-liner and Settings'
+ * "Last result" row cannot drift apart from each other or from
+ * docs/OPERATIONS.md procedure 3.
  *
  * It is deliberately a warning, not a danger: danger is reserved for
  * destructive actions and for things that actually failed on this machine. A
@@ -11,6 +15,11 @@
  */
 import { AlertTriangle } from "@/ui/icons";
 import type { ReactNode } from "react";
+import { shouldSuggestDisconnect } from "@/features/leads/lib/backoff";
+import {
+  pollBannerCopy,
+  type PollFailureKind,
+} from "@/features/leads/lib/pollMessages";
 import type { PollStatus } from "@/features/leads/lib/types";
 
 export function PollBanner(props: {
@@ -20,7 +29,12 @@ export function PollBanner(props: {
   const { status, action } = props;
   if (!status.bannerVisible || !status.lastError) return null;
 
-  const isAuth = status.lastError.kind === "auth";
+  const copy = pollBannerCopy(status.lastError.kind as PollFailureKind, {
+    status: status.lastError.status ?? null,
+    consecutiveFailures: status.consecutiveFailures,
+    suggestDisconnect: shouldSuggestDisconnect(status.consecutiveFailures),
+    detail: status.lastError.detail ?? null,
+  });
   return (
     <div
       role="status"
@@ -39,14 +53,10 @@ export function PollBanner(props: {
       />
       <div className="min-w-0 flex-1">
         <p className="text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
-          {isAuth
-            ? "Your website turned the connection down. Check the token."
-            : "Helix cannot reach your website."}
+          {copy.headline}
         </p>
         <p className="mt-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          {isAuth
-            ? "New leads are not coming in until the token is right. Paste a fresh one below and save."
-            : `Nothing has come through for ${status.consecutiveFailures} tries. Helix keeps trying on its own.`}
+          {copy.detail}
         </p>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}

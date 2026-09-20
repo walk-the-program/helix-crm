@@ -21,20 +21,22 @@
  */
 import { Link } from "wouter";
 import { usePollStatus } from "@/features/leads/hooks";
+import {
+  pollNoticeCopy,
+  type PollFailureKind,
+} from "@/features/leads/lib/pollMessages";
 
 export function PollNotice() {
   const status = usePollStatus();
   if (!status.bannerVisible || !status.lastError) return null;
 
-  const isAuth = status.lastError.kind === "auth";
+  const sentence = pollNoticeCopy(status.lastError.kind as PollFailureKind);
   return (
     <p
       data-testid="poll-notice"
       className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
     >
-      {isAuth
-        ? "New leads are not coming in: your website turned the connection down."
-        : "New leads are not coming in: Helix cannot reach your website."}{" "}
+      {sentence}{" "}
       <Link
         href="/settings/site"
         className="text-[var(--color-text)] underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"

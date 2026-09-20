@@ -35,6 +35,25 @@ export function shouldShowNetworkBanner(consecutiveFailures: number): boolean {
 }
 
 /**
+ * Consecutive network failures before the banner offers Disconnect.
+ *
+ * Twelve failures is three at 1/2/4 minutes plus nine at the 8-minute ceiling:
+ * about eighty minutes of Helix being open and getting nothing. A site that is
+ * merely down comes back inside that; a site that was taken down when the
+ * client stopped paying for it never does, and before LR-REV that owner was
+ * told "Helix keeps trying on its own" forever with no hint that stopping was
+ * an option (F-REV-5). Disconnecting is offered, never done for him: his leads
+ * are already in Helix either way, and only he knows whether the site is
+ * coming back.
+ */
+export const FAILURES_BEFORE_DISCONNECT_HINT = 12;
+
+/** True once "the site is gone" is a likelier reading than "the site is down". */
+export function shouldSuggestDisconnect(consecutiveFailures: number): boolean {
+  return consecutiveFailures >= FAILURES_BEFORE_DISCONNECT_HINT;
+}
+
+/**
  * The error map splits on the HTTP status: 401 and 403 are "check the token"
  * and stop the timer; everything else is a network error and backs off.
  */
