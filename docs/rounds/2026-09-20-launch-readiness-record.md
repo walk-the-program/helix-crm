@@ -28,6 +28,13 @@ rate limits on public endpoints, in-app billing state. The security phase must i
 local-only app must prove: the data on disk, the two outbound integrations, the keychain, exports,
 backups, logs, and the site-lead ingestion path (untrusted input from a public form).
 
+### 1.1 Commercial model (evidence outside this repo, for the REV phase)
+
+- Helix itself carries no price: AGPL, free download. No Helix pricing, plan, trial, or subscription exists anywhere in this repo or in the ClearPath working notes.
+- ClearPath's paid relationship with a client is the website build plus hosting. `ClearPath Sites/FOR-THE-NEXT-AGENT.md` (2026-09-16 note) records that website pricing itself is not settled (about $1,000 build, monthly hosting unpriced; earlier $500 + $75–100/mo; a $250/mo AI cohort). That is Walker's decision, not this round's.
+- The only "entitlement" that connects a client to Helix is the `CRM_API_TOKEN` on the client's ClearPath site (`.env`), which the client pastes into Helix Settings. Provisioning = Walker sets the token on the site and hands it over; offboarding = rotate or remove it. All eighteen site templates expose `GET /api/crm/leads` behind that token (`templates/CRM-ENDPOINT-STATUS.md`, 2026-09-18, 18/18 tests each).
+- Therefore the REV phase evaluates: the token lifecycle (issue, hand over, rotate, revoke), what a client keeps when the site relationship ends (everything: their data is on their machine), and what Walker must track by hand (which client has which token, which Helix version). It does not build billing.
+
 ## 2. Findings ledger
 
 Format: `F-<role>-<n>` | class (Blocker / Required / Follow-up) | finding | why that class | fix commit(s) | evidence.
@@ -47,7 +54,7 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
 | task | role | owner | state | children | writable areas | return |
 | --- | --- | --- | --- | --- | --- | --- |
-| LR-SEC | CSPO | Opus lead | planned | ≤3 Sonnet | see packet | `launch-returns/sec.md` |
+| LR-SEC | CSPO | Opus lead | running (12:1x, packet rev 1) | ≤3 Sonnet | see packet | `launch-returns/sec.md` |
 | LR-OPS | CROO | Opus lead | planned (after SEC) | ≤3 | | `launch-returns/ops.md` |
 | LR-REV | CRevOps | Opus lead | planned (after OPS) | ≤2 | | `launch-returns/rev.md` |
 | LR-CS | CCSO | Opus lead | planned (after REV) | ≤3 | | `launch-returns/cs.md` |
