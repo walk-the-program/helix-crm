@@ -92,6 +92,10 @@ export function QuickAddDialog() {
   // in-flight guard is a ref checked and set synchronously, not state
   // (F-LA-1). `saving` state still drives the buttons' visual loading prop.
   const savingRef = useRef(false);
+  // Roving tabindex for the type tablist: only the selected tab is a tab
+  // stop, and the arrow keys move both focus and the current record type in
+  // one motion, per the WAI-ARIA tabs pattern.
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const debouncedEmail = useDebounced(email, 300);
   const debouncedPhone = useDebounced(phone, 300);
@@ -315,19 +319,49 @@ export function QuickAddDialog() {
       <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Quick add</DialogTitle>
-          <DialogDescription>
-            <Kbd keys="enter" /> saves and closes. <Kbd keys="shift+enter" /> saves and keeps
-            the form open for the next one.
+          <DialogDescription className="whitespace-nowrap">
+            <Kbd keys="enter" /> saves &middot; <Kbd keys="shift+enter" /> saves and adds another
           </DialogDescription>
         </DialogHeader>
 
-        <div role="tablist" aria-label="What to add" className="flex flex-wrap gap-[var(--space-1)]">
-          {types.map((option) => (
+        <div
+          role="tablist"
+          aria-label="What to add"
+          className="flex flex-wrap gap-[var(--space-1)]"
+          onKeyDown={(event) => {
+            const index = types.findIndex((option) => option.id === type);
+            if (index === -1) return;
+            let nextIndex: number | null = null;
+            if (event.key === "ArrowRight") nextIndex = (index + 1) % types.length;
+            else if (event.key === "ArrowLeft")
+              nextIndex = (index - 1 + types.length) % types.length;
+            else if (event.key === "Home") nextIndex = 0;
+            else if (event.key === "End") nextIndex = types.length - 1;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            const next = types[nextIndex];
+            setType(next.id);
+            setError(null);
+            // The freshly selected panel's first field carries `autoFocus`,
+            // which fires as part of the very render this triggers and would
+            // otherwise win the race and pull focus off the tablist after one
+            // key press. A frame later, once that has already happened, is
+            // the only reliable place left to put focus back on the tab.
+            window.requestAnimationFrame(() => tabRefs.current[nextIndex]?.focus());
+          }}
+        >
+          {types.map((option, index) => (
             <button
               key={option.id}
+              ref={(el) => {
+                tabRefs.current[index] = el;
+              }}
               type="button"
               role="tab"
+              id={`quick-add-tab-${option.id}`}
               aria-selected={type === option.id}
+              aria-controls={`quick-add-panel-${option.id}`}
+              tabIndex={type === option.id ? 0 : -1}
               onClick={() => {
                 setType(option.id);
                 setError(null);
@@ -348,7 +382,8 @@ export function QuickAddDialog() {
 
         <form
           role="tabpanel"
-          aria-label={`New ${types.find((option) => option.id === type)?.label ?? "record"}`}
+          id={`quick-add-panel-${type}`}
+          aria-labelledby={`quick-add-tab-${type}`}
           className="mt-[var(--space-4)]"
           onKeyDown={onFormKeyDown}
           onSubmit={(event) => event.preventDefault()}
@@ -361,7 +396,10 @@ export function QuickAddDialog() {
                   autoFocus
                   value={name}
                   placeholder={type === "contact" ? "Brent Hendrickson" : "Sorensen Landscaping"}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    if (error) setError(null);
+                  }}
                 />
               </Field>
             ) : null}
@@ -417,7 +455,10 @@ export function QuickAddDialog() {
                   placeholder={
                     type === "deal" ? "Spring cleanup and mulch" : "Call back about the quote"
                   }
-                  onChange={(event) => setTitle(event.target.value)}
+                  onChange={(event) => {
+                    setTitle(event.target.value);
+                    if (error) setError(null);
+                  }}
                 />
               </Field>
             ) : null}
@@ -436,7 +477,10 @@ export function QuickAddDialog() {
                     label="Stage"
                     pipelineId={pipeline?.id}
                     value={stageId}
-                    onChange={setStageId}
+                    onChange={(next) => {
+                      setStageId(next);
+                      if (error) setError(null);
+                    }}
                   />
                 </div>
                 <Field label="Value">
@@ -478,7 +522,10 @@ export function QuickAddDialog() {
                   rows={4}
                   value={body}
                   placeholder="What happened."
-                  onChange={(event) => setBody(event.target.value)}
+                  onChange={(event) => {
+                    setBody(event.target.value);
+                    if (error) setError(null);
+                  }}
                 />
               </Field>
             ) : null}
@@ -499,6 +546,7 @@ export function QuickAddDialog() {
                     onChange={(id, contact) => {
                       setContactId(id);
                       setCompanyId((current) => companyAfterContactPick(contact, current));
+                      if (error) setError(null);
                     }}
                   />
                 </div>
@@ -513,7 +561,10 @@ export function QuickAddDialog() {
                     id="quick-add-company"
                     label="Company"
                     value={companyId}
-                    onChange={setCompanyId}
+                    onChange={(id) => {
+                      setCompanyId(id);
+                      if (error) setError(null);
+                    }}
                   />
                 </div>
               </div>
