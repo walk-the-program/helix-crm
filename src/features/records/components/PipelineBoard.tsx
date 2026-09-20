@@ -6,8 +6,11 @@
  * the new column and index, the board renders that optimistically, and
  * `deals.moveTo` persists stage and position.
  *
- * Moving into a "lost" stage is refused by the repository until there is a
- * reason, so the board catches that and asks for one.
+ * A drop on a won or lost column does not move anything by itself: it opens
+ * StageMoveDialog ("Move to <Stage>?") and waits for Confirm, which supplies
+ * the date (and, for lost, the reason) that `deals.moveTo` needs. Any other
+ * drop - between two open stages, or a reorder within one - lands right away
+ * with today's date, the way it always has (D24).
  */
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -37,7 +40,7 @@ import { formatMoneyTrim, formatMonthly } from "@/lib/money";
 import * as dealItemsRepo from "@/db/repos/dealItems";
 import { upfrontCents } from "@/db/repos/dealItems";
 import { DealCard } from "@/features/records/components/DealCard";
-import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
+import { StageMoveDialog } from "@/features/records/components/StageMoveDialog";
 import {
   moveCard,
   keyboardMove,
@@ -60,10 +63,15 @@ export type PipelineBoardProps = {
 export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoardProps) {
   const [, navigate] = useLocation();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [pendingLost, setPendingLost] = useState<{
+  const [pendingMove, setPendingMove] = useState<{
     dealId: string;
     stageId: string;
     index: number;
+    stageName: string;
+    requiresReason: boolean;
+    initialReason: string | null;
+    /** Run once the move actually lands, e.g. to refocus after shift+arrow. */
+    afterCommit?: () => void;
   } | null>(null);
 
   const dealsById = useMemo(() => {
@@ -96,7 +104,12 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  async function persist(dealId: string, stageId: string, index: number, reason?: string) {
+  async function persist(
+    dealId: string,
+    stageId: string,
+    index: number,
+    options?: { at?: string; outcomeReason?: string | null },
+  ) {
     try {
       // The move carries a batch id so it lands on the application undo stack.
       // Before the HIG pass it carried none, which is why a drag was the one
@@ -108,7 +121,11 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
         label: `moved ${title} to ${toStage?.name ?? "another stage"}`,
         write: (batchId) =>
           dealsRepo
-            .moveTo(dealId, stageId, index, { outcomeReason: reason, batchId })
+            .moveTo(dealId, stageId, index, {
+              outcomeReason: options?.outcomeReason,
+              at: options?.at,
+              batchId,
+            })
             .then(() => undefined),
       });
       // Dropping a card on the Won column is one of the two ways a deal is
@@ -117,23 +134,48 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
       await dealItemsRepo.recompute(dealId);
       await invalidateRecords();
     } catch (err) {
-      const stage = stages.find((candidate) => candidate.id === stageId);
-      if (stage?.isLost && reason === undefined) {
-        setPendingLost({ dealId, stageId, index });
-        setColumns(serverColumns);
-        return;
-      }
       setColumns(serverColumns);
       reportError(err, "That move did not save.");
     }
   }
 
-  function apply(dealId: string, toStageId: string, toIndex: number) {
+  /**
+   * Route a move: a won/lost target asks StageMoveDialog for a date (and, for
+   * lost, a reason) and touches nothing until Confirm - cancelling leaves the
+   * card exactly where it was, because `columns` never changed. Anything else
+   * applies right away with today's date, as it always has.
+   */
+  function apply(
+    dealId: string,
+    toStageId: string,
+    toIndex: number,
+    afterCommit?: () => void,
+  ) {
     const before = findCard(columns, dealId);
     if (!before) return;
     if (before.stageId === toStageId && before.index === toIndex) return;
+
+    // Only an actual stage change is a "move to won/lost" - reordering cards
+    // that are already sitting in one needs no date and no reason.
+    const changingStage = before.stageId !== toStageId;
+    const target = stages.find((candidate) => candidate.id === toStageId);
+    if (changingStage && target && (target.isWon || target.isLost)) {
+      const deal = dealsById.get(dealId);
+      setPendingMove({
+        dealId,
+        stageId: toStageId,
+        index: toIndex,
+        stageName: target.name,
+        requiresReason: target.isLost,
+        initialReason: deal?.outcomeReason ?? null,
+        afterCommit,
+      });
+      return;
+    }
+
     setColumns((current) => moveCard(current, dealId, toStageId, toIndex));
     void persist(dealId, toStageId, toIndex);
+    afterCommit?.();
   }
 
   function onDragStart(event: DragStartEvent) {
@@ -164,12 +206,14 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
   function onKeyMove(dealId: string, direction: "left" | "right" | "up" | "down") {
     const move = keyboardMove(columns, dealId, direction);
     if (!move || isNoopMove(move)) return;
-    setColumns((current) => moveCard(current, dealId, move.toStageId, move.toIndex));
-    void persist(dealId, move.toStageId, move.toIndex);
-    // Keep the moved card focused so a run of shift+arrows works.
-    window.requestAnimationFrame(() => {
-      const node = document.querySelector<HTMLElement>(`[data-deal-id="${dealId}"]`);
-      node?.focus();
+    // Keep the moved card focused so a run of shift+arrows works. Deferred
+    // until the move actually commits, since a won/lost target waits on
+    // StageMoveDialog first and the card has not moved yet.
+    apply(dealId, move.toStageId, move.toIndex, () => {
+      window.requestAnimationFrame(() => {
+        const node = document.querySelector<HTMLElement>(`[data-deal-id="${dealId}"]`);
+        node?.focus();
+      });
     });
   }
 
@@ -215,20 +259,23 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
         </DragOverlay>
       </DndContext>
 
-      <LostReasonDialog
-        open={pendingLost !== null}
-        dealTitle={pendingLost ? dealsById.get(pendingLost.dealId)?.title ?? "" : ""}
+      <StageMoveDialog
+        open={pendingMove !== null}
+        stageName={pendingMove?.stageName ?? ""}
+        requiresReason={pendingMove?.requiresReason ?? false}
+        initialReason={pendingMove?.initialReason ?? null}
         onOpenChange={(open) => {
-          if (!open) setPendingLost(null);
+          if (!open) setPendingMove(null);
         }}
-        onConfirm={async (reason) => {
-          const pending = pendingLost;
-          setPendingLost(null);
+        onConfirm={async ({ at, outcomeReason }) => {
+          const pending = pendingMove;
+          setPendingMove(null);
           if (!pending) return;
           setColumns((current) =>
             moveCard(current, pending.dealId, pending.stageId, pending.index),
           );
-          await persist(pending.dealId, pending.stageId, pending.index, reason);
+          await persist(pending.dealId, pending.stageId, pending.index, { at, outcomeReason });
+          pending.afterCommit?.();
         }}
       />
     </>

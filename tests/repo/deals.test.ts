@@ -127,6 +127,91 @@ describe("deals: moveToStage", () => {
   });
 });
 
+describe("deals: moveToStage with an explicit `at`", () => {
+  it("stamps deal_stage_events.at and stage_entered_at to the given date, not now", async () => {
+    h = await createSeededHarness();
+    const byName = await seededStages();
+    const deal = await deals.create({ title: "Backdated move", stageId: byName.New.id });
+
+    const at = "2026-09-01T12:00:00.000Z";
+    const moved = await deals.moveToStage(deal.id, byName.Contacted.id, { at });
+
+    expect(moved.stageEnteredAt).toBe(at);
+    // Backdated on purpose, so it is not the most recent event by `at` -
+    // find it by the stage it moved to rather than by array position.
+    const events = await deals.listStageEvents(deal.id);
+    const moveEvent = events.find((event) => event.toStageId === byName.Contacted.id);
+    expect(moveEvent?.at).toBe(at);
+    // updatedAt is bookkeeping, not the business date: it stays close to now.
+    expect(new Date(moved.updatedAt).getTime()).toBeGreaterThan(Date.now() - 5000);
+  });
+
+  it("omitting `at` behaves exactly as before (now)", async () => {
+    h = await createSeededHarness();
+    const byName = await seededStages();
+    const deal = await deals.create({ title: "Undated move", stageId: byName.New.id });
+
+    const before = Date.now();
+    const moved = await deals.moveToStage(deal.id, byName.Contacted.id);
+    const after = Date.now();
+
+    const stampedAt = new Date(moved.stageEnteredAt).getTime();
+    expect(stampedAt).toBeGreaterThanOrEqual(before - 1000);
+    expect(stampedAt).toBeLessThanOrEqual(after + 1000);
+  });
+
+  it("a won move with an explicit `at` sets closed_at to that date", async () => {
+    h = await createSeededHarness();
+    const byName = await seededStages();
+    const deal = await deals.create({ title: "Backdated win", stageId: byName.New.id });
+
+    const at = "2026-09-19T12:00:00.000Z";
+    const won = await deals.moveToStage(deal.id, byName.Won.id, { at });
+    expect(won.closedAt).toBe(at);
+  });
+
+  it("a lost move with an explicit `at` sets closed_at to that date", async () => {
+    h = await createSeededHarness();
+    const byName = await seededStages();
+    const deal = await deals.create({ title: "Backdated loss", stageId: byName.New.id });
+
+    const at = "2026-09-10T12:00:00.000Z";
+    const lost = await deals.moveToStage(deal.id, byName.Lost.id, {
+      at,
+      outcomeReason: "Too expensive",
+    });
+    expect(lost.closedAt).toBe(at);
+  });
+
+  it("writes a system timeline entry naming the stage and the date, in the same transaction", async () => {
+    h = await createSeededHarness();
+    const byName = await seededStages();
+    const deal = await deals.create({ title: "Timeline check", stageId: byName.New.id });
+
+    const at = "2026-09-19T12:00:00.000Z";
+    await deals.moveToStage(deal.id, byName.Won.id, { at });
+
+    const { rows } = await activities.list({ dealId: deal.id, kind: "system" });
+    const moveEntry = rows.find((row) => row.body.startsWith("Moved to Won"));
+    expect(moveEntry).toBeDefined();
+    expect(moveEntry?.dealId).toBe(deal.id);
+    expect(moveEntry?.isSystem).toBe(true);
+    expect(moveEntry?.occurredAt).toBe(at);
+    expect(moveEntry?.body).toContain("Moved to Won on");
+  });
+
+  it("does not write a timeline entry or event for a no-op move (already in that stage)", async () => {
+    h = await createSeededHarness();
+    const byName = await seededStages();
+    const deal = await deals.create({ title: "Stays put", stageId: byName.New.id });
+
+    await deals.moveToStage(deal.id, byName.New.id, { at: "2026-09-19T12:00:00.000Z" });
+
+    const { rows } = await activities.list({ dealId: deal.id, kind: "system" });
+    expect(rows.filter((row) => row.body.startsWith("Moved to")).length).toBe(0);
+  });
+});
+
 describe("deals: moveTo / reposition", () => {
   it("rewrites positions 0..n-1 within one stage after a drop", async () => {
     h = await createSeededHarness();

@@ -18,8 +18,9 @@ import { z } from "zod";
 import { raw } from "@/db/client";
 import { withTransaction, withWrite } from "@/db/writeLock";
 import { NotFoundError, ValidationError } from "@/db/errors";
-import { nowIso } from "@/lib/dates";
+import { nowIso, formatDateDisplay } from "@/lib/dates";
 import { newId } from "@/lib/ids";
+import { systemStatement } from "@/db/repos/activities";
 import {
   countRows,
   insertStatement,
@@ -472,19 +473,21 @@ export async function update(
   }, "Saving a deal");
 }
 
-type StageFlags = { pipelineId: string; isWon: boolean; isLost: boolean };
+type StageFlags = { pipelineId: string; name: string; isWon: boolean; isLost: boolean };
 
 async function stageFlags(stageId: string): Promise<StageFlags> {
   const rows = await raw.query(
-    `SELECT s.pipeline_id AS s_pipeline_id, s.is_won AS s_is_won, s.is_lost AS s_is_lost
+    `SELECT s.pipeline_id AS s_pipeline_id, s.name AS s_name,
+            s.is_won AS s_is_won, s.is_lost AS s_is_lost
      FROM stages s WHERE s.id = ? AND s.deleted_at IS NULL`,
     [stageId],
   );
   if (rows.length === 0) throw new NotFoundError("stage", stageId);
   return {
     pipelineId: String(rows[0][0]),
-    isWon: Number(rows[0][1]) !== 0,
-    isLost: Number(rows[0][2]) !== 0,
+    name: String(rows[0][1]),
+    isWon: Number(rows[0][2]) !== 0,
+    isLost: Number(rows[0][3]) !== 0,
   };
 }
 
@@ -494,6 +497,14 @@ async function stageFlags(stageId: string): Promise<StageFlags> {
  * Refuses a stage in another pipeline. Lost stages require a reason. Entering
  * a won or lost stage stamps closed_at; leaving one clears it (that is the
  * reopen path).
+ *
+ * `at` is the date the move is BACKDATED to (a confirm dialog's DatePicker,
+ * defaulting to today): it lands on `deal_stage_events.at`, `stage_entered_at`
+ * and, for a won/lost target, `closed_at` - the money model and gone-quiet
+ * both read those columns, so a dated move has to mean it. Omitting it keeps
+ * the old behaviour exactly (`nowIso()`), so every existing caller is
+ * unaffected. `updated_at` always stays the real write time: it is
+ * bookkeeping, not the business date.
  */
 export async function moveToStage(
   id: string,
@@ -501,6 +512,7 @@ export async function moveToStage(
   options: {
     toIndex?: number;
     outcomeReason?: string | null;
+    at?: string;
     batchId?: string;
   } = {},
 ): Promise<Deal> {
@@ -526,13 +538,14 @@ export async function moveToStage(
       ]);
     }
 
-    const at = nowIso();
+    const now = nowIso();
+    const at = options.at ?? now;
     const changedStage = before.stageId !== toStageId;
     const closing = target.isWon || target.isLost;
 
     const values: Record<string, unknown> = {
       stageId: toStageId,
-      updatedAt: at,
+      updatedAt: now,
       closedAt: closing ? (before.closedAt ?? at) : null,
     };
     if (changedStage) values.stageEnteredAt = at;
@@ -546,14 +559,23 @@ export async function moveToStage(
     if (changedStage) {
       const ev = insertStatement("deal_stage_events", {
         id: newId(),
-        createdAt: at,
-        updatedAt: at,
+        createdAt: now,
+        updatedAt: now,
         dealId: id,
         fromStageId: before.stageId,
         toStageId,
         at,
       });
       await raw.execute(ev.sql, ev.params);
+
+      // The dated, confirmed timeline entry (D24): "Moved to Won on Sep 19",
+      // in the same transaction as the move it describes.
+      const sys = systemStatement({
+        dealId: id,
+        body: `Moved to ${target.name} on ${formatDateDisplay(at)}`,
+        occurredAt: at,
+      });
+      await raw.execute(sys.sql, sys.params);
     }
 
     await reposition(id, toStageId, options.toIndex);
@@ -618,7 +640,7 @@ export async function moveTo(
   id: string,
   toStageId: string,
   toIndex: number,
-  options: { outcomeReason?: string | null; batchId?: string } = {},
+  options: { outcomeReason?: string | null; at?: string; batchId?: string } = {},
 ): Promise<Deal> {
   const current = await getOrThrow(id);
   if (current.stageId === toStageId) {
