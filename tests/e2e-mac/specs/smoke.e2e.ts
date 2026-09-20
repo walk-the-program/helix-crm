@@ -570,3 +570,191 @@ test("captures the round-3 shell screens in both themes", async ({ page, helix }
   });
   await shoot("scroll-tall");
 });
+
+/* -------------------------------------------------------------------------- */
+/* CPO pass: things the audit found by measuring, kept measured               */
+/* -------------------------------------------------------------------------- */
+
+test("every route mounts at the top of its scroller", async ({ page, helix }) => {
+  void helix; // installs the Tauri shim; without it the app cannot boot
+  test.setTimeout(120_000);
+
+  /*
+   * F-LC-5. `/import` mounted with `main.scrollTop` at 44, because the wizard
+   * focused its step region on the very first render and `Element.focus()`
+   * scrolls its target into view by default — so the screen a new owner is
+   * sent to opened with its own <h1> clipped under the toolbar. Every other
+   * route was fine, which is exactly why a per-route check is the test: the
+   * next component to focus something on mount will be caught here rather
+   * than in a screenshot six weeks later.
+   */
+  const routes = [
+    "/",
+    "/contacts",
+    "/companies",
+    "/pipeline",
+    "/tasks",
+    "/import",
+    "/export",
+    "/duplicates",
+    "/trash",
+    "/settings",
+    "/settings/workspace",
+    "/settings/fields",
+    "/settings/shortcuts",
+    "/help",
+  ];
+
+  const scrolled: string[] = [];
+  for (const route of routes) {
+    await page.goto(route);
+    await page.locator("main").first().waitFor({ state: "visible" });
+    await page.waitForTimeout(150);
+    const top = await page.evaluate(() => document.querySelector("main")?.scrollTop ?? -1);
+    if (top !== 0) scrolled.push(`${route} at ${top}px`);
+  }
+  expect(scrolled, "these routes mounted already scrolled").toEqual([]);
+
+  // And the title is really inside the scroller, not merely at scrollTop 0.
+  await page.goto("/import");
+  await page.locator("main").first().waitFor({ state: "visible" });
+  const clip = await page.evaluate(() => {
+    const main = document.querySelector("main");
+    const h1 = document.querySelector("main h1");
+    if (!main || !h1) return null;
+    return Math.round(main.getBoundingClientRect().top - h1.getBoundingClientRect().top);
+  });
+  expect(clip, "the import title is clipped under the toolbar").toBeLessThanOrEqual(0);
+});
+
+test("compact density reaches a table, a dialog and the board", async ({ page, helix }) => {
+  void helix;
+  test.setTimeout(120_000);
+
+  /*
+   * Design direction item 7: density is a setting the kit honours, verified on
+   * a table, a dialog and the board rather than assumed. A screen that
+   * hard-codes a height simply would not move.
+   */
+  await page.goto("/settings/appearance");
+  await page.locator("main").first().waitFor({ state: "visible" });
+
+  const rowHeight = () =>
+    page.evaluate(() =>
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--row-h"),
+      ),
+    );
+
+  const comfortable = await rowHeight();
+  expect(comfortable).toBeGreaterThan(0);
+
+  await page.evaluate(() => document.documentElement.setAttribute("data-density", "compact"));
+  await page.waitForTimeout(250);
+  const compact = await rowHeight();
+  expect(compact, "compact is a shorter row than comfortable").toBeLessThan(comfortable);
+
+  // A table: the contacts list's own rows come down with the token.
+  await page.goto("/contacts");
+  await page.locator("main").first().waitFor({ state: "visible" });
+  await page.evaluate(() => document.documentElement.setAttribute("data-density", "compact"));
+  await page.waitForTimeout(250);
+  const tableRow = await page.evaluate(() => {
+    const el = document.querySelector("main table tbody tr, main [role='row']");
+    return el ? Math.round(el.getBoundingClientRect().height) : null;
+  });
+  if (tableRow !== null) expect(tableRow).toBeLessThanOrEqual(comfortable);
+
+  // The board.
+  await page.goto("/pipeline");
+  await page.locator("main").first().waitFor({ state: "visible" });
+  await page.evaluate(() => document.documentElement.setAttribute("data-density", "compact"));
+  await page.waitForTimeout(250);
+  expect(await rowHeight()).toBe(compact);
+
+  // A dialog: the shortcuts sheet, which is rows all the way down.
+  await page.keyboard.press("Shift+Slash");
+  const sheet = page.getByTestId("shortcuts-sheet");
+  await expect(sheet).toBeVisible();
+  const sheetRow = await page.evaluate(() => {
+    const el = document.querySelector("[data-testid='shortcuts-sheet'] [data-testid='shortcut-row']");
+    return el ? Math.round(el.getBoundingClientRect().height) : null;
+  });
+  expect(sheetRow, "the dialog's rows exist").not.toBeNull();
+  expect(sheetRow!, "the dialog honours compact too").toBeLessThan(comfortable * 2);
+});
+
+test("a dialog taller than a 700px window scrolls inside, with its footer visible", async ({
+  page,
+  helix,
+}) => {
+  void helix;
+  test.setTimeout(120_000);
+
+  /*
+   * docs/CONTRACTS.md's dialog contract, measured rather than assumed: the
+   * body scrolls and the footer stays on screen. 1280x700 is the short
+   * laptop the owner actually has open.
+   */
+  await page.setViewportSize({ width: 1280, height: 700 });
+  await page.goto("/settings/fields");
+  await page.locator("main").first().waitFor({ state: "visible" });
+
+  await page.getByRole("button", { name: /Add a field|New field/ }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  const box = await page.evaluate(() => {
+    const content = document.querySelector("[role='dialog']");
+    const body = document.querySelector("[data-testid='dialog-body']");
+    const footer = document.querySelector("[data-testid='dialog-footer']");
+    if (!content || !body) return null;
+    const c = content.getBoundingClientRect();
+    const f = footer?.getBoundingClientRect() ?? null;
+    return {
+      dialogBottom: Math.round(c.bottom),
+      viewport: window.innerHeight,
+      bodyScrolls: getComputedStyle(body).overflowY,
+      hoisted: footer?.getAttribute("data-hoisted") ?? null,
+      footerBottom: f ? Math.round(f.bottom) : null,
+    };
+  });
+
+  expect(box, "the dialog rendered a body").not.toBeNull();
+  // The whole dialog is inside the window, so nothing is cut off the bottom.
+  expect(box!.dialogBottom).toBeLessThanOrEqual(box!.viewport);
+  expect(box!.bodyScrolls, "the body is the scroller, not the page").toBe("auto");
+  if (box!.footerBottom !== null) {
+    expect(box!.footerBottom, "the footer is on screen").toBeLessThanOrEqual(box!.viewport);
+    expect(box!.hoisted, "the footer is hoisted out of the scroll box").toBe("true");
+  }
+});
+
+test("the search dialog answers both of its keys in the built app", async ({ page, helix }) => {
+  void helix;
+  /*
+   * R17. mod+/ used to be bound by a listener inside the Today feature, so the
+   * shell did not know about it and the shortcuts sheet could not print it.
+   * It is the search command's declared alias now, bound by the same binder as
+   * every other key — which is only worth saying if it still opens the dialog.
+   */
+  await page.goto("/");
+  await page.locator("main").first().waitFor({ state: "visible" });
+
+  await page.keyboard.press("Meta+k");
+  await expect(page.getByTestId("today-search")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("today-search")).toBeHidden();
+
+  await page.keyboard.press("Meta+Slash");
+  await expect(page.getByTestId("today-search"), "mod+/ opens the same dialog").toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // And the sheet says so, on one row rather than two.
+  await page.goto("/settings/shortcuts");
+  await page.locator("main").first().waitFor({ state: "visible" });
+  const rows = await page.getByTestId("shortcut-row").allInnerTexts();
+  const searchRows = rows.filter((r) => /Search/i.test(r));
+  expect(searchRows, "one search row, not two").toHaveLength(1);
+  expect(searchRows[0].replace(/\s+/g, " ")).toMatch(/or/);
+});

@@ -272,6 +272,54 @@ test.describe("first run", () => {
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
+  /*
+   * F-LC-19, the hypothesis the audit could not settle.
+   *
+   * `OnboardingFlow` resolves the stored profile and the workspace's existing
+   * name asynchronously and then calls `setDraft` wholesale. If the step-1
+   * form is on screen before that lands, an owner who starts typing
+   * immediately could have his business name replaced by the default. Three
+   * runs of the audit spec stalled with the prefilled name still in the box,
+   * which is a symptom, not a proof — so this types into the field the instant
+   * it exists and checks the typing survives.
+   */
+  test("typing the business name immediately is not overwritten by the prefill", async ({
+    page,
+    helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.goto("/");
+
+    // No settle, no networkidle: the point is to race the prefill.
+    const field = page.getByLabel("What is the business called?");
+    await field.waitFor({ state: "visible" });
+    await field.fill("Alpine Ridge Landscape");
+
+    // Long enough for any late setDraft to land on top of the typing.
+    await page.waitForTimeout(1_500);
+    await expect(
+      field,
+      "the async prefill overwrote what the owner had already typed",
+    ).toHaveValue("Alpine Ridge Landscape");
+
+    // And it is what gets saved, not the default it started from.
+    await page.getByRole("button", { name: "Landscaping", exact: true }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(
+      page.getByRole("heading", { name: "How you'll track work", level: 1 }),
+    ).toBeVisible();
+
+    const stored = helix.bridge.query(
+      "SELECT value_json FROM settings WHERE key = 'workspaceName'",
+      [],
+    );
+    expect(String(stored[0]?.[0] ?? "")).toContain("Alpine Ridge Landscape");
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
   test("skipping goes to Today and setup does not come back on reload", async ({
     page,
     helix,
