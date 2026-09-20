@@ -12,6 +12,7 @@ export * from "./Checkbox";
 export * from "./Switch";
 export * from "./Tabs";
 export * from "./Dialog";
+export * from "./Overlay";
 export * from "./DropdownMenu";
 export * from "./Popover";
 export * from "./Tooltip";

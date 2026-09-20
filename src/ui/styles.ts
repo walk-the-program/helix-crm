@@ -58,6 +58,41 @@ export const headingFont =
  *  --leading-normal, where 1.65 would push a label off a 32px control. */
 export const proseLeading = "leading-[var(--leading-body)]";
 
+/**
+ * THE ONE OVERLAY SYSTEM.
+ *
+ * Three panels float over the app — the kit's `Dialog`, the search dialog and
+ * the command palette — and until phase two each drew its own scrim, its own
+ * shadow and its own row. The differences were small and all wrong: the
+ * palette sat in a 32px scrim gutter where search sat in 16px, the palette's
+ * rows were `h-[var(--row-h)]` where search's were `min-h`, and each spelled
+ * its group heading out in a different pile of arbitrary variants. A user
+ * moving between ⌘K and ⌘⇧K saw the panel change shape under them.
+ *
+ * These are the shared parts. Anything floating uses them, so a change to the
+ * floating layer is one edit rather than three.
+ *
+ * (`--shadow-md` and `--shadow-lg` currently resolve to the same hairline ring
+ * — the brand guide retired the diffuse shadow in round 3 — so the panel uses
+ * `--shadow-lg`, which is what the kit's `Dialog` uses.)
+ */
+export const overlayScrim =
+  "fixed inset-0 z-50 bg-[var(--color-overlay)] px-[var(--space-4)] py-[var(--space-6)]";
+
+/** The floating panel itself: raised surface, one hairline, one shadow, radius 0. */
+export const overlayPanel = [
+  "w-full overflow-hidden",
+  "border border-[var(--color-border)]",
+  "bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]",
+].join(" ");
+
+/** A row in a floating list: --row-h tall, the kit's selected tint, no pointer. */
+export const overlayRow = [
+  "flex min-h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)]",
+  "px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)]",
+  "data-[selected=true]:bg-[var(--color-selected)]",
+].join(" ");
+
 /** Disabled: muted, and the cursor says so. Never pointer-events: none, which
  *  would also kill the tooltip that explains why the control is disabled. */
 export const disabledState =

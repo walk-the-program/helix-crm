@@ -14,7 +14,14 @@ import { Command } from "cmdk";
 import { useLocation } from "wouter";
 import { allCommands, allNavItems } from "@/app/registry";
 import { MagnifyingGlass } from "@/ui/icons";
-import { Kbd } from "@/ui";
+import {
+  cn,
+  Kbd,
+  OverlayPanel,
+  OverlayScrim,
+  overlayHeadingClass,
+  overlayRowClass,
+} from "@/ui";
 
 /** Fired on `window` to open the palette from outside the shell's React tree. */
 export const OPEN_PALETTE_EVENT = "helix:open-palette";
@@ -56,96 +63,73 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   return (
     /*
      * A Spotlight panel: a floating sheet held a fifth of the way down the
-     * window over a light dim, with one hairline and the single diffuse
-     * shadow. No chrome, no title bar, no icons in the list.
+     * window over a light dim, with one hairline and the kit's one shadow.
+     * No chrome, no title bar, no icons in the list.
+     *
+     * Scrim, panel, row and heading all come from the kit's floating layer
+     * (src/ui/Overlay.tsx), which is also what the search dialog draws, so
+     * ⌘K and ⌘⇧K put the same shape in the same place.
      */
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-[var(--color-overlay)] p-[var(--space-8)] pt-[14vh]"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onOpenChange(false);
-      }}
-    >
-      <Command
-        label="Command palette"
-        className="w-full max-w-[600px] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onOpenChange(false);
-        }}
-      >
-        <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-4)]">
-          <MagnifyingGlass
-            size={18}
-            weight="regular"
-            aria-hidden
-            className="flex-none text-[var(--color-text-faint)]"
-          />
-          <Command.Input
-            autoFocus
-            value={value}
-            onValueChange={setValue}
-            placeholder="Search, or type a command"
-            className="w-full border-0 bg-transparent py-[var(--space-4)] text-[length:var(--text-lg)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
-          />
-        </div>
-        <Command.List className="max-h-[368px] overflow-y-auto p-[var(--space-2)]">
-          <Command.Empty className="px-[var(--space-3)] py-[var(--space-6)] text-center text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Nothing matches that yet.
-          </Command.Empty>
+    <OverlayScrim onDismiss={() => onOpenChange(false)}>
+      <OverlayPanel>
+        <Command
+          label="Command palette"
+          className="w-full"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onOpenChange(false);
+          }}
+        >
+          <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-3)]">
+            <MagnifyingGlass
+              size={18}
+              weight="regular"
+              aria-hidden="true"
+              className="flex-none text-[var(--color-text-faint)]"
+            />
+            <Command.Input
+              autoFocus
+              value={value}
+              onValueChange={setValue}
+              placeholder="Search, or type a command"
+              className="w-full border-0 bg-transparent text-[length:var(--text-lg)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
+            />
+          </div>
+          <Command.List className="max-h-[50vh] overflow-y-auto p-[var(--space-2)]">
+            <Command.Empty className="px-[var(--space-3)] py-[var(--space-5)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+              Nothing matches that yet.
+            </Command.Empty>
 
-          <Command.Group
-            heading="Go to"
-            className={[
-              "[&_[cmdk-group-heading]]:px-[var(--space-3)]",
-              "[&_[cmdk-group-heading]]:pb-[var(--space-1)]",
-              "[&_[cmdk-group-heading]]:pt-[var(--space-2)]",
-              "[&_[cmdk-group-heading]]:text-[length:var(--text-label)]",
-              "[&_[cmdk-group-heading]]:font-semibold",
-              "[&_[cmdk-group-heading]]:uppercase",
-              "[&_[cmdk-group-heading]]:tracking-[var(--tracking-label)]",
-              "[&_[cmdk-group-heading]]:text-[var(--color-text-faint)]",
-            ].join(" ")}
-          >
-            {navItems.map((item) => (
-              <Command.Item
-                key={item.to}
-                value={`go ${item.label}`}
-                onSelect={() => run(() => navigate(item.to))}
-                className="flex h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)] data-[selected=true]:bg-[var(--color-selected)]"
-              >
-                {item.label}
-              </Command.Item>
-            ))}
-          </Command.Group>
-
-          {commands.length > 0 ? (
-            <Command.Group
-              heading="Actions"
-              className={[
-                "[&_[cmdk-group-heading]]:px-[var(--space-3)]",
-                "[&_[cmdk-group-heading]]:pb-[var(--space-1)]",
-                "[&_[cmdk-group-heading]]:pt-[var(--space-3)]",
-                "[&_[cmdk-group-heading]]:text-[length:var(--text-label)]",
-                "[&_[cmdk-group-heading]]:font-semibold",
-                "[&_[cmdk-group-heading]]:uppercase",
-                "[&_[cmdk-group-heading]]:tracking-[var(--tracking-label)]",
-                "[&_[cmdk-group-heading]]:text-[var(--color-text-faint)]",
-              ].join(" ")}
-            >
-              {commands.map((command) => (
+            <Command.Group heading={<span className={overlayHeadingClass}>Go to</span>}>
+              {navItems.map((item) => (
                 <Command.Item
-                  key={command.id}
-                  value={`${command.label} ${(command.keywords ?? []).join(" ")}`}
-                  onSelect={() => run(command.run)}
-                  className="flex h-[var(--row-h)] cursor-default items-center justify-between gap-[var(--space-3)] px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)] data-[selected=true]:bg-[var(--color-selected)]"
+                  key={item.to}
+                  value={`go ${item.label}`}
+                  onSelect={() => run(() => navigate(item.to))}
+                  className={overlayRowClass}
                 >
-                  <span>{command.label}</span>
-                  {command.shortcut ? <Kbd keys={command.shortcut} /> : null}
+                  {item.label}
                 </Command.Item>
               ))}
             </Command.Group>
-          ) : null}
-        </Command.List>
-      </Command>
-    </div>
+
+            {commands.length > 0 ? (
+              <Command.Group heading={<span className={overlayHeadingClass}>Actions</span>}>
+                {commands.map((command) => (
+                  <Command.Item
+                    key={command.id}
+                    value={`${command.label} ${(command.keywords ?? []).join(" ")}`}
+                    onSelect={() => run(command.run)}
+                    className={cn(overlayRowClass, "justify-between")}
+                  >
+                    <span className="min-w-0 truncate">{command.label}</span>
+                    {command.shortcut ? <Kbd keys={command.shortcut} /> : null}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            ) : null}
+          </Command.List>
+        </Command>
+      </OverlayPanel>
+    </OverlayScrim>
   );
 }
