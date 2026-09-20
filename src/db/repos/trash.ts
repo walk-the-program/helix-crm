@@ -321,7 +321,19 @@ export async function purge(
     }
   }
   await withTransaction(async () => {
+    // A purged invoice's payments go first, by hand. `payments.document_id`
+    // is ON DELETE RESTRICT on purpose - nothing may destroy the record of
+    // what a customer paid as a side effect of deleting something else - so
+    // SQLite refuses the DELETE below until they are gone. The payments went
+    // into the Trash with the invoice (documents.softDelete cascades them),
+    // and they leave with it. Ordinary purges reach this through the Trash
+    // screen; the 30-day sweep reaches it through `purgeSweep.ts`.
+    const payments: { sql: string; params: unknown[] }[] =
+      entityType === "document"
+        ? [{ sql: `DELETE FROM payments WHERE document_id = ?`, params: [entityId] }]
+        : [];
     await raw.batch([
+      ...payments,
       ...orphanSweep(entityType, entityId),
       { sql: `DELETE FROM custom_values WHERE entity_id = ?`, params: [entityId] },
       {

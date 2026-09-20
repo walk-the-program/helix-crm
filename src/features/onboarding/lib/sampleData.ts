@@ -631,6 +631,18 @@ export async function removeSampleData(): Promise<RemoveResult> {
       );
       allSampleIds.push(...dealItemRows.map((r) => String(r[0])));
 
+      // The payments before the documents they hang off. `payments.document_id`
+      // is ON DELETE RESTRICT (drizzle/0006_payments.sql) so that nothing can
+      // wipe out the record of what a customer paid as a side effect of
+      // deleting something else - which means the one place where it IS the
+      // right thing to do has to say so. The example's paid invoice always has
+      // a payment behind it now, so without this the whole removal fails on a
+      // foreign key and the owner is told the example could not be removed.
+      statements.push({
+        sql: `DELETE FROM payments
+              WHERE document_id IN (SELECT id FROM documents WHERE deal_id IN (${holes}))`,
+        params: [...sampleDealIds],
+      });
       statements.push({
         sql: `DELETE FROM document_items
               WHERE document_id IN (SELECT id FROM documents WHERE deal_id IN (${holes}))`,

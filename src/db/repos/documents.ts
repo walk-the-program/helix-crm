@@ -1596,6 +1596,29 @@ export async function accept(
 /* delete                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * A trashed invoice keeps its payments, and a purged one does not.
+ *
+ * Soft delete does NOT cascade. The first version of this did, stamping the
+ * payments with the document's own `deleted_at` so a restore could pick out
+ * the ones that went down with it - and `documents.softDelete` immediately
+ * after `payments.remove` landed both in the same millisecond, so restoring
+ * the invoice resurrected a payment the owner had deliberately removed
+ * (tests/repo/invoices/documentPayments.test.ts holds that case). Keying a
+ * cascade on a timestamp is the bug, not the symptom.
+ *
+ * Leaving the payments live costs nothing, because a payment is only ever
+ * reachable through its invoice: every money query joins `documents` and tests
+ * `d.deleted_at IS NULL`, so a trashed invoice's payments count towards
+ * nothing and appear on no screen, and the moment it is restored they are
+ * exactly where they were. That is also what the 0006 backfill assumes when it
+ * writes payments for already-paid invoices sitting in the Trash.
+ *
+ * Purge is the other half, and it is deliberate: `payments.document_id` is ON
+ * DELETE RESTRICT so that nothing can destroy the record of what a customer
+ * paid as a side effect of deleting something else, which means the one place
+ * where destroying it IS right has to say so out loud.
+ */
 export async function softDelete(
   id: string,
   options: { batchId?: string } = {},
@@ -1616,12 +1639,39 @@ export async function restore(
   );
 }
 
+/**
+ * Permanent. The payments go first, by hand: `payments.document_id` is
+ * RESTRICT precisely so that nothing can destroy the record of what a
+ * customer paid as a side effect of deleting something else. A purge is the
+ * one place it is deliberate, and this is that place.
+ */
 export async function purge(
   id: string,
   options: { batchId?: string } = {},
 ): Promise<void> {
-  await withWrite(
-    () => purgeRow("documents", "document", id, options.batchId),
-    "Purging a document",
+  await withWrite(async () => {
+    await purgePaymentsOf(id, options.batchId);
+    await purgeRow("documents", "document", id, options.batchId);
+  }, "Purging a document");
+}
+
+/**
+ * Hard-delete every payment against one document, live or trashed, logging
+ * each one so the trail still says what was destroyed. Exported because the
+ * Trash repository builds its own DELETE rather than calling `purge` above,
+ * and the 30-day sweep goes through it.
+ */
+export async function purgePaymentsOf(
+  documentId: string,
+  batchId?: string,
+): Promise<void> {
+  const rows = await raw.query(
+    `SELECT p.id AS p_id FROM payments p WHERE p.document_id = ?`,
+    [documentId],
   );
+  if (rows.length === 0) return;
+  await raw.execute(`DELETE FROM payments WHERE document_id = ?`, [documentId]);
+  for (const row of rows) {
+    await logWrite("payment", String(row[0]), "delete", null, { purged: true }, batchId);
+  }
 }
