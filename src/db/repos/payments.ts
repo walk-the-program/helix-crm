@@ -600,7 +600,16 @@ export async function purge(
 
 /**
  * Take every payment off an invoice: what "this was not paid after all" means
- * now that payment is a record rather than a flag. One batch, one undo.
+ * now that payment is a record rather than a flag.
+ *
+ * The recompute at the end runs whether or not anything was removed, and that
+ * is the point rather than belt and braces. An invoice can read `paid` with
+ * no payment rows behind it - a workspace whose row was written before this
+ * table existed and somehow missed the backfill, an import, a fixture - and
+ * before this it was stuck there for ever: the loop had nothing to remove, so
+ * nothing recomputed, so "Mark unpaid" silently did nothing at all. Ending on
+ * a recompute makes the operation mean what it says, which is "leave this
+ * invoice reading whatever no payments justifies".
  */
 export async function clearForDocument(
   documentId: string,
@@ -610,5 +619,6 @@ export async function clearForDocument(
   for (const payment of existing) {
     await remove(payment.id, options);
   }
+  await documents.recomputeInvoiceStatus(documentId, { batchId: options.batchId });
   return existing.length;
 }

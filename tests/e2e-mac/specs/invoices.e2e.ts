@@ -322,22 +322,30 @@ test.describe("invoices", () => {
     // A sent invoice's page, per the screenshot list.
     await shoot(page, "document-page");
 
-    await page.getByRole("button", { name: "Mark paid" }).click();
-    const payDialog = page.getByTestId("mark-paid-dialog");
+    // The date and the method moved out of "Mark paid" and into the Record
+    // payment dialog when payments became records (LR-PX-A): "Mark paid" is
+    // now one click that records a payment for the balance, dated today, and
+    // the dialog is what an owner opens for a deposit or a different date.
+    // The fact this used to prove about the date field is proved there.
+    await page.getByRole("button", { name: "Record payment" }).first().click();
+    const payDialog = page.getByRole("dialog", { name: /payment/i });
     await expect(payDialog).toBeVisible();
-    // "Date paid" is now the in-app DatePicker, not input[type=date] - open
-    // it and check today's cell is the one the calendar marks selected,
-    // which is the same fact ".toHaveValue(dateOnly(0))" used to prove.
+    // "Date paid" is the in-app DatePicker, not input[type=date] - open it
+    // and check today's cell is the one the calendar marks selected, which is
+    // the same fact ".toHaveValue(dateOnly(0))" used to prove.
     await payDialog.getByLabel("Date paid").click();
     await expect(
       page.locator(`[data-testid="date-picker-day"][data-date="${dateOnly(0)}"]`),
     ).toHaveAttribute("aria-selected", "true");
     await page.keyboard.press("Escape");
 
-    await shoot(page, "mark-paid-dialog");
+    await shoot(page, "record-payment-dialog");
 
-    await payDialog.getByRole("button", { name: "Mark paid" }).click();
+    await page.keyboard.press("Escape");
     await expect(payDialog).toBeHidden();
+
+    await page.getByRole("button", { name: "Mark paid" }).click();
+    await expect(page.getByTestId("document-status")).toHaveText(/Paid/);
 
     await page.goto("/");
     const unpaidSection = page.locator('[data-today-section="unpaid-invoices"]');
@@ -560,17 +568,14 @@ test.describe("invoices", () => {
     // proving it is never clicked is the point of using the select instead.
     await expect(page.getByRole("button", { name: "Mark paid" })).toBeVisible();
 
-    // Sent -> Paid, through the Status select. Paid needs a date and a
-    // method, so the select hands off to the same MarkPaidDialog the header
-    // button opens - its own confirm button is not "the Mark paid button"
-    // this test is avoiding, that button is in the header and stays unclicked.
+    // Sent -> Paid, through the Status select. Paid now means "a payment for
+    // the whole balance, today", so the select records one rather than
+    // opening a dialog for a date and a method - the header's own "Mark paid"
+    // button does the identical thing and stays unclicked, which is the point
+    // of using the select here.
     await page.getByRole("combobox", { name: "Status" }).click();
     await page.getByRole("option", { name: "Paid" }).click();
-
-    const payDialog = page.getByTestId("mark-paid-dialog");
-    await expect(payDialog).toBeVisible();
-    await payDialog.getByRole("button", { name: "Mark paid" }).click();
-    await expect(payDialog).toBeHidden();
+    await expect(page.getByTestId("document-status")).toHaveText(/Paid/);
 
     const [[finalStatus]] = db.query("SELECT status FROM documents WHERE id = ?", [
       docId,
@@ -792,7 +797,7 @@ test.describe("invoices", () => {
 /**
  * The two screenshot pairs that do not fall naturally out of a functional
  * test: the list with several documents on it, and the AR block. The other
- * three pairs (document-page, mark-paid-dialog, today-overdue) are captured
+ * three pairs (document-page, record-payment-dialog, today-overdue) are captured
  * above, at the point in the functional flow where that exact state exists.
  */
 test.describe("invoices screens", () => {
@@ -981,6 +986,17 @@ test.describe("invoices: audited findings (round 4 pin)", () => {
        VALUES (?, ?, ?, 1, ?, 0, 'one_time', 0)`,
       ["item-oduya", docId, "Hedge removal", 40000],
     );
+    // The payment behind it. A paid invoice has had money against it since
+    // LR-PX-A - `Collected` is the sum of payments, and migration 0006
+    // backfills one for every invoice that was already paid - so a fixture
+    // that sets `status = 'paid'` and stops is not a workspace this product
+    // can produce, and the Collected assertion at the end of this test would
+    // pass for the wrong reason.
+    db.execute(
+      `INSERT INTO payments (id, document_id, deal_id, amount_cents, paid_on, method, reference, note, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, ?, 'transfer', NULL, NULL, ?, ?)`,
+      ["pay-oduya", docId, 40000, dateOnly(0), now, now],
+    );
 
     await page.goto(`/invoices/${docId}`);
     await expect(page.getByTestId("document-status")).toBeVisible();
@@ -1023,6 +1039,14 @@ test.describe("invoices: audited findings (round 4 pin)", () => {
     expect(paidOn).toBeNull();
     expect(paidMethod).toBeNull();
     expect(paidNote).toBeNull();
+
+    // And the money itself came off, which is what makes it owed again:
+    // "Mark unpaid" removes the payments, and the status follows them.
+    const [[livePayments]] = db.query(
+      "SELECT count(*) FROM payments WHERE document_id = ? AND deleted_at IS NULL",
+      [docId],
+    ) as [[number]];
+    expect(Number(livePayments)).toBe(0);
 
     // Back on Receivables: it is owed again.
     await page.goto("/reports/receivables");

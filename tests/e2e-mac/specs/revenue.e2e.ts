@@ -450,6 +450,17 @@ test.describe("revenue: audited findings (round 4 pin)", () => {
        ) VALUES (?, 'invoice', ?, ?, 'paid', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
       [orphanDocId, "INV-2026-0960", trashedDealId, today, 50000, 50000, now, today, "bank", now, now],
     );
+    // The payment behind that paid invoice. Collected is the sum of payments
+    // since LR-PX-A, and migration 0006 backfills one for every invoice that
+    // was already paid, so a fixture that writes `status = 'paid'` and no
+    // payment row is not a state this product can be in - and the Collected
+    // headline below would read $0.00 for a reason that has nothing to do
+    // with what this test is pinning.
+    db.execute(
+      `INSERT INTO payments (id, document_id, deal_id, amount_cents, paid_on, method, reference, note, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'transfer', NULL, NULL, ?, ?)`,
+      ["pay-benoit-fence", orphanDocId, trashedDealId, 50000, today, now, now],
+    );
     db.execute("UPDATE deals SET deleted_at = ? WHERE id = ?", [now, trashedDealId]);
 
     await page.goto("/reports/revenue");

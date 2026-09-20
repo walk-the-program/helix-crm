@@ -1387,9 +1387,17 @@ export function assertTakesPayments(document: Document): void {
  * It writes no timeline line: the payment write already wrote the one line
  * that describes what the owner did ("Paid $500.00 by check - $700.00 still
  * owed"), and a second line saying the status moved would be the same event
- * twice. It does keep `paid_on` and `paid_method` on the document in step,
- * because they are what the invoice PDF and the older reports read; they are
- * now a cache of the payments, cleared the moment the invoice is not settled.
+ * twice.
+ *
+ * It does keep `paid_on`, `paid_method` and `paid_note` on the document in
+ * step. Those three columns are what the product meant by a payment before
+ * this table existed, and the export still reads them; they are now purely a
+ * cache of the settling payment, and all three are cleared the moment the
+ * invoice is not settled. That is the same rule the old `markUnpaid` gave for
+ * clearing them rather than keeping them "for the record": a `paid_on` (or a
+ * paid note) sitting on an invoice whose status is `sent` is a lie waiting to
+ * be read by the next query somebody writes. What happened is on the
+ * timeline, and now also on the payment rows, which is where history belongs.
  *
  * A document that is not an invoice, or is a draft or void, is left alone.
  */
@@ -1411,12 +1419,14 @@ export async function recomputeInvoiceStatus(
     status: to,
     paidOn: latest?.paidOn ?? null,
     paidMethod: latest?.method ?? null,
+    paidNote: latest?.note ?? null,
     updatedAt: nowIso(),
   };
   if (
     document.status === to &&
     document.paidOn === values.paidOn &&
-    document.paidMethod === values.paidMethod
+    document.paidMethod === values.paidMethod &&
+    document.paidNote === values.paidNote
   ) {
     return document;
   }
@@ -1439,12 +1449,12 @@ function statementTuple(statement: Statement): [string, Bindable[]] {
   return [statement.sql, statement.params as Bindable[]];
 }
 
-/** The day and the method of the most recent payment on an invoice. */
+/** The day, the method and the note of the most recent payment on an invoice. */
 async function latestPaymentFacts(
   documentId: string,
-): Promise<{ paidOn: string; method: string } | null> {
+): Promise<{ paidOn: string; method: string; note: string | null } | null> {
   const rows = await raw.query(
-    `SELECT p.paid_on AS p_paid_on, p.method AS p_method
+    `SELECT p.paid_on AS p_paid_on, p.method AS p_method, p.note AS p_note
      FROM payments p
      WHERE p.document_id = ? AND p.deleted_at IS NULL
      ORDER BY p.paid_on DESC, p.created_at DESC
@@ -1453,7 +1463,11 @@ async function latestPaymentFacts(
   );
   const row = rows[0];
   if (!row) return null;
-  return { paidOn: String(row[0]), method: String(row[1]) };
+  return {
+    paidOn: String(row[0]),
+    method: String(row[1]),
+    note: row[2] === null || row[2] === undefined ? null : String(row[2]),
+  };
 }
 
 /**
