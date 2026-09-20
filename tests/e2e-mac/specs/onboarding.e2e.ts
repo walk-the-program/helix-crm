@@ -398,7 +398,7 @@ test.describe("first run", () => {
     await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();
 
     // Not in the DOM before it is asked for.
-    await expect(page.getByTestId("today-recovery-key")).toHaveCount(0);
+    await expect(page.getByTestId("recovery-key")).toHaveCount(0);
 
     // The card owns the screen's one primary block while it is showing, so
     // "Import a CSV" reads as the secondary (white) treatment underneath it.
@@ -412,7 +412,7 @@ test.describe("first run", () => {
     await expect(confirm).toHaveCount(0);
 
     await page.getByRole("button", { name: "Show recovery key" }).click();
-    const keyEl = page.getByTestId("today-recovery-key");
+    const keyEl = page.getByTestId("recovery-key");
     await expect(keyEl).toBeVisible();
     await expect(keyEl).not.toHaveText("");
 
