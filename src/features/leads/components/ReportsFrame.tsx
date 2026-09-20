@@ -23,6 +23,7 @@
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { PageHeader, Tabs, TabsList, TabsTrigger } from "@/ui";
+import { useVocabulary } from "@/app/vocabulary";
 import { PeriodPicker } from "@/features/leads/components/PeriodPicker";
 import type { Period } from "@/lib/periods";
 
@@ -35,6 +36,12 @@ export type ReportTabId = "overview" | "revenue" | "deals" | "people" | "receiva
  * Receivables is the invoices feature's screen at its own route. It is listed
  * here because it is one of the five reports as far as the owner is concerned,
  * and the sidebar keeps Reports lit on every path under /reports.
+ *
+ * The Deals tab's label is the ONLY one the workspace renames: a landscaping
+ * setup calls them jobs everywhere else in the product and this tab strip was
+ * the last place still saying "Deals" (F-LC-9). `REPORT_TABS` keeps the plain
+ * label so a non-React caller still has one; `useReportTabs` is what a screen
+ * uses.
  */
 export const REPORT_TABS: { id: ReportTabId; label: string; to: string }[] = [
   { id: "overview", label: "Overview", to: "/reports" },
@@ -44,20 +51,29 @@ export const REPORT_TABS: { id: ReportTabId; label: string; to: string }[] = [
   { id: "receivables", label: "Receivables", to: "/reports/receivables" },
 ];
 
+/** The five tabs with the Deals one named the way this workspace names them. */
+export function useReportTabs(): typeof REPORT_TABS {
+  const vocabulary = useVocabulary();
+  return REPORT_TABS.map((tab) =>
+    tab.id === "deals" ? { ...tab, label: vocabulary.many } : tab,
+  );
+}
+
 export function ReportTabs(props: { active: ReportTabId }) {
   const [, navigate] = useLocation();
   const { active } = props;
+  const tabs = useReportTabs();
 
   return (
     <Tabs
       value={active}
       onValueChange={(next) => {
-        const tab = REPORT_TABS.find((candidate) => candidate.id === next);
+        const tab = tabs.find((candidate) => candidate.id === next);
         if (tab && tab.id !== active) navigate(tab.to);
       }}
     >
       <TabsList data-testid="reports-tabs" className="overflow-x-auto">
-        {REPORT_TABS.map((tab) => (
+        {tabs.map((tab) => (
           <TabsTrigger key={tab.id} value={tab.id}>
             {tab.label}
           </TabsTrigger>

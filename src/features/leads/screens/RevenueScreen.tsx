@@ -37,7 +37,16 @@ import type { Period } from "@/lib/periods";
 import { formatMoney } from "@/lib/money";
 import { useRevenue, useRevenueMoney } from "@/features/leads/lib/reportKeys";
 import type { RevenueBundle, RevenueMoney } from "@/db/repos/reports";
+import { NO_DEAL_ROW_ID } from "@/db/repos/money";
 import type { PerDealMoneyRow } from "@/db/repos/money";
+
+/**
+ * What the catch-all row is, in the one place it is explained. Kept short
+ * enough to sit in a table cell: the long version is that the document either
+ * predates the rule that every document belongs to a deal, or its deal is in
+ * the trash.
+ */
+const NO_DEAL_HINT = "Invoices not attached to a job";
 import { ReportsFrame } from "@/features/leads/components/ReportsFrame";
 import { DataTable } from "@/features/leads/components/DataTable";
 import type { DataTableColumn } from "@/features/leads/components/DataTable";
@@ -98,10 +107,15 @@ export function RevenueScreen() {
  * Quoted, Won, Invoiced, Collected - and what is still owed on what this
  * period billed.
  *
- * The four are on four different clocks by design (src/db/repos/money.ts says
- * which), so Collected can be larger than Invoiced in a month where last
- * month's invoices were paid. The caption says that out loud rather than
- * leaving the owner to think the page is broken.
+ * Every one is on its own clock by design (src/db/repos/money.ts says which),
+ * so Collected can be larger than Invoiced in a month where last month's
+ * invoices were paid, and a deal can be Quoted in one month and Won in the
+ * next. The caption names all four out loud rather than leaving the owner to
+ * think the page is broken.
+ *
+ * Quoted is the DEAL'S value now, not the sum of its quote documents, and it
+ * falls on the day the deal was created - the day the owner quoted it. That is
+ * a fourth clock the old caption did not have, which is why it is rewritten.
  */
 function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
   const { money, period } = props;
@@ -111,17 +125,35 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
     {
       key: "deal",
       header: "Deal",
-      render: (row) => (
-        <Link
-          href={`/deals/${row.dealId}`}
-          title={row.title}
-          className="block truncate text-[var(--color-link)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
-        >
-          {row.title}
-        </Link>
-      ),
+      // The catch-all row is not a deal and has nowhere to link to: it is the
+      // money in the headline that belongs to a document whose job was never
+      // recorded or has since been deleted. It carries its own explanation so
+      // the column still adds up to the figure above it (F-LB-3).
+      render: (row) =>
+        row.dealId === NO_DEAL_ROW_ID ? (
+          <span className="block truncate text-[var(--color-text-muted)]" title={NO_DEAL_HINT}>
+            {row.title}
+          </span>
+        ) : (
+          <Link
+            href={`/deals/${row.dealId}`}
+            title={row.title}
+            className="block truncate text-[var(--color-link)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+          >
+            {row.title}
+          </Link>
+        ),
     },
-    { key: "customer", header: "Customer", render: (row) => row.customerName ?? "—" },
+    {
+      key: "customer",
+      header: "Customer",
+      render: (row) =>
+        row.dealId === NO_DEAL_ROW_ID ? (
+          <span className="text-[var(--color-text-muted)]">{NO_DEAL_HINT}</span>
+        ) : (
+          (row.customerName ?? "—")
+        ),
+    },
     {
       key: "quoted",
       header: "Quoted",
@@ -149,8 +181,9 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
         <div className="flex min-w-0 flex-col gap-[var(--space-1)]">
           <CardTitle>{period.label}</CardTitle>
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Quoted and invoiced fall on the day the document was issued; collected falls on
-            the day the money arrived, so a month can collect more than it billed.
+            Each number falls on its own day: quoted when you created the job, won when you
+            closed it, invoiced when you billed it, collected when the money arrived. So a
+            month can collect more than it billed, and win what it quoted last month.
           </p>
         </div>
       </CardHeader>
