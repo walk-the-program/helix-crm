@@ -54,7 +54,6 @@ export function CompanyPage() {
   const { id = "" } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const vocabulary = useVocabulary();
-  const formats = useFormats();
   const { data: company, isLoading } = useCompany(id);
   const { data: money } = useCustomerMoney({ companyId: id });
   const { data: counts } = useCompanyCounts(id);
@@ -428,6 +427,7 @@ function DealsCard(props: {
   deals: { id: string; title: string; valueCents: number; currency: string; stageName: string }[];
   emptyText: string;
 }) {
+  const formats = useFormats();
   return (
     <div>
       <CardGroupLabel className="flex items-baseline gap-[var(--space-2)]">
