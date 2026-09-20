@@ -29,12 +29,13 @@
 import { useState, type Key } from "react";
 import { Line, LabelList, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "wouter";
-import { Card, CardBody, CardHeader, CardTitle, EmptyState, Spinner } from "@/ui";
+import { Button, Card, CardBody, CardHeader, CardTitle, EmptyState, Spinner, toast } from "@/ui";
 import { AgingBlock } from "@/features/invoices";
+import { centsToDecimalString } from "@/lib/money";
 import { formatBucket, periodFor } from "@/lib/periods";
 import type { Period } from "@/lib/periods";
 import { useFormats } from "@/app/formats";
-import { useRevenue, useRevenueMoney } from "@/features/leads/lib/reportKeys";
+import { toCsv, useRevenue, useRevenueMoney } from "@/features/leads/lib/reportKeys";
 import type { RevenueBundle, RevenueMoney } from "@/db/repos/reports";
 import { NO_DEAL_ROW_ID } from "@/db/repos/money";
 import type { PerDealMoneyRow } from "@/db/repos/money";
@@ -147,33 +148,68 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
     {
       key: "customer",
       header: "Customer",
+      // A customer name is a name (docs/DESIGN.md §4): it truncates with an
+      // ellipsis and carries a title, it never wraps inside the row.
       render: (row) =>
         row.dealId === NO_DEAL_ROW_ID ? (
-          <span className="text-[var(--color-text-muted)]">{NO_DEAL_HINT}</span>
+          <span className="block truncate text-[var(--color-text-muted)]" title={NO_DEAL_HINT}>
+            {NO_DEAL_HINT}
+          </span>
         ) : (
-          (row.customerName ?? "—")
+          <span className="block truncate" title={row.customerName ?? undefined}>
+            {row.customerName ?? "—"}
+          </span>
         ),
     },
     {
       key: "quoted",
       header: "Quoted",
       numeric: true,
-      render: (row) => formats.money(row.quotedCents),
+      dashZero: (row) => row.quotedCents === 0,
+      render: (row) => formats.moneyOrDash(row.quotedCents),
     },
-    { key: "won", header: "Won", numeric: true, render: (row) => formats.money(row.wonCents) },
+    {
+      key: "won",
+      header: "Won",
+      numeric: true,
+      dashZero: (row) => row.wonCents === 0,
+      render: (row) => formats.moneyOrDash(row.wonCents),
+    },
     {
       key: "invoiced",
       header: "Invoiced",
       numeric: true,
-      render: (row) => formats.money(row.invoicedCents),
+      dashZero: (row) => row.invoicedCents === 0,
+      render: (row) => formats.moneyOrDash(row.invoicedCents),
     },
     {
       key: "collected",
       header: "Collected",
       numeric: true,
-      render: (row) => formats.money(row.collectedCents),
+      dashZero: (row) => row.collectedCents === 0,
+      render: (row) => formats.moneyOrDash(row.collectedCents),
     },
   ];
+
+  async function handleCopyCsv() {
+    const csv = toCsv(
+      ["Deal", "Customer", "Quoted", "Won", "Invoiced", "Collected"],
+      money.perDeal.map((row) => [
+        row.title,
+        row.dealId === NO_DEAL_ROW_ID ? NO_DEAL_HINT : (row.customerName ?? ""),
+        centsToDecimalString(row.quotedCents),
+        centsToDecimalString(row.wonCents),
+        centsToDecimalString(row.invoicedCents),
+        centsToDecimalString(row.collectedCents),
+      ]),
+    );
+    try {
+      await navigator.clipboard.writeText(csv);
+      toast.success("Copied the report to the clipboard");
+    } catch {
+      toast.error("The clipboard refused it.");
+    }
+  }
 
   return (
     <Card>
@@ -181,11 +217,15 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
         <div className="flex min-w-0 flex-col gap-[var(--space-1)]">
           <CardTitle>{period.label}</CardTitle>
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Each number falls on its own day: quoted when you created the job, won when you
-            closed it, invoiced when you billed it, collected when the money arrived. So a
-            month can collect more than it billed, and win what it quoted last month.
+            Quoted, won, invoiced and collected each fall on their own day, so a month can
+            collect more than it billed, or win what it quoted last month.
           </p>
         </div>
+        {money.perDeal.length > 0 ? (
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={handleCopyCsv}>
+            Copy as CSV
+          </Button>
+        ) : null}
       </CardHeader>
       <CardBody className="p-[var(--space-5)]">
         <div className="flex flex-wrap gap-[var(--space-10)]">
@@ -213,17 +253,15 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
             label="Still owed on it"
             value={formats.money(totals.outstandingCents)}
             sizeClass="text-[length:var(--text-xl)]"
-            muted
           />
         </div>
       </CardBody>
       {money.perDeal.length === 0 ? (
-        <CardBody className="p-[var(--space-5)] pt-0">
-          <p className="text-[length:var(--text-base)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
-            No deal moved money in this period. Pick a wider range and the ones that did
-            show up here.
-          </p>
-        </CardBody>
+        <EmptyState
+          variant="quiet"
+          title="No deal moved money in this period"
+          description="Pick a wider range and the ones that did show up here."
+        />
       ) : (
         <DataTable columns={columns} rows={money.perDeal} getRowKey={(row) => row.dealId} />
       )}
@@ -240,9 +278,16 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
  * label under it. `sizeClass` is a literal Tailwind arbitrary-value class at
  * each call site (never composed at runtime) so the token it names is one
  * Tailwind's build can actually see.
+ *
+ * Every headline figure on this page shares this one component, one size per
+ * row (the MRR row's own figure is the page's single biggest number; every
+ * other figure on the page, in the MRR row and in the period's money row
+ * alike, is `--text-xl`) and full ink - a real number is never muted just
+ * because it happens to read as a negative or an amount still outstanding
+ * (CDQO phase two design review, decision C; docs/DESIGN.md rule 5).
  */
-function HeadlineFigure(props: { label: string; value: string; sizeClass: string; muted?: boolean }) {
-  const { label, value, sizeClass, muted } = props;
+function HeadlineFigure(props: { label: string; value: string; sizeClass: string }) {
+  const { label, value, sizeClass } = props;
   return (
     <div className="flex flex-col gap-[var(--space-1)]">
       <span
@@ -250,7 +295,7 @@ function HeadlineFigure(props: { label: string; value: string; sizeClass: string
           "tabular",
           "font-[family-name:var(--font-heading)] font-bold leading-[var(--leading-heading)]",
           sizeClass,
-          muted ? "text-[var(--color-text-muted)]" : "text-[var(--color-heading)]",
+          "text-[var(--color-heading)]",
         ].join(" ")}
       >
         {value}
@@ -263,10 +308,11 @@ function HeadlineFigure(props: { label: string; value: string; sizeClass: string
 }
 
 /**
- * Churned MRR reads as a negative, and in the muted ink rather than a
- * semantic red: docs/DESIGN.md reserves the danger colour for something
- * wrong, and a deal ending its recurring line on schedule is not that. Zero
- * churn is still zero, not "-$0.00".
+ * Churned MRR reads as a negative, in full ink like every other headline
+ * figure on the page: docs/DESIGN.md reserves the danger colour for something
+ * wrong, and a deal ending its recurring line on schedule is not that, so
+ * there is no reason to mute it either. Zero churn is still zero, not
+ * "-$0.00".
  */
 function formatChurned(cents: number, money: (cents: number) => string): string {
   return cents === 0 ? money(0) : `-${money(cents)}`;
@@ -420,7 +466,17 @@ function RevenueContent(props: {
 
   const columns: DataTableColumn<RecurringDealRow>[] = [
     { key: "deal", header: "Deal", render: (row) => <DealCell row={row} /> },
-    { key: "customer", header: "Customer", render: (row) => customerName(row) },
+    {
+      key: "customer",
+      header: "Customer",
+      // A customer name is a name (docs/DESIGN.md §4): it truncates with an
+      // ellipsis and carries a title, it never wraps inside the row.
+      render: (row) => (
+        <span className="block truncate" title={customerName(row)}>
+          {customerName(row)}
+        </span>
+      ),
+    },
     { key: "started", header: "Started", render: (row) => formats.date(row.startedOn) },
     {
       key: "monthly",
@@ -441,7 +497,7 @@ function RevenueContent(props: {
         <HeadlineFigure
           label="A year of that"
           value={formats.money(data.arrCents)}
-          sizeClass="text-[length:var(--text-2xl)]"
+          sizeClass="text-[length:var(--text-xl)]"
         />
         <HeadlineFigure
           label="New this month"
@@ -452,7 +508,6 @@ function RevenueContent(props: {
           label="Churned this month"
           value={formatChurned(data.churnedMrrCents, formats.money)}
           sizeClass="text-[length:var(--text-xl)]"
-          muted
         />
       </div>
 
@@ -499,12 +554,11 @@ function RevenueContent(props: {
           <CardTitle>Active recurring deals</CardTitle>
         </CardHeader>
         {noRecurring ? (
-          <CardBody className="p-[var(--space-5)]">
-            <p className="text-[length:var(--text-base)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
-              Nothing repeats yet. Win a deal with a monthly service on it and it
-              lands here.
-            </p>
-          </CardBody>
+          <EmptyState
+            variant="quiet"
+            title="Nothing repeats yet"
+            description="Win a deal with a monthly service on it and it lands here."
+          />
         ) : (
           <DataTable columns={columns} rows={data.active} getRowKey={(row) => row.dealId} />
         )}

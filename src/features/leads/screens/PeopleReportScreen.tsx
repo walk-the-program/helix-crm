@@ -371,14 +371,16 @@ function TopCompaniesCard(props: { rows: TopCompanyRow[] }) {
       key: "wonValue",
       header: "Won value",
       numeric: true,
-      render: (row) => formats.money(row.wonValueCents),
+      dashZero: (row) => row.wonValueCents === 0,
+      render: (row) => formats.moneyOrDash(row.wonValueCents),
     },
     { key: "openCount", header: "Open", numeric: true, render: (row) => row.openCount },
     {
       key: "openValue",
       header: "Open value",
       numeric: true,
-      render: (row) => formats.money(row.openValueCents),
+      dashZero: (row) => row.openValueCents === 0,
+      render: (row) => formats.moneyOrDash(row.openValueCents),
     },
   ];
 

@@ -37,7 +37,15 @@ function formatDays(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(1)} days`;
 }
 
-function formatMoneyOrDash(cents: number | null, money: (cents: number) => string): string {
+/**
+ * A headline figure with nothing to average yet - not the kit's
+ * `useFormats().moneyOrDash`, which dashes a period table's true ZERO. This
+ * dashes NULL: "no win to average" is a missing value, and a headline figure
+ * keeps its real "$0.00" when the answer to its own question genuinely is
+ * zero. Named apart from the kit helper so the two are never mistaken for one
+ * convention.
+ */
+function formatAverageOrDash(cents: number | null, money: (cents: number) => string): string {
   return cents === null ? "—" : money(cents);
 }
 
@@ -218,7 +226,7 @@ function OverviewContent(props: { data: OverviewBundle }) {
       <GroupCard title="Revenue" href="/reports/revenue">
         <div className="flex flex-wrap items-end gap-[var(--space-8)]">
           <Figure label="Monthly recurring revenue" value={formats.money(data.mrrCents)} sizeClass="text-[length:var(--text-2xl)]" />
-          <Figure label="A year of that" value={formats.money(data.arrCents)} sizeClass="text-[length:var(--text-xl)]" />
+          <Figure label="A year of that" value={formats.money(data.arrCents)} sizeClass="text-[length:var(--text-2xl)]" />
         </div>
         <div className="flex flex-wrap gap-[var(--space-6)]">
           <MiniFigure label="Quoted" value={formats.money(money.quotedCents)} />
@@ -233,7 +241,7 @@ function OverviewContent(props: { data: OverviewBundle }) {
         <div className="flex flex-wrap gap-[var(--space-6)]">
           <MiniFigure label="New deals" value={String(deals.newCount)} />
           <MiniFigure label="Won rate" value={formatPercent(deals.wonRate)} />
-          <MiniFigure label="Average won value" value={formatMoneyOrDash(deals.averageWonCents, formats.money)} />
+          <MiniFigure label="Average won value" value={formatAverageOrDash(deals.averageWonCents, formats.money)} />
           <MiniFigure label="Median days to win" value={formatDays(deals.medianDaysToWin)} />
         </div>
       </GroupCard>

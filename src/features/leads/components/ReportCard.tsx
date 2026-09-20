@@ -91,7 +91,10 @@ export function ReportCard(props: ReportCardProps) {
           )}
         </CardHeader>
         {empty ? (
-          <EmptyState title={emptyTitle} description={emptyDescription} />
+          // Section-level empty (docs/DESIGN.md rule 6): this card is one of
+          // several stacked on the tab, never the whole of it, so it gets the
+          // quiet inline form rather than the full centred one.
+          <EmptyState variant="quiet" title={emptyTitle} description={emptyDescription} />
         ) : (
           <>
             {/* The chart keeps its own padding; the table runs to the card's

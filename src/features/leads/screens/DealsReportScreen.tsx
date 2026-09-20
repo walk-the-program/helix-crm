@@ -122,7 +122,15 @@ function formatDaysValue(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(1)}`;
 }
 
-function formatMoneyOrDash(cents: number | null, money: Formats["money"]): string {
+/**
+ * A headline figure with nothing to average yet - not the kit's
+ * `useFormats().moneyOrDash`, which dashes a period table's true ZERO. This
+ * dashes NULL: "no win to average" is a missing value, and a headline figure
+ * keeps its real "$0.00" when the answer to its own question genuinely is
+ * zero (decision A, CDQO phase two design review). Named apart from the kit
+ * helper so the two are never mistaken for one convention.
+ */
+function formatAverageOrDash(cents: number | null, money: Formats["money"]): string {
   return cents === null ? "—" : money(cents);
 }
 
@@ -221,7 +229,7 @@ function SummaryTiles(props: { summary: DealsSummary }) {
       />
       <StatTile
         label="Average won"
-        value={formatMoneyOrDash(summary.averageWonCents, formats.money)}
+        value={formatAverageOrDash(summary.averageWonCents, formats.money)}
         count={`${summary.wonCount} won${
           summary.wonValueCents > 0 ? `, ${formats.money(summary.wonValueCents)} in total` : ""
         }`}
@@ -289,7 +297,8 @@ function TrendCard(props: {
       key: "value",
       header: "Value",
       numeric: true,
-      render: (row) => formats.money(row.valueCents),
+      dashZero: (row) => row.valueCents === 0,
+      render: (row) => formats.moneyOrDash(row.valueCents),
     },
   ];
 
@@ -377,7 +386,8 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
       key: "value",
       header: "Value",
       numeric: true,
-      render: (row) => formats.money(row.openValueCents),
+      dashZero: (row) => row.openValueCents === 0,
+      render: (row) => formats.moneyOrDash(row.openValueCents),
     },
   ];
 
@@ -523,14 +533,16 @@ function WonLostCard(props: {
       key: "wonValue",
       header: "Won value",
       numeric: true,
-      render: (row) => formats.money(row.wonValueCents),
+      dashZero: (row) => row.wonValueCents === 0,
+      render: (row) => formats.moneyOrDash(row.wonValueCents),
     },
     { key: "lostCount", header: "Lost", numeric: true, render: (row) => row.lostCount },
     {
       key: "lostValue",
       header: "Lost value",
       numeric: true,
-      render: (row) => formats.money(row.lostValueCents),
+      dashZero: (row) => row.lostValueCents === 0,
+      render: (row) => formats.moneyOrDash(row.lostValueCents),
     },
   ];
 
@@ -672,7 +684,8 @@ function SourcesCard(props: { rows: SourceRow[] }) {
       key: "value",
       header: "Value",
       numeric: true,
-      render: (row) => formats.money(row.valueCents),
+      dashZero: (row) => row.valueCents === 0,
+      render: (row) => formats.moneyOrDash(row.valueCents),
     },
     { key: "won", header: "Won", numeric: true, render: (row) => row.wonCount },
     { key: "open", header: "Open", numeric: true, render: (row) => row.openCount },
@@ -848,9 +861,7 @@ function DwellMiniChart(props: {
     return (
       <div>
         <CardGroupLabel>{title}</CardGroupLabel>
-        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          Nothing here yet.
-        </p>
+        <EmptyState variant="quiet" title="Nothing here yet" className="px-0" />
       </div>
     );
   }

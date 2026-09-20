@@ -14,6 +14,15 @@ export type DataTableColumn<Row> = {
   header: string;
   /** Right-aligns the column and gives it tabular figures. */
   numeric?: boolean;
+  /**
+   * True when this row's value in this column is a period-table zero: the
+   * cell draws in the kit's faint dash ink (`TD`'s `dashZero`) instead of
+   * reading as one more "$0.00" the eye has to discard (docs/DESIGN.md rule
+   * 1 and 5; CDQO phase two design review, decision A). Pair with
+   * `useFormats().moneyOrDash` in `render`. Leave unset for a column whose
+   * zero is a true, standalone answer rather than "nothing on this clock."
+   */
+  dashZero?: (row: Row) => boolean;
   render: (row: Row) => ReactNode;
 };
 
@@ -25,36 +34,44 @@ export function DataTable<Row>(props: {
   const { columns, rows, getRowKey } = props;
 
   return (
-    <Table>
-      <THead>
-        <TR>
-          {columns.map((column) => (
-            <TH
-              key={column.key}
-              align={column.numeric ? "right" : "left"}
-              data-numeric={column.numeric || undefined}
-            >
-              {column.header}
-            </TH>
-          ))}
-        </TR>
-      </THead>
-      {/* No rule under the last row: the card edge is already a hairline. */}
-      <TBody className="[&>tr:last-child]:border-b-0">
-        {rows.map((row, index) => (
-          <TR key={getRowKey(row, index)}>
+    // A report table can carry more columns than fit a 1024px card (Revenue's
+    // per-deal table is Deal, Customer and four money columns). Without this,
+    // the extra columns had nowhere to go but past the card's own edge, with
+    // no scrollbar to say so - the row was just cut off. This scrolls the
+    // table horizontally inside its own card instead, so the window's 1024px
+    // floor (docs/DESIGN.md §11) never hides a column.
+    <div className="overflow-x-auto">
+      <Table>
+        <THead>
+          <TR>
             {columns.map((column) => (
-              <TD
+              <TH
                 key={column.key}
                 align={column.numeric ? "right" : "left"}
                 data-numeric={column.numeric || undefined}
               >
-                {column.render(row)}
-              </TD>
+                {column.header}
+              </TH>
             ))}
           </TR>
-        ))}
-      </TBody>
-    </Table>
+        </THead>
+        <TBody>
+          {rows.map((row, index) => (
+            <TR key={getRowKey(row, index)}>
+              {columns.map((column) => (
+                <TD
+                  key={column.key}
+                  align={column.numeric ? "right" : "left"}
+                  data-numeric={column.numeric || undefined}
+                  dashZero={column.dashZero?.(row)}
+                >
+                  {column.render(row)}
+                </TD>
+              ))}
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+    </div>
   );
 }
