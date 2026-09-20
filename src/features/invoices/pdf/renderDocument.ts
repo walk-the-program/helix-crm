@@ -7,7 +7,11 @@
  *
  * Shape (docs/DESIGN.md section 6): hard edges only. No gradient, no
  * blurred shadow, no rounded corner. The only filled colour on the page is
- * the total row.
+ * one block in the totals -- "Total" on an invoice nobody has paid against
+ * (and on every quote), or "Balance due" once a payment exists (see
+ * planTotalsRows below): DESIGN.md allows exactly one primary block per
+ * view, so the moment there is a figure the customer has to act on, that is
+ * the one that gets it.
  */
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import type { PDFFont, PDFImage, PDFPage } from "pdf-lib";
@@ -54,6 +58,27 @@ export type RenderLine = {
   interval: string | null;
 };
 
+/** One payment listed under the totals block, on an invoice that has any. */
+export type RenderPaymentLine = {
+  paidOn: string;
+  methodLabel: string;
+  reference: string | null;
+  amountCents: number;
+};
+
+/**
+ * The payments block for an invoice PDF (LR-PX-A W3). Absent (or null) on a
+ * quote, and on an invoice with no payments -- the totals block then draws
+ * exactly as it always has, byte-for-byte, which is the point: an invoice
+ * nobody has paid against yet must not change shape just because the feature
+ * exists.
+ */
+export type RenderPaymentsBlock = {
+  lines: RenderPaymentLine[];
+  paidToDateCents: number;
+  balanceDueCents: number;
+};
+
 export type RenderInput = {
   kind: "quote" | "invoice";
   number: string;
@@ -70,6 +95,7 @@ export type RenderInput = {
   currency: string;
   notes: string | null;
   paymentInstructions: string | null;
+  payments?: RenderPaymentsBlock | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -123,12 +149,12 @@ export function wrapText(text: string, font: PDFFont, size: number, maxWidth: nu
 }
 
 /** wrapText, but respecting explicit newlines in the source text (addresses). */
-function splitAndWrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+export function splitAndWrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   return text.split("\n").flatMap((part) => wrapText(part, font, size, maxWidth));
 }
 
 /** Truncates a single line to fit `maxWidth`, appending an ellipsis if it does not already fit. */
-function truncateToWidth(text: string, font: PDFFont, size: number, maxWidth: number): string {
+export function truncateToWidth(text: string, font: PDFFont, size: number, maxWidth: number): string {
   const ellipsis = "…";
   if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
   let result = text;
@@ -139,7 +165,7 @@ function truncateToWidth(text: string, font: PDFFont, size: number, maxWidth: nu
 }
 
 /** Wraps text and caps it at `maxLines`, marking truncation with an ellipsis on the last line. */
-function wrapAndClip(
+export function wrapAndClip(
   text: string,
   font: PDFFont,
   size: number,
@@ -176,7 +202,7 @@ function intervalSuffix(line: RenderLine): string | null {
 // Low-level drawing helpers.
 // ---------------------------------------------------------------------------
 
-function drawRightAligned(
+export function drawRightAligned(
   page: PDFPage,
   text: string,
   rightX: number,
@@ -190,13 +216,13 @@ function drawRightAligned(
 }
 
 /** Manual letter-spacing: pdf-lib has no tracking, so small uppercase labels are drawn glyph by glyph. */
-function trackedWidth(text: string, font: PDFFont, size: number, tracking: number): number {
+export function trackedWidth(text: string, font: PDFFont, size: number, tracking: number): number {
   let total = 0;
   for (const ch of text) total += font.widthOfTextAtSize(ch, size) + tracking;
   return total > 0 ? total - tracking : 0;
 }
 
-function drawTrackedText(
+export function drawTrackedText(
   page: PDFPage,
   text: string,
   x: number,
@@ -213,7 +239,7 @@ function drawTrackedText(
   }
 }
 
-function drawRightAlignedTracked(
+export function drawRightAlignedTracked(
   page: PDFPage,
   text: string,
   rightX: number,
@@ -228,11 +254,11 @@ function drawRightAlignedTracked(
 }
 
 /** A small uppercase tracked section label ("Bill to" -> "BILL TO"), sentence-case source, drawn tracked+uppercase. */
-function drawSectionLabel(page: PDFPage, text: string, x: number, y: number, font: PDFFont): void {
+export function drawSectionLabel(page: PDFPage, text: string, x: number, y: number, font: PDFFont): void {
   drawTrackedText(page, text.toUpperCase(), x, y, font, 7.5, COLOR_MUTED, 1.1);
 }
 
-function drawHairline(page: PDFPage, y: number, x = PAGE_MARGIN, width = CONTENT_WIDTH): number {
+export function drawHairline(page: PDFPage, y: number, x = PAGE_MARGIN, width = CONTENT_WIDTH): number {
   page.drawRectangle({
     x,
     y: y - HAIRLINE_THICKNESS,
@@ -250,7 +276,7 @@ function drawHairline(page: PDFPage, y: number, x = PAGE_MARGIN, width = CONTENT
 // nothing downstream needs to know which one is active.
 // ---------------------------------------------------------------------------
 
-type FontSet = {
+export type FontSet = {
   heading: PDFFont;
   headingBold: PDFFont;
   body: PDFFont;
@@ -289,7 +315,7 @@ async function embedWithFallback(
   return doc.embedFont(standard);
 }
 
-async function loadFontSet(doc: PDFDocument, assets: DocumentAssets): Promise<FontSet> {
+export async function loadFontSet(doc: PDFDocument, assets: DocumentAssets): Promise<FontSet> {
   const fontkitReady = await tryEnableFontkit(doc);
   const [heading, headingBold, body, bodyBold] = await Promise.all([
     embedWithFallback(doc, assets.fonts.heading, fontkitReady, StandardFonts.HelveticaBold),
@@ -600,6 +626,55 @@ function drawLineRow(
   return startY - measureRowHeight(line);
 }
 
+/**
+ * The rows the totals block draws, computed once as pure data so a test can
+ * assert on it directly -- pdf-lib cannot read text back out of a saved PDF
+ * (see the note at the bottom of pdfLayout.test.ts), so this is what proves
+ * "an invoice with two payments carries a 'Balance due' row for the right
+ * figure, and an invoice with none carries neither string".
+ *
+ * With no payments this is exactly the shape the totals block has always
+ * drawn: Subtotal (and tax, when it applies), then the filled block reading
+ * "Total". With payments, Total steps down to an ordinary row, "Paid to
+ * date" joins it, and the filled block -- the one confident colour the page
+ * spends -- moves to "Balance due", the figure the customer actually acts
+ * on. The total still prints, one line above it, exactly where it always
+ * was; DESIGN.md's "one primary block per view" is why it stops being
+ * filled once something else needs to be.
+ */
+export function planTotalsRows(
+  input: RenderInput,
+  taxSummary: TaxLineSummary,
+): { plainRows: Array<[string, number]>; filledLabel: string; filledCents: number } {
+  const rate = input.taxRateBp / 100;
+  const rows: Array<[string, number]> = [["Subtotal", input.subtotalCents]];
+  const taxRow = taxRowLabel(taxSummary, input.taxCents, `${formatPercent(rate)}%`, (cents) =>
+    formatMoney(cents, input.currency),
+  );
+  if (taxRow.show) rows.push([taxRow.label, input.taxCents]);
+
+  const payments = input.payments;
+  if (!payments) {
+    return { plainRows: rows, filledLabel: "Total", filledCents: input.totalCents };
+  }
+
+  rows.push(["Total", input.totalCents]);
+  rows.push(["Paid to date", payments.paidToDateCents]);
+  return { plainRows: rows, filledLabel: "Balance due", filledCents: payments.balanceDueCents };
+}
+
+/** The two strings one payment line draws under the totals block. */
+export function paymentsListLineText(
+  line: RenderPaymentLine,
+  currency: string,
+): { left: string; right: string } {
+  const refPart = line.reference && line.reference.trim() !== "" ? ` · ${line.reference}` : "";
+  return {
+    left: `${formatDateDisplay(line.paidOn)} · ${line.methodLabel}${refPart}`,
+    right: formatMoney(line.amountCents, currency),
+  };
+}
+
 function drawTotals(
   page: PDFPage,
   fonts: FontSet,
@@ -615,21 +690,17 @@ function drawTotals(
 
   let y = startY;
 
-  const rate = input.taxRateBp / 100;
-  const rows: Array<[string, number]> = [["Subtotal", input.subtotalCents]];
-  const taxRow = taxRowLabel(taxSummary, input.taxCents, `${formatPercent(rate)}%`, (cents) =>
-    formatMoney(cents, input.currency),
-  );
-  if (taxRow.show) rows.push([taxRow.label, input.taxCents]);
-
-  for (const [label, cents] of rows) {
+  const plan = planTotalsRows(input, taxSummary);
+  for (const [label, cents] of plan.plainRows) {
     y -= rowSize;
     page.drawText(label, { x: boxX, y, size: rowSize, font: fonts.body, color: COLOR_NEUTRAL_DARK });
     drawRightAligned(page, formatMoney(cents, input.currency), contentRight, y, fonts.body, rowSize, COLOR_NEUTRAL_DARK);
     y -= rowGap;
   }
 
-  // Total row: the one confident filled block on the page, flat colour, hard edges.
+  // The filled block: the one confident colour on the page, flat, hard edges.
+  // "Total" when there are no payments; "Balance due" once there are (see
+  // planTotalsRows above).
   const totalHeight = 30;
   const totalTop = y;
   const totalBottom = totalTop - totalHeight;
@@ -637,10 +708,16 @@ function drawTotals(
 
   const totalSize = 12;
   const totalBaseline = totalBottom + (totalHeight - totalSize) / 2 + 2;
-  page.drawText("Total", { x: boxX + 14, y: totalBaseline, size: totalSize, font: fonts.bodyBold, color: COLOR_ON_PRIMARY });
+  page.drawText(plan.filledLabel, {
+    x: boxX + 14,
+    y: totalBaseline,
+    size: totalSize,
+    font: fonts.bodyBold,
+    color: COLOR_ON_PRIMARY,
+  });
   drawRightAligned(
     page,
-    formatMoney(input.totalCents, input.currency),
+    formatMoney(plan.filledCents, input.currency),
     contentRight - 14,
     totalBaseline,
     fonts.bodyBold,
@@ -649,6 +726,29 @@ function drawTotals(
   );
 
   return totalBottom - 24;
+}
+
+/**
+ * The payment lines under the totals block -- only drawn once there is more
+ * than one payment (F-LR-PX-A). A single payment is already fully told by
+ * "Paid to date"; a list of one row would just repeat it.
+ */
+function drawPaymentsList(page: PDFPage, fonts: FontSet, input: RenderInput, startY: number): number {
+  const payments = input.payments;
+  if (!payments || payments.lines.length <= 1) return startY;
+
+  let y = startY;
+  drawSectionLabel(page, "Payments", PAGE_MARGIN, y, fonts.body);
+  y -= 16;
+
+  const size = 9;
+  for (const line of payments.lines) {
+    const { left, right } = paymentsListLineText(line, input.currency);
+    page.drawText(left, { x: PAGE_MARGIN, y, size, font: fonts.body, color: COLOR_NEUTRAL_DARK });
+    drawRightAligned(page, right, PAGE_WIDTH - PAGE_MARGIN, y, fonts.body, size, COLOR_NEUTRAL_DARK);
+    y -= size + 4;
+  }
+  return y - 10;
 }
 
 function drawLabeledBlock(
@@ -681,7 +781,7 @@ function drawNotesAndPayment(page: PDFPage, fonts: FontSet, input: RenderInput, 
   return y;
 }
 
-function drawFooter(page: PDFPage, fonts: FontSet, documentNumber: string, pageNumber: number, pageCount: number): void {
+export function drawFooter(page: PDFPage, fonts: FontSet, documentNumber: string, pageNumber: number, pageCount: number): void {
   const size = 8;
   page.drawText(documentNumber, { x: PAGE_MARGIN, y: FOOTER_BASELINE_Y, size, font: fonts.body, color: COLOR_MUTED });
   drawRightAligned(
@@ -720,13 +820,13 @@ function drawFooter(page: PDFPage, fonts: FontSet, documentNumber: string, pageN
 // ---------------------------------------------------------------------------
 
 /** Fonts and logo embedded in a throwaway PDFDocument, used only to measure -- never drawn into the real output or saved. */
-type MeasurementContext = {
+export type MeasurementContext = {
   doc: PDFDocument;
   fonts: FontSet;
   logoImage: PDFImage | null;
 };
 
-async function prepareMeasurementContext(resolvedAssets: DocumentAssets): Promise<MeasurementContext> {
+export async function prepareMeasurementContext(resolvedAssets: DocumentAssets): Promise<MeasurementContext> {
   const doc = await PDFDocument.create();
   const fonts = await loadFontSet(doc, resolvedAssets);
 
@@ -743,7 +843,7 @@ async function prepareMeasurementContext(resolvedAssets: DocumentAssets): Promis
 }
 
 /** Runs `fn` against a fresh page appended to the throwaway measurement document. That document is never saved, so the page (and anything drawn on it) never reaches the output. */
-function measureOnScratchPage<T>(measurement: MeasurementContext, fn: (page: PDFPage) => T): T {
+export function measureOnScratchPage<T>(measurement: MeasurementContext, fn: (page: PDFPage) => T): T {
   const page = measurement.doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
   return fn(page);
 }
@@ -792,6 +892,7 @@ function measureFooterBlockHeight(
   return measureOnScratchPage(measurement, (page) => {
     let y = reference - 14;
     y = drawTotals(page, fonts, input, y, contentRight, taxSummary);
+    y = drawPaymentsList(page, fonts, input, y);
     y = drawNotesAndPayment(page, fonts, input, y);
     return reference - y;
   });
@@ -970,6 +1071,7 @@ export async function renderDocument(input: RenderInput, assets?: DocumentAssets
     if (isLastPage) {
       cursorY -= 14;
       cursorY = drawTotals(page, fonts, input, cursorY, contentRight, taxSummary);
+      cursorY = drawPaymentsList(page, fonts, input, cursorY);
       cursorY = drawNotesAndPayment(page, fonts, input, cursorY);
     }
 

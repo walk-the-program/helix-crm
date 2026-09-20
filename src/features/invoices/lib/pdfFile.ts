@@ -15,9 +15,16 @@
  * refused by the capability, and this reports that in a plain sentence rather
  * than throwing a permission error at him.
  */
-import { renderDocument, type RenderInput, type RenderLine } from "@/features/invoices/pdf/renderDocument";
+import {
+  renderDocument,
+  type RenderInput,
+  type RenderLine,
+  type RenderPaymentsBlock,
+} from "@/features/invoices/pdf/renderDocument";
 import type { Document, DocumentItem } from "@/db/repos/documents";
 import * as documentsRepo from "@/db/repos/documents";
+import * as paymentsRepo from "@/db/repos/payments";
+import { methodLabel, type Payment } from "@/db/repos/payments";
 import { workspacePaths } from "@/features/data/lib/workspace";
 import { joinPath } from "@/features/data/lib/fsBridge";
 import { contactName } from "@/db/repos/contacts";
@@ -47,16 +54,26 @@ export async function documentsDir(): Promise<string> {
   return dir;
 }
 
-/** The customer block, resolved from whichever of the two the document has. */
-async function customerFor(document: Document): Promise<RenderInput["customer"]> {
+/**
+ * The customer block for a PDF, resolved from whichever of a contact and a
+ * company a caller has (a document's own, or a statement's `ref`). Exported
+ * so `statementFile.ts` builds its customer block the identical way an
+ * invoice does -- the statement has to read as the same business's own
+ * paperwork, not a second guess at how to describe a customer.
+ */
+export async function resolveCustomerBlock(ref: {
+  contactId: string | null;
+  companyId: string | null;
+  companyNameFallback?: string | null;
+}): Promise<RenderInput["customer"]> {
   let name = "";
   let email = "";
   let phone = "";
   let address = "";
-  let company = document.companyName ?? "";
+  let company = ref.companyNameFallback ?? "";
 
-  if (document.contactId) {
-    const contact = await contactsRepo.get(document.contactId);
+  if (ref.contactId) {
+    const contact = await contactsRepo.get(ref.contactId);
     if (contact) {
       name = contactName(contact);
       const primaryEmail =
@@ -69,8 +86,8 @@ async function customerFor(document: Document): Promise<RenderInput["customer"]>
     }
   }
 
-  if (document.companyId) {
-    const record = await companiesRepo.get(document.companyId);
+  if (ref.companyId) {
+    const record = await companiesRepo.get(ref.companyId);
     if (record) {
       company = record.name;
       if (!phone) phone = record.phoneE164 ?? record.phoneRaw ?? "";
@@ -81,6 +98,15 @@ async function customerFor(document: Document): Promise<RenderInput["customer"]>
   }
 
   return { name, company, email, phone, address };
+}
+
+/** The customer block, resolved from whichever of the two the document has. */
+async function customerFor(document: Document): Promise<RenderInput["customer"]> {
+  return resolveCustomerBlock({
+    contactId: document.contactId,
+    companyId: document.companyId,
+    companyNameFallback: document.companyName,
+  });
 }
 
 /**
@@ -134,11 +160,42 @@ function toRenderLines(items: DocumentItem[]): RenderLine[] {
   }));
 }
 
-/** Everything the renderer needs, assembled from the row and the settings. */
+/**
+ * The payments block a rendered invoice carries under its totals -- null on a
+ * quote and on an invoice nobody has paid against, so the PDF for either is
+ * byte-for-byte what it always was (LR-PX-A W3).
+ */
+function buildPaymentsBlock(document: Document, payments: Payment[]): RenderPaymentsBlock | null {
+  if (document.kind !== "invoice" || payments.length === 0) return null;
+  const paidToDateCents = payments.reduce((sum, p) => sum + p.amountCents, 0);
+  return {
+    lines: payments.map((p) => ({
+      paidOn: p.paidOn,
+      methodLabel: methodLabel(p.method),
+      // Already capped by the schema (120 chars), but capped here too so this
+      // block can never bypass the boundary every other free-text field on
+      // this PDF goes through (see capPdfText's comment above).
+      reference: capPdfText(p.reference),
+      amountCents: p.amountCents,
+    })),
+    paidToDateCents,
+    balanceDueCents: document.totalCents - paidToDateCents,
+  };
+}
+
+/**
+ * Everything the renderer needs, assembled from the row and the settings.
+ *
+ * `payments` defaults to empty rather than being fetched here, matching
+ * `items`: this function stays a pure assembler over data the caller already
+ * has, and a caller that has none (a quote, or a test with no database) never
+ * has to know payments exist.
+ */
 export async function buildRenderInput(
   document: Document,
   items: DocumentItem[],
   settings: InvoiceSettings,
+  payments: Payment[] = [],
 ): Promise<RenderInput> {
   const customer = await customerFor(document);
   return {
@@ -171,6 +228,7 @@ export async function buildRenderInput(
     paymentInstructions: capPdfText(
       document.paymentInstructions || settings.paymentInstructions || null,
     ),
+    payments: buildPaymentsBlock(document, payments),
   };
 }
 
@@ -187,7 +245,10 @@ export async function saveDocumentPdf(
   settings: InvoiceSettings,
   options: { openAfter?: boolean } = {},
 ): Promise<SaveResult> {
-  const input = await buildRenderInput(document, items, settings);
+  // Only an invoice ever carries payments (payments.assertTakesPayments
+  // refuses one on a quote), so a quote skips this query entirely.
+  const payments = document.kind === "invoice" ? await paymentsRepo.listForDocument(document.id) : [];
+  const input = await buildRenderInput(document, items, settings, payments);
   const bytes = await renderDocument(input);
 
   const fileName = pdfFileName(document.number);
