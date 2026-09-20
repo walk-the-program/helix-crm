@@ -20,7 +20,7 @@
 import { forwardRef } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { DotsSixVertical } from "@/ui/icons";
-import { formatMoney } from "@/lib/money";
+import { formatBreakdown, formatMoney } from "@/lib/money";
 import type { Deal } from "@/db/repos/deals";
 
 export type DealCardProps = {
@@ -94,8 +94,18 @@ export const DealCard = forwardRef<HTMLDivElement, DealCardProps>(function DealC
           >
             {deal.companyName ?? "No company"}
           </span>
-          <span className="money flex-none text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
-            {formatMoney(deal.valueCents, deal.currency)}
+          {/* The breakdown, not the total (D20). "$1,500 + $150/mo" is what
+              the owner recognises; "$3,300" is a number he has to unpick. A
+              deal with nothing recurring on it is just its own value. */}
+          <span
+            data-testid="card-value"
+            className="money flex-none text-[length:var(--text-sm)] font-medium text-[var(--color-text)]"
+          >
+            {deal.recurringMonthlyCents > 0
+              ? formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
+                  currency: deal.currency,
+                })
+              : formatMoney(deal.valueCents, deal.currency)}
           </span>
         </div>
 

@@ -24,7 +24,8 @@ import {
   TR,
 } from "@/ui";
 import { useVocabulary } from "@/app/vocabulary";
-import { formatMoney } from "@/lib/money";
+import { formatBreakdown, formatMoney, formatMoneyTrim, formatMonthly } from "@/lib/money";
+import { upfrontCents } from "@/db/repos/dealItems";
 import { formatDateDisplay } from "@/lib/dates";
 import {
   useBoard,
@@ -122,6 +123,9 @@ export function PipelineScreen() {
     return {
       count: deals.length,
       cents: deals.reduce((sum, deal) => sum + deal.valueCents, 0),
+      // The same two halves the columns show (D20).
+      upfront: deals.reduce((sum, deal) => sum + upfrontCents(deal), 0),
+      monthly: deals.reduce((sum, deal) => sum + deal.recurringMonthlyCents, 0),
       currency: deals[0]?.currency ?? "USD",
     };
   }, [board]);
@@ -155,8 +159,12 @@ export function PipelineScreen() {
       <PageHeader
         title={vocabulary.many}
         subtitle={
-          <span className="tabular">
-            {totals.count} open · {formatMoney(totals.cents, totals.currency)}
+          <span className="tabular" data-testid="pipeline-total">
+            {totals.count} open · Upfront{" "}
+            {formatMoneyTrim(totals.upfront, totals.currency)}
+            {totals.monthly > 0
+              ? ` \u00b7 ${formatMonthly(totals.monthly, totals.currency)}`
+              : null}
           </span>
         }
         actions={
@@ -281,7 +289,13 @@ export function PipelineScreen() {
                       </Badge>
                     </TD>
                     <TD align="right">
-                      <span className="money">{formatMoney(deal.valueCents, deal.currency)}</span>
+                      <span className="money" data-testid="row-value">
+                        {deal.recurringMonthlyCents > 0
+                          ? formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
+                              currency: deal.currency,
+                            })
+                          : formatMoney(deal.valueCents, deal.currency)}
+                      </span>
                     </TD>
                     <TD muted>
                       <span className="tabular">

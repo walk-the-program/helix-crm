@@ -24,6 +24,7 @@
  * figure at the end of it, which is exact where a gridline is a guess.
  */
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import {
   Bar,
   BarChart,
@@ -35,6 +36,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  Button,
   CardGroupLabel,
   EmptyState,
   PageHeader,
@@ -98,6 +100,7 @@ function barChartHeight(rows: number, floor = 76): number {
 }
 
 export function ReportsScreen() {
+  const [, navigate] = useLocation();
   const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const [granularity, setGranularity] = useState<Granularity>(() => defaultGranularity(period));
 
@@ -112,7 +115,17 @@ export function ReportsScreen() {
 
   return (
     <div className="flex flex-col">
-      <PageHeader title="Reports" actions={<PeriodPicker value={period} onChange={setPeriod} />} />
+      <PageHeader
+        title="Reports"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => navigate("/reports/revenue")}>
+              Revenue
+            </Button>
+            <PeriodPicker value={period} onChange={setPeriod} />
+          </>
+        }
+      />
       <div className="flex flex-col gap-[var(--space-6)]">
         {query.isPending ? (
           <div className="flex justify-center py-[var(--space-10)]">

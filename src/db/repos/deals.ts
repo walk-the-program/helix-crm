@@ -61,6 +61,18 @@ export type Deal = {
   expectedOn: string | null;
   closedAt: string | null;
   outcomeReason: string | null;
+  /**
+   * The revenue breakdown (D20). `valueCents` above is the annual value -
+   * upfront plus twelve months of recurring - and these four say which half is
+   * which. They are derived columns: `dealItems.recompute` is the only thing
+   * that writes them, in the same transaction as the line change that caused
+   * them, so a deal whose lines and whose value disagree cannot exist.
+   */
+  oneTimeCents: number;
+  recurringMonthlyCents: number;
+  recurringStartedOn: string | null;
+  recurringEndedOn: string | null;
+  suggestedTotalCents: number;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -127,6 +139,13 @@ const DEAL_COLS: readonly Col<Deal>[] = [
   ["expectedOn", "d.expected_on", "textNull"],
   ["closedAt", "d.closed_at", "textNull"],
   ["outcomeReason", "d.outcome_reason", "textNull"],
+  // coalesce because the columns arrived on a table that already held rows:
+  // a deal written before 0004_revenue has NULL where a 0 belongs.
+  ["oneTimeCents", "coalesce(d.one_time_cents, 0)", "int"],
+  ["recurringMonthlyCents", "coalesce(d.recurring_monthly_cents, 0)", "int"],
+  ["recurringStartedOn", "d.recurring_started_on", "textNull"],
+  ["recurringEndedOn", "d.recurring_ended_on", "textNull"],
+  ["suggestedTotalCents", "coalesce(d.suggested_total_cents, 0)", "int"],
   ["createdAt", "d.created_at", "text"],
   ["updatedAt", "d.updated_at", "text"],
   ["deletedAt", "d.deleted_at", "textNull"],

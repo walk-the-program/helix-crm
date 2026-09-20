@@ -39,6 +39,13 @@ export const preset: TradePreset = {
       options: ["Cleaning", "Whitening", "Clear aligners", "Crown or bridge", "Emergency", "Other"],
     },
   ],
+  services: [
+    { name: "New patient exam and x-rays", kind: "one_time", interval: null, unitPriceCents: 15000 },
+    { name: "Routine cleaning", kind: "one_time", interval: null, unitPriceCents: 12000 },
+    { name: "Teeth whitening", kind: "one_time", interval: null, unitPriceCents: 40000 },
+    { name: "Clear aligners", kind: "one_time", interval: null, unitPriceCents: 450000 },
+    { name: "Membership plan", kind: "recurring", interval: "year", unitPriceCents: 39900 },
+  ],
 };
 
 export default preset;

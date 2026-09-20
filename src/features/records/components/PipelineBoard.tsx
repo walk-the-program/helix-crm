@@ -33,7 +33,9 @@ import { useLocation } from "wouter";
 import type { Deal } from "@/db/repos/deals";
 import type { Stage } from "@/db/repos/stages";
 import * as dealsRepo from "@/db/repos/deals";
-import { formatMoney } from "@/lib/money";
+import { formatMoneyTrim, formatMonthly } from "@/lib/money";
+import * as dealItemsRepo from "@/db/repos/dealItems";
+import { upfrontCents } from "@/db/repos/dealItems";
 import { DealCard } from "@/features/records/components/DealCard";
 import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
 import {
@@ -95,6 +97,10 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
       await dealsRepo.moveTo(dealId, stageId, index, {
         outcomeReason: reason,
       });
+      // Dropping a card on the Won column is one of the two ways a deal is
+      // won, so it starts the recurring clock the same way the deal page's
+      // stage picker does (D20).
+      await dealItemsRepo.recompute(dealId);
       await invalidateRecords();
     } catch (err) {
       const stage = stages.find((candidate) => candidate.id === stageId);
@@ -224,7 +230,10 @@ function StageColumn(props: {
 }) {
   const { stage, deals, nextStepByDealId, onOpen, onKeyMove } = props;
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-  const total = deals.reduce((sum, deal) => sum + deal.valueCents, 0);
+  // Two numbers, because a column holding one patio and one maintenance
+  // contract is not the same column as one holding two patios (D20).
+  const upfront = deals.reduce((sum, deal) => sum + upfrontCents(deal), 0);
+  const monthly = deals.reduce((sum, deal) => sum + deal.recurringMonthlyCents, 0);
   const currency = deals[0]?.currency ?? "USD";
 
   return (
@@ -253,8 +262,12 @@ function StageColumn(props: {
             {deals.length}
           </span>
         </div>
-        <div className="money text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          {formatMoney(total, currency)}
+        <div
+          data-testid="stage-total"
+          className="money text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+        >
+          Upfront {formatMoneyTrim(upfront, currency)}
+          {monthly > 0 ? ` \u00b7 ${formatMonthly(monthly, currency)}` : null}
         </div>
       </header>
 

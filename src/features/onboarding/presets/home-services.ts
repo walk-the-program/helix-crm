@@ -42,6 +42,13 @@ export const preset: TradePreset = {
       options: ["Routine", "Same day", "Emergency"],
     },
   ],
+  services: [
+    { name: "Diagnostic visit", kind: "one_time", interval: null, unitPriceCents: 8900 },
+    { name: "Drain cleaning", kind: "one_time", interval: null, unitPriceCents: 22500 },
+    { name: "Water heater installation", kind: "one_time", interval: null, unitPriceCents: 180000 },
+    { name: "HVAC tune-up", kind: "one_time", interval: null, unitPriceCents: 15000 },
+    { name: "Annual service plan", kind: "recurring", interval: "year", unitPriceCents: 24900 },
+  ],
 };
 
 export default preset;

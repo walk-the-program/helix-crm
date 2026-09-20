@@ -13,7 +13,8 @@
  * promoted here in wave 3.
  */
 import { raw } from "@/db/client";
-import type { Granularity, Period } from "@/lib/periods";
+import { periodFor, type Granularity, type Period } from "@/lib/periods";
+import { todayLocal } from "@/lib/dates";
 
 /* -------------------------------------------------------------------------- */
 /* 1. pipeline value by stage                                                 */
@@ -266,4 +267,241 @@ export async function loadReports(
     daysInStage(period),
   ]);
   return { pipeline, wonLost: won, sources, conversion, dwell };
+}
+
+/* -------------------------------------------------------------------------- */
+/* 6. recurring revenue: MRR, ARR and what is behind them                      */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * D20 made a deal two numbers rather than one: what is charged once and what
+ * is charged every month. `deals.recurring_monthly_cents` is already
+ * normalised (a yearly line is divided by twelve when the line is saved), so
+ * MRR is a plain sum with no CASE in it, and `recurring_started_on` /
+ * `recurring_ended_on` are what put a deal inside or outside it.
+ *
+ * The twelve-month series is computed in TypeScript from one query rather than
+ * twelve queries or a recursive CTE. The row set is small by construction -
+ * one row per won deal that ever had a recurring line - and the two functions
+ * that do the arithmetic are pure, which is what lets the boundary cases
+ * (started today, ended today, ended before it started) be tested without a
+ * database.
+ */
+
+/** A won deal that has, or once had, recurring revenue. */
+export type RecurringDealRow = {
+  dealId: string;
+  title: string;
+  monthlyCents: number;
+  oneTimeCents: number;
+  currency: string;
+  startedOn: string;
+  endedOn: string | null;
+  contactId: string | null;
+  contactName: string | null;
+  companyId: string | null;
+  companyName: string | null;
+};
+
+export async function recurringDeals(): Promise<RecurringDealRow[]> {
+  const rows = await raw.query(
+    `SELECT d.id                            AS d_id,
+            d.title                         AS d_title,
+            coalesce(d.recurring_monthly_cents, 0) AS d_recurring_monthly_cents,
+            coalesce(d.one_time_cents, 0)   AS d_one_time_cents,
+            d.currency                      AS d_currency,
+            d.recurring_started_on          AS d_recurring_started_on,
+            d.recurring_ended_on            AS d_recurring_ended_on,
+            d.contact_id                    AS d_contact_id,
+            trim(coalesce(c.first_name, '') || ' ' || coalesce(c.last_name, '')) AS c_name,
+            d.company_id                    AS d_company_id,
+            co.name                         AS co_name
+     FROM deals d
+     JOIN stages s ON s.id = d.stage_id
+     LEFT JOIN contacts c ON c.id = d.contact_id
+     LEFT JOIN companies co ON co.id = d.company_id
+     WHERE d.deleted_at IS NULL
+       AND s.is_won = 1
+       AND d.recurring_started_on IS NOT NULL
+       AND coalesce(d.recurring_monthly_cents, 0) > 0
+     ORDER BY d.recurring_monthly_cents DESC, d.title ASC`,
+  );
+  return rows.map((r) => {
+    const contactName = r[8] === null || r[8] === undefined ? "" : String(r[8]);
+    return {
+      dealId: String(r[0]),
+      title: String(r[1]),
+      monthlyCents: Number(r[2]),
+      oneTimeCents: Number(r[3]),
+      currency: String(r[4] ?? "USD"),
+      startedOn: String(r[5]),
+      endedOn: r[6] === null || r[6] === undefined ? null : String(r[6]),
+      contactId: r[7] === null || r[7] === undefined ? null : String(r[7]),
+      contactName: contactName.length > 0 ? contactName : null,
+      companyId: r[9] === null || r[9] === undefined ? null : String(r[9]),
+      companyName: r[10] === null || r[10] === undefined ? null : String(r[10]),
+    };
+  });
+}
+
+/**
+ * Is this deal earning on that date?
+ *
+ * Both boundaries are deliberate and both are the owner's reading of them. The
+ * start date counts from the day itself: a plan that starts today is earning
+ * today. The end date does not: "ended on the 30th" means the 30th was the
+ * last day it was paid for, so the deal is still in the number on the 30th and
+ * out of it on the 1st. Dates are 'YYYY-MM-DD', so a string comparison is a
+ * date comparison.
+ */
+export function isEarningOn(
+  row: { startedOn: string; endedOn: string | null },
+  date: string,
+): boolean {
+  if (row.startedOn > date) return false;
+  return row.endedOn === null || row.endedOn >= date;
+}
+
+/** Monthly recurring revenue on one date. */
+export function mrrAsOf(rows: RecurringDealRow[], date: string): number {
+  return rows.reduce(
+    (sum, row) => (isEarningOn(row, date) ? sum + row.monthlyCents : sum),
+    0,
+  );
+}
+
+export type MrrPoint = {
+  /** "2026-03". */
+  bucket: string;
+  /** The date the figure was taken on, which is today for the current month. */
+  asOf: string;
+  mrrCents: number;
+};
+
+/** The last day of a 'YYYY-MM' month, as 'YYYY-MM-DD'. */
+export function lastDayOfMonth(bucket: string): string {
+  const [year, month] = bucket.split("-").map(Number);
+  const day = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${bucket}-${String(day).padStart(2, "0")}`;
+}
+
+/**
+ * The twelve buckets the chart draws, oldest first and ending on the month
+ * `today` falls in.
+ *
+ * The current month is read as of today rather than as of its last day,
+ * because a chart whose final point is a month that has not happened yet
+ * always looks like a collapse.
+ */
+export function lastTwelveMonths(today: string): { bucket: string; asOf: string }[] {
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  const out: { bucket: string; asOf: string }[] = [];
+  for (let back = 11; back >= 0; back -= 1) {
+    const date = new Date(Date.UTC(year, month - 1 - back, 1));
+    const bucket = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    const end = lastDayOfMonth(bucket);
+    out.push({ bucket, asOf: end > today ? today : end });
+  }
+  return out;
+}
+
+export function mrrSeries(rows: RecurringDealRow[], today: string): MrrPoint[] {
+  return lastTwelveMonths(today).map(({ bucket, asOf }) => ({
+    bucket,
+    asOf,
+    mrrCents: mrrAsOf(rows, asOf),
+  }));
+}
+
+/** Recurring revenue that started, or stopped, inside one calendar month. */
+export function mrrMovement(
+  rows: RecurringDealRow[],
+  monthBucket: string,
+): { newCents: number; churnedCents: number } {
+  const from = `${monthBucket}-01`;
+  const to = lastDayOfMonth(monthBucket);
+  let newCents = 0;
+  let churnedCents = 0;
+  for (const row of rows) {
+    if (row.startedOn >= from && row.startedOn <= to) newCents += row.monthlyCents;
+    if (row.endedOn !== null && row.endedOn >= from && row.endedOn <= to) {
+      churnedCents += row.monthlyCents;
+    }
+  }
+  return { newCents, churnedCents };
+}
+
+/**
+ * Upfront money on deals won inside a period.
+ *
+ * Counted on `closed_at`, which is when the deal was won, and on
+ * `one_time_cents` rather than `value_cents`, because the annual value of a
+ * monthly plan is not money that arrived this month.
+ */
+export async function upfrontWon(period: Period): Promise<number> {
+  const rows = await raw.query(
+    `SELECT coalesce(sum(d.one_time_cents), 0) AS upfront_cents
+     FROM deals d JOIN stages s ON s.id = d.stage_id
+     WHERE d.deleted_at IS NULL AND s.is_won = 1
+       AND d.closed_at IS NOT NULL AND d.closed_at >= ? AND d.closed_at < ?`,
+    [period.from, period.to],
+  );
+  return rows.length > 0 ? Number(rows[0][0]) : 0;
+}
+
+export type RevenueParams = {
+  /** Today in the owner's own calendar, 'YYYY-MM-DD'. */
+  today: string;
+  month: Period;
+  quarter: Period;
+  year: Period;
+};
+
+export type RevenueBundle = {
+  mrrCents: number;
+  arrCents: number;
+  newMrrCents: number;
+  churnedMrrCents: number;
+  upfrontMonthCents: number;
+  upfrontQuarterCents: number;
+  upfrontYearCents: number;
+  byMonth: MrrPoint[];
+  /** Only the deals earning today, biggest first. */
+  active: RecurringDealRow[];
+};
+
+/** The three periods the revenue report needs, from the owner's own clock. */
+export function revenueParams(now: Date = new Date()): RevenueParams {
+  return {
+    today: todayLocal(),
+    month: periodFor("month", now),
+    quarter: periodFor("quarter", now),
+    year: periodFor("year", now),
+  };
+}
+
+export async function revenue(params: RevenueParams): Promise<RevenueBundle> {
+  const [rows, upfrontMonthCents, upfrontQuarterCents, upfrontYearCents] =
+    await Promise.all([
+      recurringDeals(),
+      upfrontWon(params.month),
+      upfrontWon(params.quarter),
+      upfrontWon(params.year),
+    ]);
+
+  const mrrCents = mrrAsOf(rows, params.today);
+  const movement = mrrMovement(rows, params.today.slice(0, 7));
+
+  return {
+    mrrCents,
+    arrCents: mrrCents * 12,
+    newMrrCents: movement.newCents,
+    churnedMrrCents: movement.churnedCents,
+    upfrontMonthCents,
+    upfrontQuarterCents,
+    upfrontYearCents,
+    byMonth: mrrSeries(rows, params.today),
+    active: rows.filter((row) => isEarningOn(row, params.today)),
+  };
 }

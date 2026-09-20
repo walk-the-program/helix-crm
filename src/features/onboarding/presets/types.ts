@@ -14,7 +14,10 @@
  *  - 4 to 8 stages;
  *  - exactly one won stage and exactly one lost stage;
  *  - stage names unique within a preset;
- *  - every `quietDays` between 3 and 60.
+ *  - every `quietDays` between 3 and 60;
+ *  - every service name unique within a preset, non-empty and trimmed;
+ *  - every `unitPriceCents` a positive integer;
+ *  - a recurring service has an interval, a one-time service has none.
  */
 
 export type TradeId =
@@ -61,6 +64,21 @@ export type PresetField = {
   options?: string[];
 };
 
+/**
+ * The price list a brand new workspace starts with, if it picked this trade.
+ * A new workspace only; nothing is ever seeded into a workspace that already
+ * exists. `intervalMonths`-style cleverness is deliberately absent: a service
+ * is one-time, per month or per year, because that is what an owner says.
+ */
+export type PresetService = {
+  name: string;
+  kind: "one_time" | "recurring";
+  /** "month" | "year" for a recurring service, null for a one-time one. */
+  interval: "month" | "year" | null;
+  unitPriceCents: number;
+  taxable?: boolean;
+};
+
 export type TradePreset = {
   id: TradeId;
   /** What the trade is called on the grid in screen 1. */
@@ -75,4 +93,5 @@ export type TradePreset = {
   stages: PresetStage[];
   sources: PresetSource[];
   fields: PresetField[];
+  services: PresetService[];
 };

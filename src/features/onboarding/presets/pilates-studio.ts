@@ -42,6 +42,12 @@ export const preset: TradePreset = {
       options: ["Morning", "Midday", "Evening", "Weekend"],
     },
   ],
+  services: [
+    { name: "Drop-in class", kind: "one_time", interval: null, unitPriceCents: 3200 },
+    { name: "Class pack of five", kind: "one_time", interval: null, unitPriceCents: 14000 },
+    { name: "Private session", kind: "one_time", interval: null, unitPriceCents: 9500 },
+    { name: "Monthly unlimited membership", kind: "recurring", interval: "month", unitPriceCents: 19900 },
+  ],
 };
 
 export default preset;

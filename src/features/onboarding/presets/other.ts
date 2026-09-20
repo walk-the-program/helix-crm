@@ -30,6 +30,12 @@ export const preset: TradePreset = {
     { name: "What they need", kind: "text", entityType: "deal" },
     { name: "How they found you", kind: "text", entityType: "contact" },
   ],
+  services: [
+    { name: "Initial consultation", kind: "one_time", interval: null, unitPriceCents: 5000 },
+    { name: "Standard service", kind: "one_time", interval: null, unitPriceCents: 15000 },
+    { name: "Premium package", kind: "one_time", interval: null, unitPriceCents: 50000 },
+    { name: "Monthly plan", kind: "recurring", interval: "month", unitPriceCents: 9900 },
+  ],
 };
 
 export default preset;

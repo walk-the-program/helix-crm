@@ -4,7 +4,9 @@
  * A preset is data somebody wrote by hand, per trade, and the pipeline it
  * produces has to work: a board with one column is not a pipeline, a board with
  * two won stages cannot report, and a stage whose quiet days are zero nags about
- * everything on the first morning. These are the rules
+ * everything on the first morning. The starting price list has the same kind of
+ * rule: a service with no price cannot be put on a deal, and a recurring service
+ * with no interval cannot be billed. These are the rules
  * `src/features/onboarding/presets/types.ts` states, checked against all ten.
  */
 import { describe, expect, it } from "vitest";
@@ -105,6 +107,27 @@ describe.each(ENTRIES)("preset: %s", (_id, preset) => {
         expect(field.options!.length).toBeLessThanOrEqual(6);
       } else {
         expect(field.options).toBeUndefined();
+      }
+    }
+  });
+
+  it("has 3 to 5 services, each named once, priced sensibly", () => {
+    expect(preset.services.length).toBeGreaterThanOrEqual(3);
+    expect(preset.services.length).toBeLessThanOrEqual(5);
+
+    const names = preset.services.map((s) => s.name.trim().toLowerCase());
+    expect(new Set(names).size).toBe(names.length);
+
+    for (const service of preset.services) {
+      expect(service.name.trim()).toBe(service.name);
+      expect(service.name.length).toBeGreaterThan(0);
+      expect(Number.isInteger(service.unitPriceCents)).toBe(true);
+      expect(service.unitPriceCents).toBeGreaterThan(0);
+      expect(["one_time", "recurring"]).toContain(service.kind);
+      if (service.kind === "recurring") {
+        expect(["month", "year"]).toContain(service.interval);
+      } else {
+        expect(service.interval).toBeNull();
       }
     }
   });

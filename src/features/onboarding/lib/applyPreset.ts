@@ -8,6 +8,7 @@
  *   stages                       replaced, in the plan's order
  *   sources                      replaced
  *   custom_fields                the ones that are not there yet
+ *   products                     the trade's starting price list, new workspace only
  *   onboarding.completedAt       now
  *
  * All of it in one `withTransaction`. The write lock is not reentrant, so
@@ -24,6 +25,13 @@
  * workspace already holds records this becomes additive: existing stages and
  * sources stay exactly as they are and only genuinely new ones are appended.
  * Nothing the owner has data in is ever thrown away by a setup screen.
+ *
+ * The price list does not follow that additive rule; it follows a stricter one.
+ * A service is seeded only when the workspace is genuinely new (`replace` is
+ * true) — never appended on a reopened setup, even though stages and sources
+ * are. An owner who already has contacts or deals may well have already built
+ * his own price list by hand, and a setup screen does not get to add four more
+ * rows to it just because he picked a trade.
  */
 import { raw } from "@/db/client";
 import { withTransaction } from "@/db/writeLock";
@@ -33,12 +41,14 @@ import * as pipelines from "@/db/repos/pipelines";
 import * as stagesRepo from "@/db/repos/stages";
 import * as sourcesRepo from "@/db/repos/sources";
 import * as customFields from "@/db/repos/customFields";
+import { productStatements } from "@/db/repos/products";
 import { newBatchId } from "@/lib/ids";
 import { KEYS, settingStatement } from "@/features/onboarding/lib/settings";
 import { workspaceHasRecords } from "@/features/onboarding/gate";
 import type {
   PresetField,
   PresetFieldKind,
+  PresetService,
   TradePreset,
   VocabularyKey,
 } from "@/features/onboarding/presets/types";
@@ -70,11 +80,20 @@ export type PlanField = {
   options?: string[];
 };
 
+/**
+ * A service rides along with the plan unedited — screen 2 has no UI for the
+ * price list, so there is no `key` to keep an input focused and nothing here
+ * is ever typed into. It is `preset.services`, carried through so `applyPlan`
+ * only has to know about `SetupPlan`.
+ */
+export type PlanService = PresetService;
+
 export type SetupPlan = {
   vocabulary: VocabularyKey;
   stages: PlanStage[];
   sources: PlanSource[];
   fields: PlanField[];
+  services: PlanService[];
 };
 
 let keySeq = 0;
@@ -106,6 +125,7 @@ export function planFromPreset(preset: TradePreset): SetupPlan {
       entityType: field.entityType,
       options: field.options ? [...field.options] : undefined,
     })),
+    services: preset.services.map((service) => ({ ...service })),
   };
 }
 
@@ -192,6 +212,9 @@ function cleanPlan(plan: SetupPlan): SetupPlan {
     fields: plan.fields
       .map((f) => ({ ...f, name: f.name.trim() }))
       .filter((f) => f.name.length > 0),
+    services: plan.services
+      .map((s) => ({ ...s, name: s.name.trim() }))
+      .filter((s) => s.name.length > 0),
   };
 }
 
@@ -201,6 +224,7 @@ export type ApplyResult = {
   stagesCreated: number;
   sourcesCreated: number;
   fieldsCreated: number;
+  servicesCreated: number;
 };
 
 export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
@@ -227,6 +251,7 @@ export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
       stagesCreated: 0,
       sourcesCreated: 0,
       fieldsCreated: 0,
+      servicesCreated: 0,
     };
 
     /* -- stages ------------------------------------------------------------ */
@@ -364,6 +389,38 @@ export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
         }),
       );
       result.fieldsCreated += 1;
+    }
+
+    /* -- services (the starting price list) --------------------------------- */
+    /* A new workspace only, per the preset type's own doc comment: nothing here
+     * runs once the workspace already holds a contact or a deal, so a reopened
+     * "/setup" never dumps a second price list on top of one the owner has
+     * already built by hand. */
+
+    if (replace) {
+      let position = 0;
+      for (const service of plan.services) {
+        const built = productStatements({
+          name: service.name,
+          kind: service.kind,
+          interval: service.interval,
+          unitPriceCents: service.unitPriceCents,
+          taxable: service.taxable,
+          position,
+        });
+        statements.push(...built.statements);
+        changes.push(
+          changeLogStatement({
+            entityType: "product",
+            entityId: built.id,
+            op: "create",
+            after: built.row,
+            batchId,
+          }),
+        );
+        position += 1;
+        result.servicesCreated += 1;
+      }
     }
 
     /* -- settings ---------------------------------------------------------- */

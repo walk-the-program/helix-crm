@@ -43,6 +43,13 @@ export const preset: TradePreset = {
     },
     { name: "Gate code", kind: "text", entityType: "contact" },
   ],
+  services: [
+    { name: "Mowing visit", kind: "one_time", interval: null, unitPriceCents: 6500 },
+    { name: "Spring cleanup", kind: "one_time", interval: null, unitPriceCents: 35000 },
+    { name: "Mulch installation", kind: "one_time", interval: null, unitPriceCents: 45000 },
+    { name: "Irrigation startup", kind: "one_time", interval: null, unitPriceCents: 15000 },
+    { name: "Monthly lawn maintenance", kind: "recurring", interval: "month", unitPriceCents: 18000 },
+  ],
 };
 
 export default preset;

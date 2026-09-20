@@ -38,6 +38,12 @@ export const preset: TradePreset = {
       options: ["All-inclusive", "Venue only", "Elopement", "Rehearsal dinner"],
     },
   ],
+  services: [
+    { name: "Saturday venue rental", kind: "one_time", interval: null, unitPriceCents: 850000 },
+    { name: "Weekday venue rental", kind: "one_time", interval: null, unitPriceCents: 450000 },
+    { name: "Elopement package", kind: "one_time", interval: null, unitPriceCents: 150000 },
+    { name: "Rehearsal dinner package", kind: "one_time", interval: null, unitPriceCents: 200000 },
+  ],
 };
 
 export default preset;

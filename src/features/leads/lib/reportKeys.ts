@@ -9,8 +9,8 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { loadReports } from "@/db/repos/reports";
-import type { ReportBundle } from "@/db/repos/reports";
+import { loadReports, revenue, revenueParams } from "@/db/repos/reports";
+import type { ReportBundle, RevenueBundle } from "@/db/repos/reports";
 import type { Granularity, Period } from "@/lib/periods";
 
 export const reportKeys = {
@@ -18,12 +18,26 @@ export const reportKeys = {
   all: ["reports"] as const,
   bundle: (period: Period, granularity: Granularity) =>
     ["reports", period.from, period.to, granularity] as const,
+  /** Still under the "reports" prefix, so the poller's invalidation catches it too. */
+  revenue: () => ["reports", "revenue"] as const,
 };
 
 export function useReports(period: Period, granularity: Granularity): UseQueryResult<ReportBundle> {
   return useQuery({
     queryKey: reportKeys.bundle(period, granularity),
     queryFn: () => loadReports(period, granularity),
+  });
+}
+
+/**
+ * The recurring-revenue report (/reports/revenue). `revenueParams` reads the
+ * owner's own clock, so this hook takes no arguments - there is no period
+ * picker on that screen, only "as of today."
+ */
+export function useRevenue(): UseQueryResult<RevenueBundle> {
+  return useQuery({
+    queryKey: reportKeys.revenue(),
+    queryFn: () => revenue(revenueParams()),
   });
 }
 

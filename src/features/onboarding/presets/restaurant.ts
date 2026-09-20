@@ -39,6 +39,12 @@ export const preset: TradePreset = {
     { name: "Guest count", kind: "number", entityType: "deal" },
     { name: "Preferred date", kind: "date", entityType: "deal" },
   ],
+  services: [
+    { name: "Private dining room rental", kind: "one_time", interval: null, unitPriceCents: 50000 },
+    { name: "Full restaurant buyout", kind: "one_time", interval: null, unitPriceCents: 500000 },
+    { name: "Catering drop-off, per person", kind: "one_time", interval: null, unitPriceCents: 2800 },
+    { name: "Rehearsal dinner package", kind: "one_time", interval: null, unitPriceCents: 120000 },
+  ],
 };
 
 export default preset;

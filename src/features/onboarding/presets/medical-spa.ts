@@ -38,6 +38,13 @@ export const preset: TradePreset = {
     },
     { name: "Preferred provider", kind: "text", entityType: "contact" },
   ],
+  services: [
+    { name: "Botox treatment", kind: "one_time", interval: null, unitPriceCents: 35000 },
+    { name: "Dermal filler syringe", kind: "one_time", interval: null, unitPriceCents: 65000 },
+    { name: "Laser hair removal session", kind: "one_time", interval: null, unitPriceCents: 20000 },
+    { name: "HydraFacial", kind: "one_time", interval: null, unitPriceCents: 17500 },
+    { name: "Membership plan", kind: "recurring", interval: "month", unitPriceCents: 9900 },
+  ],
 };
 
 export default preset;

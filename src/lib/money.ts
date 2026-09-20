@@ -111,3 +111,63 @@ function pad2(n: number): string {
 export function sumCents(values: Array<number | null | undefined>): number {
   return values.reduce<number>((acc, v) => acc + (v ?? 0), 0);
 }
+
+/* -------------------------------------------------------------------------- */
+/* the revenue breakdown (D20)                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Money with the cents dropped when there are none.
+ *
+ * A price list is written in round numbers - $150, $1,500 - and ".00" after
+ * every one of them is two characters of noise on every row of the board. An
+ * amount that genuinely has cents keeps them, so nothing is ever rounded away
+ * in front of the owner.
+ */
+export function formatMoneyTrim(cents: number, currency?: string, locale?: string): string {
+  const whole = cents % 100 === 0;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: currency ?? DEFAULT_CURRENCY,
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: whole ? 0 : 2,
+    }).format(cents / 100);
+  } catch {
+    return formatMoney(cents, currency, locale);
+  }
+}
+
+/** "$150/mo". The short form, because it sits inside a row. */
+export function formatMonthly(cents: number, currency?: string, locale?: string): string {
+  return `${formatMoneyTrim(cents, currency, locale)}/mo`;
+}
+
+/**
+ * What a deal is worth, said the way the owner says it.
+ *
+ * A deal priced from the services catalog has two halves, and one number
+ * hiding both of them is the thing D20 set out to stop: "$3,300" tells him
+ * nothing about whether that is a patio or a maintenance contract. So the
+ * money is always written as the breakdown -
+ *
+ *   "$1,500 + $150/mo"   both halves
+ *   "$1,500"             nothing recurring
+ *   "$150/mo"            nothing up front
+ *
+ * - and `upfrontLabel` puts the word "Upfront" in front of the first half
+ * where there is room for it, which is the deal page.
+ */
+export function formatBreakdown(
+  oneTimeCents: number,
+  recurringMonthlyCents: number,
+  options: { currency?: string; locale?: string; upfrontLabel?: boolean } = {},
+): string {
+  const { currency, locale, upfrontLabel = false } = options;
+  const upfront = formatMoneyTrim(oneTimeCents, currency, locale);
+  const monthly = formatMonthly(recurringMonthlyCents, currency, locale);
+
+  if (recurringMonthlyCents === 0) return upfront;
+  if (oneTimeCents === 0) return monthly;
+  return `${upfrontLabel ? "Upfront " : ""}${upfront} + ${monthly}`;
+}

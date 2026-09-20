@@ -42,6 +42,12 @@ export const preset: TradePreset = {
       options: ["Call", "Text", "Email"],
     },
   ],
+  services: [
+    { name: "Sanctuary rental", kind: "one_time", interval: null, unitPriceCents: 50000 },
+    { name: "Fellowship hall rental", kind: "one_time", interval: null, unitPriceCents: 25000 },
+    { name: "Wedding ceremony fee", kind: "one_time", interval: null, unitPriceCents: 75000 },
+    { name: "Premarital counseling session", kind: "one_time", interval: null, unitPriceCents: 7500 },
+  ],
 };
 
 export default preset;

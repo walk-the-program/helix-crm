@@ -42,6 +42,12 @@ export const preset: TradePreset = {
       options: ["New to CrossFit", "Some experience", "Competitive athlete"],
     },
   ],
+  services: [
+    { name: "Drop-in class", kind: "one_time", interval: null, unitPriceCents: 2500 },
+    { name: "On-ramp program", kind: "one_time", interval: null, unitPriceCents: 15000 },
+    { name: "Personal training session", kind: "one_time", interval: null, unitPriceCents: 7500 },
+    { name: "Monthly unlimited membership", kind: "recurring", interval: "month", unitPriceCents: 17500 },
+  ],
 };
 
 export default preset;
