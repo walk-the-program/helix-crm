@@ -77,7 +77,52 @@ export type TrashItem = {
    * caller that builds a TrashItem by hand keeps compiling.
    */
   blockedBy?: string | null;
+  /**
+   * Set on a contact or company row that is in the Trash because it LOST a
+   * merge, rather than because the owner deleted it. The two need different
+   * offers: restoring a merged loser rebuilds an empty duplicate of a person
+   * who already exists on the survivor, with none of their work, because the
+   * merge moved all of it (CPO audit, scenario 7). Undefined for every other
+   * type and for an ordinary deletion.
+   */
+  mergedInto?: MergedInto | null;
 };
+
+/** The survivor a merged-away record was folded into. */
+export type MergedInto = { survivorId: string; survivorName: string };
+
+/**
+ * Whether this contact or company is in the Trash because it lost a merge,
+ * and who it was folded into.
+ *
+ * `merges` is written by src/db/repos/merge.ts and read here rather than
+ * there, because "why is this record deleted" is a Trash question and
+ * merge.ts belongs to another lead. A REVERSED merge does not count: the
+ * reversal already restored the loser, so the row is live again or was
+ * deleted for some other reason since. The newest unreversed merge wins,
+ * which is also the one whose survivor still holds the work.
+ */
+export async function mergedInto(
+  entityType: "contact" | "company",
+  entityId: string,
+): Promise<MergedInto | null> {
+  const name =
+    entityType === "contact"
+      ? `CASE WHEN trim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) = ''
+              THEN '(no name)'
+              ELSE trim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) END`
+      : "s.name";
+  const table = entityType === "contact" ? "contacts" : "companies";
+  const rows = await raw.query(
+    `SELECT m.survivor_id AS m_survivor_id, ${name} AS m_survivor_name
+     FROM merges m JOIN ${table} s ON s.id = m.survivor_id
+     WHERE m.entity_type = ? AND m.loser_id = ? AND m.reversed_at IS NULL
+     ORDER BY m.at DESC, m.id DESC LIMIT 1`,
+    [entityType, entityId],
+  );
+  if (rows.length === 0) return null;
+  return { survivorId: String(rows[0][0]), survivorName: String(rows[0][1]) };
+}
 
 export const PURGE_AFTER_DAYS = 30;
 
@@ -101,6 +146,11 @@ export async function list(
   if (entityType === "deal") {
     for (const item of items) {
       item.blockedBy = await deals.purgeBlockedBy(item.entityId);
+    }
+  }
+  if (entityType === "contact" || entityType === "company") {
+    for (const item of items) {
+      item.mergedInto = await mergedInto(entityType, item.entityId);
     }
   }
   return items;

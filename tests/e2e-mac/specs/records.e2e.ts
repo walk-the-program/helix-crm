@@ -1106,3 +1106,59 @@ test.describe("records: CPO regressions", () => {
     ).not.toBeNull();
   });
 });
+
+test.describe("records: merged-away records", () => {
+  /**
+   * CPO audit, scenario 7. A merge loser is soft-deleted, so its page rendered
+   * exactly like any trashed record: an "Archived" badge and a Restore button.
+   * Restoring it would rebuild an empty duplicate of someone who already
+   * exists, because the merge moved every task, deal and activity to the
+   * survivor. The page has to say what actually happened instead.
+   */
+  test("a merged-away contact names its survivor and offers no Restore", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await waitForShell(page);
+
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name)
+       VALUES ('c-survivor', ?, ?, 'Marla', 'Quintero')`,
+      [now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name, deleted_at)
+       VALUES ('c-loser', ?, ?, 'Marla', 'Q', ?)`,
+      [now, now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name, deleted_at)
+       VALUES ('c-plain', ?, ?, 'Hollis', 'Fenwick', ?)`,
+      [now, now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO merges (id, created_at, updated_at, entity_type, survivor_id, loser_id,
+         batch_id, at)
+       VALUES ('m-1', ?, ?, 'contact', 'c-survivor', 'c-loser', 'b-1', ?)`,
+      [now, now, now],
+    );
+
+    await page.goto("/contacts/c-loser");
+    await page.reload();
+    await expect(page.getByRole("link", { name: /Merged into Marla Quintero/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Restore" })).toBeHidden();
+
+    // An ordinary deletion still offers the way back.
+    await page.goto("/contacts/c-plain");
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Restore" })).toBeVisible();
+
+    // And the Trash tells the two apart in its own rows.
+    await page.goto("/trash");
+    await page.reload();
+    await expect(page.getByText("Merged into Marla Quintero")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(1);
+  });
+});

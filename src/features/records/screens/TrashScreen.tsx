@@ -280,6 +280,14 @@ function TrashTypeTable(props: {
                       Kept: {item.blockedBy} refers to it
                     </div>
                   ) : null}
+                  {/* A merge loser is here because it lost a merge, not because
+                      the owner deleted it, and everything it owned is on the
+                      survivor (CPO audit, scenario 7). */}
+                  {item.mergedInto ? (
+                    <div className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+                      Merged into {item.mergedInto.survivorName}
+                    </div>
+                  ) : null}
                 </TD>
                 <TD
                   className="tabular"
@@ -295,14 +303,19 @@ function TrashTypeTable(props: {
                 </TD>
                 <TD align="right">
                   <div className="flex items-center justify-end gap-[var(--space-2)]">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      loading={restoringId === item.entityId}
-                      onClick={() => void handleRestore(item)}
-                    >
-                      Restore
-                    </Button>
+                    {/* Restoring a merge loser rebuilds an empty duplicate of a
+                        record that already exists, with none of its work.
+                        Reversing the merge is the only honest way back. */}
+                    {item.mergedInto ? null : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={restoringId === item.entityId}
+                        onClick={() => void handleRestore(item)}
+                      >
+                        Restore
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"

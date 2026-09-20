@@ -17,6 +17,7 @@ import * as contactsRepo from "@/db/repos/contacts";
 import * as companiesRepo from "@/db/repos/companies";
 import * as dealsRepo from "@/db/repos/deals";
 import * as tasksRepo from "@/db/repos/tasks";
+import * as trashRepo from "@/db/repos/trash";
 import * as activitiesRepo from "@/db/repos/activities";
 import * as moneyRepo from "@/db/repos/money";
 
@@ -222,6 +223,24 @@ export function useCompany(id: string) {
   return useQuery({
     queryKey: qk.company(id),
     queryFn: () => companiesRepo.get(id),
+  });
+}
+
+/**
+ * The survivor a trashed contact or company was merged into, or null.
+ *
+ * Only asked when the record is actually deleted: a live record cannot be a
+ * merge loser, and the query is a wasted read on every record page otherwise.
+ */
+export function useMergedInto(
+  entityType: "contact" | "company",
+  id: string,
+  deleted: boolean,
+) {
+  return useQuery({
+    queryKey: ["merged-into", entityType, id] as const,
+    enabled: deleted && id.length > 0,
+    queryFn: () => trashRepo.mergedInto(entityType, id),
   });
 }
 

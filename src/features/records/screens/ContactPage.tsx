@@ -48,7 +48,13 @@ import * as contactsRepo from "@/db/repos/contacts";
 import type { ActivityKind } from "@/db/repos/activities";
 import { formatPhone } from "@/lib/phone";
 import { SummarizeButton } from "@/features/ai";
-import { useContact, useCustomerMoney, useDeals, useTasks } from "@/features/records/lib/hooks";
+import {
+  useContact,
+  useCustomerMoney,
+  useDeals,
+  useMergedInto,
+  useTasks,
+} from "@/features/records/lib/hooks";
 import * as dealsRepo from "@/db/repos/deals";
 import { useVocabulary } from "@/app/vocabulary";
 import { useFormats } from "@/app/formats";
@@ -101,6 +107,7 @@ export function ContactPage() {
   const formats = useFormats();
   const { data: openDeals } = useDeals({ contactId: id, openOnly: true }, 200);
   const { data: closedDeals } = useDeals({ contactId: id, closedOnly: true }, 200);
+  const { data: mergedInto } = useMergedInto("contact", id, contact?.deletedAt != null);
   const [composing, setComposing] = useState<ActivityKind | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   /**
@@ -150,6 +157,7 @@ export function ContactPage() {
   const primaryEmail = contact.emails.find((email) => email.isPrimary) ?? contact.emails[0] ?? null;
   const archived = contact.deletedAt !== null;
   const openCount = openDeals?.rows.length ?? 0;
+  const merged = mergedInto ?? null;
   const phoneLabel = primaryPhone
     ? formatPhone(primaryPhone.raw) || primaryPhone.raw
     : null;
@@ -198,12 +206,28 @@ export function ContactPage() {
                   </span>
                 </Link>
               ) : null}
-              {archived ? <Badge tone="warning">Archived</Badge> : null}
+              {archived && merged ? (
+                <span className="inline-flex items-center gap-[var(--space-2)]">
+                  <Badge tone="warning">Merged</Badge>
+                  <Link
+                    href={`/contacts/${merged.survivorId}`}
+                    className="text-[length:var(--text-sm)] text-[var(--color-text-muted)] underline-offset-2 hover:text-[var(--color-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+                  >
+                    Merged into {merged.survivorName}
+                  </Link>
+                </span>
+              ) : archived ? (
+                <Badge tone="warning">Archived</Badge>
+              ) : null}
             </div>
           </div>
 
           <div className="flex flex-none items-center gap-[var(--space-2)]">
-            {archived ? (
+            {/* A merge loser gets no Restore: everything this person owned moved
+                to the survivor, so restoring would rebuild an empty duplicate
+                of someone who already exists. Undoing a merge is the merge's
+                own reversal, not this button (CPO audit, scenario 7). */}
+            {archived && merged ? null : archived ? (
               <Button
                 variant="secondary"
                 iconLeft={<Archive size={16} weight="bold" aria-hidden="true" />}
