@@ -23,13 +23,13 @@ import { contactName } from "@/db/repos/contacts";
 import { formatPhone } from "@/lib/phone";
 import { todayLocal } from "@/lib/dates";
 import { useVocabulary } from "@/app/vocabulary";
-import { useFormats } from "@/app/formats";
 import {
   useCompany,
   useCompanyCounts,
   useCustomerMoney,
   useContacts,
   useDeals,
+  useMergedInto,
 } from "@/features/records/lib/hooks";
 import {
   deleteWithUndo,
@@ -41,6 +41,7 @@ import { oneTap } from "@/lib/actions";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { SourcePicker } from "@/features/records/components/Pickers";
 import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
+import { DealsCard } from "@/features/records/components/DealsCard";
 import { AddressPanel } from "@/features/records/components/AddressPanel";
 import { TagEditor } from "@/features/records/components/TagEditor";
 import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPanel";
@@ -60,6 +61,7 @@ export function CompanyPage() {
   const { data: contacts } = useContacts({ companyId: id }, 500);
   const { data: openDeals } = useDeals({ companyId: id, openOnly: true }, 200);
   const { data: closedDeals } = useDeals({ companyId: id, closedOnly: true }, 200);
+  const { data: mergedInto } = useMergedInto("company", id, company?.deletedAt != null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   if (isLoading) {
@@ -98,6 +100,7 @@ export function CompanyPage() {
   }
 
   const archived = company.deletedAt !== null;
+  const merged = mergedInto ?? null;
 
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
@@ -134,12 +137,27 @@ export function CompanyPage() {
                 .filter((part): part is string => part !== null)
                 .join(" · ")}
             </span>
-            {archived ? <Badge tone="warning">Archived</Badge> : null}
+            {archived && merged ? (
+              <span className="inline-flex items-center gap-[var(--space-2)]">
+                <Badge tone="warning">Merged</Badge>
+                <Link
+                  href={`/companies/${merged.survivorId}`}
+                  className="text-[length:var(--text-sm)] text-[var(--color-text-muted)] underline-offset-2 hover:text-[var(--color-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+                >
+                  Merged into {merged.survivorName}
+                </Link>
+              </span>
+            ) : archived ? (
+              <Badge tone="warning">Archived</Badge>
+            ) : null}
           </span>
         }
         actions={
           <>
-            {archived ? (
+            {/* A merge loser gets no Restore: its people, jobs and history moved
+                to the survivor, so restoring would rebuild an empty duplicate
+                (CPO audit, scenario 7). */}
+            {archived && merged ? null : archived ? (
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -422,47 +440,3 @@ export function CompanyPage() {
   );
 }
 
-function DealsCard(props: {
-  title: string;
-  deals: { id: string; title: string; valueCents: number; currency: string; stageName: string }[];
-  emptyText: string;
-}) {
-  const formats = useFormats();
-  return (
-    <div>
-      <CardGroupLabel className="flex items-baseline gap-[var(--space-2)]">
-        <span>{props.title}</span>
-        <span className="tabular">{props.deals.length}</span>
-      </CardGroupLabel>
-      <Card>
-        {props.deals.length === 0 ? (
-          <p className="p-[var(--space-4)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            {props.emptyText}
-          </p>
-        ) : (
-          props.deals.map((deal) => (
-            <CardRow key={deal.id} interactive className="p-0">
-              <Link
-                href={`/deals/${deal.id}`}
-                className="flex min-h-[var(--row-h)] w-full items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]"
-              >
-                <span
-                  className="min-w-0 truncate text-[length:var(--text-base)] text-[var(--color-text)]"
-                  title={deal.title}
-                >
-                  {deal.title}
-                </span>
-                <span className="flex shrink-0 items-center gap-[var(--space-3)]">
-                  <Badge>{deal.stageName}</Badge>
-                  <span className="money text-[length:var(--text-base)] text-[var(--color-text)]">
-                    {formats.money(deal.valueCents, deal.currency)}
-                  </span>
-                </span>
-              </Link>
-            </CardRow>
-          ))
-        )}
-      </Card>
-    </div>
-  );
-}
