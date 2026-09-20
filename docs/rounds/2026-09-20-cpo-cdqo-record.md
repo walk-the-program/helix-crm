@@ -276,6 +276,8 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 
 | 00:5x | Lead C implementation return (`docs/rounds/cpo-returns/lead-c-platform-impl.md`): 22 commits; 17 findings implemented, F-LC-19 refuted with a pinning test, F-LC-18 and F-LC-22 deferred; tsc clean; 957 tests in its suites; data/settings/smoke/onboarding/ai/hig e2e 62 passed on 4251; zero CSS warnings. Fable inspected `1a4a034`, `b2aed5e`, `fdeeea7`. Contract text placed in CONTRACTS.md (Field wiring on pickers; `FeatureCommand.aliases`) and DESIGN.md §4 (PDF fonts exception). | accepted; Lead C finished phase one |
 
+| 01:0x | Regression found by lead-money: `1ea980d` (Today keeps starter cards until something is on Today) tested tasks, open deals and activities only, so a workspace whose one Today item is an overdue invoice showed "Nothing here yet"; `invoices.e2e.ts` "mark paid from Today" red. | fix packet CPO-LA-4 to lead-records (fourth term from `useOutstandingSummary`, unit test, e2e green) |
+
 Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
 with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
 into `c0bd452 test(leads): …` (content correct, attribution wrong, left as is), then ran
