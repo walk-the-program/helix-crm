@@ -29,8 +29,8 @@ import {
   type QuietRow,
 } from "@/features/today/lib/useToday";
 import { useOpenDealCount } from "@/features/today/lib/useToday";
-import { formatMoney } from "@/lib/money";
 import { useVocabulary } from "@/app/vocabulary";
+import { useFormats } from "@/app/formats";
 
 function rowName(row: QuietRow): string {
   const contact = `${row.deal.contactFirstName ?? ""} ${row.deal.contactLastName ?? ""}`.trim();
@@ -39,6 +39,7 @@ function rowName(row: QuietRow): string {
 
 export function GoneQuietSection() {
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const { data, isLoading } = useGoneQuiet();
   const { data: openCount } = useOpenDealCount();
   const logCall = useLogCall();
@@ -98,7 +99,7 @@ export function GoneQuietSection() {
               subtitleText={detail}
               money={
                 row.deal.valueCents > 0
-                  ? formatMoney(row.deal.valueCents, row.deal.currency)
+                  ? formats.money(row.deal.valueCents, row.deal.currency)
                   : undefined
               }
               actions={

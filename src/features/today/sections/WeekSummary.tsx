@@ -18,7 +18,7 @@
  */
 
 import { useVocabulary } from "@/app/vocabulary";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { useWeekSummary, type WeekSummary } from "@/features/today/lib/useWeekSummary";
 
 /** The parts of the sentence, in order, with the empty ones dropped. */
@@ -47,13 +47,14 @@ export function summaryParts(
 export function WeekSummaryLine() {
   const { data } = useWeekSummary();
   const vocabulary = useVocabulary();
+  const formats = useFormats();
 
   if (!data || data.isEmpty) return null;
 
   const parts = summaryParts(
     data,
     { one: vocabulary.lower, many: vocabulary.lowerMany },
-    (cents) => formatMoney(cents, data.currency, data.locale),
+    (cents) => formats.money(cents, data.currency),
   );
   if (parts.length === 0) return null;
 

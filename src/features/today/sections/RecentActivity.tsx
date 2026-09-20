@@ -13,7 +13,8 @@
 import { Link } from "wouter";
 import { Section } from "@/features/today/components/Section";
 import { useRecentActivity } from "@/features/today/lib/useToday";
-import { formatDateTimeDisplay, formatRelative } from "@/lib/dates";
+import { formatRelative } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 
 const KIND_LABEL: Record<string, string> = {
   note: "Note",
@@ -26,6 +27,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function RecentActivitySection() {
   const { data, isLoading } = useRecentActivity(20);
+  const formats = useFormats();
   const entries = data ?? [];
 
   return (
@@ -63,7 +65,7 @@ export function RecentActivitySection() {
                 ) : null}
                 <span
                   className="tabular ml-auto flex-none text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
-                  title={formatDateTimeDisplay(entry.occurredAt)}
+                  title={formats.dateTime(entry.occurredAt)}
                 >
                   {formatRelative(entry.occurredAt)}
                 </span>

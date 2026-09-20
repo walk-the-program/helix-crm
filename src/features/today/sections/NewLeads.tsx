@@ -28,8 +28,8 @@ import {
 } from "@/features/today/lib/useToday";
 import type { NewLead } from "@/db/repos/deals";
 import { openTel } from "@/lib/actions";
-import { formatMoney } from "@/lib/money";
 import { formatRelative } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 
 function leadName(lead: NewLead): string {
   const person = `${lead.contactFirstName ?? ""} ${lead.contactLastName ?? ""}`.trim();
@@ -38,6 +38,7 @@ function leadName(lead: NewLead): string {
 
 export function NewLeadsSection() {
   const { data, isLoading } = useNewLeads();
+  const formats = useFormats();
   const logCall = useLogCall();
   const [target, setTarget] = useState<LogCallTarget | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -100,7 +101,7 @@ export function NewLeadsSection() {
               subtitleText={detail}
               money={
                 lead.valueCents > 0
-                  ? formatMoney(lead.valueCents, lead.currency)
+                  ? formats.money(lead.valueCents, lead.currency)
                   : undefined
               }
               actions={

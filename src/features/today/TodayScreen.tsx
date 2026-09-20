@@ -34,6 +34,7 @@ import { navigate } from "wouter/use-browser-location";
 import { MagnifyingGlass } from "@/ui/icons";
 import { Button, Kbd, PageHeader } from "@/ui";
 import { allCommands } from "@/app/registry";
+import { useFormats } from "@/app/formats";
 import { DueNowSection } from "@/features/today/sections/DueNow";
 import { ComingUpSection } from "@/features/today/sections/ComingUp";
 import { WeekSummaryLine } from "@/features/today/sections/WeekSummary";
@@ -61,9 +62,9 @@ export function runQuickAdd(): void {
   navigate("/contacts");
 }
 
-function todayLabel(): string {
+function todayLabel(locale?: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(locale, {
       weekday: "long",
       day: "numeric",
       month: "long",
@@ -211,6 +212,7 @@ function FirstRun() {
 
 export function TodayScreen() {
   const { data: isEmpty, isLoading } = useTodayIsUnstarted();
+  const formats = useFormats();
 
   return (
     <div className="flex flex-col">
@@ -218,7 +220,7 @@ export function TodayScreen() {
         title="Today"
         subtitle={
           <>
-            {todayLabel()}
+            {todayLabel(formats.locale)}
             {isEmpty ? null : <WeekSummaryLine />}
           </>
         }

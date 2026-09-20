@@ -18,7 +18,7 @@ import { Link } from "wouter";
 import { CheckCircle } from "@/ui/icons";
 import { Badge, Button, toast } from "@/ui";
 import { Row, Section } from "@/features/today/components/Section";
-import { formatDateDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { describeInterval } from "@/db/repos/recurring";
 import type { RecurringDue } from "@/db/repos/recurring";
 import {
@@ -40,6 +40,7 @@ export function whenLabel(daysUntil: number): string {
 function RowActions({ entry }: { entry: RecurringDue }) {
   const complete = useCompleteRule();
   const skip = useSkipRule();
+  const formats = useFormats();
 
   return (
     <>
@@ -55,7 +56,7 @@ function RowActions({ entry }: { entry: RecurringDue }) {
             onSuccess: (next) =>
               toast.success(
                 `Done: ${entry.rule.title}. Next one ${
-                  formatDateDisplay(next.nextDueOn) || next.nextDueOn
+                  formats.date(next.nextDueOn) || next.nextDueOn
                 }.`,
               ),
             onError: () => toast.error(`"${entry.rule.title}" did not save.`),
@@ -76,7 +77,7 @@ function RowActions({ entry }: { entry: RecurringDue }) {
             onSuccess: (next) =>
               toast.success(
                 `Skipped. ${entry.rule.title} comes back ${
-                  formatDateDisplay(next.nextDueOn) || next.nextDueOn
+                  formats.date(next.nextDueOn) || next.nextDueOn
                 }.`,
               ),
             onError: () => toast.error(`"${entry.rule.title}" did not save.`),
