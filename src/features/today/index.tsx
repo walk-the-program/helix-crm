@@ -23,6 +23,7 @@ import {
   openSearch,
   SearchOverlay,
   SEARCH_SHORTCUT,
+  SEARCH_SHORTCUT_ALIAS,
 } from "@/features/today/search/overlay";
 import { usePinnedViewsNav } from "@/features/today/views/pinnedNav";
 
@@ -40,6 +41,9 @@ export const feature: FeatureModule = {
       id: "search",
       label: "Search records",
       shortcut: SEARCH_SHORTCUT,
+      // The shell binds this too, so it is one command with two keys rather
+      // than a command and a listener the sheet could not see (R17).
+      aliases: [SEARCH_SHORTCUT_ALIAS],
       group: "Find",
       keywords: ["find", "contact", "company", "deal", "note", "lookup"],
       run: openSearch,

@@ -17,10 +17,11 @@
  *    either, because it skips the shell group. The shell list is now filtered
  *    against the commands: where a real binding exists, the command's own row
  *    wins and the hard-coded one is dropped, so a key appears exactly once.
- * 2. **A real, working binding was missing.** `mod+/` opens the search dialog
- *    (`SEARCH_SHORTCUT_ALIAS`, bound outside the command system) and appeared
- *    nowhere. Aliases are declared below and printed beside the command they
- *    belong to.
+ * 2. **A real, working binding was missing.** `mod+/` opened the search dialog
+ *    through a listener the feature owned, outside the command system, so the
+ *    shell did not know it existed and this page could not print it. It is now
+ *    `FeatureCommand.aliases`, bound by the same binder as every other key,
+ *    and printed beside the key it doubles for.
  * 3. **Twelve of twenty-six rows showed an em dash** for the key — commands
  *    with no shortcut, listed on a keyboard-shortcuts screen, where they read
  *    as broken rather than as "no key". They move to their own group, which
@@ -28,7 +29,6 @@
  */
 import type { FeatureCommand } from "@/app/feature";
 import { PALETTE_SHORTCUT } from "@/app/CommandPalette";
-import { SEARCH_SHORTCUT_ALIAS } from "@/features/today/search/overlay";
 
 export type ShortcutRow = {
   id: string;
@@ -65,18 +65,6 @@ export const SHELL_SHORTCUTS: ShortcutRow[] = [
   // commands on those exact keys, and two rows for one key is how the sheet
   // came to disagree with itself.
 ];
-
-/**
- * A second key for a command, bound by the feature rather than by the shell's
- * generic binder, so `FeatureCommand.shortcut` cannot carry it.
- *
- * `mod+/` is a real binding: `src/features/today/search/overlay.tsx` calls
- * `useShortcut(SEARCH_SHORTCUT_ALIAS, show)`. It is imported rather than
- * retyped so the sheet cannot drift from the key the app actually answers to.
- */
-export const COMMAND_ALIASES: Record<string, string> = {
-  search: SEARCH_SHORTCUT_ALIAS,
-};
 
 export const SHELL_GROUP = "The app";
 export const OTHER_GROUP = "Other";
@@ -141,7 +129,10 @@ export function groupShortcuts(
       id: command.id,
       label: command.label,
       shortcut: command.shortcut ?? null,
-      alias: COMMAND_ALIASES[command.id],
+      // The first alias the command declares. A command with three keys is
+      // not a thing the product has, and a row that printed three would stop
+      // being scannable, which is the whole job of this page.
+      alias: command.aliases?.[0],
     };
     if (row.shortcut === null) {
       // No key: it belongs on the "where to find it" list, not in a table of

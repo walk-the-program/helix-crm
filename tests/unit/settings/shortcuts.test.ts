@@ -12,14 +12,16 @@ import {
   SHELL_GROUP,
   SHELL_SHORTCUTS,
 } from "../../../src/features/settings/lib/shortcuts";
+import { allCommands } from "../../../src/app/registry";
 
 function command(
   id: string,
   label: string,
   group?: string,
   shortcut?: string,
+  aliases?: string[],
 ): FeatureCommand {
-  return { id, label, group, shortcut, run: () => undefined };
+  return { id, label, group, shortcut, aliases, run: () => undefined };
 }
 
 describe("groupShortcuts", () => {
@@ -115,12 +117,22 @@ describe("groupShortcuts", () => {
     expect(duplicateShortcuts(groups)).toEqual([]);
   });
 
-  it("prints a command's second, feature-bound key beside its first", () => {
-    // mod+/ really opens the search dialog and appeared nowhere on the sheet.
-    const groups = groupShortcuts([command("search", "Search records", "Today", "mod+k")]);
+  it("prints a command's second key beside its first", () => {
+    // mod+/ really opens the search dialog and appeared nowhere on the sheet
+    // while it was bound by a listener the shell could not see.
+    const groups = groupShortcuts([
+      command("search", "Search records", "Today", "mod+k", ["mod+/"]),
+    ]);
     const row = groups.find((g) => g.name === "Today")?.rows[0];
     expect(row?.shortcut).toBe("mod+k");
     expect(row?.alias).toBe("mod+/");
+  });
+
+  it("really is the search command that carries the alias, not a table here", () => {
+    // Read from the registry, so moving or renaming the alias breaks this
+    // rather than quietly leaving the sheet printing a key nothing binds.
+    const search = allCommands().find((c) => c.id === "search");
+    expect(search?.aliases).toContain("mod+/");
   });
 
   it("counts a duplicate between a shell row and a command, which it used to skip", () => {

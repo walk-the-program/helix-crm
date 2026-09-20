@@ -67,6 +67,17 @@ export type FeatureCommand = {
    * and a bare key ("?") is bound too. See `src/app/shortcuts.ts`.
    */
   shortcut?: string;
+  /**
+   * More keys that run the same command, in the same chord grammar as
+   * `shortcut` above, and bound by the same binder.
+   *
+   * Search is why this exists: `mod+/` has always opened the search dialog,
+   * but the feature bound it with its own listener outside the command
+   * system, so the shell did not know about it and the shortcuts sheet could
+   * not print it — a working key that appeared nowhere (F-LC-7, ruling R17).
+   * A second key belongs to the command, not to a listener somewhere else.
+   */
+  aliases?: string[];
   group?: string;
   keywords?: string[];
   /**

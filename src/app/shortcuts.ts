@@ -157,17 +157,23 @@ export function pickCommand(
   );
 
   for (const command of commands) {
-    const chord = parseShortcut(command.shortcut);
-    if (!chord) continue;
+    // A command's own key, then any alias it declares: an alias is a real
+    // binding on the same terms, not a label (see FeatureCommand.aliases).
+    for (const key of [command.shortcut, ...(command.aliases ?? [])]) {
+      const chord = parseShortcut(key);
+      if (!chord) continue;
 
-    // Keys the shell binds itself (search, the palette) win: it has to answer
-    // them even when no feature registered the matching command.
-    const canonical = normaliseShortcut(command.shortcut);
-    if (canonical !== null && reserved.has(canonical)) continue;
+      // Keys the shell binds itself (search, the palette) win: it has to
+      // answer them even when no feature registered the matching command.
+      const canonical = normaliseShortcut(key);
+      if (canonical !== null && reserved.has(canonical)) continue;
 
-    if (context.typing && (chord.bare || command.whileTyping !== true)) continue;
-    if (!matchesChord(chord, event, context.mac)) continue;
-    return command;
+      // The typing rules apply to an alias exactly as they do to the first
+      // key: a bare alias never fires mid-sentence either.
+      if (context.typing && (chord.bare || command.whileTyping !== true)) continue;
+      if (!matchesChord(chord, event, context.mac)) continue;
+      return command;
+    }
   }
   return null;
 }

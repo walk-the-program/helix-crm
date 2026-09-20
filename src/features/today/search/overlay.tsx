@@ -14,8 +14,7 @@
  * event is how a caller with no React context reaches this component.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { useShortcut } from "@/app/hooks";
+import { useEffect, useState } from "react";
 import { SearchDialog } from "@/features/today/search/SearchDialog";
 
 /**
@@ -29,13 +28,18 @@ import { SearchDialog } from "@/features/today/search/SearchDialog";
 export const SEARCH_SHORTCUT = "mod+k";
 
 /**
- * A second key that also opens search, and the one binding a feature still owns.
+ * A second key that also opens search.
  *
- * Cmd/Ctrl+K reaches the dialog through the shell, so this is only an alias. It
- * is not a `FeatureCommand.shortcut` — the palette prints one key per command
- * and mod+k is the one worth printing — so the shell does not bind it and this
- * component does. It is a keybinding inside the shell's tree, not a second
- * React root: that is the difference from what this file used to be.
+ * It used to be bound here, by this component, because `FeatureCommand` had
+ * room for one key and mod+k was the one worth printing. The cost was that the
+ * shell did not know the binding existed and the shortcuts sheet could not
+ * print it: a key that really worked and appeared nowhere on the page that
+ * documents the keys (F-LC-7, ruling R17).
+ *
+ * It is now declared as the search command's `aliases` entry in this feature's
+ * index, so the shell binds it with every other key and the sheet prints
+ * "⌘K or ⌘/" on one row. This constant stays because that is where the string
+ * is written down once.
  */
 export const SEARCH_SHORTCUT_ALIAS = "mod+/";
 
@@ -51,9 +55,6 @@ export function openSearch(): void {
 /** Rendered once per app by the shell, through the feature's `overlays` slot. */
 export function SearchOverlay() {
   const [open, setOpen] = useState(false);
-  const show = useCallback(() => setOpen(true), []);
-
-  useShortcut(SEARCH_SHORTCUT_ALIAS, show);
 
   useEffect(() => {
     const handler = () => setOpen(true);

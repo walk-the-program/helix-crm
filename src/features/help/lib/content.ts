@@ -28,7 +28,12 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: "lead-to-won",
     title: "Working a job from lead to won",
     paragraphs: [
-      "A job moves through stages on the Pipeline screen, from a new lead to won or lost. Open a job's page from a board card to see the customer, the price, the next step and everything said so far, all in one place. Drag it to a new stage as the work moves along, or use the stage menu on the job itself.",
+      "A job moves through stages on the Pipeline screen, from a new lead to won or lost. Open a job's page from a board card to see the customer, the price, the next step and everything said so far, all in one place, and change its stage from the menu there.",
+      // From lead-records (F-LA-17c), verbatim: the board's keyboard method,
+      // which it has always offered and never said out loud. It replaces the
+      // old "drag it to a new stage" sentence rather than joining it — the
+      // section is held to six sentences, and this one says more.
+      "On the jobs board, drag a card to another stage, or focus a card and hold shift with an arrow key to move it.",
       "Moving a job to a lost stage asks you for a reason first, so you remember why later without having to guess. The Text and Email buttons on a customer each have a small arrow beside them: that picks one of your saved templates, fills in the name, the job and the price, and opens the message ready for you to read and send. If job is not the word you use, open Settings and go to Vocabulary to call these deals, jobs or quotes instead; the change is instant and only relabels the screen, nothing about your data moves.",
     ],
   },
