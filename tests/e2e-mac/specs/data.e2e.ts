@@ -728,6 +728,71 @@ test.describe("data", () => {
     const firstDataRow = splitCsvLine(lines[1]);
     expect(seededStageNames).toContain(firstDataRow[stageIndex]);
   });
+
+  test("messy-3000.csv: a real install-day export, mapped, previewed, imported, and undo reachable from the result", async ({
+    page,
+    helix: _helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.goto("/import");
+    await offerFile(page, "/tmp/helix-e2e/messy-3000.csv", fixture("messy-3000.csv"));
+    await page.getByRole("button", { name: "Choose a file" }).click();
+
+    // Step 2: the non-obvious headers guess the way a human would.
+    await expect(page.getByRole("columnheader", { name: "Import as" })).toBeVisible();
+    const customerNameRow = page.getByRole("row").filter({ hasText: "Customer Name" }).first();
+    await expect(customerNameRow.getByRole("combobox")).toHaveText("Full name");
+    const coRow = page.getByRole("row").filter({ hasText: "Co." }).first();
+    await expect(coRow.getByRole("combobox")).toHaveText("Company");
+    const cellRow = page.getByRole("row").filter({ hasText: "Cell" }).first();
+    await expect(cellRow.getByRole("combobox")).toHaveText("Phone");
+    const emailRow = page.getByRole("row").filter({ hasText: "E-mail Address" }).first();
+    await expect(emailRow.getByRole("combobox")).toHaveText("Email");
+    // No contacts-schema home for these two: Skip is the correct guess.
+    const spentRow = page.getByRole("row").filter({ hasText: "Total Spent" }).first();
+    await expect(spentRow.getByRole("combobox")).toContainText("Skip this column");
+    const dateRow = page.getByRole("row").filter({ hasText: "Last Service Date" }).first();
+    await expect(dateRow.getByRole("combobox")).toContainText("Skip this column");
+
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Step 3: the preview says, before the owner commits to anything, how
+    // many rows in the WHOLE file (not just the 20 shown) already match
+    // someone in Helix.
+    await expect(page.getByText("The first 20 of")).toBeVisible();
+    await expect(
+      page.getByText(/6 of 2,997 rows match an email or phone already in Helix/),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("radio", { name: "Skip them" })).toBeChecked();
+
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+
+    // Step 4: the exact counts this fixture is documented to produce.
+    await expect(page.getByText("contacts created")).toBeVisible({ timeout: 60_000 });
+    await expect(
+      page.locator("div").filter({ hasText: /^2,991contacts created$/ }).first(),
+    ).toBeVisible();
+    await expect(page.locator("div").filter({ hasText: /^6rows skipped$/ }).first()).toBeVisible();
+    expect(await helixCount(page)).toBe(2991);
+
+    // The rows that imported but that Helix had to make a judgement call on
+    // (an unparseable phone, a row with no name) are not silently dropped.
+    await expect(page.getByText(/61 rows Helix had to decide something about/)).toBeVisible();
+
+    // The rows that did NOT go in can be gotten back out.
+    await expect(page.getByText("6 rows did not go in")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save skipped rows as CSV" })).toBeVisible();
+
+    // Undo: the pre-import backup is named, and it is one click to where it
+    // is restored from - not just a sentence saying where to look.
+    await expect(page.getByText("Helix saved a backup before this import")).toBeVisible();
+    await page.getByRole("button", { name: "Go to Backups" }).click();
+    await expect(page.getByRole("heading", { name: "Backups", level: 1 })).toBeVisible();
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
 });
 
 /**
