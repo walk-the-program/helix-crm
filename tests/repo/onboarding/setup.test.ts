@@ -237,6 +237,61 @@ describe("the sample data set", () => {
     expect(await countRows("custom_values")).toBeGreaterThan(0);
   });
 
+  /*
+   * The arithmetic, end to end, for every trade (R9).
+   *
+   * `tests/unit/onboarding/sample.test.ts` holds the DATA to its claims — that
+   * a priced deal's lines add up to the value it states. This holds the LOADER
+   * to the same claim, which is a different thing: the lines go in through
+   * `dealItems`, and `recompute` is what actually writes `value_cents`. If the
+   * two ever disagree, the board and the pipeline totals move under a change
+   * that was only supposed to add detail, and nothing above this line would
+   * notice.
+   */
+  it.each(Object.keys(SAMPLES) as (keyof typeof SAMPLES)[])(
+    "%s: a priced deal's value_cents is exactly what the set says",
+    async (trade) => {
+      h = await createSeededHarness();
+      await applyPlan(planFromPreset(PRESETS[trade]));
+      await loadSampleData(trade);
+
+      const set = SAMPLES[trade];
+      const priced = set.deals.filter((d) => (d.items?.length ?? 0) > 0);
+      // Every set has money now; a set that quietly lost it should fail here.
+      expect(priced.length, `${trade} has no priced deals`).toBeGreaterThan(0);
+
+      /*
+       * Matched by title, and a title is not unique — two gym members can both
+       * have an "Unlimited monthly membership" — so this asserts that the
+       * values the set states are all present among the rows with that title,
+       * rather than that there is exactly one row.
+       */
+      for (const title of new Set(priced.map((d) => d.title))) {
+        const rows = await raw.query(
+          `SELECT value_cents FROM deals WHERE title = ? AND deleted_at IS NULL`,
+          [title],
+        );
+        const actual = rows.map((r) => Number(r[0]));
+        for (const deal of priced.filter((d) => d.title === title)) {
+          const want = Math.round(deal.value * 100);
+          expect(
+            actual,
+            `${trade}: "${title}" recomputed to something other than the ${want} the set states (got ${actual.join(", ")})`,
+          ).toContain(want);
+        }
+      }
+
+      // And every document the set declares was actually raised, with a real
+      // number out of the sequence rather than a hand-rolled insert.
+      const declared = (set.documents ?? []).length;
+      const raised = await raw.query(`SELECT number FROM documents`, []);
+      expect(raised.length, `${trade}: documents raised`).toBe(declared);
+      for (const row of raised) {
+        expect(String(row[0]), `${trade}: a document with no number`).toMatch(/\w+-\d{4}-\d+/);
+      }
+    },
+  );
+
   it("comes out again leaving no rows, no tag and no setting", async () => {
     h = await createSeededHarness();
     await applyPlan(planFromPreset(PRESETS.landscaping));
