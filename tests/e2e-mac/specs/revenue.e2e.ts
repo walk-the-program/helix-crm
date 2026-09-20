@@ -311,7 +311,7 @@ test.describe("revenue", () => {
     // dialog defaults to today, which is what this test wants.
     const wonDialog = page.getByRole("dialog", { name: "Move to Won?" });
     await expect(wonDialog).toBeVisible();
-    await wonDialog.getByRole("button", { name: "Confirm" }).click();
+    await wonDialog.getByRole("button", { name: /^Move to / }).click();
     await expect(wonDialog).toBeHidden();
 
     await expect

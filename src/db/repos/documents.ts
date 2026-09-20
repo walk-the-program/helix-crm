@@ -32,6 +32,7 @@ import { newId } from "@/lib/ids";
 import { formatMoney } from "@/lib/money";
 import * as deals from "@/db/repos/deals";
 import * as settings from "@/db/repos/settings";
+import { vocabularyFor, DEFAULT_VOCABULARY, type Vocabulary } from "@/lib/vocabulary";
 import * as activities from "@/db/repos/activities";
 import {
   countRows,
@@ -288,6 +289,25 @@ export function documentActivityBody(
 /* numbering                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What this workspace calls a deal, for the handful of messages the owner
+ * reads out of this layer.
+ *
+ * The repository cannot call `useVocabulary` - it is not React - and it must
+ * not import `src/app`, a layering rule nothing in `src/db` breaks. The pure
+ * table now lives in `src/lib/vocabulary.ts` for exactly this, and the setting
+ * is an ordinary `settings.get` this module already makes for currency and
+ * locale. A workspace that has never chosen falls back to Deals, and a read
+ * that fails falls back rather than turning a validation message into a crash.
+ */
+async function vocabulary(): Promise<Vocabulary> {
+  try {
+    return vocabularyFor(await settings.get("vocabulary"));
+  } catch {
+    return DEFAULT_VOCABULARY;
+  }
+}
+
 /** "INV-2026-0007". The year is the issue year; the counter is per kind. */
 export function formatNumber(prefix: string, year: number, counter: number): string {
   const safePrefix = (prefix || "").trim() || "DOC";
@@ -452,7 +472,11 @@ export const newDocumentSchema = z.object({
   // Money model (round 3): every document belongs to a deal. Required, not
   // advisory - see `insertDocument`, the one place that turns this into a
   // customer.
-  dealId: z.string().min(1, "A document belongs to a deal."),
+  // Noun-free on purpose: a zod message is built once at module load, so it
+  // cannot ask the workspace what it calls a deal. The vocabulary-aware
+  // sentence is the one `insertDocument` throws a few lines down, which is the
+  // path every caller with a real (or missing) deal id actually takes.
+  dealId: z.string().min(1, "Pick what this document is for."),
   // Still accepted on input, but advisory only: `insertDocument` always
   // overwrites these from the deal, so a document and its deal can never
   // disagree about who it is for. Kept in the type so a caller that still
@@ -552,8 +576,9 @@ async function insertDocument(
   let companyId: string | null;
   if (inheritCustomer) {
     if (!parsed.dealId) {
-      throw new ValidationError("A document belongs to a deal.", [
-        { path: "dealId", message: "Pick a deal for this document." },
+      const words = await vocabulary();
+      throw new ValidationError(`A document belongs to a ${words.lower}.`, [
+        { path: "dealId", message: `Pick the ${words.lower} this document is for.` },
       ]);
     }
     const deal = await deals.getOrThrow(parsed.dealId);
@@ -753,13 +778,14 @@ export async function createFromDeal(
     options.lines ?? (options.kind === "quote" ? "all" : "one_time");
   const lines = selectLines(await dealLines(dealId), selection);
   if (lines.length === 0) {
+    const words = await vocabulary();
     throw new ValidationError("There is nothing to put on this document.", [
       {
         path: "items",
         message:
           selection === "recurring"
-            ? "This deal has no monthly or yearly services on it."
-            : "This deal has no services on it yet. Add one first.",
+            ? `This ${words.lower} has no monthly or yearly services on it.`
+            : `This ${words.lower} has no services on it yet. Add one first.`,
       },
     ]);
   }
@@ -856,8 +882,12 @@ export async function createDeposit(
     0,
   );
   if (lines.length === 0) {
+    const words = await vocabulary();
     throw new ValidationError("There is nothing to take a deposit on.", [
-      { path: "items", message: "There are no one-off services on it yet. Add one first." },
+      {
+        path: "items",
+        message: `This ${words.lower} has no one-off services on it yet. Add one first.`,
+      },
     ]);
   }
   const prior = await priorInvoiced(dealId);

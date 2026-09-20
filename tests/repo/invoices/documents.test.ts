@@ -19,6 +19,7 @@ import * as companies from "../../../src/db/repos/companies";
 import * as stages from "../../../src/db/repos/stages";
 import * as pipelines from "../../../src/db/repos/pipelines";
 import * as activities from "../../../src/db/repos/activities";
+import * as settings from "../../../src/db/repos/settings";
 import { NotFoundError, ValidationError } from "../../../src/db/errors";
 import { newId } from "../../../src/lib/ids";
 import { todayLocal } from "../../../src/lib/dates";
@@ -84,6 +85,46 @@ function lines(...unitCents: number[]): documents.NewDocumentItem[] {
 }
 
 /* -------------------------------------------------------------------------- */
+
+describe("documents: the workspace's own word (F-P2-LB-2)", () => {
+  it("says job, not deal, in a workspace that calls them jobs", async () => {
+    h = await createSeededHarness();
+    await settings.set("vocabulary", "jobs");
+    const dealId = await aDeal("Nothing priced");
+
+    // Raising a document from a deal with no lines. The workspace's word is
+    // in the FIELD message, which is the half the owner actually sees
+    // (F-LB-22); the top-level one stays generic.
+    const fromDeal = await documents
+      .createFromDeal(dealId, { kind: "invoice", prefix: "INV", taxRateBp: 0 })
+      .catch((err: unknown) => err as ValidationError);
+    expect((fromDeal as ValidationError).issues[0].message).toContain("job");
+    expect((fromDeal as ValidationError).issues[0].message).not.toContain("deal");
+
+    // A deposit on a deal with no one-off work.
+    const deposit = await documents
+      .createDeposit(dealId, { amountCents: 1_000, prefix: "INV" })
+      .catch((err: unknown) => err as ValidationError);
+    expect((deposit as ValidationError).issues[0].message).toContain("job");
+
+    // An empty deal id never reaches insertDocument - the schema rejects it
+    // first, and a zod message is built once at module load, so it cannot know
+    // the workspace's word. It is phrased not to need one.
+    const noDeal = await documents
+      .create({ kind: "invoice", dealId: "", prefix: "INV", items: lines(1000) })
+      .catch((err: unknown) => err as ValidationError);
+    expect((noDeal as ValidationError).issues[0].message).not.toContain("deal");
+  });
+
+  it("falls back to deal when the workspace has never chosen", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal("Nothing priced");
+    const err = await documents
+      .createFromDeal(dealId, { kind: "invoice", prefix: "INV", taxRateBp: 0 })
+      .catch((e: unknown) => e as ValidationError);
+    expect((err as ValidationError).issues[0].message).toContain("deal");
+  });
+});
 
 describe("documents: deposits and the balance (F-LB-7)", () => {
   it("a deposit and its balance add up to the job's one-time value, to the cent", async () => {
@@ -629,7 +670,7 @@ describe("documents: listing", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("documents: the money model - a document belongs to a deal", () => {
-  it("refuses to create without a deal, names the deal in the error, and writes nothing", async () => {
+  it("refuses to create without a deal, says what to do about it, and writes nothing", async () => {
     h = await createSeededHarness();
 
     // Omitted entirely - bypassing the type the way a caller ignoring TS
@@ -642,14 +683,17 @@ describe("documents: the money model - a document belongs to a deal", () => {
       } as unknown as documents.NewDocument),
     ).rejects.toBeInstanceOf(ValidationError);
 
-    // Explicitly empty hits the schema's own message, which is what "names
-    // the deal": "A document belongs to a deal."
+    // Explicitly empty hits the schema's own message. It no longer names the
+    // deal, and deliberately: a zod message is built once at module load, so
+    // it cannot ask the workspace whether it calls them deals, jobs or quotes
+    // (F-P2-LB-2). It says what the owner has to do instead, and the
+    // vocabulary-aware sentence is the one insertDocument throws.
     try {
       await documents.create({ kind: "invoice", dealId: "", prefix: "INV", items: lines(1000) });
       expect.unreachable("create should have thrown");
     } catch (err) {
       const validation = err as InstanceType<typeof ValidationError>;
-      expect(validation.issues.some((issue) => /deal/i.test(issue.message))).toBe(true);
+      expect(validation.issues.some((issue) => /Pick what this document is for/.test(issue.message))).toBe(true);
     }
 
     expect((await documents.list({ includeDeleted: true })).rows).toHaveLength(0);

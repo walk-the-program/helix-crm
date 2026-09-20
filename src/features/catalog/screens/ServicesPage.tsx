@@ -138,7 +138,7 @@ export function ServicesPage() {
         title="Delete service"
         description={
           deletingService
-            ? `Delete "${deletingService.name}"? If a deal already uses it, it is deactivated instead so that deal keeps its price. A deletion can be undone from the toast for the next ten seconds.`
+            ? `Delete "${deletingService.name}"? If a ${vocabulary.lower} already uses it, it is deactivated instead so that ${vocabulary.lower} keeps its price. A deletion can be undone from the toast for the next ten seconds.`
             : undefined
         }
         confirmLabel="Delete service"
