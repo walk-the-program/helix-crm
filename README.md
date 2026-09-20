@@ -85,8 +85,10 @@ new leads or backs itself up.
 
 Off by default. If you turn it on, you bring your own Anthropic API key
 (from console.anthropic.com), stored in your operating system's keychain,
-never in Helix's database or settings file. Three things it can do, only
-when you press a button:
+never in Helix's database or settings file. Anthropic bills that key
+directly, so what the AI costs is yours and appears on your own Anthropic
+account; Helix is free and neither it nor ClearPath charges for it or sees
+it. Three things it can do, only when you press a button:
 
 - Paste an email, text, or voicemail transcript and get a contact and job
   ready for you to review and save.
@@ -157,8 +159,16 @@ quote-form leads straight into Helix.
    open and turns each new lead into a contact and a job in your first
    pipeline stage, with the original message kept on its timeline.
 
-If the token is wrong, Helix shows a banner telling you to check it rather
-than failing silently.
+Helix tells you which of these went wrong rather than failing silently:
+a rejected token says to check the token, a site with no lead endpoint says
+the site is not set up to send leads yet, and a site it cannot reach says
+so and keeps trying.
+
+If the website ever goes away — you change it, or the arrangement with
+ClearPath ends — Helix keeps everything. Every contact, job, note and file
+already in it stays on your machine; only the flow of new leads stops.
+**Settings → Website → Disconnect** removes the address and the token and
+deletes nothing.
 
 ## Where your data lives
 

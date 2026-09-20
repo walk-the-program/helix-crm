@@ -51,8 +51,8 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: "website-leads",
     title: "Your website's leads",
     paragraphs: [
-      "If ClearPath built your website, connect it under Settings, then Website, and quote requests start landing in Helix on their own, each with the message the customer typed. Paste your site's address and the token from its admin page; the token is stored in your Mac Keychain or Windows Credential Manager, never in a Helix file you could lose. Helix checks for new leads every few minutes while it is open, and once when it starts.",
-      "Press Poll now if you do not want to wait, or Test connection to check the address and token work before you count on them. The Reports screen shows which sources are actually bringing in the work, so you can see it in numbers instead of guessing.",
+      "If ClearPath built your website, connect it under Settings, then Website, and quote requests start landing in Helix on their own, each with the message the customer typed. Paste your site's address and the token from its admin page; the token is stored in your Mac Keychain or Windows Credential Manager, never in a Helix file you could lose. Helix checks every few minutes while it is open and once when it starts, Poll now checks straight away, and Test connection checks the address and token already saved, so save a new token before you test it.",
+      "When leads stop, that screen names the cause, because each one has a different fix: a token that changed, a website with no lead connection on it yet, a website answering with an error, or no answer at all. Paste a new token and save and Helix carries on from where it stopped, so nothing that arrived meanwhile is lost; if the website has gone for good, disconnect it and nothing is deleted, because every customer, job, note and file it ever sent is already on your machine. The Reports screen shows which sources are actually bringing in the work, so you can see it in numbers instead of guessing.",
     ],
   },
   {

@@ -299,6 +299,12 @@ export function AiSettingsScreen() {
           Straight to Anthropic&apos;s API from your machine. Helix has no server, so no
           request passes through us.
         </SettingsValueRow>
+        <SettingsValueRow label="Who pays for it">
+          Anthropic bills the key above, so the cost is yours and it appears on your
+          own Anthropic account. Helix and ClearPath never charge for it and never see
+          it. Anthropic publishes what each model costs; these three are priced in
+          that order, cheapest first: Haiku, Sonnet, Opus.
+        </SettingsValueRow>
       </SettingsGroup>
     </SettingsScreenFrame>
   );

@@ -31,7 +31,11 @@ export const AI_MODELS: AiModel[] = [
   {
     id: "claude-opus-5",
     label: "Opus 5",
-    note: "The strongest. Better on messy notes and long threads; costs about two and a half times Sonnet.",
+    // No multiple here any more: "about two and a half times Sonnet" was a
+    // claim about Anthropic's list prices that this repository cannot back and
+    // that goes stale the day they change them (LR-REV, F-REV-10). The
+    // ordering is true and stable; the ratio was neither.
+    note: "The strongest. Better on messy notes and long threads, and the most expensive of the three.",
     supportsEffort: true,
   },
   {
