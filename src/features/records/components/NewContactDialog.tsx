@@ -152,7 +152,12 @@ export function NewContactDialog(props: {
           </DialogDescription>
         </DialogHeader>
 
-        <FormRow>
+        {/* Round 3, criterion 10: the footer is a different zone from the form,
+            so the step down to it is a whole size larger than the gap between
+            two fields. Walker: "the email box next to Create Contact is just
+            slightly too close". DialogFooter's own --space-6 is the floor;
+            this is the breathing room on top of it. */}
+        <FormRow className="pb-[var(--space-3)]">
           <div className="grid grid-cols-2 gap-[var(--space-4)]">
             <Field label="First name">
               <Input

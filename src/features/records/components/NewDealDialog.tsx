@@ -113,7 +113,7 @@ export function NewDealDialog(props: {
           </DialogDescription>
         </DialogHeader>
 
-        <FormRow>
+        <FormRow className="pb-[var(--space-3)]">
           <Field label="Title" error={error ?? undefined}>
             <Input
               autoFocus

@@ -17,7 +17,7 @@
  */
 import { test, expect } from "../fixtures";
 import type { HelixHarness } from "../fixtures";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -285,10 +285,19 @@ test.describe("records", () => {
       }),
     ).toBeVisible();
 
-    const dealRowAfter = helix.bridge.query("SELECT stage_id FROM deals WHERE id = ?", [
-      dealId,
-    ]) as [string][];
-    expect(dealRowAfter[0][0]).toBe(secondStage[0]);
+    // The card moves optimistically; the write behind it is a transaction that
+    // also stamps the stage event and the timeline entry, so poll rather than
+    // read once.
+    await expect
+      .poll(
+        () =>
+          (
+            helix.bridge.query("SELECT stage_id FROM deals WHERE id = ?", [dealId]) as [
+              string,
+            ][]
+          )[0][0],
+      )
+      .toBe(secondStage[0]);
   });
 
   // TaskRow.tsx: the checkbox's accessible name is `Mark "<title>" done`,
@@ -460,6 +469,30 @@ test.describe("records", () => {
   // -------------------------------------------------------------------------
 
 
+/**
+   * Choose an exact date from the in-app DatePicker.
+   *
+   * The popover opens on the month of whatever the field already holds - a
+   * yearly reminder defaults a year out - so this pages to the target month
+   * before clicking the day. Each cell carries its own `data-date`, so the
+   * click is never ambiguous between two months showing the same digit.
+   */
+  async function pickDate(page: Page, trigger: Locator, target: string): Promise<void> {
+    await trigger.click();
+    await expect(page.getByTestId("date-picker-grid")).toBeVisible();
+    const day = page.locator(`[data-testid="date-picker-day"][data-date="${target}"]`);
+    const back = page.getByRole("button", { name: "Previous month" });
+    const forward = page.getByRole("button", { name: "Next month" });
+
+    for (let hop = 0; hop < 30 && (await day.count()) === 0; hop += 1) {
+      const heading = await page.getByTestId("date-picker-grid").getAttribute("aria-label");
+      const shown = new Date(`${heading} 1`);
+      const wanted = new Date(`${target}T00:00:00`);
+      await (shown > wanted ? back : forward).click();
+    }
+    await day.click();
+  }
+
   /** A local YYYY-MM-DD this many days from today, the way the app stores it. */
   function localDateIn(days: number): string {
     const d = new Date();
@@ -509,7 +542,7 @@ test.describe("records", () => {
 
     // Now the deal form: three characters, pick her, and the company fills.
     await page.goto("/pipeline");
-    await page.getByRole("button", { name: "New deal" }).click();
+    await page.getByRole("button", { name: "New deal" }).first().click();
     const dialog = page.getByRole("dialog", { name: "New deal" });
     await dialog.getByLabel("Title").fill("Re-roof at 14 Elm");
 
@@ -530,13 +563,19 @@ test.describe("records", () => {
 
   // Walker: "When I hit New Deal and then Contact, the list is off the screen.
   // That 100% needs to be fixed."
-  test("the contact list stays on screen in a short window", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 620 });
+  test("the contact list stays on screen in a short window", async ({
+    page,
+    helix,
+  }) => {
+    void helix; // the fixture is what provisions the workspace this test needs
     await page.goto("/");
     await quickAddContact(page, "Priya Raman");
 
+    // Shortened only once the workspace is up: the complaint is about a short
+    // window, not about booting into one.
+    await page.setViewportSize({ width: 1280, height: 620 });
     await page.goto("/pipeline");
-    await page.getByRole("button", { name: "New deal" }).click();
+    await page.getByRole("button", { name: "New deal" }).first().click();
     const dialog = page.getByRole("dialog", { name: "New deal" });
     await dialog.getByRole("combobox", { name: "Contact" }).click();
 
@@ -569,9 +608,7 @@ test.describe("records", () => {
     // adjacent month also shows.
     await expect(dialog.locator('input[type="date"]')).toHaveCount(0);
     const target = localDateIn(3);
-    await dialog.getByTestId("date-picker").first().click();
-    await expect(page.getByTestId("date-picker-grid")).toBeVisible();
-    await page.locator(`[data-testid="date-picker-day"][data-date="${target}"]`).click();
+    await pickDate(page, dialog.getByTestId("date-picker").first(), target);
 
     await dialog.getByRole("button", { name: "Save", exact: true }).click();
     await expect(dialog).toBeHidden();
@@ -844,13 +881,35 @@ test.describe("records screens", () => {
     await expect(contactDialog).toBeVisible();
     await contactDialog.getByLabel("First name").fill("Priya");
     await contactDialog.getByLabel("Email").fill("priya@acme.example");
+
+    // Criterion 10: the last field keeps at least --space-6 (24px) of clear
+    // air above the footer, and more than the gap between two fields, so the
+    // footer reads as a separate zone rather than the next row down.
+    const gap = await contactDialog.evaluate((node) => {
+      const email = node.querySelector<HTMLElement>('input[type="email"]');
+      const phone = node.querySelector<HTMLElement>('input[type="tel"]');
+      const footer = node.querySelector<HTMLElement>("button")?.closest("div");
+      const confirm = Array.from(node.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().startsWith("Create"),
+      ) as HTMLElement | undefined;
+      if (!email || !phone || !confirm || !footer) return null;
+      return {
+        toFooter: confirm.getBoundingClientRect().top - email.getBoundingClientRect().bottom,
+        betweenFields:
+          email.getBoundingClientRect().top - phone.getBoundingClientRect().bottom,
+      };
+    });
+    expect(gap).not.toBeNull();
+    expect(gap!.toFooter).toBeGreaterThanOrEqual(24);
+    expect(gap!.toFooter).toBeGreaterThan(gap!.betweenFields);
+
     await shootTo("records-create-contact");
     await contactDialog.getByRole("button", { name: /^Create contact$/ }).click();
     await expect(contactDialog).toBeHidden();
 
     // --- New deal with the contact combobox open (criterion 4) --------------
     await page.goto("/pipeline");
-    await page.getByRole("button", { name: "New deal" }).click();
+    await page.getByRole("button", { name: "New deal" }).first().click();
     const dealDialog = page.getByRole("dialog", { name: "New deal" });
     await dealDialog.getByLabel("Title").fill("Re-roof at 14 Elm");
     await dealDialog.getByRole("combobox", { name: "Contact" }).click();
@@ -874,7 +933,7 @@ test.describe("records screens", () => {
     // --- the deal page services picker (criterion 11) -----------------------
     const contactId = contactRows(helix.bridge)[0][0];
     await page.goto("/pipeline");
-    await page.getByRole("button", { name: "New deal" }).click();
+    await page.getByRole("button", { name: "New deal" }).first().click();
     const second = page.getByRole("dialog", { name: "New deal" });
     await second.getByLabel("Title").fill("Gutter work at 14 Elm");
     await second.getByRole("button", { name: /^Create/ }).click();
@@ -887,7 +946,9 @@ test.describe("records screens", () => {
       ][]
     )[0][0];
     await page.goto(`/deals/${dealId}`);
-    const servicesAction = page.getByRole("button", { name: "Add services" });
+    const servicesAction = page
+      .getByTestId("deal-services-panel")
+      .getByTestId("combobox");
     await expect(servicesAction).toBeVisible();
     await servicesAction.click();
     await expect(page.getByTestId("combobox-input")).toBeVisible();

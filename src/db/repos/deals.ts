@@ -447,12 +447,22 @@ export type DealPatch = Partial<
   >
 > & { outcomeReason?: string | null };
 
+/**
+ * Edit a deal.
+ *
+ * When the customer changes, the deal's quotes and invoices follow it: a
+ * document never stores a different customer from its deal (round 3, "Money
+ * model"). That sync runs AFTER this write has committed, not inside it -
+ * `documents.syncCustomerFromDeal` opens its own transaction and the write
+ * lock is not reentrant - and it is imported lazily because documents.ts
+ * already imports this module.
+ */
 export async function update(
   id: string,
   patch: DealPatch,
   options: { batchId?: string } = {},
 ): Promise<Deal> {
-  return withWrite(async () => {
+  const updated = await withWrite(async () => {
     const before = await getOrThrow(id);
     const values: Record<string, unknown> = { updatedAt: nowIso() };
     if (patch.title !== undefined) values.title = trimmed(patch.title);
@@ -469,8 +479,17 @@ export async function update(
     const stmt = updateStatement("deals", id, values);
     await raw.execute(stmt.sql, stmt.params);
     await logWrite("deal", id, "update", before, values, options.batchId);
-    return getOrThrow(id);
+    const customerMoved =
+      (patch.contactId !== undefined && (patch.contactId ?? null) !== before.contactId) ||
+      (patch.companyId !== undefined && (patch.companyId ?? null) !== before.companyId);
+    return { deal: await getOrThrow(id), customerMoved };
   }, "Saving a deal");
+
+  if (updated.customerMoved) {
+    const documents = await import("@/db/repos/documents");
+    await documents.syncCustomerFromDeal(id);
+  }
+  return updated.deal;
 }
 
 type StageFlags = { pipelineId: string; name: string; isWon: boolean; isLost: boolean };

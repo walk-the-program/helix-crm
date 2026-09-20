@@ -612,10 +612,11 @@ describe("documents: the money model - a document belongs to a deal", () => {
       items: lines(500),
     });
 
+    // deals.update now runs this sync itself once the customer changes
+    // (round 3, "Money model"), so by here the documents have already
+    // followed and syncCustomerFromDeal has nothing left to do.
     await deals.update(deal.id, { contactId: contactB.id, companyId: companyB.id });
-
-    const changed = await documents.syncCustomerFromDeal(deal.id);
-    expect(changed).toBe(2);
+    expect(await documents.syncCustomerFromDeal(deal.id)).toBe(0);
 
     const reloadedOne = await documents.getOrThrow(docOne.id);
     const reloadedTwo = await documents.getOrThrow(docTwo.id);
@@ -624,7 +625,19 @@ describe("documents: the money model - a document belongs to a deal", () => {
     expect(reloadedTwo.document.contactId).toBe(contactB.id);
     expect(reloadedTwo.document.companyId).toBe(companyB.id);
 
-    // Nothing left to change: the second call is a no-op.
+    // And it still does the work when documents have drifted on their own -
+    // a row written before the deal_id rule, or restored from a backup. The
+    // drift is arranged directly, because no repository call can produce it
+    // any more.
+    await raw.execute(
+      `UPDATE documents SET contact_id = ?, company_id = ? WHERE deal_id = ?`,
+      [contactA.id, companyA.id, deal.id],
+    );
+    expect(await documents.syncCustomerFromDeal(deal.id)).toBe(2);
+    expect((await documents.getOrThrow(docOne.id)).document.companyId).toBe(companyB.id);
+    expect((await documents.getOrThrow(docTwo.id)).document.companyId).toBe(companyB.id);
+
+    // Nothing left to change: a second call is a no-op.
     expect(await documents.syncCustomerFromDeal(deal.id)).toBe(0);
   });
 

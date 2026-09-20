@@ -321,7 +321,7 @@ export function QuickAddDialog() {
           onKeyDown={onFormKeyDown}
           onSubmit={(event) => event.preventDefault()}
         >
-          <FormRow>
+          <FormRow className="pb-[var(--space-3)]">
             {type === "contact" || type === "company" ? (
               <Field label="Name" error={error ?? undefined}>
                 <Input

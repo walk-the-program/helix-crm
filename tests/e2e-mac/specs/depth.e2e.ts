@@ -19,7 +19,7 @@
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test, expect, type HelixHarness } from "../fixtures";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 const SCREENS = fileURLToPath(new URL("../.cache/screens/depth/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
@@ -31,6 +31,30 @@ function iso(msFromNow: number): string {
 }
 
 /** A local calendar day, the way the app stores due_on and next_due_on. */
+/**
+ * Choose an exact date from the in-app DatePicker.
+ *
+ * The popover opens on the month of whatever the field already holds - a
+ * yearly reminder defaults a year out - so this pages to the target month
+ * before clicking the day. Each cell carries its own `data-date`, so the
+ * click is never ambiguous between two months showing the same digit.
+ */
+async function pickDate(page: Page, trigger: Locator, target: string): Promise<void> {
+  await trigger.click();
+  await expect(page.getByTestId("date-picker-grid")).toBeVisible();
+  const day = page.locator(`[data-testid="date-picker-day"][data-date="${target}"]`);
+  const back = page.getByRole("button", { name: "Previous month" });
+  const forward = page.getByRole("button", { name: "Next month" });
+
+  for (let hop = 0; hop < 30 && (await day.count()) === 0; hop += 1) {
+    const heading = await page.getByTestId("date-picker-grid").getAttribute("aria-label");
+    const shown = new Date(`${heading} 1`);
+    const wanted = new Date(`${target}T00:00:00`);
+    await (shown > wanted ? back : forward).click();
+  }
+  await day.click();
+}
+
 function dateOnly(msFromNow: number): string {
   const d = new Date(Date.now() + msFromNow);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -238,9 +262,7 @@ test.describe("recurring reminders", () => {
     // native date input is gone (round 3, criterion 3), so this opens the
     // in-app picker and clicks the exact day cell by its data-date.
     const firstDue = dateOnly(3 * DAY);
-    await dialog.getByTestId("date-picker").first().click();
-    await expect(page.getByTestId("date-picker-grid")).toBeVisible();
-    await page.locator(`[data-testid="date-picker-day"][data-date="${firstDue}"]`).click();
+    await pickDate(page, dialog.getByTestId("date-picker").first(), firstDue);
     await dialog.getByRole("button", { name: "Add reminder" }).click();
     await expect(dialog).toHaveCount(0);
 

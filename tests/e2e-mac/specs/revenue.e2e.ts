@@ -292,6 +292,12 @@ test.describe("revenue", () => {
     await page.goto(`/deals/${dealId}`);
     await page.getByRole("combobox", { name: "Stage" }).click();
     await page.getByRole("option", { name: "Won" }).click();
+    // Round 3, criterion 24: winning is a dated, confirmed event now. The
+    // dialog defaults to today, which is what this test wants.
+    const wonDialog = page.getByRole("dialog", { name: "Move to Won?" });
+    await expect(wonDialog).toBeVisible();
+    await wonDialog.getByRole("button", { name: "Confirm" }).click();
+    await expect(wonDialog).toBeHidden();
 
     await expect
       .poll(
@@ -312,8 +318,14 @@ test.describe("revenue", () => {
     const mrrValue = mrrLabel.locator("xpath=preceding-sibling::span[1]");
     await expect(mrrValue).toHaveText(MRR_TEXT);
 
-    await expect(page.getByRole("link", { name: dealTitle })).toBeVisible();
-    const activeRow = page.getByRole("row", { name: new RegExp(dealTitle) });
+    // The report names the deal in two tables since round 3: the per-deal
+    // money table (Quoted/Won/Invoiced/Collected) and "Active recurring
+    // deals". The monthly figure lives in the second, so scope to it.
+    const activeTable = page
+      .getByRole("heading", { name: "Active recurring deals" })
+      .locator("xpath=following::table[1]");
+    await expect(activeTable.getByRole("link", { name: dealTitle })).toBeVisible();
+    const activeRow = activeTable.getByRole("row", { name: new RegExp(dealTitle) });
     await expect(activeRow).toContainText(MRR_TEXT);
 
     await shoot(page, "revenue");
