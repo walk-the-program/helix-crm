@@ -206,6 +206,12 @@ export const sample: SampleSet = {
       stageDays: 7,
       expectedInDays: 15,
       fields: { "Event type": "Full buyout", "Guest count": "85", "Preferred date": "+96" },
+      // $5,000 full buyout + $9,500 private bar and premium catering upgrade
+      // for 85 guests = $14,500.
+      items: [
+        { service: "Full restaurant buyout", qty: 1 },
+        { name: "Private bar package and premium catering upgrade, 85 guests", qty: 1, price: 9500 },
+      ],
     },
     {
       key: "dl-lakeside-dinner",
@@ -219,6 +225,12 @@ export const sample: SampleSet = {
       stageDays: 4,
       expectedInDays: 6,
       fields: { "Event type": "Private dining", "Guest count": "18", "Preferred date": "+52" },
+      // $500 private dining room + $1,700 for the three-course prix fixe
+      // menu for 18 guests = $2,200.
+      items: [
+        { service: "Private dining room rental", qty: 1 },
+        { name: "Three-course prix fixe menu, 18 guests", qty: 1, price: 1700 },
+      ],
     },
     {
       key: "dl-crestwood-closing",
@@ -231,6 +243,12 @@ export const sample: SampleSet = {
       ageDays: 30,
       stageDays: 8,
       fields: { "Event type": "Private dining", "Guest count": "14", "Preferred date": "+24" },
+      // $500 private dining room + $1,100 for the closing celebration dinner
+      // package for 14 guests = $1,600.
+      items: [
+        { service: "Private dining room rental", qty: 1 },
+        { name: "Closing celebration dinner package, 14 guests", qty: 1, price: 1100 },
+      ],
     },
     {
       key: "dl-northridge-catering",
@@ -316,6 +334,12 @@ export const sample: SampleSet = {
       ageDays: 24,
       stageDays: 7,
       fields: { "Event type": "Private dining", "Guest count": "10", "Preferred date": "+38" },
+      // $500 private dining room + 5 x $28 catering drop-off (the table's
+      // dinners) = $640.
+      items: [
+        { service: "Private dining room rental", qty: 1 },
+        { service: "Catering drop-off, per person", qty: 5 },
+      ],
     },
   ],
 
@@ -505,6 +529,33 @@ export const sample: SampleSet = {
       title: "Check whether the patio is open for Seraphine's group",
       dueInDays: 7,
       contactKey: "ct-farraday",
+    },
+  ],
+
+  /*
+   * One paid, matching the note that "Hollis paid at the table," and one
+   * overdue: a deposit invoice for the holiday buyout, sent a few days past
+   * its 14-day terms — the room is booked for months out, but a deposit is
+   * still due promptly.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-hollis-anniversary",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 23,
+      dueInDays: 14,
+      paidDaysAgo: 23,
+      paidMethod: "card",
+    },
+    {
+      kind: "invoice",
+      dealKey: "dl-summit-holiday",
+      status: "sent",
+      lines: "one_time",
+      issuedDaysAgo: 19,
+      dueInDays: 14,
     },
   ],
 };

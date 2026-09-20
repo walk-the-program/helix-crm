@@ -241,6 +241,16 @@ export const sample: SampleSet = {
       stageDays: 5,
       expectedInDays: 9,
       fields: { "Reason for visiting": "Baptism or wedding" },
+      // $400: baptism preparation and the family reception is not one of the
+      // two things the building charges a set fee for, so it is a custom line.
+      items: [
+        {
+          name: "Baptism preparation and family reception",
+          description: "Three prep sessions plus light refreshments after the service.",
+          qty: 1,
+          price: 400,
+        },
+      ],
     },
     {
       key: "dl-park-wedding",
@@ -253,6 +263,16 @@ export const sample: SampleSet = {
       stageDays: 1,
       expectedInDays: 14,
       fields: { "Reason for visiting": "Baptism or wedding" },
+      // $750 wedding ceremony fee + 2 x $75 premarital counseling = $900,
+      // which is what the two things this building actually charges for add up to.
+      items: [
+        { service: "Wedding ceremony fee", qty: 1 },
+        {
+          service: "Premarital counseling session",
+          qty: 2,
+          description: "Two sessions before the spring date they are asking about.",
+        },
+      ],
     },
     {
       key: "dl-oduya-prayer",
@@ -515,6 +535,27 @@ export const sample: SampleSet = {
       title: "Schedule the Mercy House meal team for the third Thursday",
       dueInDays: 8,
       contactKey: "ct-imelda-mercy",
+    },
+  ],
+
+  /*
+   * One paid invoice, which is the only deal in the set old enough and priced
+   * enough to raise one. Neither "won" deal (Castillo, Quintrell) carries a
+   * fee — a family joining the church is not billed for it — so unlike a
+   * for-profit trade, this one has no plausible won-stage invoice, and there
+   * is no deal here both priced and old enough to be worth chasing as an
+   * overdue second invoice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-winslow-baptism",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 4,
+      dueInDays: 14,
+      paidDaysAgo: 4,
+      paidMethod: "card",
     },
   ],
 };

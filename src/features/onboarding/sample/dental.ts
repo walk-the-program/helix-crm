@@ -230,6 +230,8 @@ export const sample: SampleSet = {
       stageDays: 4,
       expectedInDays: 7,
       fields: { "Treatment interest": "Cleaning" },
+      // 10 x $120 routine cleaning = $1,200, one per new hire this quarter.
+      items: [{ service: "Routine cleaning", qty: 10 }],
     },
     {
       key: "dl-crestline-early",
@@ -243,6 +245,8 @@ export const sample: SampleSet = {
       stageDays: 3,
       expectedInDays: 14,
       fields: { "Treatment interest": "Cleaning" },
+      // 15 x $120 routine cleaning = $1,800, the whole warehouse crew.
+      items: [{ service: "Routine cleaning", qty: 15 }],
     },
     {
       key: "dl-holbrook-aligners",
@@ -289,6 +293,11 @@ export const sample: SampleSet = {
       ageDays: 25,
       stageDays: 8,
       fields: { "Treatment interest": "Whitening" },
+      // $400 teeth whitening + $50 take-home kit = $450.
+      items: [
+        { service: "Teeth whitening", qty: 1 },
+        { name: "Take-home touch-up kit", description: "Sent home for the two weeks before the wedding.", qty: 1, price: 50 },
+      ],
     },
     {
       key: "dl-quillfeather-lost",
@@ -312,6 +321,12 @@ export const sample: SampleSet = {
       ageDays: 33,
       stageDays: 9,
       fields: { "Treatment interest": "Cleaning" },
+      // 5 x $120 routine cleaning + 2 x $150 new patient exam (two new
+      // associates) = $600 + $300 = $900.
+      items: [
+        { service: "Routine cleaning", qty: 5 },
+        { service: "New patient exam and x-rays", qty: 2, description: "Two new associates joined the firm this year." },
+      ],
     },
     {
       key: "dl-oakridge-checkup",
@@ -513,6 +528,26 @@ export const sample: SampleSet = {
       title: "Request Ifeoma's records from her old practice",
       dueInDays: 4,
       contactKey: "ct-oduya",
+    },
+  ],
+
+  /*
+   * One paid invoice, off the deal the timeline already describes as paid:
+   * "Pinnacle Law paid the group invoice the same week it went out." The
+   * only other priced deal old enough to chase is Brindley's whitening,
+   * but its own note ("Invoice paid at checkout") rules it out as an
+   * overdue example too, so this set carries a single invoice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-pinnaclelaw-cleanings",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 27,
+      dueInDays: 14,
+      paidDaysAgo: 24,
+      paidMethod: "bank",
     },
   ],
 };

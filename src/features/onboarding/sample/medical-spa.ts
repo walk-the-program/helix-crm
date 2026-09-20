@@ -153,6 +153,11 @@ export const sample: SampleSet = {
       stageDays: 3,
       expectedInDays: 4,
       fields: { "Treatment interest": "Injectables" },
+      // $350 Botox + $100 for the extra units on top of the standard dose = $450.
+      items: [
+        { service: "Botox treatment", qty: 1 },
+        { name: "Additional touch-up units", description: "A few extra units beyond the standard treatment.", qty: 1, price: 100 },
+      ],
     },
     {
       key: "dl-marchetti-filler",
@@ -165,6 +170,11 @@ export const sample: SampleSet = {
       stageDays: 5,
       expectedInDays: 6,
       fields: { "Treatment interest": "Injectables" },
+      // $650 dermal filler syringe + $100 consultation fee = $750.
+      items: [
+        { service: "Dermal filler syringe", qty: 1 },
+        { name: "Consultation fee", qty: 1, price: 100 },
+      ],
     },
     {
       key: "dl-oyelowo-laser",
@@ -188,17 +198,35 @@ export const sample: SampleSet = {
       ageDays: 20,
       stageDays: 6,
       fields: { "Treatment interest": "Facial" },
+      // $620 flat: the four-visit series is sold as a bundle discounted below
+      // 4 x $175 HydraFacial, so it is a custom line.
+      items: [
+        {
+          name: "Signature facial series, four visits",
+          description: "Booked as a birthday gift to herself.",
+          qty: 1,
+          price: 620,
+        },
+      ],
     },
     {
       key: "dl-castell-membership",
       title: "Monthly membership signup",
-      value: 2400,
+      /*
+       * $1,188, not $2,400: `value_cents` is the ANNUAL value — one-time plus
+       * twelve months of any recurring line — and this deal carries only the
+       * $99/month membership line, so $0 + 12 x $99 = $1,188. It is the one
+       * won deal priced this way, so `invoiceSchedules.ensureForWonDeal`
+       * finally has a schedule to show instead of an empty MRR report.
+       */
+      value: 1188,
       stage: "Paid",
       contactKey: "ct-castell",
       sourceName: "Existing client",
       ageDays: 30,
       stageDays: 10,
       fields: { "Treatment interest": "Membership" },
+      items: [{ service: "Membership plan", qty: 1 }],
     },
     {
       key: "dl-winterbourne-injectables",
@@ -445,6 +473,25 @@ export const sample: SampleSet = {
       title: "Add Ottoline to the seasonal specials list",
       dueInDays: 8,
       contactKey: "ct-blackwood",
+    },
+  ],
+
+  /*
+   * One paid invoice, off the only priced won deal that is not the
+   * membership (which carries just the recurring line and so has nothing to
+   * put on a `one_time` invoice). The other two priced deals are still in
+   * early stages and not old enough to be worth chasing as an overdue one.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-fennimore-facial",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 15,
+      dueInDays: 14,
+      paidDaysAgo: 12,
+      paidMethod: "card",
     },
   ],
 };

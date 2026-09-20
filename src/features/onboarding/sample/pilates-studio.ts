@@ -144,13 +144,21 @@ export const sample: SampleSet = {
     {
       key: "dl-castellano-unlimited",
       title: "Unlimited monthly membership",
-      value: 2100,
+      /*
+       * $2,388, not $2,100: `value_cents` is the ANNUAL value — one-time plus
+       * twelve months of any recurring line — and this deal carries only the
+       * $199/month unlimited membership line, so $0 + 12 x $199 = $2,388. It
+       * is the only won deal priced this way, so `invoiceSchedules
+       * .ensureForWonDeal` has a real MRR and ARR to show.
+       */
+      value: 2388,
       stage: "Membership sold",
       contactKey: "ct-castellano",
       sourceName: "Website",
       ageDays: 18,
       stageDays: 6,
       fields: { "Membership interest": "Unlimited monthly" },
+      items: [{ service: "Monthly unlimited membership", qty: 1 }],
     },
     {
       key: "dl-marchetti-classpack",
@@ -163,6 +171,11 @@ export const sample: SampleSet = {
       stageDays: 3,
       expectedInDays: 5,
       fields: { "Membership interest": "Class pack" },
+      // $140 class pack of five + $80 for the second five-class add-on = $220.
+      items: [
+        { service: "Class pack of five", qty: 1 },
+        { name: "Additional five-class add-on", description: "Second five-pack, sold at a discount off the first.", qty: 1, price: 80 },
+      ],
     },
     {
       key: "dl-oyelowo-dropin",
@@ -175,6 +188,8 @@ export const sample: SampleSet = {
       stageDays: 3,
       expectedInDays: 2,
       fields: { "Membership interest": "Drop-in" },
+      // $32 catalogue price, invoiced at $30 for a first-time intro visit.
+      items: [{ service: "Drop-in class", qty: 1, actualPrice: 30 }],
     },
     {
       key: "dl-fennimore-notsure",
@@ -210,6 +225,8 @@ export const sample: SampleSet = {
       ageDays: 25,
       stageDays: 9,
       fields: { "Membership interest": "Class pack" },
+      // $140 catalogue price, invoiced at $130 to try the studio out.
+      items: [{ service: "Class pack of five", qty: 1, actualPrice: 130 }],
     },
     {
       key: "dl-alderidge-wentcold",
@@ -441,6 +458,24 @@ export const sample: SampleSet = {
       title: "Add Ottoline to the next intro promotion list",
       dueInDays: 8,
       contactKey: "ct-blackwood",
+    },
+  ],
+
+  /*
+   * One paid invoice, off the priced won deal that is not the membership
+   * (which carries only the recurring line). The other two priced deals are
+   * too new to be worth chasing as an overdue second invoice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-winterbourne-classpack",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 20,
+      dueInDays: 14,
+      paidDaysAgo: 15,
+      paidMethod: "card",
     },
   ],
 };

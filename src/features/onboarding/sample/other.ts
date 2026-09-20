@@ -227,6 +227,8 @@ export const sample: SampleSet = {
       stageDays: 6,
       expectedInDays: 5,
       fields: { "What they need": "Standing turnover cleaning contract" },
+      // 24 x $150 standard service = $3,600, one per unit.
+      items: [{ service: "Standard service", qty: 24 }],
     },
     {
       key: "dl-briarwood-showing",
@@ -240,11 +242,25 @@ export const sample: SampleSet = {
       stageDays: 3,
       expectedInDays: 4,
       fields: { "What they need": "Deep clean before open houses" },
+      // $500 premium package (the listing with the open house this week) +
+      // 3 x $150 standard service (the other listings) = $950.
+      items: [
+        { service: "Premium package", qty: 1 },
+        { service: "Standard service", qty: 3 },
+      ],
     },
     {
       key: "dl-cobblestone-window",
       title: "Storefront window and floor detail",
-      value: 480,
+      /*
+       * $1,668, not $480: `value_cents` is the ANNUAL value — one-time plus
+       * twelve months of any recurring line — and Oswaldo asked about a
+       * standing quarterly visit, which this workspace's monthly plan is the
+       * closest fit for, so $480 + 12 x $99 = $1,668. It is the only won deal
+       * priced this way, so the billing schedule and MRR reports have
+       * something real to show.
+       */
+      value: 1668,
       stage: "Won",
       contactKey: "ct-oswaldo",
       companyKey: "co-cobblestone",
@@ -252,6 +268,10 @@ export const sample: SampleSet = {
       ageDays: 25,
       stageDays: 10,
       fields: { "What they need": "Seasonal storefront detail" },
+      items: [
+        { name: "Storefront window and floor detail", qty: 1, price: 480 },
+        { service: "Monthly plan", qty: 1 },
+      ],
     },
     {
       key: "dl-harrison-weekly",
@@ -290,6 +310,15 @@ export const sample: SampleSet = {
       ageDays: 30,
       stageDays: 12,
       fields: { "What they need": "Mirror rehang and floor detail" },
+      // $340 flat: resetting a mirror wall bracket is not a catalogue item.
+      items: [
+        {
+          name: "Mirror wall reset and floor cleaning",
+          description: "New anchors for the bracket, plus the studio floor.",
+          qty: 1,
+          price: 340,
+        },
+      ],
     },
     {
       key: "dl-riverside-nightly",
@@ -529,6 +558,33 @@ export const sample: SampleSet = {
       dueInDays: 10,
       contactKey: "ct-mireille",
       companyKey: "co-oakhill",
+    },
+  ],
+
+  /*
+   * One paid, one overdue, same as the landscaping example. Cobblestone's
+   * invoice is `one_time` so the new monthly plan line is left to the
+   * billing schedule rather than being charged twice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-cobblestone-window",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 24,
+      dueInDays: 14,
+      paidDaysAgo: 24,
+      paidMethod: "card",
+    },
+    {
+      // Issued 26 days ago on 14-day terms: twelve days over, worth chasing.
+      kind: "invoice",
+      dealKey: "dl-oakhill-mirror",
+      status: "sent",
+      lines: "one_time",
+      issuedDaysAgo: 26,
+      dueInDays: 14,
     },
   ],
 };

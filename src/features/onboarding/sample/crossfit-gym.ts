@@ -146,13 +146,22 @@ export const sample: SampleSet = {
     {
       key: "dl-brantley-unlimited",
       title: "Unlimited monthly membership",
-      value: 1800,
+      /*
+       * $2,100, not $1,800: `value_cents` is the ANNUAL value — one-time plus
+       * twelve months of any recurring line — and this deal now carries only
+       * the $175/month unlimited membership line, so $0 + 12 x $175 = $2,100.
+       * It is the only won deal priced this way, which is what lets
+       * `invoiceSchedules.ensureForWonDeal` show a real MRR and ARR instead
+       * of three empty reports (R9, requirement 1).
+       */
+      value: 2100,
       stage: "Membership sold",
       contactKey: "ct-brantley",
       sourceName: "Website",
       ageDays: 20,
       stageDays: 7,
       fields: { "Membership interest": "Unlimited monthly" },
+      items: [{ service: "Monthly unlimited membership", qty: 1 }],
     },
     {
       key: "dl-fenella-onramp",
@@ -176,6 +185,8 @@ export const sample: SampleSet = {
       stageDays: 3,
       expectedInDays: 2,
       fields: { "Membership interest": "Drop-in" },
+      // $25, straight off the catalogue.
+      items: [{ service: "Drop-in class", qty: 1 }],
     },
     {
       key: "dl-marigold-notsure",
@@ -211,6 +222,16 @@ export const sample: SampleSet = {
       ageDays: 27,
       stageDays: 10,
       fields: { "Membership interest": "On-ramp" },
+      // $240 flat: the six-session on-ramp is sold as one bundled package,
+      // not per-session off the catalogue, so it is a custom line.
+      items: [
+        {
+          name: "Six-session on-ramp package",
+          description: "All six sessions completed before she signed.",
+          qty: 1,
+          price: 240,
+        },
+      ],
     },
     {
       key: "dl-rutherford-wentcold",
@@ -222,6 +243,15 @@ export const sample: SampleSet = {
       ageDays: 45,
       stageDays: 17,
       fields: { "Membership interest": "Not sure yet" },
+      // $20 flat for the free-class trial, never followed by a membership.
+      items: [
+        {
+          name: "Free class visit",
+          description: "Signed up for a free class, never came back to book it.",
+          qty: 1,
+          price: 20,
+        },
+      ],
     },
     {
       key: "dl-linnea-onrampcomplete",
@@ -442,6 +472,38 @@ export const sample: SampleSet = {
       title: "Invite Marlowe to jump into a regular class this week",
       dueInDays: 3,
       contactKey: "ct-marlowe",
+    },
+  ],
+
+  /*
+   * One paid, one overdue: Collected has something to show, and the overdue
+   * one gives the aging report a row. Both `one_time`, so Brantley's monthly
+   * membership line is left to the billing schedule instead of being
+   * invoiced twice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-quintessa-onramp",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 20,
+      dueInDays: 14,
+      paidDaysAgo: 17,
+      paidMethod: "card",
+    },
+    {
+      /*
+       * Issued 30 days ago on 14-day terms: sixteen days over, same as the
+       * landscaping example, on the one signup who never came back to book
+       * the free class in the first place.
+       */
+      kind: "invoice",
+      dealKey: "dl-rutherford-wentcold",
+      status: "sent",
+      lines: "one_time",
+      issuedDaysAgo: 30,
+      dueInDays: 14,
     },
   ],
 };

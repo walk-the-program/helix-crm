@@ -205,6 +205,12 @@ export const sample: SampleSet = {
       ageDays: 22,
       stageDays: 8,
       fields: { "Event date": "+212", "Guest count": "180", "Package interest": "All-inclusive" },
+      // $8,500 Saturday venue rental + $6,000 for the all-inclusive catering,
+      // floral and coordination package for 180 guests = $14,500.
+      items: [
+        { service: "Saturday venue rental", qty: 1 },
+        { name: "All-inclusive catering, floral and coordination package, 180 guests", qty: 1, price: 6000 },
+      ],
     },
     {
       key: "dl-okonkwo",
@@ -217,6 +223,12 @@ export const sample: SampleSet = {
       stageDays: 4,
       expectedInDays: 7,
       fields: { "Event date": "+296", "Guest count": "120", "Package interest": "Venue only" },
+      // $8,500 Saturday venue rental + $1,300 additional guest count
+      // surcharge for 120 guests = $9,800.
+      items: [
+        { service: "Saturday venue rental", qty: 1 },
+        { name: "Additional guest count surcharge, 120 guests", qty: 1, price: 1300 },
+      ],
     },
     {
       key: "dl-fitzwilliam",
@@ -265,6 +277,9 @@ export const sample: SampleSet = {
       ageDays: 28,
       stageDays: 9,
       fields: { "Event date": "+198", "Guest count": "40", "Package interest": "Rehearsal dinner" },
+      // $2,000 catalogue price, invoiced at $1,800 through the Copperleaf
+      // referral relationship.
+      items: [{ service: "Rehearsal dinner package", qty: 1, actualPrice: 1800 }],
     },
     {
       key: "dl-winslow",
@@ -289,6 +304,12 @@ export const sample: SampleSet = {
       stageDays: 5,
       expectedInDays: 9,
       fields: { "Event date": "+352", "Guest count": "110", "Package interest": "Venue only" },
+      // $8,500 Saturday venue rental + $2,700 additional rental setup for
+      // 110 guests = $11,200.
+      items: [
+        { service: "Saturday venue rental", qty: 1 },
+        { name: "Additional rental setup, 110 guests", qty: 1, price: 2700 },
+      ],
     },
     {
       key: "dl-brennan",
@@ -508,6 +529,26 @@ export const sample: SampleSet = {
       title: "Confirm First Note's new Saturday dates on the calendar",
       dueInDays: 9,
       contactKey: "ct-baxter-firstnote",
+    },
+  ],
+
+  /*
+   * One paid invoice, off the smaller rehearsal dinner deal. The Harrow
+   * wedding is also priced and "deposit paid," but the timeline already
+   * describes that deposit as collected at signing rather than chased down,
+   * and the two quoted-only deals (Okonkwo, Ashworth) are not booked yet, so
+   * neither gives a plausible overdue second invoice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-vantassel",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 24,
+      dueInDays: 14,
+      paidDaysAgo: 18,
+      paidMethod: "bank",
     },
   ],
 };

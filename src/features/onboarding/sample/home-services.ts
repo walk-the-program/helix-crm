@@ -211,6 +211,16 @@ export const sample: SampleSet = {
       stageDays: 4,
       expectedInDays: 5,
       fields: { "Job type": "HVAC", Urgency: "Routine" },
+      // $8,400 flat: a rooftop unit and crane rental is not in the catalogue,
+      // which only prices routine visits and tune-ups, so it is a custom line.
+      items: [
+        {
+          name: "Rooftop HVAC unit replacement, building B",
+          description: "Includes the crane rental for the weekend swap.",
+          qty: 1,
+          price: 8400,
+        },
+      ],
     },
     {
       key: "dl-summit-water-heater",
@@ -223,6 +233,9 @@ export const sample: SampleSet = {
       ageDays: 9,
       stageDays: 2,
       fields: { "Job type": "Plumbing", Urgency: "Same day" },
+      // $1,800 catalogue price, invoiced at $1,650 for a repeat management
+      // account, so the deal page shows a real discount row.
+      items: [{ service: "Water heater installation", qty: 1, actualPrice: 1650 }],
     },
     {
       key: "dl-canyon-panel",
@@ -248,6 +261,15 @@ export const sample: SampleSet = {
       ageDays: 28,
       stageDays: 5,
       fields: { "Job type": "Plumbing", Urgency: "Emergency" },
+      // $2,100 flat for the emergency slab leak repair, not a catalogue item.
+      items: [
+        {
+          name: "Slab leak repair, building C",
+          description: "Located and repaired the break under the unit 7 slab.",
+          qty: 1,
+          price: 2100,
+        },
+      ],
     },
     {
       key: "dl-mesa-gate-light",
@@ -286,6 +308,16 @@ export const sample: SampleSet = {
       ageDays: 35,
       stageDays: 6,
       fields: { "Job type": "Plumbing", Urgency: "Routine" },
+      // $890 flat for the whole-plaza clean-out, split across eight tenants
+      // outside this system, so it is one custom line here.
+      items: [
+        {
+          name: "Main line drain clean-out, whole plaza",
+          description: "Cleared the shared main line serving all eight suites.",
+          qty: 1,
+          price: 890,
+        },
+      ],
     },
     {
       key: "dl-holloway-ac",
@@ -513,6 +545,26 @@ export const sample: SampleSet = {
       title: "Send Yolanda the billing address options for the duplex",
       dueInDays: 7,
       contactKey: "ct-yolanda",
+    },
+  ],
+
+  /*
+   * One paid invoice, matching the timeline's own note: "Brightleaf paid the
+   * slab leak invoice within a week, same as always." The other two priced
+   * jobs (the rooftop unit and the plaza drain) are either not yet done or
+   * already noted as paid without complaint, so neither gives a plausible
+   * overdue second invoice.
+   */
+  documents: [
+    {
+      kind: "invoice",
+      dealKey: "dl-brightleaf-leak",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 25,
+      dueInDays: 14,
+      paidDaysAgo: 20,
+      paidMethod: "bank",
     },
   ],
 };
