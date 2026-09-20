@@ -31,7 +31,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { Route, Router, Switch, useLocation } from "wouter";
 import { cn } from "@/ui/cn";
 import { Toaster } from "sonner";
-import { MagnifyingGlass, MoonStars, SidebarSimple, Sun } from "@/ui/icons";
+import { MagnifyingGlass, MoonStars, Plus, SidebarSimple, Sun } from "@/ui/icons";
 import {
   allCommands,
   allNavItems,
@@ -442,6 +442,20 @@ export function Shell({ registry, workspace }: ShellProps) {
     if (command) void command.run();
   }, []);
 
+  /**
+   * Quick add's toolbar affordance (F-LC-21). Looked up at click time, the
+   * same as `openSearch` and `switchWorkspace` above, so the shell never
+   * imports the records feature that owns the command. `hasQuickAdd` is a
+   * plain check in the render body rather than memoized state, the same
+   * defensive shape `hasWorkspaceSwitcher` uses below, so the button simply
+   * does not render when nothing has registered "quick-add".
+   */
+  const quickAdd = useCallback(() => {
+    const command = findCommand("quick-add");
+    if (command) void command.run();
+  }, []);
+  const hasQuickAdd = findCommand("quick-add") !== null;
+
   const isActive = useCallback(
     (to: string): boolean => {
       if (to === "/") return location === "/" || location === "/today";
@@ -670,6 +684,22 @@ export function Shell({ registry, workspace }: ShellProps) {
             right={
               <div className="flex items-center gap-[var(--space-2)]">
                 <WriteStatus />
+                {hasQuickAdd ? (
+                  <Tooltip
+                    content={
+                      <span className="flex items-center gap-[var(--space-2)]">
+                        Quick add <Kbd keys="mod+n" />
+                      </span>
+                    }
+                  >
+                    <IconButton
+                      label="Quick add"
+                      title={undefined}
+                      onClick={quickAdd}
+                      icon={<Plus size={16} weight="bold" aria-hidden />}
+                    />
+                  </Tooltip>
+                ) : null}
                 <Tooltip content={themeButton.stateLabel}>
                   <IconButton
                     label={themeButton.actionLabel}
