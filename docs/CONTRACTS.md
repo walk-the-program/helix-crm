@@ -398,8 +398,22 @@ without a real site.
   folder, because the workspace id is derived from the name of the folder holding
   `helix.db` and `backups` is not that folder.
 - The pre-encryption copy the one-time migration sets aside uses the ordinary backup
-  naming scheme, so it is subject to the normal 30-day retention policy rather than kept
-  forever.
+  naming scheme so the Backups screen lists it, but it is NOT left to the 30-day
+  retention policy: the next `db_open` that finds an already-encrypted file deletes every
+  `*-pre-encryption.db` in that workspace's `backups` folder (`purge_plaintext_set_aside`
+  in `db.rs`). Retention always keeps the newest backup, so leaving it to retention meant
+  a complete unencrypted copy of a client's CRM could live on disk for thirty days, or
+  forever on a workspace that is never backed up again (F-SEC-2).
+- `db_open` refuses, with `DB_OPEN_FAILED` and a message that says so, when the file
+  exists, is already encrypted, and the keychain holds no key for that workspace. It does
+  not mint a replacement: a new key cannot open an old file, and writing one would occupy
+  the entry a keychain restore could still have repaired (F-SEC-3).
+- A keychain item that exists but cannot be parsed is `SECRET_ERROR`, not an empty
+  bundle. Every `secrets` read and write refuses and leaves the damaged item exactly as
+  it was found, because treating it as empty made `db_key` mint a fresh key and write it
+  over the real one, which is unrecoverable (F-SEC-1). A bundle that parses as a JSON
+  object is accepted even when it carries values this build does not understand, so an
+  upgrade followed by a downgrade does not look like corruption.
 
 ## Wave 3 reconciliation (binding)
 
@@ -732,12 +746,18 @@ If the first 16 bytes of the file are `SQLite format 3\0`, the file is plaintext
 Nothing is deleted. If the final rename fails, the plaintext original is put back, so the
 next launch retries.
 
-The set-aside copy deliberately uses the ordinary backup naming scheme, so the Backups
-screen lists it and the normal 30-day retention eventually clears it - which is the
-point, because a plaintext copy kept forever beside the encrypted one would hand back
-everything the encryption was for. Note the existing retention rule that the single
-newest backup is always kept, so on a workspace that is never backed up again the
-pre-encryption copy stays.
+The set-aside copy uses the ordinary backup naming scheme so the Backups screen lists
+it, and it is deleted by the FIRST LATER `db_open` that finds an already-encrypted file -
+that open is the only proof the conversion can ever get, and past it the copy is not a
+safety net but a second, unencrypted copy of the whole CRM. Recovery is not lost with it:
+the launch that converted the workspace also took an ordinary backup afterwards, and that
+one is encrypted with the workspace key.
+
+This replaces the original rule, which left the copy to the normal 30-day retention. That
+was wrong twice over: thirty days is a long time for a plaintext copy of a client's
+database to sit beside the encrypted one, and retention always keeps the single newest
+backup, so on a workspace that is never backed up again the plaintext copy stayed
+forever (F-SEC-2).
 
 ### `db_backup`
 

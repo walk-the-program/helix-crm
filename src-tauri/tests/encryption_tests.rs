@@ -288,8 +288,9 @@ fn plaintext_is_detected_and_migrated() {
         "the .enc working file should be gone"
     );
 
-    // Opening again is a no-op: the file is already encrypted, so no second
-    // pre-encryption copy appears.
+    // Opening again does not convert anything a second time, and it is the
+    // moment the plaintext original stops being a safety net and starts being a
+    // second unencrypted copy of the whole CRM: it is removed (F-SEC-2).
     db.close().expect("close");
     db.open(&path).expect("reopen the now-encrypted workspace");
     let still: Vec<_> = std::fs::read_dir(&backups)
@@ -298,10 +299,56 @@ fn plaintext_is_detected_and_migrated() {
         .map(|e| e.file_name().to_string_lossy().to_string())
         .filter(|n| n.ends_with("-pre-encryption.db"))
         .collect();
+    assert!(
+        still.is_empty(),
+        "the plaintext copy must be gone after the encrypted file has opened \
+         on its own, found {still:?}"
+    );
+    assert!(
+        !is_plaintext(&path),
+        "and the workspace itself must still be the encrypted file"
+    );
     assert_eq!(
-        still.len(),
-        1,
-        "the migration must not run a second time, found {still:?}"
+        count(&db, "SELECT COUNT(*) FROM contacts"),
+        2,
+        "the rows survive the sweep"
+    );
+}
+
+/// The sweep is not allowed to touch an ordinary backup, only the plaintext
+/// original the one-time migration set aside.
+#[test]
+fn reopening_removes_the_plaintext_copy_and_nothing_else() {
+    let (_dir, path) = temp_workspace("018f-sweep-only-plaintext");
+    write_plaintext_db(&path);
+
+    let db = Db::new();
+    db.open(&path).expect("migrate on open");
+    let backups = path.parent().expect("parent").join("backups");
+
+    // An ordinary encrypted backup, made the way the scheduler makes one.
+    let ordinary = db.backup("scheduled").expect("backup").path;
+    assert!(std::path::Path::new(&ordinary).is_file());
+
+    db.close().expect("close");
+    db.open(&path).expect("reopen");
+
+    let names: Vec<_> = std::fs::read_dir(&backups)
+        .expect("read backups")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    assert!(
+        !names.iter().any(|n| n.ends_with("-pre-encryption.db")),
+        "the plaintext copy should be gone, found {names:?}"
+    );
+    assert!(
+        std::path::Path::new(&ordinary).is_file(),
+        "the ordinary encrypted backup must survive, {names:?}"
+    );
+    assert!(
+        !is_plaintext(std::path::Path::new(&ordinary)),
+        "and that surviving backup is encrypted"
     );
 }
 
@@ -432,9 +479,14 @@ fn the_wrong_key_is_refused_clearly() {
         .expect("create");
     db.close().expect("close");
 
-    // Same file, different workspace folder, so a different key.
+    // Same file, different workspace folder, so a different key. The other
+    // workspace is opened once first so it HAS a key of its own: that is what
+    // makes this the wrong-key case rather than the lost-key case below, which
+    // `db_open` now separates and answers differently.
     let other = dir.path().join("018f-wrong").join("helix.db");
     std::fs::create_dir_all(other.parent().expect("parent")).expect("mkdir");
+    db.open(&other).expect("mint a key for the other workspace");
+    db.close().expect("close");
     std::fs::copy(&path, &other).expect("copy the encrypted file into another workspace");
 
     let err = db
@@ -450,6 +502,56 @@ fn the_wrong_key_is_refused_clearly() {
         !err.message.contains("PRAGMA key"),
         "the message must never carry key material or the pragma, got: {}",
         err.message
+    );
+}
+
+/// F-SEC-3: the keychain entry is gone but the encrypted file is still there.
+///
+/// Before this, `db_open` minted a fresh key, wrote it to the keychain, and then
+/// failed to open the file with it. Two things were wrong with that. The owner
+/// was told the key "does not open this workspace", which reads like the wrong
+/// workspace rather than a lost key; and the newly minted key now occupies the
+/// entry a keychain restore would have put the real one back into. Neither is
+/// recoverable advice. Now nothing is written and the message says what
+/// happened.
+#[test]
+fn a_lost_keychain_entry_is_reported_and_no_new_key_is_minted() {
+    let (_dir, path) = temp_workspace("018f-lost-key");
+    let db = Db::new();
+    db.open(&path).expect("open a fresh workspace");
+    db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)", &[])
+        .expect("create");
+    db.close().expect("close");
+    assert!(!is_plaintext(&path), "the file is encrypted");
+
+    // The owner's keychain lost the item: a restored Mac, a new user account, a
+    // "clean up my keychain" afternoon.
+    secrets::reset_bundle_cache();
+    secrets::delete("018f-lost-key", "dbkey").expect("clear the entry");
+    assert!(!secrets::has_db_key("018f-lost-key").expect("probe"));
+
+    let err = db.open(&path).expect_err("there is no key, so it must not open");
+    assert_eq!(err.code, "DB_OPEN_FAILED");
+    assert!(
+        err.message.contains("its key is not in this machine's keychain"),
+        "the message should name the real cause, got: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("has not made a new one"),
+        "and say that nothing was replaced, got: {}",
+        err.message
+    );
+
+    // The refusal wrote nothing: a keychain restore can still put the real key
+    // back into an entry Helix has not occupied.
+    assert!(
+        !secrets::has_db_key("018f-lost-key").expect("probe"),
+        "db_open must not have minted a replacement key"
+    );
+    assert!(
+        !is_plaintext(&path),
+        "and the file itself must be untouched"
     );
 }
 

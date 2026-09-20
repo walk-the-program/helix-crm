@@ -139,6 +139,14 @@ fn to_hex(bytes: &[u8]) -> String {
 /// It does not close the same race across two processes. It does not have to:
 /// the single-instance plugin in `lib.rs` means there is only ever one Helix on
 /// a machine, and it is the only thing that asks for these keys.
+/// Is there already a key for this workspace? Asked by `db.rs` before it opens
+/// a file that is already encrypted, so that a workspace whose keychain entry
+/// has been lost gets a truthful message instead of a freshly minted key that
+/// cannot open it. Never mints anything.
+pub fn has_db_key(workspace_id: &str) -> AppResult<bool> {
+    Ok(get(workspace_id, "dbkey")?.value.is_some())
+}
+
 pub fn db_key(workspace_id: &str) -> AppResult<DbKey> {
     static CREATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one_at_a_time = CREATE.lock().unwrap_or_else(|p| p.into_inner());
@@ -301,19 +309,47 @@ pub fn reset_bundle_cache() {
         .clear();
 }
 
+/// What the owner is told when the one item exists but cannot be read. It is
+/// the one message in this module that has to be exactly right, because the
+/// wrong reaction to it - "delete it and start again" - destroys the workspace.
+const UNREADABLE_BUNDLE: &str = "This workspace's saved keys are on this machine \
+     but Helix could not read them. Helix will not replace them, because writing \
+     a new database key over the old one would make this workspace's file \
+     unreadable for good. Restore the keychain entry \"helix\" for this workspace \
+     from a Time Machine or keychain backup, or open a different workspace.";
+
+/// Parse the one item. A bundle written by a later version may carry values this
+/// build does not understand, so anything that is a JSON object is accepted and
+/// its string entries taken; only a payload that is not an object at all counts
+/// as unreadable.
+fn parse_bundle(json: &str) -> Option<Bundle> {
+    let object = serde_json::from_str::<serde_json::Value>(json).ok()?;
+    let map = object.as_object()?;
+    Some(
+        map.iter()
+            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+            .collect(),
+    )
+}
+
 /// The workspace's one item, read at most once per run.
 ///
-/// A bundle that will not parse is treated as empty rather than as an error: it
-/// was not written by this app, and refusing to start is a worse answer than
-/// asking the owner to reconnect a site. The dbkey is protected from that by
-/// the legacy fall-back below and, once written here, by the fact that nothing
-/// rewrites the item except this module.
+/// An item that exists but will not parse is an ERROR, not an empty bundle.
+/// This used to be `unwrap_or_default()`, on the reasoning that refusing to
+/// start is worse than asking the owner to reconnect a site. That reasoning had
+/// a hole once the per-kind items were folded into the bundle and deleted: with
+/// no legacy `dbkey` item left to fall back on, an empty bundle made
+/// [`db_key`] believe the workspace had no key yet, mint a fresh one, and
+/// `save_bundle` it straight over the damaged item - taking the real key with
+/// it and leaving the workspace file permanently undecryptable. Refusing is the
+/// only safe answer: the damaged item is left exactly as it is, so a keychain
+/// backup can still recover it.
 fn load_bundle(workspace_id: &str) -> AppResult<Bundle> {
     if let Some(cached) = cached_bundle(workspace_id) {
         return Ok(cached);
     }
     let bundle: Bundle = match raw_get(workspace_id, BUNDLE_KIND)? {
-        Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+        Some(json) => parse_bundle(&json).ok_or_else(|| AppError::secret(UNREADABLE_BUNDLE))?,
         None => Bundle::new(),
     };
     cache_bundle(workspace_id, &bundle);
@@ -657,13 +693,78 @@ mod tests {
         delete(ws, "site").expect("second delete");
     }
 
+    /// F-SEC-1. This test used to assert the opposite - that a garbled item read
+    /// as an empty bundle so the app could still start. That was the bug: with
+    /// the per-kind items folded into the bundle and deleted, an empty bundle
+    /// told `db_key` the workspace had no key, it minted one, and `set` wrote it
+    /// straight over the damaged item. The real key went with it and the
+    /// workspace file could never be decrypted again. Refusing is the only safe
+    /// answer, and the damaged item has to survive the refusal so a keychain
+    /// backup can still recover it.
     #[test]
-    fn an_unreadable_bundle_does_not_stop_the_app() {
+    fn an_unreadable_bundle_is_refused_and_never_overwritten() {
         memory();
         reset_bundle_cache();
         let ws = "018f-secrets-garbled";
         raw_set(ws, "bundle", "{not json").expect("write");
-        assert_eq!(get(ws, "site").unwrap().value, None);
+
+        for err in [
+            get(ws, "site").unwrap_err(),
+            get(ws, "dbkey").unwrap_err(),
+            db_key(ws).unwrap_err(),
+            set(ws, "site", "t").unwrap_err(),
+            delete(ws, "site").unwrap_err(),
+        ] {
+            assert_eq!(err.code, "SECRET_ERROR");
+            assert!(
+                err.message.contains("will not replace them"),
+                "the message has to say why nothing was written: {}",
+                err.message
+            );
+        }
+
+        assert_eq!(
+            raw_get(ws, "bundle").unwrap().as_deref(),
+            Some("{not json"),
+            "the damaged item must be left exactly as it was found"
+        );
+    }
+
+    /// A bundle written by a later Helix that carries a value this build does
+    /// not understand is not damaged - it is just newer. The keys this build
+    /// does know must still come out, or an upgrade-then-downgrade would look
+    /// exactly like corruption.
+    #[test]
+    fn a_bundle_with_unknown_or_non_string_values_still_reads() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-forward";
+        let hex = "b".repeat(64);
+        raw_set(
+            ws,
+            "bundle",
+            &format!(r#"{{"dbkey":"{hex}","site":"t","future":{{"a":1}},"n":7}}"#),
+        )
+        .expect("write");
+
+        assert_eq!(get(ws, "site").unwrap().value.as_deref(), Some("t"));
+        assert!(db_key(ws).expect("key").key_pragma().contains(&hex));
+    }
+
+    /// `has_db_key` answers without minting: `db.rs` relies on that to tell a
+    /// lost key from a workspace that never had one.
+    #[test]
+    fn has_db_key_never_mints() {
+        memory();
+        reset_bundle_cache();
+        let ws = "018f-secrets-probe";
+        assert!(!has_db_key(ws).expect("probe"));
+        assert!(
+            raw_get(ws, "bundle").unwrap().is_none(),
+            "probing must not create the item"
+        );
+        let _ = db_key(ws).expect("key");
+        assert!(has_db_key(ws).expect("probe"));
     }
 
     #[test]

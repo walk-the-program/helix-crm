@@ -71,7 +71,11 @@
 //!     |       5. prove '<path>.enc' opens with the key and carries the same tables
 //!     |       6. rename the plaintext to backups/<iso>Z-pre-encryption.db
 //!     |       7. rename '<path>.enc' into place  (step 6 is undone if this fails)
-//!     |     no: nothing to do - the file is already keyed, or brand new
+//!     |     no: nothing to convert. If the keychain has no key for an existing
+//!     |         file the open is REFUSED rather than minting one that cannot
+//!     |         work; and the plaintext copy step 6 set aside on an earlier
+//!     |         launch is deleted, because the file has now opened on its own
+//!     |         and the copy is only a second unencrypted CRM on disk.
 //!     |
 //!     +-- PRAGMA key = "x'<hex>'"   FIRST, before any other statement
 //!     +-- prove the key opens it    (SQLITE_NOTADB here means the wrong key)
@@ -255,9 +259,32 @@ impl Db {
         // refuses answers SECRET_ERROR, which is the truthful code - the file is
         // fine, the machine's credential store is not.
         let workspace_id = workspace_id_from_db_path(&path)?;
+        let plaintext = is_plaintext_file(&path);
+
+        // A file that is already encrypted and a keychain with no key for it is
+        // the one combination where minting is wrong. `db_key` would happily
+        // make a new key, write it to the keychain, and then fail to open the
+        // file with it - overwriting the "no key here" state that a keychain
+        // restore could still have fixed, and reporting it as a mismatch rather
+        // than as the loss it is. Answer honestly and change nothing.
+        if has_content(&path) && !plaintext && !secrets::has_db_key(&workspace_id)? {
+            return Err(AppError::new(
+                Code::DbOpenFailed,
+                format!(
+                    "This workspace is encrypted, but its key is not in this \
+                     machine's keychain. Helix has not made a new one: a new key \
+                     cannot open an old file. The key is saved under \"helix\" for \
+                     this workspace - restore it from a backup of this machine, or \
+                     open the workspace on the machine that created it. Nothing in \
+                     {} has been changed.",
+                    path.display()
+                ),
+            ));
+        }
+
         let key = secrets::db_key(&workspace_id)?;
 
-        if is_plaintext_file(&path) {
+        if plaintext {
             encrypt_in_place(&path, &key)?;
         }
 
@@ -278,6 +305,15 @@ impl Db {
                 format!("Could not configure {}: {}", path.display(), e.message),
             )
         })?;
+
+        // The encrypted file has now opened with the stored key on a launch that
+        // did no converting, which is the only proof the one-time migration can
+        // ever get. Past that point the plaintext original it set aside is not a
+        // safety net, it is a second, unencrypted copy of the whole CRM sitting
+        // next to the encrypted one.
+        if !plaintext {
+            purge_plaintext_set_aside(&path);
+        }
 
         let shown = path.to_string_lossy().to_string();
         *state = Some(OpenDb { conn, path, key });
@@ -617,14 +653,66 @@ fn apply_key(conn: &Connection, key: &DbKey, path: &Path) -> AppResult<()> {
     })
 }
 
+/// True for a file that exists and has bytes in it. A missing or zero-length
+/// file is a workspace about to be created, not one whose key is lost.
+fn has_content(path: &Path) -> bool {
+    fs::metadata(path).map(|m| m.len() > 0).unwrap_or(false)
+}
+
+/// The suffix [`encrypt_in_place`] gives the plaintext original it sets aside.
+const SET_ASIDE_SUFFIX: &str = "-pre-encryption.db";
+
+/// Delete any plaintext original the one-time migration set aside, once the
+/// encrypted file has opened with the stored key on a later launch.
+///
+/// The set-aside copy used to rely on the ordinary 30-day backup retention,
+/// which left a complete, unencrypted copy of a client's CRM on disk for a
+/// month - and forever on a workspace that is never backed up again, because
+/// retention always keeps the newest file. It is also no longer the only way
+/// back: the launch that converted the workspace took an ordinary backup
+/// afterwards, and that one is encrypted with the workspace key.
+///
+/// Best effort on purpose. A file that cannot be removed is logged and the
+/// workspace still opens; failing the open would be a worse answer than a copy
+/// that survives until the next launch.
+fn purge_plaintext_set_aside(db_path: &Path) {
+    let Some(dir) = db_path.parent().map(|p| p.join("backups")) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_set_aside = path
+            .file_name()
+            .map(|n| n.to_string_lossy().ends_with(SET_ASIDE_SUFFIX))
+            .unwrap_or(false);
+        if !is_set_aside {
+            continue;
+        }
+        match fs::remove_file(&path) {
+            Ok(()) => tauri_plugin_log::log::info!(
+                "Removed the plaintext copy the one-time encryption set aside"
+            ),
+            Err(e) => tauri_plugin_log::log::warn!(
+                "Could not remove the plaintext copy set aside by the one-time encryption: {e}"
+            ),
+        }
+    }
+}
+
 /// The one-time plaintext -> SQLCipher migration, run from `open` while it holds
 /// `backup_guard`.
 ///
-/// Nothing is destroyed: the plaintext file is renamed into the `backups` folder
-/// as `<iso>Z-pre-encryption.db`, so a failed conversion can be recovered by
-/// restoring it, and the ordinary 30-day retention eventually takes it away -
-/// which is the point. Keeping a plaintext copy of the database forever beside
-/// the encrypted one would hand back everything the encryption was for.
+/// Nothing is destroyed here: the plaintext file is renamed into the `backups`
+/// folder as `<iso>Z-pre-encryption.db`, so a conversion that went wrong can be
+/// recovered by restoring it. It does not stay. The next launch - the first one
+/// that opens the encrypted file without converting anything - removes it
+/// ([`purge_plaintext_set_aside`]). It used to be left to the ordinary 30-day
+/// backup retention, which meant a complete unencrypted copy of a client's CRM
+/// lived on disk for a month, and forever on a workspace that is never backed
+/// up again, because retention always keeps the newest file.
 fn encrypt_in_place(path: &Path, key: &DbKey) -> AppResult<()> {
     let failed = |message: String| AppError::new(Code::DbOpenFailed, message);
 
