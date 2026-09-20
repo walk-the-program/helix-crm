@@ -577,4 +577,6 @@ fn pragmas_are_applied_on_open() {
     let (_dir, db, _path) = open_temp();
     assert_eq!(scalar(&db, "PRAGMA journal_mode"), json!("wal"));
     assert_eq!(scalar(&db, "PRAGMA foreign_keys"), json!(1));
+    // 2 is MEMORY. Nothing a query needs to spill goes to an unkeyed file.
+    assert_eq!(scalar(&db, "PRAGMA temp_store"), json!(2));
 }

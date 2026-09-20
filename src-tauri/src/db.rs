@@ -831,6 +831,15 @@ fn configure(conn: &Connection) -> AppResult<()> {
         "journal_mode came back as {mode}"
     );
     conn.pragma_update(None, "foreign_keys", true)?;
+
+    // Temporary tables and the scratch files a large sort or an FTS rebuild
+    // spills to go in memory, never to a file. SQLCipher does encrypt its temp
+    // databases, but "does" is a property of a dependency and this is the one
+    // place customer data could reach the disk outside the keyed file - a
+    // workspace is thousands of rows, so keeping it in RAM costs nothing and
+    // removes the question (F-SEC-5).
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
+
     conn.busy_timeout(BUSY_TIMEOUT)?;
     Ok(())
 }

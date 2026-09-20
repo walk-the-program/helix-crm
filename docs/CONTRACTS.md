@@ -404,6 +404,9 @@ without a real site.
   in `db.rs`). Retention always keeps the newest backup, so leaving it to retention meant
   a complete unencrypted copy of a client's CRM could live on disk for thirty days, or
   forever on a workspace that is never backed up again (F-SEC-2).
+- Every connection is opened with `PRAGMA temp_store = MEMORY`, so a large sort, a
+  temporary table or an FTS rebuild never spills customer data to an unkeyed scratch file
+  beside the encrypted one (F-SEC-5).
 - `db_open` refuses, with `DB_OPEN_FAILED` and a message that says so, when the file
   exists, is already encrypted, and the keychain holds no key for that workspace. It does
   not mint a replacement: a new key cannot open an old file, and writing one would occupy
