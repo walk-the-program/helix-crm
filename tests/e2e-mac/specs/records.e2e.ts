@@ -1225,3 +1225,79 @@ test.describe("records: phase-two design", () => {
     await expect(page.getByText(/Expected Sep 28/)).toBeHidden();
   });
 });
+
+test.describe("records: trash usability (CDQO-LA-W1)", () => {
+  /**
+   * The type tab row (contact, company, deal, activity, task, tag, saved
+   * view, attachment, recurring rule, template, product, custom field,
+   * document - thirteen in all) is wider than any reviewed width holds on one
+   * line. It used to just run off the edge of the window with no way back:
+   * Templates, Services, Custom fields and Invoices and quotes were
+   * unreachable at 1024, 1280 and 1440px alike. It now scrolls horizontally,
+   * so this proves the tenth tab is still reachable and clickable at the
+   * app's own documented minimum width, not merely present in the DOM.
+   */
+  test("the trash type tabs scroll to reach a tab past the fold", async ({ page, helix }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto("/");
+    await waitForShell(page);
+
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name, deleted_at)
+       VALUES ('c-trash-w1', ?, ?, 'Odell', 'Fenwick', ?)`,
+      [now, now, now],
+    );
+
+    await page.goto("/trash");
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Trash", level: 1 })).toBeVisible();
+
+    const templatesTab = page.getByRole("tab", { name: /^Templates/ });
+    await templatesTab.scrollIntoViewIfNeeded();
+    await templatesTab.click();
+    await expect(templatesTab).toHaveAttribute("data-state", "active");
+    await expect(page.getByText("Nothing deleted")).toBeVisible();
+  });
+
+  /**
+   * Ruling R6b: a deal a sent invoice still refers to keeps its "Delete
+   * forever" disabled rather than letting the purge fail. A dimmed button is
+   * not an explanation on its own - the CPO audit's coordinator asked
+   * specifically whether the disabled state carries one. It has to be
+   * reachable to something other than eyesight, so this checks the
+   * accessible name/description, not just the pixels.
+   */
+  test("a deal's disabled Delete forever explains what is holding it", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await waitForShell(page);
+
+    const now = new Date().toISOString();
+    const stageId = String(
+      helix.bridge.query("SELECT id FROM stages WHERE name = 'New'", [])[0][0],
+    );
+    helix.bridge.execute(
+      `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at,
+                          position, created_at, updated_at, deleted_at)
+       VALUES ('d-trash-w1', 'Fence repair', 50000, 'USD', ?, ?, 0, ?, ?, ?)`,
+      [stageId, now, now, now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO documents (id, kind, number, deal_id, status, created_at, updated_at)
+       VALUES ('doc-w1', 'invoice', 'INV-2026-0099', 'd-trash-w1', 'sent', ?, ?)`,
+      [now, now],
+    );
+
+    await page.goto("/trash");
+    await page.reload();
+    await page.getByRole("tab", { name: /^Deals/ }).click();
+    await expect(page.getByText(/Kept: INV-2026-0099 refers to it/)).toBeVisible();
+
+    const deleteButton = page.getByRole("button", { name: "Delete forever" });
+    await expect(deleteButton).toBeDisabled();
+    await expect(deleteButton).toHaveAccessibleDescription(/INV-2026-0099 refers to it/);
+  });
+});
