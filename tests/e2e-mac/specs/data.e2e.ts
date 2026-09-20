@@ -273,6 +273,16 @@ test.describe("data", () => {
     await page.goto("/import");
     await expect(page.getByRole("heading", { name: "Import", level: 1 })).toBeVisible();
     await expect(page.getByText("Drop a spreadsheet here")).toBeVisible();
+    // The pick step explains the decision once (phase-two design direction,
+    // rule 3): the type choices above already say what each import is, so the
+    // drop zone itself carries no second copy of that explanation - one
+    // sentence below it, naming the formats and the example file.
+    await expect(
+      page.getByText(/Works with a CSV from HubSpot, Zoho, Pipedrive, Google Contacts, or/),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Helix works out the columns; you check them"),
+    ).toHaveCount(0);
     await shootBoth(page, "import-pick");
 
     // --- the wizard ------------------------------------------------------
@@ -333,6 +343,19 @@ test.describe("data", () => {
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByText("They share the same email")).toBeVisible();
     await shootBoth(page, "merge-dialog");
+
+    // The dialog at the 1024px floor: nothing clipped, no horizontal scroll
+    // (F3). The confirm button's label is a survivor name of arbitrary
+    // length, so it is a truncating span with the full name in `title`
+    // rather than free text that could force the dialog wider than it is.
+    await page.setViewportSize({ width: 1024, height: 800 });
+    const dialogBox = page.getByRole("dialog");
+    const overflowsX = await dialogBox.evaluate(
+      (el) => el.scrollWidth > el.clientWidth + 1,
+    );
+    expect(overflowsX, "the merge dialog does not overflow horizontally at 1024px").toBe(false);
+    await shootBoth(page, "merge-dialog-1024");
+    await page.setViewportSize({ width: 1280, height: 900 });
 
     await page.getByRole("button", { name: /^Merge into / }).click();
     await expect(page.getByText("Merged. You can still put it back.")).toBeVisible();
@@ -439,7 +462,16 @@ test.describe("data", () => {
   }) => {
     await page.goto("/settings/backups");
     await expect(page.getByRole("heading", { name: "Backups", level: 1 })).toBeVisible();
+    // Backups states each fact once (phase-two design direction, rule 3 and
+    // rule 6): one honest subtitle, no standing paragraph re-explaining the
+    // schedule, and an empty-state sentence that says something the subtitle
+    // does not and is true with zero backups on record.
+    await expect(page.getByText("Helix backs up your database automatically.")).toBeVisible();
     await expect(page.getByRole("heading", { name: "No backups yet" })).toBeVisible();
+    await expect(
+      page.getByText("The first one is written the next time you open Helix, or start one now."),
+    ).toBeVisible();
+    await expect(page.getByText(/keeps every backup from the last 24 hours/)).toHaveCount(0);
     await shootBoth(page, "backups-empty");
 
     // The button really runs a backup - the harness's `db_backup` is
@@ -604,6 +636,13 @@ test.describe("data", () => {
     // Step 3: straight through with the default duplicate policy - this is a
     // first import into an empty workspace, so nothing is a duplicate yet.
     await expect(page.getByRole("columnheader", { name: "What Helix noticed" })).toBeVisible();
+    // The money column is a numeric column: `align="right"` on the header and
+    // the cell, never a hand-rolled `text-right tabular-nums` (docs/DESIGN.md
+    // "Tables"; `TD`/`TH`'s `data-numeric` attribute is what turns that on).
+    await expect(page.getByRole("columnheader", { name: "Value" })).toHaveAttribute(
+      "data-numeric",
+      "",
+    );
     await page.getByRole("button", { name: "Import", exact: true }).click();
 
     // Step 4: the counts, and the two rows the file could not match cleanly.
