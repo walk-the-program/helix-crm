@@ -937,3 +937,67 @@ later build.
 Without the first, `data-tauri-drag-region` is inert — the markup was already right and
 the IPC call behind it was being refused, which was the round-3 drag bug. Drag regions are
 the top bar and the sidebar header; a button inside either never carries the attribute.
+
+## CPO / CDQO pass (2026-09-20, binding)
+
+Everything here is on main; this section is the contract other agents code against.
+
+### Route-level splitting
+
+`lazyScreen(loader, pick)` in `src/app/feature.ts` wraps `React.lazy` for a named export,
+and the shell renders one `<Suspense>` around the whole route switch with a spinner in
+the content column. A feature registers a lazy screen as its route `element` exactly as
+before. Rules: nothing on the boot path (Today, the shell, quick add, search) is lazy; a
+feature index must not statically re-export a screen it routes lazily, because the
+re-export pulls the module back into the main chunk with the build still green (that
+was half of the 1.7 MB the pass removed). Reports, the PDF renderer, jszip and papaparse
+load at their points of use.
+
+### `VirtualList fit`
+
+`<VirtualList fit>` sizes its own scroller: height = min(the virtualiser's total size,
+the height available from the nearest genuinely scrolling ancestor (`overflow: auto` or
+`scroll`, never `hidden`) clamped to the viewport), re-measured on the next frame. A short
+list ends at its last row; a long one scrolls. The surface around it carries no `flex-1`
+and no `max-h-*`; the element carries `data-fit` for tests. Never measure a list's
+available height from an element whose height depends on the list.
+
+### Table
+
+`TBody` drops the hairline under its last row. `TableScroll` is the bounded region a
+sticky `THead` needs (`maxHeight` as a CSS length). A numeric cell is `<TD align="right">`;
+in a PERIOD money table a zero is `<TD align="right" dashZero={cents === 0}>
+{f.moneyOrDash(cents)}</TD>` (`useFormats().moneyOrDash` returns `ZERO_DASH` at zero;
+headline figures keep `money()` and read "$0.00").
+
+### `EmptyState variant="quiet"`
+
+One muted left-aligned sentence at `--row-h`, no title, no centring, at most one action:
+the form for a section-level empty inside a card. The centred form stays the default for
+a whole empty screen.
+
+### One overlay system
+
+`src/ui/Overlay.tsx` exports `OverlayScrim`, `OverlayPanel`, `overlayRowClass` and
+`overlayHeadingClass`. The command palette and the search dialog both draw on them, so
+⌘K and ⌘⇧K share one scrim, one hairline, one row height and one highlight.
+
+### Labels and icons
+
+`aria-label` is the kit's label prop everywhere; `ariaLabel` survives as a deprecated
+alias so no caller breaks. Icon sizes are the four in `docs/DESIGN.md` §10 (18 regular in
+rows, 16 bold in controls, 14 for a caret, check or error glyph, 10 for a sort caret) and
+the canon is written in `src/ui/icons.ts`.
+
+### Dialog focus
+
+A `DialogContent` that closes with Radix's restore target on `document.body` (opened from
+a keyboard shortcut with nothing focused) sends focus to the shell's main region
+(`data-dialog-focus-fallback` on `<main>`); a caller's own `onCloseAutoFocus` still wins.
+
+### Formats
+
+`useFormats()` in `src/app/formats.ts` is the one place a screen formats money, dates and
+times, bound to the workspace's currency and locale. Pure helpers in `src/lib/money.ts`
+and `src/lib/dates.ts` keep their signatures. The PDF renderer takes currency and locale
+as explicit inputs and does not use the hook.
