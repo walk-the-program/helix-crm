@@ -31,8 +31,10 @@ import {
 import { focusRingInset } from "@/ui/styles";
 import { cn } from "@/ui/cn";
 import * as companiesRepo from "@/db/repos/companies";
-import type { Company } from "@/db/repos/companies";
+import type { CompanyListRow } from "@/db/repos/companies";
 import { formatPhone } from "@/lib/phone";
+import { formatMoneyTrim } from "@/lib/money";
+import { useVocabulary } from "@/app/vocabulary";
 import {
   useCompanies,
   useDebounced,
@@ -75,6 +77,7 @@ const FILTER_DEFAULTS = {
 
 export function CompaniesScreen() {
   const [, navigate] = useLocation();
+  const vocabulary = useVocabulary();
   const [search, setSearch] = useState(FILTER_DEFAULTS.search);
   const [sort, setSort] = useState(DEFAULT_SORT);
   const [tagId, setTagId] = useState(FILTER_DEFAULTS.tagId);
@@ -276,7 +279,12 @@ export function CompaniesScreen() {
               how a native list view labels a column (DESIGN.md §4). Name is
               the only header that can sort - the only column the "Sort"
               Select below can also express - and clicking it drives that
-              same `sort` state, so the two never disagree. */}
+              same `sort` state, so the two never disagree.
+
+              Open jobs answers "is there work on here" (F-LA-7, CPO audit) -
+              the count and the value the owner cannot get from the name and
+              the phone number alone. Tags drops first as the window narrows,
+              same as Contacts. */}
           <div
             role="row"
             className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]"
@@ -290,7 +298,10 @@ export function CompaniesScreen() {
               Name
             </ColumnHeaderCell>
             <ColumnHeaderCell className="w-[200px] flex-none">Phone</ColumnHeaderCell>
-            <ColumnHeaderCell align="right" className="hidden w-[180px] flex-none md:block">
+            <ColumnHeaderCell align="right" className="w-[140px] flex-none">
+              Open {vocabulary.lowerMany}
+            </ColumnHeaderCell>
+            <ColumnHeaderCell align="right" className="hidden w-[180px] flex-none lg:block">
               Tags
             </ColumnHeaderCell>
           </div>
@@ -332,8 +343,13 @@ function nameSortDirection(sort: string): SortDirection {
   return null;
 }
 
+/** An em dash for a cell with nothing to show — a company with no open work
+ *  reads a dash here, never "0", which would read as a fact about the deal
+ *  count rather than the absence of one. */
+const EMPTY_CELL = "—";
+
 function CompanyRow(props: {
-  company: Company;
+  company: CompanyListRow;
   tagNames: string[];
   onOpen: () => void;
   /** Roving-tabindex + arrow-key props from VirtualList's `keyboardNav`
@@ -378,7 +394,18 @@ function CompanyRow(props: {
       <div className="w-[200px] shrink-0 truncate tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
         {company.phoneRaw ? formatPhone(company.phoneRaw) || company.phoneRaw : "No phone"}
       </div>
-      <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] md:flex">
+      <div className="w-[140px] shrink-0 truncate text-right tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        {company.openDealCount > 0 ? (
+          <>
+            {company.openDealCount.toLocaleString()}
+            {" · "}
+            {formatMoneyTrim(company.openDealValueCents)}
+          </>
+        ) : (
+          <span className="text-[var(--color-text-faint)]">{EMPTY_CELL}</span>
+        )}
+      </div>
+      <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] lg:flex">
         {tagNames.slice(0, 2).map((tag) => (
           <Badge key={tag}>
             <span className="max-w-[70px] truncate" title={tag}>
