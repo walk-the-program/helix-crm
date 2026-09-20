@@ -12,9 +12,32 @@
  * already spends its single primary block on the deal's value, so the strip
  * inherits it rather than adding a second (docs/DESIGN.md §6).
  */
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Button,
+  Card,
+  CardGroupLabel,
+  CardRow,
+  DatePicker,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  Field,
+  toast,
+} from "@/ui";
 import { formatBreakdown, formatMoneyTrim } from "@/lib/money";
+import { todayLocal } from "@/lib/dates";
 import { useFormats } from "@/app/formats";
-import type { MoneyTotals } from "@/db/repos/money";
+import * as money from "@/db/repos/money";
+import type { CustomerRef, MoneyTotals } from "@/db/repos/money";
+import * as paymentsRepo from "@/db/repos/payments";
+import { methodLabel } from "@/db/repos/payments";
+import { paidOfLabel } from "@/features/invoices/lib/format";
 
 export type MoneyFigure = {
   label: string;
@@ -24,6 +47,13 @@ export type MoneyFigure = {
   /** The quiet second line, e.g. a deal's upfront + monthly split. */
   note?: string | null;
   testId?: string;
+  /**
+   * Render this text instead of the formatted `cents` value - e.g.
+   * "$500.00 of $1,200.00" under the "Collected" label when a deal is only
+   * partly collected (packet task 6). `cents` still drives nothing else here;
+   * a caller that sets this owns the whole sentence.
+   */
+  valueText?: string | null;
 };
 
 export function MoneyStrip(props: {
@@ -55,14 +85,14 @@ export function MoneyStrip(props: {
               data-testid={figure.testId}
               className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]"
             >
-              {money(figure.cents)}
+              {figure.valueText ?? money(figure.cents)}
             </span>
           ) : (
             <span
               data-testid={figure.testId}
               className="money text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-text)]"
             >
-              {money(figure.cents)}
+              {figure.valueText ?? money(figure.cents)}
             </span>
           )}
           {figure.note ? (
@@ -103,6 +133,13 @@ export function DealMoneyStrip(props: {
         })
       : null;
 
+  // "Collected $X of $Y" once a job is only partly paid (packet task 6): the
+  // label already says Collected, so this is just the fraction, not a whole
+  // sentence repeating the word.
+  const collectedCents = money?.collectedCents ?? 0;
+  const invoicedCents = money?.invoicedCents ?? 0;
+  const partlyCollected = collectedCents > 0 && collectedCents < invoicedCents;
+
   return (
     <MoneyStrip
       testId="deal-money"
@@ -115,8 +152,15 @@ export function DealMoneyStrip(props: {
           note: breakdown,
           testId: "deal-value",
         },
-        { label: "Invoiced", cents: money?.invoicedCents ?? 0, testId: "deal-invoiced" },
-        { label: "Collected", cents: money?.collectedCents ?? 0, testId: "deal-collected" },
+        { label: "Invoiced", cents: invoicedCents, testId: "deal-invoiced" },
+        {
+          label: "Collected",
+          cents: collectedCents,
+          valueText: partlyCollected
+            ? paidOfLabel(collectedCents, invoicedCents, props.currency)
+            : null,
+          testId: "deal-collected",
+        },
         {
           label: "Outstanding",
           cents: money?.outstandingCents ?? 0,
@@ -138,7 +182,11 @@ export function DealMoneyStrip(props: {
  * screen still wrong about the person (CPO audit, F-LA-14; ruling R1 added
  * `openCents`).
  */
-export function CustomerMoneyStrip(props: { money: MoneyTotals | undefined }) {
+export function CustomerMoneyStrip(props: {
+  money: MoneyTotals | undefined;
+  /** What this customer still owes, across every invoice (packet task 5). */
+  balanceCents?: number;
+}) {
   const money = props.money;
   return (
     <MoneyStrip
@@ -156,7 +204,190 @@ export function CustomerMoneyStrip(props: { money: MoneyTotals | undefined }) {
           cents: money?.collectedCents ?? 0,
           testId: "customer-collected",
         },
+        {
+          label: "Balance",
+          cents: props.balanceCents ?? 0,
+          testId: "customer-balance",
+        },
       ]}
     />
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* LR-PX-A / W2: the customer's balance and their recent payments             */
+/* -------------------------------------------------------------------------- */
+
+/** What this contact or company still owes, across every invoice. */
+export function useCustomerBalance(ref: CustomerRef) {
+  const contactId = ref.contactId ?? null;
+  const companyId = ref.companyId ?? null;
+  return useQuery({
+    queryKey: ["money", "customer-balance", contactId, companyId] as const,
+    queryFn: () => money.customerBalanceCents({ contactId, companyId }),
+    enabled: contactId !== null || companyId !== null,
+  });
+}
+
+/** The customer's most recent payments, newest first, trimmed to `limit`. */
+function useCustomerPayments(ref: CustomerRef, limit: number) {
+  const contactId = ref.contactId ?? null;
+  const companyId = ref.companyId ?? null;
+  return useQuery({
+    queryKey: ["invoices", "customer-payments", contactId, companyId] as const,
+    queryFn: async () => {
+      const rows = await paymentsRepo.listForCustomer({ contactId, companyId });
+      return rows.slice(0, limit);
+    },
+    enabled: contactId !== null || companyId !== null,
+  });
+}
+
+/**
+ * The period picker behind "Statement…": two dates, defaulting to this month,
+ * then `saveStatementPdf` (W3's file - `src/features/invoices/lib/
+ * statementFile.ts`). Loaded dynamically, the way `DocumentPage.writePdf`
+ * already loads `pdfFile.ts`: nothing needs pdf-lib until the owner asks for
+ * one.
+ */
+function StatementDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  contactId: string | null;
+  companyId: string | null;
+  name: string;
+}) {
+  const { open, onOpenChange, contactId, companyId, name } = props;
+  const [fromDay, setFromDay] = useState<string | null>(null);
+  const [toDay, setToDay] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const today = todayLocal();
+    setFromDay(`${today.slice(0, 7)}-01`);
+    setToDay(today);
+    setError(null);
+  }, [open]);
+
+  async function confirm() {
+    if (!fromDay || !toDay) {
+      setError("Pick a start and an end date.");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const { saveStatementPdf } = await import("@/features/invoices/lib/statementFile");
+      const result = await saveStatementPdf({
+        ref: { contactId, companyId },
+        name,
+        fromDay,
+        toDay,
+      });
+      if (result.path) {
+        toast.success(`Saved ${result.path.split(/[\\/]/).pop()}`);
+      }
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That statement could not be saved.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm" data-testid="statement-dialog">
+        <DialogHeader>
+          <DialogTitle>Statement for {name}</DialogTitle>
+          <DialogDescription>Choose the period the statement covers.</DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-[var(--space-4)]">
+          <Field label="From">
+            <DatePicker aria-label="From" value={fromDay} onChange={setFromDay} />
+          </Field>
+          <Field label="To" error={error ?? undefined}>
+            <DatePicker aria-label="To" value={toDay} onChange={setToDay} />
+          </Field>
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={pending}>
+            Cancel
+          </Button>
+          <Button variant="primary" loading={pending} onClick={() => void confirm()}>
+            Save statement
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The money card's payments half: a short list of what this customer has
+ * recently paid, and the way to a full statement. Kept short on purpose - the
+ * full story is what the statement is for (packet task 5).
+ */
+export function CustomerPaymentsCard(props: {
+  contactId?: string | null;
+  companyId?: string | null;
+  /** The customer's display name, for the statement's title and file name. */
+  name: string;
+}) {
+  const contactId = props.contactId ?? null;
+  const companyId = props.companyId ?? null;
+  const formats = useFormats();
+  const { data: payments } = useCustomerPayments({ contactId, companyId }, 5);
+  const [statementOpen, setStatementOpen] = useState(false);
+  const rows = payments ?? [];
+
+  return (
+    <div>
+      <CardGroupLabel>Payments</CardGroupLabel>
+      <Card>
+        {rows.length === 0 ? (
+          <EmptyState
+            variant="quiet"
+            title="Nothing recorded from this customer yet."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => setStatementOpen(true)}>
+                Statement…
+              </Button>
+            }
+          />
+        ) : (
+          <>
+            {rows.map((payment) => (
+              <CardRow key={payment.id}>
+                <span className="min-w-0 flex-1 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                  {formats.date(payment.paidOn)} · {payment.documentNumber} ·{" "}
+                  {methodLabel(payment.method)}
+                </span>
+                <span className="money flex-none text-right text-[length:var(--text-base)] text-[var(--color-text)]">
+                  {formats.money(payment.amountCents)}
+                </span>
+              </CardRow>
+            ))}
+            <CardRow className="justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setStatementOpen(true)}>
+                Statement…
+              </Button>
+            </CardRow>
+          </>
+        )}
+      </Card>
+
+      <StatementDialog
+        open={statementOpen}
+        onOpenChange={setStatementOpen}
+        contactId={contactId}
+        companyId={companyId}
+        name={props.name}
+      />
+    </div>
   );
 }

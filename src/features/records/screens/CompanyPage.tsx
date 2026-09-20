@@ -42,7 +42,11 @@ import { oneTap, safeExternalUrl } from "@/lib/actions";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { SourcePicker } from "@/features/records/components/Pickers";
-import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
+import {
+  CustomerMoneyStrip,
+  CustomerPaymentsCard,
+  useCustomerBalance,
+} from "@/features/records/components/MoneyStrip";
 import { DealsCard } from "@/features/records/components/DealsCard";
 import { AddressPanel } from "@/features/records/components/AddressPanel";
 import { TagEditor } from "@/features/records/components/TagEditor";
@@ -59,6 +63,7 @@ export function CompanyPage() {
   const vocabulary = useVocabulary();
   const { data: company, isLoading } = useCompany(id);
   const { data: money } = useCustomerMoney({ companyId: id });
+  const { data: balance } = useCustomerBalance({ companyId: id });
   const { data: counts } = useCompanyCounts(id);
   const { data: contacts } = useContacts({ companyId: id }, 500);
   const { data: openDeals } = useDeals({ companyId: id, openOnly: true }, 200);
@@ -236,7 +241,7 @@ export function CompanyPage() {
 
       {/* Lifetime money, from src/db/repos/money.ts - the one definition of
           these figures (round 3, "Money model"). */}
-      <CustomerMoneyStrip money={money} />
+      <CustomerMoneyStrip money={money} balanceCents={balance} />
 
       <div className="grid grid-cols-1 gap-[var(--space-5)] xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
@@ -298,6 +303,8 @@ export function CompanyPage() {
 
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
           <TaskRail companyId={id} />
+
+          <CustomerPaymentsCard companyId={id} name={company.name} />
 
           <div>
             <CardGroupLabel>Reminders</CardGroupLabel>

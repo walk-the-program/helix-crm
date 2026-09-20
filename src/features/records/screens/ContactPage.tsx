@@ -69,7 +69,11 @@ import { dueLabel } from "@/features/records/lib/taskGroups";
 import { todayLocal } from "@/lib/dates";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { CompanyPicker, SourcePicker } from "@/features/records/components/Pickers";
-import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
+import {
+  CustomerMoneyStrip,
+  CustomerPaymentsCard,
+  useCustomerBalance,
+} from "@/features/records/components/MoneyStrip";
 import { DealsCard } from "@/features/records/components/DealsCard";
 import { PhoneList, EmailList } from "@/features/records/components/ContactMethods";
 import { AddressPanel } from "@/features/records/components/AddressPanel";
@@ -102,6 +106,7 @@ export function ContactPage() {
   // This person's own money, not their company's: two contacts at the same
   // company must not each appear to be worth the company's whole history.
   const { data: money } = useCustomerMoney({ contactId: id });
+  const { data: balance } = useCustomerBalance({ contactId: id });
   const { data: openTasks } = useTasks({ contactId: id, openOnly: true }, 20);
   const vocabulary = useVocabulary();
   const formats = useFormats();
@@ -331,7 +336,7 @@ export function ContactPage() {
 
         {/* Lifetime money, from src/db/repos/money.ts - the one definition of
             these figures (round 3, "Money model"). */}
-        <CustomerMoneyStrip money={money} />
+        <CustomerMoneyStrip money={money} balanceCents={balance} />
       </header>
 
       <div className="grid grid-cols-1 gap-[var(--space-6)] xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -364,6 +369,8 @@ export function ContactPage() {
           />
 
           <TaskRail contactId={id} />
+
+          <CustomerPaymentsCard contactId={id} name={name} />
 
           <div>
             <CardGroupLabel>Reminders</CardGroupLabel>
