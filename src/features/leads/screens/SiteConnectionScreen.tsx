@@ -54,6 +54,7 @@ import {
 import { invokeLeadsFetch } from "@/features/leads/lib/leadsFetch";
 import { POLL_INTERVAL_MS, refresh, tick } from "@/features/leads/poller";
 import { statusFromError, isAuthStatus } from "@/features/leads/lib/backoff";
+import { messageFrom } from "@/lib/errors";
 
 const POLL_MINUTES = POLL_INTERVAL_MS / 60_000;
 
@@ -67,28 +68,6 @@ class TokenError extends Error {
     super(message);
     this.name = "TokenError";
   }
-}
-
-/**
- * The readable text out of whatever this screen's mutations rejected with.
- *
- * `setSiteToken`, `disconnectSite` and `invokeLeadsFetch` (through
- * `saveSiteOrigin` / the keychain / `leads_fetch`) all end in a raw
- * `invoke()`, and Tauri v2 rejects a command with a plain `{ code, message }`
- * object, not an `Error` - the exact trap `src/features/leads/poller.ts` and
- * `src/features/data/lib/backupsFs.ts` already name and fix (F-LB-6):
- * `err instanceof Error` is false for that shape, and `String(err)` on a
- * plain object gives "[object Object]", which this screen was showing
- * verbatim under the address or token field, or in the disconnect toast, for
- * any real keychain or network failure.
- */
-function messageFrom(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null) {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return String(err);
 }
 
 export function SiteConnectionScreen() {

@@ -62,6 +62,7 @@ import { formatBytes, totalBytes } from "@/features/data/lib/retention";
 import { getBackupStatus, subscribeBackupStatus } from "@/features/data/backups/scheduler";
 import { workspacePaths } from "@/features/data/lib/workspace";
 import { useFormats } from "@/app/formats";
+import { messageFrom } from "@/lib/errors";
 
 function useBackupsDir(): string | null {
   const [dir, setDir] = useState<string | null>(null);
@@ -75,20 +76,6 @@ function useBackupsDir(): string | null {
     };
   }, []);
   return dir;
-}
-
-/**
- * Tauri rejects a command with a plain `{ code, message }` object rather than
- * an Error, so `String(err)` on the shape this screen sees most often gives
- * "[object Object]" (the same trap the lead poller fell into, F-LB-6).
- */
-function messageFrom(err: unknown, fallback: string): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null) {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return fallback;
 }
 
 /**

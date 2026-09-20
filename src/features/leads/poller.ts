@@ -61,6 +61,7 @@ import {
   type PollError,
   type PollStatus,
 } from "@/features/leads/lib/types";
+import { messageFrom } from "@/lib/errors";
 
 /* -------------------------------------------------------------------------- */
 /* the store                                                                  */
@@ -521,25 +522,6 @@ function codeFrom(err: unknown): string | null {
   if (typeof err !== "object" || err === null) return null;
   const code = (err as { code?: unknown }).code;
   return typeof code === "string" ? code : null;
-}
-
-/**
- * The readable text out of whatever a rejected `invoke()` carries.
- *
- * Tauri v2 rejects a command with a plain `{ code, message }` object, not an
- * `Error` (docs/CONTRACTS.md's binding facts for this task) - so
- * `err instanceof Error` was false for the one shape this poller sees the
- * most, and `String(err)` on a plain object gives "[object Object]". Settings
- * → Website was showing "LeadPollAuthError: HTTP 401 - [object Object]"
- * instead of the site's real answer (CPO audit, F-LB-6).
- */
-function messageFrom(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null) {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return String(err);
 }
 
 async function saveError(syncKey: string, message: string): Promise<void> {

@@ -49,6 +49,7 @@ import {
 } from "@/features/data/lib/fsBridge";
 import { workspacePaths } from "@/features/data/lib/workspace";
 import { useFormats } from "@/app/formats";
+import { messageFrom } from "@/lib/errors";
 
 const UNDO_MS = 10_000;
 
@@ -58,26 +59,6 @@ export type CopiedFile = { storedName: string; bytes: number; mime: string };
 export async function copyFileIntoWorkspace(src: string): Promise<CopiedFile> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<CopiedFile>("copy_in", { src });
-}
-
-/**
- * The readable text out of whatever `copy_in` rejected with.
- *
- * Tauri v2 rejects a command with a plain `{ code, message }` object, not an
- * `Error` - the trap `src/features/leads/poller.ts` and
- * `src/features/data/lib/backupsFs.ts` already name and fix (F-LB-6):
- * `err instanceof Error` is false for that shape, and `String(err)` on a
- * plain object gives "[object Object]", which `add()` below was showing
- * inline as "Helix could not attach that file. [object Object]" for any
- * `copy_in` refusal the oversized-file regex did not already recognise.
- */
-function messageFrom(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null) {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return String(err);
 }
 
 export function formatFileSize(bytes: number): string {

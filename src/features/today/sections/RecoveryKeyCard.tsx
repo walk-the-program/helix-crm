@@ -38,19 +38,7 @@ import {
   canConfirmRecoveryKey,
   shouldShowRecoveryKeyCard,
 } from "@/features/today/lib/recoveryKeyCard";
-
-/**
- * Tauri rejects a command with a plain `{ code, message }` object rather than
- * an Error (the same trap BackupsScreen.tsx's own `messageFrom` exists for).
- */
-function messageFrom(err: unknown, fallback: string): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null) {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") return message;
-  }
-  return fallback;
-}
+import { messageFrom } from "@/lib/errors";
 
 async function readConfirmedAt(): Promise<string | null> {
   const value = await settingsRepo.getRaw(RECOVERY_KEY_CONFIRMED_AT_KEY);
