@@ -82,11 +82,11 @@
      Walker looked at the shipped app and called the offset outline sloppy: at
      26px in the sidebar the ring reads as a printing
      misregistration rather than as a sticker, and every screen that borrowed
-     it for a hero button turned the page into a collage. The token stays,
-     resolving to `none`, so a call site that still carries
-     `shadow-[var(--shadow-sticker)]` renders flat while the feature leads
-     remove the class from their own screens. The brand's one loud element is
-     now the flat primary block and nothing else.                             */
+     it for a hero button turned the page into a collage. Every call site is
+     gone; the token survives at `none` only so a stray class in a branch or
+     an old doc renders flat instead of breaking. Do not give it a value
+     again. The brand's one loud element is the flat primary block and
+     nothing else.                                                            */
   --shadow-sticker: none;
 
   /* --- Type ---------------------------------------------------------------
