@@ -13,7 +13,6 @@
  */
 import { useState } from "react";
 import type { ReactElement } from "react";
-import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   Badge,
@@ -108,18 +107,6 @@ export function TrashScreen(): ReactElement {
           <EmptyState
             title="Trash is empty"
             description="Nothing has been deleted in the last 30 days."
-            action={
-              <Link
-                href="/contacts"
-                className={[
-                  "text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
-                  "underline-offset-2 hover:underline",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
-                ].join(" ")}
-              >
-                Back to Contacts
-              </Link>
-            }
           />
         ) : totalCount === null ? null : (
           <Tabs value={activeType} onValueChange={(value) => setActiveType(value as TrashEntityType)}>

@@ -77,7 +77,7 @@ export function TaskComposer(props: {
               ref={titleRef}
               id={titleId}
               autoFocus={autoFocus}
-              placeholder="Follow up with Brent about the estimate"
+              placeholder="What do you need to do?"
               value={title}
               invalid={Boolean(error)}
               onChange={(event) => {

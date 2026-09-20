@@ -109,15 +109,7 @@ export function TasksScreen(): ReactElement {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title="Tasks"
-        subtitle={subtitle}
-        actions={
-          <Button variant="secondary" onClick={focusComposer}>
-            New task
-          </Button>
-        }
-      />
+      <PageHeader title="Tasks" subtitle={subtitle} />
 
       <div className="flex flex-col gap-[var(--space-4)] py-[var(--space-4)]">
         <div ref={composerRef}>
