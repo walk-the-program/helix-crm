@@ -260,6 +260,7 @@ export const sample: SampleSet = {
     {
       key: "dl-wasatch-spring",
       title: "Spring cleanup, nine rentals",
+      // 9 x $350 + 6 x $450 = $5,850, which is what the lines below come to.
       value: 5850,
       stage: "Scheduled",
       contactKey: "ct-tabitha",
@@ -269,6 +270,10 @@ export const sample: SampleSet = {
       stageDays: 5,
       expectedInDays: 6,
       fields: { "Service type": "Cleanup" },
+      items: [
+        { service: "Spring cleanup", qty: 9, description: "One visit per rental, beds and borders." },
+        { service: "Mulch installation", qty: 6, description: "Six of the nine need new bark." },
+      ],
     },
     {
       key: "dl-brightwood-sod",
@@ -286,6 +291,8 @@ export const sample: SampleSet = {
     {
       key: "dl-sprinkler-zone",
       title: "Sprinkler repair, zone 3",
+      // $150 + $530 = $680. The custom line is the point: it shows the "this
+      // was not in my catalogue" path sitting beside a catalogue line.
       value: 680,
       stage: "Work done",
       contactKey: "ct-hollis",
@@ -293,11 +300,31 @@ export const sample: SampleSet = {
       ageDays: 9,
       stageDays: 2,
       fields: { "Service type": "Sprinklers" },
+      items: [
+        { service: "Irrigation startup", qty: 1 },
+        {
+          name: "Sprinkler repair, zone 3",
+          description: "Two cracked heads and the zone valve.",
+          qty: 1,
+          price: 530,
+        },
+      ],
     },
     {
       key: "dl-summit-fence",
       title: "Weed control, 600 feet of fence line",
-      value: 1450,
+      /*
+       * $3,610, not $1,450: `value_cents` is the ANNUAL value — one-time plus
+       * twelve months of any recurring line — and this deal now carries a
+       * $180/month maintenance line, so $1,450 + 12 x $180 = $3,610.
+       *
+       * It is the only won deal in the set, which is what makes the recurring
+       * line worth having here: `invoiceSchedules.ensureForWonDeal` picks it
+       * up, so the example finally shows a billing schedule, an MRR of $180
+       * and an ARR of $2,160 instead of three empty reports. Approved by the
+       * coordinator (R9, requirement 1).
+       */
+      value: 3610,
       stage: "Paid",
       contactKey: "ct-royce",
       companyKey: "co-summit-storage",
@@ -305,10 +332,26 @@ export const sample: SampleSet = {
       ageDays: 34,
       stageDays: 8,
       fields: { "Service type": "Maintenance" },
+      items: [
+        {
+          name: "Weed control, 600 feet of fence line",
+          description: "Cut back, treated and cleared along the east boundary.",
+          qty: 1,
+          price: 1450,
+        },
+        {
+          service: "Monthly lawn maintenance",
+          qty: 1,
+          description: "Grounds either side of the office.",
+        },
+      ],
     },
     {
       key: "dl-kettle-planters",
       title: "Patio planters, spring swap",
+      // $450 + $350 + 2 x $60 = $920. The mowing visits went out at $60
+      // against a $65 catalogue price, so the deal page's services panel shows
+      // a real discount row rather than a hypothetical one.
       value: 920,
       stage: "Paid",
       contactKey: "ct-imogen",
@@ -317,6 +360,16 @@ export const sample: SampleSet = {
       ageDays: 41,
       stageDays: 12,
       fields: { "Service type": "Maintenance" },
+      items: [
+        { service: "Mulch installation", qty: 1 },
+        { service: "Spring cleanup", qty: 1 },
+        {
+          service: "Mowing visit",
+          qty: 2,
+          actualPrice: 60,
+          description: "Two tidy-ups either side of the swap.",
+        },
+      ],
     },
     {
       key: "dl-brackenbury-beds",
@@ -519,6 +572,48 @@ export const sample: SampleSet = {
       dueInDays: 9,
       contactKey: "ct-nadine",
       companyKey: "co-alta-dental",
+    },
+  ],
+
+  /*
+   * Two invoices, which is what turns the money half of the product from a row
+   * of empty states into something an owner can read (R9).
+   *
+   * One paid and one overdue on purpose: the paid one gives Collected and the
+   * Receivables "collected this month" line something to say, and the overdue
+   * one gives the Invoices list, Today's unpaid section and the Receivables
+   * aging table a row each. Both are `one_time`, so the monthly maintenance
+   * line on the fence deal is left to the billing schedule rather than being
+   * charged twice.
+   */
+  documents: [
+    {
+      /*
+       * The invoice the set's own timeline already talks about: "Summit paid
+       * the fence line the day it was invoiced. Ask about the back lot."
+       * Until now that note described an invoice that did not exist.
+       */
+      kind: "invoice",
+      dealKey: "dl-summit-fence",
+      status: "paid",
+      lines: "one_time",
+      issuedDaysAgo: 26,
+      dueInDays: 14,
+      paidDaysAgo: 26,
+      paidMethod: "bank",
+    },
+    {
+      /*
+       * Issued 30 days ago on 14-day terms, so it is sixteen days over and
+       * lands in the 1-30 bucket: late enough to be worth chasing, not so late
+       * that the example looks like a failing business.
+       */
+      kind: "invoice",
+      dealKey: "dl-sprinkler-zone",
+      status: "sent",
+      lines: "one_time",
+      issuedDaysAgo: 30,
+      dueInDays: 14,
     },
   ],
 };

@@ -54,6 +54,63 @@ export type SampleContact = {
   fields?: Record<string, string>;
 };
 
+/**
+ * One priced line on a sample deal (R9).
+ *
+ * Until this existed a sample deal carried a typed `value` and nothing else,
+ * so the whole money half of the product demoed as an empty state: /services
+ * said "No deals" against every service, every deal page said "Nothing priced
+ * yet", and Invoiced and Collected were $0 on every strip and every report.
+ *
+ * A set is not expected to price every deal. A real owner has costed some jobs
+ * properly and scribbled a number on the others, and both states have to look
+ * right, so a deal with no `items` keeps its typed `value` exactly as before.
+ */
+export type SampleDealItem = {
+  /**
+   * A service name from the trade's preset, matched exactly. The loader finds
+   * the product it created for that preset row and links `product_id`, so the
+   * Services page's deal counts are real. Leave it out for a custom line —
+   * work that was never in the catalogue, which is the other half of how an
+   * owner prices a job.
+   */
+  service?: string;
+  /** Required on a custom line; otherwise the service's own name is used. */
+  name?: string;
+  description?: string;
+  /** Defaults to 1. */
+  qty?: number;
+  /**
+   * Whole dollars, and only when the owner charged something other than the
+   * catalogue price — that difference is what puts a real discount row on the
+   * deal page instead of a hypothetical one.
+   */
+  actualPrice?: number;
+  /** Whole dollars. Required on a custom line, ignored on a catalogue line. */
+  price?: number;
+};
+
+/** A quote or invoice the sample week already raised against a deal (R9). */
+export type SampleDocument = {
+  kind: "quote" | "invoice";
+  /** The deal it belongs to. Every document belongs to a deal (round 3). */
+  dealKey: string;
+  status: "sent" | "paid";
+  /**
+   * Which of the deal's lines go on it. "one_time" is what an invoice for the
+   * work carries: the recurring lines are billed month by month by the
+   * schedule, and putting them on this invoice as well would bill them twice.
+   */
+  lines: "all" | "one_time";
+  /** Days ago it was issued. */
+  issuedDaysAgo: number;
+  /** Days from issue to the due date. 14 is the workspace default. */
+  dueInDays?: number;
+  /** Days ago the money arrived. Required when `status` is "paid". */
+  paidDaysAgo?: number;
+  paidMethod?: "bank" | "card" | "cash" | "cheque" | "other";
+};
+
 export type SampleDeal = {
   key: string;
   title: string;
@@ -71,6 +128,14 @@ export type SampleDeal = {
   /** Days from now the owner expects to close it. */
   expectedInDays?: number;
   fields?: Record<string, string>;
+  /**
+   * The priced lines, if this deal was costed. When present the loader calls
+   * `dealItems.recompute`, which is the only writer of `value_cents`, so the
+   * lines are the source of truth and `value` above is only the figure the
+   * deal carries until they land. Keep the two in step: every set's invariant
+   * test checks that a priced deal's lines add up to its stated value.
+   */
+  items?: SampleDealItem[];
 };
 
 export type SampleActivity = {
@@ -99,6 +164,12 @@ export type SampleSet = {
   deals: SampleDeal[];
   activities: SampleActivity[];
   tasks: SampleTask[];
+  /**
+   * Quotes and invoices already raised against the set's deals. Optional: a
+   * trade whose sample has not been given money yet simply has none, and
+   * loads exactly as it did before (R9).
+   */
+  documents?: SampleDocument[];
 };
 
 /** The tag every sample row carries, and the one thing removal looks for. */

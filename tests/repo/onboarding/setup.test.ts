@@ -174,6 +174,10 @@ describe("the sample data set", () => {
     const counts = await loadSampleData("landscaping");
     const set = SAMPLES.landscaping;
     expect(counts).toEqual({
+      // R9: the set now carries priced lines and two invoices, raised through
+      // the repositories after the transactional phase.
+      dealItems: set.deals.reduce((n, d) => n + (d.items?.length ?? 0), 0),
+      documents: (set.documents ?? []).length,
       companies: set.companies.length,
       contacts: set.contacts.length,
       deals: set.deals.length,
@@ -184,9 +188,18 @@ describe("the sample data set", () => {
     expect((await contacts.list({}, { limit: 100 })).total).toBe(set.contacts.length);
     expect((await companies.list({}, { limit: 100 })).total).toBe(set.companies.length);
     expect((await deals.list({}, { limit: 100 })).total).toBe(set.deals.length);
-    expect((await activities.list({ includeSystem: true }, { limit: 100 })).total).toBe(
+    /*
+     * The set's own activities are the ones it authored; the documents raised
+     * in phase two add their own system timeline entries on top ("Invoice
+     * INV-0001 sent, $1,450.00"), which is the behaviour the example exists to
+     * demonstrate. So the two are counted separately rather than summed into a
+     * number nobody can check.
+     */
+    expect((await activities.list({ includeSystem: false }, { limit: 200 })).total).toBe(
       set.activities.length,
     );
+    const withSystem = (await activities.list({ includeSystem: true }, { limit: 200 })).total;
+    expect(withSystem).toBeGreaterThan(set.activities.length);
     expect((await tasks.list({}, { limit: 100 })).total).toBe(set.tasks.length);
     expect(await readSampleLoadedAt()).toBeTruthy();
 
@@ -229,6 +242,13 @@ describe("the sample data set", () => {
     await applyPlan(planFromPreset(PRESETS.landscaping));
     await loadSampleData("landscaping");
 
+    // R9: the example now raises real invoices, so prove they were there
+    // before proving they are gone — an assertion against a table that was
+    // already empty proves nothing.
+    expect(await countRows("deal_items")).toBeGreaterThan(0);
+    expect(await countRows("documents")).toBe(2);
+    expect(await countRows("document_items")).toBeGreaterThan(0);
+
     const result = await removeSampleData();
     expect(result.removed).toBeGreaterThan(0);
 
@@ -242,6 +262,13 @@ describe("the sample data set", () => {
       "contact_phones",
       "contact_emails",
       "custom_values",
+      // The money the example brought with it. `documents.deal_id` is ON
+      // DELETE SET NULL, so an invoice raised against a sample deal would
+      // otherwise survive its deal and float free of any record.
+      "deal_items",
+      "documents",
+      "document_items",
+      "invoice_schedules",
       "tag_links",
       "tags",
     ]) {
