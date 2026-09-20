@@ -1,14 +1,19 @@
 /**
  * AR aging: what customers owe, grouped by how late it is.
  *
- * Built from `Card` / `CardRow` / `CardGroupLabel` in `@/ui` rather than
- * Today's `Panel` - this lives on a reports screen, not on Today, and the
- * house pattern for a grouped figure on a reports or record screen is the
- * card, the way `DealPage.tsx` uses it for the deal's own identity panel.
+ * A real `<table>`, from the kit (F-LB-D8). It was a `Card` of `CardRow`s with
+ * hand-measured `w-[3ch]` and `w-[9ch]` spans faking columns, which meant the
+ * one money table on Receivables was the one money table in the product that
+ * got none of the kit's treatment: no `TH` semantics for a screen reader, no
+ * shared numeric alignment, and no `dashZero`, so an empty bucket printed
+ * "$0.00" where every other period table in Reports now prints an em dash.
+ * Five buckets are always rendered, including the empty ones, because the
+ * shape of the ageing is the report - a gap at "Over 90 days" is the number
+ * the owner is looking for.
  *
  * This is the one primary block on the screen it sits on (DESIGN.md §5, §9):
- * the total owed gets the flat accent fill and the sticker shadow, drawn the
- * same way `DealPage.tsx` draws the deal value, and nothing else here is
+ * the total owed gets the flat accent fill, drawn the same way
+ * `DealPage.tsx` draws the deal value, and nothing else here is
  * coloured - an overdue bucket is not a warning, it is a row with a number in
  * it (§5 "What has no colour" names the word "overdue" explicitly). Takes no
  * required props so a second screen can mount it with one line.
@@ -20,7 +25,18 @@
  * a formatted "$1,234.56" string a spreadsheet would read as text.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Button, Card, CardGroupLabel, CardRow, toast } from "@/ui";
+import {
+  Button,
+  CardGroupLabel,
+  EmptyState,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  Table,
+  toast,
+} from "@/ui";
 import { useFormats } from "@/app/formats";
 import { todayLocal } from "@/lib/dates";
 import { iqk } from "@/features/invoices/lib/hooks";
@@ -82,50 +98,55 @@ export function AgingBlock() {
           </Button>
         )}
       </div>
-      <Card>
-        {isLoading ? (
-          <div className="px-[var(--space-4)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Reading the database.
-          </div>
-        ) : nothingOwed ? (
-          <div className="px-[var(--space-4)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Nothing owed to you right now.
-          </div>
-        ) : (
-          <>
+      {isLoading ? (
+        <p className="py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          Reading the database.
+        </p>
+      ) : nothingOwed ? (
+        <EmptyState variant="quiet" title="Nothing owed to you right now." />
+      ) : (
+        <Table>
+          <THead>
+            <TR>
+              <TH className="w-[56%]">How late</TH>
+              <TH className="w-[14%]" align="right">
+                Invoices
+              </TH>
+              <TH className="w-[30%]" align="right">
+                Amount
+              </TH>
+            </TR>
+          </THead>
+          <TBody>
             {aging!.rows.map((row) => (
-              <CardRow key={row.bucket}>
-                <span className="text-[var(--color-text)]">{BUCKET_LABELS[row.bucket]}</span>
-                <div className="flex items-baseline gap-[var(--space-6)]">
-                  <span className="tabular w-[3ch] text-right text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                    {row.count}
-                  </span>
-                  <span className="money w-[9ch] text-right text-[var(--color-text)]">
-                    {money(row.cents)}
-                  </span>
-                </div>
-              </CardRow>
+              <TR key={row.bucket}>
+                <TD primary>{BUCKET_LABELS[row.bucket]}</TD>
+                <TD align="right" muted dashZero={row.count === 0}>
+                  {row.count === 0 ? "—" : row.count}
+                </TD>
+                <TD align="right" className="money" dashZero={row.cents === 0}>
+                  {row.cents === 0 ? "—" : money(row.cents)}
+                </TD>
+              </TR>
             ))}
-            {/* Extra vertical room: the accent block wears the 4px sticker
-                overhang, and DESIGN.md section 3 is explicit that the offset
-                needs space under it or it reads as a smear against the next
-                hairline rather than as an offset card. */}
-            <CardRow className="border-t border-[var(--color-border-strong)] py-[var(--space-4)]">
-              <span className="font-medium text-[var(--color-text)]">Total owed</span>
-              <div className="flex items-baseline gap-[var(--space-6)]">
-                <span className="tabular w-[3ch] text-right text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  {aging!.totalCount}
-                </span>
-                {/* The one primary block on this screen, drawn exactly the way
-                    DealPage.tsx draws the deal value. */}
-                <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
+            {/* The total is the screen's one primary block, drawn the way
+                DealPage.tsx draws the deal value. It sits in the table rather
+                than under it so the figure lines up with the column it totals
+                - the whole point of making this a table. */}
+            <TR className="border-t border-[var(--color-border-strong)]">
+              <TD primary>Total owed</TD>
+              <TD align="right" muted>
+                {aging!.totalCount}
+              </TD>
+              <TD align="right">
+                <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-3)] py-[var(--space-1)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
                   {money(aging!.totalCents)}
                 </span>
-              </div>
-            </CardRow>
-          </>
-        )}
-      </Card>
+              </TD>
+            </TR>
+          </TBody>
+        </Table>
+      )}
       {/* "Collected this month: $0.00 across 0 invoices" is not a fact worth
           printing - it is silent, the same way the aging card above says
           nothing at all rather than "Nothing owed: $0.00" (F-LB-11c). */}
