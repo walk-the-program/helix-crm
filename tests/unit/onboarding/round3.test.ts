@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 const SITE_SENTENCE =
-  "Connect a website that sends leads to Helix. Sites built by ClearPath work out of the box; any site can implement the endpoint described in Help, which Helix polls for new leads.";
+  "Leads from your website land here on their own. ClearPath sites work straight away; Help covers any other site.";
 
 describe("ChoiceTile sizing", () => {
   it("carries the same min-height class whether or not it has a hint", () => {

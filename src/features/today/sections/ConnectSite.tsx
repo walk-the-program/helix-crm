@@ -40,9 +40,8 @@ export function ConnectSiteCard() {
           Send quote-form leads straight here
         </h2>
         <p className="mt-[var(--space-2)] max-w-[var(--content-max)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-          Connect a website that sends leads to Helix. Sites built by
-          ClearPath work out of the box; any site can implement the endpoint
-          described in Help, which Helix polls for new leads.
+          Leads from your website land here on their own. ClearPath sites
+          work straight away; Help covers any other site.
         </p>
         <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
           <Link

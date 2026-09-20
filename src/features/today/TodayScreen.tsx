@@ -204,7 +204,7 @@ function FirstRun() {
         />
         <StarterCard
           title="Connect a website"
-          description="Connect a website that sends leads to Helix. Sites built by ClearPath work out of the box; any site can implement the endpoint described in Help, which Helix polls for new leads."
+          description="Leads from your website land here on their own. ClearPath sites work straight away; Help covers any other site."
           action={
             <Link href="/settings/site" className={secondaryLinkClasses}>
               Connect website

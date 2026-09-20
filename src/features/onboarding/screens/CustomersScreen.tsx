@@ -24,7 +24,13 @@ const CHOICES: { id: CustomersChoice; title: string; body: string }[] = [
   {
     id: "site",
     title: "Connect a website",
-    body: "Connect a website that sends leads to Helix. Sites built by ClearPath work out of the box; any site can implement the endpoint described in Help, which Helix polls for new leads.",
+    // Was four sentences of developer language ("any site can implement the
+    // endpoint described in Help, which Helix polls for new leads") on a card
+    // read by a landscaper, and long enough that the grid row stretched its
+    // two-line neighbour into five lines of empty white. The endpoint detail
+    // belongs in Help, which is where this now points.
+    body:
+      "Leads from your website land here on their own. ClearPath sites work straight away; Help covers any other site.",
   },
   {
     id: "sample",
