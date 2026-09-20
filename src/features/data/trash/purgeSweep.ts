@@ -33,16 +33,52 @@
  * paid document is never handed over, because purging it would cut a real
  * piece of paper loose (ruling R6b) — so this file never has to know that rule
  * exists.
+ *
+ * SEC audit addendum (launch round 2026-09-20). Two more things ride the same
+ * once-a-day beat, because they are the same finding as the one above (a
+ * screen or a promise saying data is gone while the file or the row is still
+ * there):
+ *
+ * 4. **A purged quote or invoice's PDF, when it is where Helix put it.**
+ *    `documents` rows purge like anything else, but the rendered PDF
+ *    `pdfFile.ts` wrote is a separate file the row only points at, and nothing
+ *    was removing it — the exact shape of the attachment gap this file was
+ *    already written to close. Only the copy inside this workspace's own
+ *    `documents/` folder (`workspacePaths().documentsDir`) is ever touched: the
+ *    save dialog lets the owner send a PDF anywhere else on the machine, and a
+ *    path Helix does not own is not this sweep's to delete.
+ * 5. **`change_log` rows past a bounded window.** Every create, update and
+ *    delete is logged with the field values it touched, forever, so that
+ *    Cmd+Z can replay it — but `src/app/undo.ts` empties its in-memory stack on
+ *    every `db_open`, so no batch a running session could ever undo is older
+ *    than that session's own launch. A row's only other job is letting
+ *    `merge.reverse` re-point what a merge moved, which is refused past
+ *    `MERGE_REVERSAL_DAYS` (30) anyway. Kept forever, a purged contact's name,
+ *    phone or notes stay recoverable from `before_json`/`after_json`
+ *    indefinitely, which is the opposite of what "removes them for good"
+ *    means. `CHANGE_LOG_RETENTION_DAYS` in `lib/retention.ts` bounds it well
+ *    past that 30-day floor so it can never race a legitimate merge reversal.
  */
 import { timersPaused } from "@/db/writeLock";
+import { withWrite } from "@/db/writeLock";
+import { raw } from "@/db/client";
 import { queryClient } from "@/app/queryClient";
 import * as trash from "@/db/repos/trash";
 import { newBatchId } from "@/lib/ids";
 import { joinPath, removePath } from "@/features/data/lib/fsBridge";
 import { workspacePaths } from "@/features/data/lib/workspace";
+import { changeLogCutoffIso } from "@/features/data/lib/retention";
 
 /** Once a day, like the duplicate scan. */
 export const PURGE_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** True when `path` is `dir` itself or somewhere inside it, on either OS's separators. */
+function isInside(path: string, dir: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const p = norm(path);
+  const d = norm(dir);
+  return p === d || p.startsWith(`${d}/`);
+}
 
 /** How long to wait before looking again when a write is in progress. */
 const RETRY_WHILE_BUSY_MS = 60_000;
@@ -81,6 +117,7 @@ export async function sweepExpiredTrash(): Promise<SweepResult> {
 
   const batchId = newBatchId();
   let attachmentsDir: string | null = null;
+  let documentsDir: string | null = null;
 
   for (const row of rows) {
     try {
@@ -100,6 +137,28 @@ export async function sweepExpiredTrash(): Promise<SweepResult> {
             // the owner cannot clear.
             console.warn(`[helix] purge: could not remove ${file.storedName}`, err);
           }
+        }
+      }
+
+      // A quote or invoice's own generated PDF, when it is a file this
+      // workspace owns (see the header note): removed the same way, before
+      // the row that names it goes.
+      if (row.entityType === "document") {
+        const pdfPath = await trash.documentPdfPathFor(row.entityId);
+        if (pdfPath !== null) {
+          if (documentsDir === null) {
+            documentsDir = (await workspacePaths()).documentsDir;
+          }
+          if (isInside(pdfPath, documentsDir)) {
+            try {
+              await removePath(pdfPath);
+              result.filesRemoved += 1;
+            } catch (err) {
+              console.warn(`[helix] purge: could not remove ${pdfPath}`, err);
+            }
+          }
+          // Saved somewhere else by the owner's own choice through the save
+          // dialog: not this sweep's file to delete.
         }
       }
 
@@ -129,6 +188,36 @@ export async function sweepExpiredTrash(): Promise<SweepResult> {
   return result;
 }
 
+let lastChangeLogSwept = 0;
+
+/** How many `change_log` rows the last sweep removed. Read by Diagnostics. */
+export function lastChangeLogSweepCount(): number {
+  return lastChangeLogSwept;
+}
+
+/**
+ * Delete `change_log` rows older than `CHANGE_LOG_RETENTION_DAYS` (see the
+ * header note and `lib/retention.ts`). Exported for the tests and reused by
+ * the same daily beat as the trash sweep; nothing else calls it today.
+ *
+ * A plain `raw.execute` under `withWrite` rather than a repository function:
+ * `change_log` has no repository of its own (`src/db/changeLog.ts` is a log,
+ * not a CRUD table with a `deleted_at`), and this file already owns the one
+ * scheduled maintenance sweep the product runs.
+ */
+export async function sweepOldChangeLog(now: Date = new Date()): Promise<number> {
+  const cutoff = changeLogCutoffIso(now);
+  const removed = await withWrite(
+    () => raw.execute(`DELETE FROM change_log WHERE at < ?`, [cutoff]),
+    "Cleaning up old history",
+  );
+  lastChangeLogSwept = removed;
+  if (removed > 0) {
+    console.info(`[helix] purge: removed ${removed} change_log row(s) past the retention window`);
+  }
+  return removed;
+}
+
 function schedule(delay: number): void {
   if (timer !== null) clearTimeout(timer);
   timer = setTimeout(() => {
@@ -147,6 +236,11 @@ async function tick(): Promise<void> {
     // A failed sweep is not worth a banner: nothing the owner does depends on
     // it, and the next one is a day away.
     console.warn("[helix] purge sweep failed", err);
+  }
+  try {
+    await sweepOldChangeLog();
+  } catch (err) {
+    console.warn("[helix] change_log sweep failed", err);
   }
   schedule(PURGE_SWEEP_INTERVAL_MS);
 }

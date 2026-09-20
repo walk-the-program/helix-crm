@@ -5,11 +5,18 @@
  *                     ^^^^^^^^^^^^^^^^^^^^^  the workspace directory
  *                                            + /backups     backup files
  *                                            + /attachments copied files
+ *                                            + /documents   generated quote/invoice PDFs
  *
  * The frontend never invents these paths for a write: Rust chooses the
- * destination for `copy_in` and for `db_backup`. They are used for reading a
- * directory listing, for the asset-protocol thumbnail URL, and for the one
- * copy a restore performs over a path the user already picked.
+ * destination for `copy_in` and for `db_backup`; the invoices feature chooses
+ * `documentsDir` the same way (`joinPath(dir, "documents")`), which is why it
+ * is derived identically here rather than imported from that feature. They
+ * are used for reading a directory listing, for the asset-protocol thumbnail
+ * URL, for the one copy a restore performs over a path the user already
+ * picked, and for the trash purge sweep to know which generated PDF files are
+ * ours to remove (a quote or invoice can also be saved somewhere else
+ * entirely through the save dialog; the purge sweep never touches a path
+ * outside this folder, because that path was the owner's own choice).
  */
 import { raw } from "@/db/client";
 import { dirnameOf, joinPath } from "@/features/data/lib/fsBridge";
@@ -22,6 +29,11 @@ export type WorkspacePaths = {
   dir: string;
   backupsDir: string;
   attachmentsDir: string;
+  /** Where a saved quote or invoice PDF lands by default (docs/CONTRACTS.md has no
+   *  entry for this folder yet; it is the invoices feature's own convention,
+   *  reproduced here so the purge sweep can find its own files without
+   *  importing across the ownership boundary). */
+  documentsDir: string;
 };
 
 function samePath(a: string, b: string): boolean {
@@ -47,5 +59,6 @@ export async function workspacePaths(): Promise<WorkspacePaths> {
     dir,
     backupsDir: joinPath(dir, "backups"),
     attachmentsDir: joinPath(dir, "attachments"),
+    documentsDir: joinPath(dir, "documents"),
   };
 }

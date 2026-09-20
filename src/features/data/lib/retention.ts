@@ -14,6 +14,35 @@
  * reporting it as part of the reason.
  */
 
+/**
+ * `change_log` retention (SEC audit, launch round 2026-09-20).
+ *
+ * Every create, update and delete is logged with the field values it touched
+ * (`src/db/changeLog.ts`), forever, so Cmd+Z can replay it - but the in-memory
+ * undo stack (`src/app/undo.ts`) is emptied on every `db_open`, so no batch a
+ * running session could ever undo is older than that session's own launch.
+ * The only other reader of an old row is `merge.reverse`, which already
+ * refuses a reversal past `MERGE_REVERSAL_DAYS` (30, `src/db/repos/merge.ts`).
+ * Kept forever, a purged contact's name, phone or notes stay recoverable from
+ * `before_json`/`after_json` indefinitely, which is the opposite of what
+ * "removes them for good" is supposed to mean once a record is actually gone.
+ *
+ * 90 days is three times the merge-reversal floor - generous enough that a
+ * workspace nobody has closed in three months does not lose an undo it could
+ * still plausibly want, and still a bounded number rather than "forever".
+ * `sweepOldChangeLog` in `src/features/data/trash/purgeSweep.ts` applies this
+ * on the same daily beat as the trash purge.
+ */
+export const CHANGE_LOG_RETENTION_DAYS = 90;
+
+/** `now` minus `CHANGE_LOG_RETENTION_DAYS`, as an ISO string. Pure: no clock read. */
+export function changeLogCutoffIso(
+  now: Date,
+  retentionDays: number = CHANGE_LOG_RETENTION_DAYS,
+): string {
+  return new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export type BackupFile = {
   name: string;
   path: string;

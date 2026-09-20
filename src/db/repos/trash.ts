@@ -212,6 +212,31 @@ export async function attachmentFilesFor(
 }
 
 /**
+ * A quote or invoice's generated PDF, if it has one and it is still on disk
+ * (SEC audit, launch round 2026-09-20). `documents.pdf_path` names wherever
+ * the owner last saved that PDF through the save dialog in
+ * `src/features/invoices/lib/pdfFile.ts` - by default the workspace's own
+ * `documents/` folder, but the dialog lets the owner steer it anywhere else on
+ * the machine.
+ *
+ * Read here rather than in the invoices feature so the purge sweep (which
+ * this repository does not own the UI for) can ask a plain question without
+ * crossing into `src/features/invoices`. Returns null for a document with no
+ * saved PDF yet, and for anything that is not a "document" purge - the caller
+ * decides whether the path is safe to remove; this function only reports what
+ * the row says.
+ */
+export async function documentPdfPathFor(entityId: string): Promise<string | null> {
+  const rows = await raw.query(
+    `SELECT d.pdf_path AS d_pdf_path FROM documents d WHERE d.id = ?`,
+    [entityId],
+  );
+  if (rows.length === 0) return null;
+  const path = rows[0][0];
+  return typeof path === "string" && path.length > 0 ? path : null;
+}
+
+/**
  * Hard delete, in the documented order, as one transaction.
  * Attachment files on disk are the caller's job and must be gone first.
  */
@@ -258,6 +283,23 @@ export async function purge(
 }
 
 /**
+ * The instant a row must have been soft-deleted before to be past the
+ * retention window, as an ISO string - pulled out of `expired()` (SEC audit,
+ * launch round 2026-09-20) so the exact boundary (a row deleted 29 days ago
+ * survives, one deleted 31 days ago does not, and the arithmetic around
+ * exactly `olderThanDays` is not off by a day in either direction) is provable
+ * in a plain unit test with no database at all.
+ */
+export function purgeCutoffIso(
+  olderThanDays: number = PURGE_AFTER_DAYS,
+  today: string = todayLocal(),
+): string {
+  const cutoff = new Date(`${today}T00:00:00Z`);
+  cutoff.setUTCDate(cutoff.getUTCDate() - olderThanDays);
+  return cutoff.toISOString();
+}
+
+/**
  * Everything soft-deleted longer ago than the retention window - what the
  * nightly sweep is free to purge.
  *
@@ -271,9 +313,7 @@ export async function expired(
   olderThanDays = PURGE_AFTER_DAYS,
   today: string = todayLocal(),
 ): Promise<TrashItem[]> {
-  const cutoff = new Date(`${today}T00:00:00Z`);
-  cutoff.setUTCDate(cutoff.getUTCDate() - olderThanDays);
-  const cutoffIso = cutoff.toISOString();
+  const cutoffIso = purgeCutoffIso(olderThanDays, today);
   const types = Object.keys(TABLES) as TrashEntityType[];
   const out: TrashItem[] = [];
   for (const type of types) {
