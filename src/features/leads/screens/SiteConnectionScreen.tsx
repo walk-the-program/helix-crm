@@ -283,13 +283,16 @@ export function SiteConnectionScreen() {
         <div className="flex flex-col gap-[var(--space-3)]">
           <div>
             <CardGroupLabel>Checking for leads</CardGroupLabel>
+            {/* The schedule is a constant, not a reading, and it was sitting in
+                the table as though it were one - so the two rows that DO change
+                had to compete with a sentence that never does, and at 1024 its
+                label wrapped to "How / often" while its value wrapped to two
+                lines of its own. It reads as what it is now: one quiet line
+                under the group label, leaving the card to carry the status. */}
+            <p className="pb-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+              Every {POLL_MINUTES} minutes while Helix is open, and once when it starts.
+            </p>
             <Card>
-              <CardRow>
-                <span className="text-[var(--color-text-muted)]">How often</span>
-                <span className="text-right text-[var(--color-text)]">
-                  Every {POLL_MINUTES} minutes while Helix is open, and once when it starts.
-                </span>
-              </CardRow>
               <CardRow>
                 <span className="text-[var(--color-text-muted)]">Last checked</span>
                 <span
