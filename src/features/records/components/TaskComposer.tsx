@@ -7,7 +7,7 @@
 import { useId, useRef, useState } from "react";
 import type { ReactElement } from "react";
 import { Plus } from "@/ui/icons";
-import { Button, Field, Input } from "@/ui";
+import { Button, DatePicker, Field, Input, TimePicker } from "@/ui";
 import * as tasksRepo from "@/db/repos/tasks";
 import { dueFromForm } from "@/features/records/lib/taskGroups";
 import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
@@ -96,17 +96,21 @@ export function TaskComposer(props: {
 
         <div className="w-[168px] shrink-0">
           <Field label="Due date">
-            <Input type="date" value={dueOn} onChange={(event) => setDueOn(event.target.value)} />
+            <DatePicker
+              value={dueOn || null}
+              onChange={(next) => setDueOn(next ?? "")}
+              clearable
+              className="tabular"
+            />
           </Field>
         </div>
 
         <div className="w-[140px] shrink-0">
           <Field label="Due time">
-            <Input
-              type="time"
-              value={dueTime}
+            <TimePicker
+              value={dueTime || null}
+              onChange={(next) => setDueTime(next ?? "")}
               disabled={dueOn.trim().length === 0}
-              onChange={(event) => setDueTime(event.target.value)}
             />
           </Field>
         </div>

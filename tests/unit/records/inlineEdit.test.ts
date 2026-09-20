@@ -10,8 +10,13 @@
  */
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { InlineText } from "@/features/records/components/InlineEdit";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { InlineText, InlineDate } from "@/features/records/components/InlineEdit";
+import { installRadixStubs } from "../ui/radixSetup";
+import { todayLocal } from "@/lib/dates";
+
+installRadixStubs();
 
 afterEach(() => {
   cleanup();
@@ -97,6 +102,56 @@ describe("InlineText", () => {
 
     fireEvent.change(screen.getByLabelText("Notes"), { target: { value: "x" } });
     await vi.advanceTimersByTimeAsync(700);
+
+    await waitFor(() => expect(screen.getByText("Not saved")).toBeTruthy());
+    expect(screen.queryByTestId("saved-indicator")).toBeNull();
+  });
+});
+
+describe("InlineDate", () => {
+  it("has no native date input, only the DatePicker trigger", () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    render(createElement(InlineDate, { label: "Install date", value: "2026-04-12", onSave: save }));
+
+    expect(document.querySelector('input[type="date"]')).toBeNull();
+    expect(screen.getByTestId("date-picker")).toBeTruthy();
+  });
+
+  it("saves the picked day, and clearing writes back the empty string", async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockResolvedValue(undefined);
+    render(createElement(InlineDate, { label: "Install date", value: "", onSave: save }));
+
+    await user.click(screen.getByTestId("date-picker"));
+    const grid = await screen.findByTestId("date-picker-grid");
+    const today = within(grid)
+      .getAllByTestId("date-picker-day")
+      .find((day) => day.getAttribute("data-today") === "true");
+    expect(today).toBeTruthy();
+    await user.click(today!);
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith(todayLocal());
+    await waitFor(() => expect(screen.getByTestId("saved-indicator")).toBeTruthy());
+
+    await user.click(screen.getByTestId("date-picker"));
+    await user.click(await screen.findByRole("button", { name: "Clear date" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save).toHaveBeenLastCalledWith("");
+  });
+
+  it("says so when the write fails, same as InlineText", async () => {
+    const user = userEvent.setup();
+    const save = vi.fn().mockRejectedValue(new Error("disk full"));
+    render(createElement(InlineDate, { label: "Install date", value: "", onSave: save }));
+
+    await user.click(screen.getByTestId("date-picker"));
+    const grid = await screen.findByTestId("date-picker-grid");
+    const today = within(grid)
+      .getAllByTestId("date-picker-day")
+      .find((day) => day.getAttribute("data-today") === "true");
+    await user.click(today!);
 
     await waitFor(() => expect(screen.getByText("Not saved")).toBeTruthy());
     expect(screen.queryByTestId("saved-indicator")).toBeNull();

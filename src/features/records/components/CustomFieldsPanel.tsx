@@ -8,7 +8,7 @@ import type { CustomField, CustomValueWithField } from "@/db/repos/customFields"
 import { useCustomFields, useCustomValues } from "@/features/records/lib/hooks";
 import { invalidateRecords } from "@/features/records/lib/mutations";
 import { queryClient } from "@/app/queryClient";
-import { InlineText, InlineSelect } from "@/features/records/components/InlineEdit";
+import { InlineText, InlineSelect, InlineDate } from "@/features/records/components/InlineEdit";
 
 function currentValue(
   values: CustomValueWithField[] | undefined,
@@ -96,9 +96,8 @@ export function CustomFieldsPanel(props: { entityType: string; entityId: string 
 
         if (field.kind === "date") {
           return (
-            <InlineText
+            <InlineDate
               key={field.id}
-              type="date"
               label={field.name}
               value={value?.valueDate ?? ""}
               onSave={(next) => save(field, { date: next.trim().length > 0 ? next : null })}

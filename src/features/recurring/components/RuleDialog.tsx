@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import {
   Button,
+  DatePicker,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -214,12 +215,12 @@ export function RuleDialog(props: {
               />
             </Field>
             <Field label="First one due" htmlFor="rule-start">
-              <Input
+              <DatePicker
                 id="rule-start"
                 className="tabular"
-                type="date"
-                value={startOn}
-                onChange={(event) => setStartOn(event.target.value)}
+                value={startOn || null}
+                onChange={(next) => setStartOn(next ?? "")}
+                clearable
               />
             </Field>
           </div>

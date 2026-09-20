@@ -8,7 +8,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { WarningCircle } from "@/ui/icons";
-import { Input, Textarea, Select, Spinner, type SelectOption } from "@/ui";
+import { DatePicker, Input, Textarea, Select, Spinner, type SelectOption } from "@/ui";
 import { useAutosave, type SaveState } from "@/features/records/lib/hooks";
 import { reportError } from "@/features/records/lib/mutations";
 
@@ -125,6 +125,68 @@ export function InlineText(props: BaseProps & { type?: "text" | "tel" | "email" 
             event.preventDefault();
             autosave.flush();
           }
+        }}
+      />
+      {hint ? (
+        <p className="mt-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The date twin of `InlineText`. Same autosave, same "no save button" and
+ * Saved/Saving/Not saved contract, but the control is the in-app `DatePicker`
+ * rather than a native date input (the `<input>` with the date `type`
+ * attribute) — DESIGN.md's r3 rule is that one never appears in the product.
+ *
+ * The external contract is untouched: `value` and what `onSave` receives are
+ * still the "YYYY-MM-DD" string the record already stores, or "" when unset.
+ * `DatePicker` itself speaks `string | null`; the empty string and `null` are
+ * the same "nothing chosen" state, converted at this boundary only.
+ *
+ * A pick is a single discrete action, not a burst of keystrokes, so there is
+ * no debounce to wait out: the autosave is scheduled and flushed in the same
+ * tick, which still gives the caller the same Saving/Saved sequence as a
+ * typed field, just without the 600ms pause first.
+ */
+export function InlineDate(
+  props: BaseProps & { min?: string; max?: string },
+) {
+  const { label, value, onSave, hideLabel, disabled, className, hint, min, max } = props;
+  const id = useId();
+  const { draft, setDraft, autosave } = useInlineValue(value, onSave);
+
+  return (
+    <div className={className}>
+      <div className="flex items-center justify-between gap-[var(--space-2)]">
+        <label
+          htmlFor={id}
+          className={
+            hideLabel
+              ? "sr-only"
+              : "text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+          }
+        >
+          {label}
+        </label>
+        <SaveIndicator state={autosave.state} />
+      </div>
+      <DatePicker
+        id={id}
+        value={draft.trim().length > 0 ? draft : null}
+        min={min}
+        max={max}
+        disabled={disabled}
+        clearable
+        className="tabular"
+        onChange={(next) => {
+          const nextValue = next ?? "";
+          setDraft(nextValue);
+          autosave.schedule(nextValue);
+          autosave.flush();
         }}
       />
       {hint ? (
