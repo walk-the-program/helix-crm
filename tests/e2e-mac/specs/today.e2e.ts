@@ -570,18 +570,35 @@ test.describe("search", () => {
 
 test.describe("today: CPO regressions", () => {
   /**
-   * F-LA-6. Today branched on "does this workspace hold any row", so saving
-   * one contact swapped the three starter cards for six empty panels — the
-   * owner did what the screen asked and got a blanker screen, with no link to
-   * the person he had just created. The starter cards now stay until a task,
-   * an open deal or an activity exists.
+   * F-LA-6, and its other half, F-CS-1.
+   *
+   * The invariant this protects was never the string "Nothing here yet" — it
+   * is that adding one contact must never give the owner a blanker screen
+   * than he had before (no stack of empty panels), and that guidance stays on
+   * screen until a task, an open job or a logged activity retires it. Today
+   * used to branch on "does this workspace hold any row", so saving one
+   * contact swapped the three starter cards for six empty panels — the owner
+   * did what the screen asked and got a blanker screen, with no link to the
+   * person he had just created.
+   *
+   * F-CS-1 found the other half of the same bug: an owner who imports
+   * fifty-two real customers and opens Today still saw the ORIGINAL first-run
+   * screen, "Import a spreadsheet" and all — telling him to do the thing he
+   * had just finished doing. "Nothing here yet" is exactly as false after one
+   * contact as it is after an import, so both now land on the same honest
+   * records-state screen (src/features/today/lib/useToday.ts's
+   * `todayScreenState`), and the assertions below are about the invariant —
+   * no six-empty-panels blank screen, guidance until real work exists — not
+   * about which heading happens to be showing.
    */
-  test("the starter cards survive the first contact, and go when work exists", async ({
+  test("one contact gets guidance, not empty panels; work retires the guidance", async ({
     page,
     helix,
   }) => {
     await page.goto("/");
+    // Nothing at all: the original three-starter-card first run.
     await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();
+    await expect(page.getByText("Due now")).toBeHidden();
 
     const now = new Date().toISOString();
     helix.bridge.execute(
@@ -590,9 +607,17 @@ test.describe("today: CPO regressions", () => {
       [now, now],
     );
     await page.reload();
-    await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();
+    // A contact exists now, so the ORIGINAL first-run guidance ("Nothing here
+    // yet") must be gone — it would be false — and so must the real panels:
+    // this is the failure the CPO audit actually found, stated both ways
+    // rather than as a single heading string.
+    await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Your customers are in Helix" })).toBeVisible();
+    await expect(page.getByText("Due now")).toBeHidden();
+    await expect(page.getByText("Gone quiet")).toBeHidden();
 
-    // A promise to keep is what Today is for, so one task retires the cards.
+    // A promise to keep is what Today is for, so one task retires the
+    // guidance and brings on the real panels.
     helix.bridge.execute(
       `INSERT INTO tasks (id, created_at, updated_at, title, contact_id)
        VALUES ('t-first', ?, ?, 'Call Brent back', 'c-first')`,
@@ -600,6 +625,9 @@ test.describe("today: CPO regressions", () => {
     );
     await page.reload();
     await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeHidden();
+    await expect(
+      page.getByRole("heading", { name: "Your customers are in Helix" }),
+    ).toBeHidden();
     await expect(page.getByText("Due now")).toBeVisible();
   });
 
