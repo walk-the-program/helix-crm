@@ -83,7 +83,7 @@ function useInlineValue(value: string, onSave: (value: string) => Promise<void>)
   return { draft, setDraft, committed, autosave };
 }
 
-export function InlineText(props: BaseProps & { type?: "text" | "tel" | "email" | "url" | "date" }) {
+export function InlineText(props: BaseProps & { type?: "text" | "tel" | "email" | "url" }) {
   const { label, value, onSave, placeholder, hint, hideLabel, disabled, className, inputClassName, type = "text" } =
     props;
   const id = useId();
