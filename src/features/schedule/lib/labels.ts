@@ -37,14 +37,15 @@ export function kindLabel(kind: ScheduleKind, vocabulary: Vocabulary): string {
 }
 
 /**
- * A fixed 24-hour clock ("09:00"), not the browser's own AM/PM choice.
+ * The time, on the owner's own clock.
  *
- * `TimePicker` lets the locale decide AM/PM because a value the owner is
- * typing should look the way his own clock does. A schedule row is not being
- * typed into - it sits next to six other rows on the same day, and a column
- * of "9:00 AM" beside "1:30 PM" beside "9:00 AM" again reads worse than one
- * that never changes shape. `locale` still reaches `Intl`, so the digits
- * themselves follow the workspace's script.
+ * The locale decides whether that is "02:30 PM" or "14:30", exactly as it
+ * does in the time picker he typed the visit into and on every timeline
+ * entry: a schedule that says 14:30 to an owner who says half two is the
+ * wrong trade. An earlier draft forced a 24-hour clock to keep the column an
+ * even width, and the width is worth keeping, so the hour is two digits -
+ * which is also the only option that never prints a lone "0:30" at half past
+ * midnight.
  */
 function clockLabel(iso: string, locale?: string): string {
   const d = parseIso(iso);
@@ -53,7 +54,6 @@ function clockLabel(iso: string, locale?: string): string {
     return new Intl.DateTimeFormat(locale, {
       hour: "2-digit",
       minute: "2-digit",
-      hourCycle: "h23",
     }).format(d);
   } catch {
     return "";
@@ -66,7 +66,7 @@ function addMinutesIso(iso: string, minutes: number): string | null {
   return new Date(d.getTime() + minutes * 60 * 1000).toISOString();
 }
 
-/** "09:00", or "09:00 – 10:30" once a duration is known. Empty for an all-day row. */
+/** "09:00 AM", or "09:00 AM – 10:30 AM" once a duration is known. Empty for an all-day row. */
 export function timeLabel(item: ScheduleItem, locale?: string): string {
   if (!item.at) return "";
   const start = clockLabel(item.at, locale);

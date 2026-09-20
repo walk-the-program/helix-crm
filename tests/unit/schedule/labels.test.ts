@@ -54,18 +54,20 @@ describe("timeLabel", () => {
   });
 
   it("is the start time alone with no duration", () => {
-    expect(timeLabel(item({ at: "2026-09-21T09:00:00.000Z" }))).toBe("09:00");
+    expect(timeLabel(item({ at: "2026-09-21T09:00:00.000Z" }), "en-US")).toBe("09:00 AM");
+    expect(timeLabel(item({ at: "2026-09-21T14:30:00.000Z" }), "en-US")).toBe("02:30 PM");
+    expect(timeLabel(item({ at: "2026-09-21T14:30:00.000Z" }), "en-GB")).toBe("14:30");
   });
 
   it("is a start-end range once a duration is known", () => {
     expect(
-      timeLabel(item({ at: "2026-09-21T09:00:00.000Z", durationMinutes: 90 })),
-    ).toBe("09:00 – 10:30");
+      timeLabel(item({ at: "2026-09-21T09:00:00.000Z", durationMinutes: 90 }), "en-US"),
+    ).toBe("09:00 AM – 10:30 AM");
   });
 
   it("carries a duration across an hour boundary", () => {
     expect(
-      timeLabel(item({ at: "2026-09-21T23:30:00.000Z", durationMinutes: 60 })),
+      timeLabel(item({ at: "2026-09-21T23:30:00.000Z", durationMinutes: 60 }), "en-GB"),
     ).toBe("23:30 – 00:30");
   });
 
