@@ -175,9 +175,10 @@ jobs:
           }
 
       - name: Upload e2e logs/screenshots
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-win-output
           path: tests/e2e-win/.output/**
           if-no-files-found: ignore
+          retention-days: 3
