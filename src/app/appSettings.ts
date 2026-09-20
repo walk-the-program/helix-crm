@@ -216,6 +216,23 @@ export function resolveTheme(theme: Theme): "light" | "dark" {
   return theme;
 }
 
+/**
+ * The next theme in the cycle: Auto → Light → Dark → Auto.
+ *
+ * One function so the toolbar button, the View menu's "Toggle theme" and the
+ * palette all move the same way. The old two-state flip was the defect the HIG
+ * review named (finding 5): from Auto it pinned the app to light or dark and
+ * there was no way back to Auto except through Settings, which most owners will
+ * never connect to the button they pressed. `dark-mode.md` asks for an app to
+ * follow the system unless the owner deliberately overrides it, so Auto has to
+ * be one press away at all times.
+ */
+export function nextTheme(current: Theme): Theme {
+  if (current === "auto") return "light";
+  if (current === "light") return "dark";
+  return "auto";
+}
+
 /** The shell sets both attributes on <html> from these values. */
 export function applyAppearance(theme: Theme, density: Density): void {
   if (typeof document === "undefined") return;
@@ -243,9 +260,27 @@ export function applyAppearance(theme: Theme, density: Density): void {
  * Tauri under it, so it would pick up the padding and shift every screenshot
  * by 38px against a title bar that is not there. The VITE_E2E guard keeps the
  * harness on the plain layout; it is only ever set in the e2e build.
+ *
+ * That guard had a cost the HIG review named: every shipped screenshot was an
+ * accurate record of the *web* layout and of nothing a Mac owner ever sees, so
+ * the one place the traffic lights could land on the lockup was the one place
+ * the suite could not photograph (design/apple-hig-review.md, the note above
+ * finding 1). `window.__helixPlatform = "macos"`, set before the app boots, is
+ * the way back in: one spec opts into the macOS layout deliberately and every
+ * other spec keeps the plain one. It is read only under VITE_E2E, so nothing a
+ * page could set can change the layout of the shipped app.
  */
+declare global {
+  interface Window {
+    /** e2e only: forces the platform layout. See `isMacOS`. */
+    __helixPlatform?: "macos" | "other";
+  }
+}
+
 export function isMacOS(): boolean {
-  if (import.meta.env.VITE_E2E) return false;
+  if (import.meta.env.VITE_E2E) {
+    return typeof window !== "undefined" && window.__helixPlatform === "macos";
+  }
   if (typeof navigator === "undefined") return false;
   return navigator.userAgent.includes("Macintosh");
 }

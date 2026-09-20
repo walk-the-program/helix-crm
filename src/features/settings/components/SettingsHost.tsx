@@ -12,7 +12,7 @@
  * providers, on every screen.
  */
 import { useSyncExternalStore } from "react";
-import { setTheme, readRegistry } from "@/app/appSettings";
+import { nextTheme, setTheme, readRegistry } from "@/app/appSettings";
 import { createOpener } from "@/features/settings/lib/opener";
 import { ShortcutsSheet } from "@/features/settings/components/ShortcutsSheet";
 import { WorkspacePicker } from "@/features/settings/components/WorkspacePicker";
@@ -20,19 +20,16 @@ import { WorkspacePicker } from "@/features/settings/components/WorkspacePicker"
 export const shortcutsSheet = createOpener();
 export const workspacePicker = createOpener();
 
-/** The palette's "Switch theme" command, so light/dark is reachable by keyboard. */
+/**
+ * The palette's and the View menu's theme command, so appearance is reachable
+ * by keyboard. It cycles Auto → Light → Dark → Auto through the shared
+ * `nextTheme`, the same way the toolbar button does: the old two-state flip
+ * pinned an owner on Auto to a fixed theme with no way back
+ * (design/apple-hig-review.md, finding 5).
+ */
 export async function toggleTheme(): Promise<void> {
   const registry = await readRegistry();
-  const next =
-    registry.theme === "dark"
-      ? "light"
-      : registry.theme === "light"
-        ? "dark"
-        : // "auto" flips to the opposite of whatever it is resolving to now.
-          document.documentElement.getAttribute("data-theme") === "dark"
-          ? "light"
-          : "dark";
-  await setTheme(next);
+  await setTheme(nextTheme(registry.theme));
 }
 
 function useOpener(opener: ReturnType<typeof createOpener>): boolean {
