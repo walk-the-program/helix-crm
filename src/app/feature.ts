@@ -14,7 +14,11 @@ export type FeatureId =
   | "data"
   | "leads"
   | "ai"
-  | "settings";
+  | "settings"
+  | "onboarding"
+  | "recurring"
+  | "templates"
+  | "help";
 
 export type IconComponent = ComponentType<{
   size?: number | string;

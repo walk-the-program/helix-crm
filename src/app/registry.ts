@@ -20,6 +20,10 @@ import { feature as data } from "@/features/data";
 import { feature as leads } from "@/features/leads";
 import { feature as ai } from "@/features/ai";
 import { feature as settings } from "@/features/settings";
+import { feature as onboarding } from "@/features/onboarding";
+import { feature as recurring } from "@/features/recurring";
+import { feature as templates } from "@/features/templates";
+import { feature as help } from "@/features/help";
 
 export const registry: FeatureModule[] = [
   today,
@@ -28,6 +32,10 @@ export const registry: FeatureModule[] = [
   leads,
   ai,
   settings,
+  onboarding,
+  recurring,
+  templates,
+  help,
 ];
 
 /** Every route, in registration order. */
