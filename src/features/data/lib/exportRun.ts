@@ -10,7 +10,6 @@
  * each - grouped in JS by parent id - rather than one query per row, so a
  * 10k-contact export stays at a small, constant number of round trips.
  */
-import JSZip from "jszip";
 import { raw } from "@/db/client";
 import { todayLocal } from "@/lib/dates";
 import { centsToDecimalString } from "@/lib/money";
@@ -944,6 +943,7 @@ const ZIP_ENTRIES: readonly ZipEntry[] = [
 ];
 
 export async function buildEverythingZip(): Promise<{ bytes: Uint8Array; files: string[] }> {
+  const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const files: string[] = [];
   const jsonDump: Record<string, Row[]> = {};

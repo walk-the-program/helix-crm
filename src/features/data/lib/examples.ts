@@ -22,7 +22,6 @@
  * check every type's round trip without a webview. Only `exampleContext` and
  * the two `save*` functions touch the outside world.
  */
-import JSZip from "jszip";
 import * as pipelines from "@/db/repos/pipelines";
 import * as stagesRepo from "@/db/repos/stages";
 import { IMPORT_TYPES } from "@/features/data/import/fields/index";
@@ -108,6 +107,7 @@ export async function saveExampleFile(file: ExampleFile): Promise<string | null>
 
 /** All of them in one zip, same plumbing as the existing export zip. */
 export async function saveAllExamplesZip(files: ExampleFile[]): Promise<string | null> {
+  const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   for (const file of files) {
     zip.file(file.fileName, file.csv);
