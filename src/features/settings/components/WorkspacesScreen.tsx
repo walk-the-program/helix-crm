@@ -57,6 +57,8 @@ import {
   switchBlockedReason,
   unarchiveWorkspace,
 } from "@/features/settings/lib/workspaces";
+import { messageFrom } from "@/lib/errors";
+import { HelpLink } from "@/features/help";
 
 function stamp(value: string | null, never: string, dateTime: (v: string) => string): string {
   return value ? dateTime(value) : never;
@@ -196,7 +198,12 @@ export function WorkspacesScreen() {
       await refresh();
       toast.success(`Created ${entry.name} and switched to it`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(
+        messageFrom(
+          err,
+          "Helix could not create that workspace. Nothing changed, and the workspace you were in is still open.",
+        ),
+      );
     } finally {
       setPending(false);
     }
@@ -208,7 +215,12 @@ export function WorkspacesScreen() {
       await refresh();
       toast.success(`Switched to ${entry.name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(
+        messageFrom(
+          err,
+          `Helix could not open ${entry.name}. The workspace you were in is still open, so nothing is lost. Try again, and if it keeps failing, check Diagnostics for where that file is.`,
+        ),
+      );
     }
   }
 
@@ -222,6 +234,16 @@ export function WorkspacesScreen() {
       await refresh();
       setRenaming(null);
       toast.success(`Renamed it to ${name}`);
+    } catch (err) {
+      // A rename that fails used to say nothing at all: the dialog simply
+      // stayed open with the old name still in the list, which reads as the
+      // click having missed.
+      toast.error(
+        messageFrom(
+          err,
+          "Helix could not rename that workspace. Its records are untouched; try again.",
+        ),
+      );
     } finally {
       setPending(false);
     }
@@ -234,7 +256,12 @@ export function WorkspacesScreen() {
       await refresh();
       toast.success(`Archived ${archiving.name}. The files are still on disk.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(
+        messageFrom(
+          err,
+          `Helix could not archive ${archiving.name}. Nothing was removed and nothing was deleted; try again.`,
+        ),
+      );
     } finally {
       setArchiving(null);
     }
@@ -328,8 +355,11 @@ export function WorkspacesScreen() {
         >
           Archiving keeps every file exactly where it is; there is no button in Helix
           that erases a workspace. If a workspace's data needs to be gone for good -
-          a client's relationship with you has ended, for instance - see Help,
-          &ldquo;Removing a workspace for good,&rdquo; for the exact steps.
+          a client's relationship with you has ended, for instance - see{" "}
+          <HelpLink to="workspace-removal">
+            Removing a workspace for good
+          </HelpLink>{" "}
+          for the exact steps.
         </p>
       ) : null}
 

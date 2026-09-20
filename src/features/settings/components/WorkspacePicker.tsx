@@ -44,6 +44,7 @@ import {
   openWorkspaceById,
   switchBlockedReason,
 } from "@/features/settings/lib/workspaces";
+import { messageFrom } from "@/lib/errors";
 
 export function WorkspacePicker(props: {
   open: boolean;
@@ -67,7 +68,12 @@ export function WorkspacePicker(props: {
       onOpenChange(false);
       toast.success(`Switched to ${name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      toast.error(
+        messageFrom(
+          err,
+          `Helix could not open ${name}. The workspace you were in is still open, so nothing is lost. Try again, and if it keeps failing, check Diagnostics for where that file is.`,
+        ),
+      );
     }
   }
 

@@ -64,6 +64,7 @@ import { ResultStep } from "@/features/data/import/ResultStep";
 import { ProgressBar } from "@/features/data/import/ProgressBar";
 import { TypePicker } from "@/features/data/import/TypePicker";
 import { ExamplesMenu } from "@/features/data/import/ExamplesMenu";
+import { HelpLink } from "@/features/help";
 
 type Step = "pick" | "map" | "preview" | "running" | "result";
 
@@ -173,6 +174,9 @@ function ParseFailure(props: { error: ImportParseError; onRetry: () => void }) {
             </code>
           ) : null}
           <span>Fix that row in a spreadsheet, save it again, and try once more.</span>
+          <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            <HelpLink to="customers-in">What Helix expects a file to look like</HelpLink>
+          </span>
         </span>
       }
       action={
