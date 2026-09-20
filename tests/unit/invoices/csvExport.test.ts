@@ -48,7 +48,7 @@ describe("agingCsv", () => {
 });
 
 describe("receivablesCsv", () => {
-  it("uses the table's own five column labels and a plain decimal amount", () => {
+  it("uses the table's own five column labels and a plain decimal balance", () => {
     const rows: ReceivableRow[] = [
       {
         id: "doc-1",
@@ -85,7 +85,7 @@ describe("receivablesCsv", () => {
     // is exercising the real CSV-quoting path, not working around it.
     const quotedDue = (dueOn: string) => `"${formatDateDisplay(dueOn)}"`;
 
-    expect(lines[0]).toBe("Number,Customer,Due,Days over,Amount");
+    expect(lines[0]).toBe("Number,Customer,Due,Days over,Balance");
     expect(lines[1]).toBe(
       `INV-2026-0007,Acme Landscaping,${quotedDue("2026-08-01")},12,4321.00`,
     );
@@ -93,5 +93,30 @@ describe("receivablesCsv", () => {
     expect(lines[2]).toBe(
       `INV-2026-0009,No customer,${quotedDue("2026-09-25")},—,50.00`,
     );
+  });
+
+  it("prints the BALANCE, not the total, once a payment is against the invoice (LR-PX-A addition 10)", () => {
+    const rows: ReceivableRow[] = [
+      {
+        id: "doc-3",
+        number: "INV-2026-0011",
+        customer: "Ridgeway Farms",
+        dueOn: "2026-08-15",
+        daysOverdue: 0,
+        totalCents: 120000,
+        paidCents: 50000,
+        balanceCents: 70000,
+        status: "partial",
+      },
+    ];
+
+    const csv = receivablesCsv(rows);
+    const lines = csv.trim().split("\r\n");
+    const quotedDue = (dueOn: string) => `"${formatDateDisplay(dueOn)}"`;
+
+    expect(lines[1]).toBe(
+      `INV-2026-0011,Ridgeway Farms,${quotedDue("2026-08-15")},—,700.00`,
+    );
+    expect(csv).not.toContain("1200.00");
   });
 });

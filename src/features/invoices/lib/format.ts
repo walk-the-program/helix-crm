@@ -322,18 +322,26 @@ export function paymentsRunningBalance(totalCents: number, amountsCents: number[
 /**
  * The outstanding-invoices list as CSV. The header row is the same five
  * labels `ReceivablesScreen`'s table renders; "Days over" keeps the table's
- * own em dash for a row that is not yet late, and "Amount" is a plain decimal
- * rather than a formatted currency string, so it pastes as a number.
+ * own em dash for a row that is not yet late, and "Balance" is a plain
+ * decimal rather than a formatted currency string, so it pastes as a number.
+ *
+ * "Balance", not "Amount" (LR-PX-A addition 10): the table shows what is
+ * still owed, not the invoice's total, once a deposit is against it - an
+ * owner copying this out for his own books should never see a number here
+ * that disagrees with the screen he copied it from. No separate "Paid"
+ * column: the table itself has none (a quiet "Partially paid" caption
+ * instead), so the export stays a faithful mirror of it rather than adding a
+ * column the screen does not have.
  */
 export function receivablesCsv(rows: ReceivableRow[], locale?: string): string {
   return toCsv(
-    ["Number", "Customer", "Due", "Days over", "Amount"],
+    ["Number", "Customer", "Due", "Days over", "Balance"],
     rows.map((row) => [
       row.number,
       row.customer,
       formatDateDisplay(row.dueOn, locale),
       row.daysOverdue > 0 ? row.daysOverdue : "—",
-      centsToDecimalString(row.totalCents),
+      centsToDecimalString(row.balanceCents),
     ]),
   );
 }
