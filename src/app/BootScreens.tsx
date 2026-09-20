@@ -5,7 +5,8 @@
  * never swallows the detail.
  */
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
-import { AlertTriangle, DatabaseZap, HardDriveDownload } from "@/ui/icons";
+import { AlertTriangle, CaretRight, DatabaseZap, HardDriveDownload } from "@/ui/icons";
+import { cn } from "@/ui/cn";
 import { MigrationError } from "@/db/migrator";
 import { DbOpenError, Fts5MissingError } from "@/db/client";
 import { Brand, Button, Card, CardBody, Spinner } from "@/ui";
@@ -99,11 +100,77 @@ function Actions({ path, onRetry }: { path?: string; onRetry?: () => void }) {
   );
 }
 
-function Detail({ children }: { children: ReactNode }) {
+/**
+ * The workspace's path: short, human-readable, and the thing the owner
+ * actually needs on this screen, so it stays in the open. Monospace because a
+ * path is a path, but at caption size and in faint ink — it is evidence, not
+ * the message.
+ */
+function PathLine({ path }: { path: string }) {
   return (
-    <pre className="mt-[var(--space-4)] max-h-[220px] overflow-auto whitespace-pre-wrap bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
-      {children}
-    </pre>
+    <p className="mt-[var(--space-3)] break-all font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+      {path}
+    </p>
+  );
+}
+
+/**
+ * The raw error, folded away.
+ *
+ * It used to sit open on every boot screen: a 220px block of JavaScript, in
+ * monospace, immediately under a sentence written for a landscaper. It is the
+ * loudest thing on the screen and it is the one part he cannot read. So it
+ * goes behind a disclosure — still one click away, still never swallowed,
+ * still selectable — with a button that puts it on the clipboard, because
+ * every one of these screens asks him to send it to somebody and none of them
+ * used to give him a way to pick it up.
+ *
+ * `<details>` is the right control here and not a state hook: it is keyboard
+ * operable, it is announced as a disclosure, and its contents stay in the DOM
+ * (and in the accessibility tree's text) while it is closed.
+ */
+function Detail({ children }: { children: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const text = typeof children === "string" ? children : String(children ?? "");
+
+  return (
+    <details className="group mt-[var(--space-4)]">
+      <summary
+        className={cn(
+          "inline-flex cursor-default list-none items-center gap-[var(--space-2)]",
+          "text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
+          "hover:text-[var(--color-text)]",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]",
+          "[&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <CaretRight
+          size={14}
+          weight="bold"
+          aria-hidden="true"
+          className="flex-none transition-transform group-open:rotate-90 motion-reduce:transition-none"
+        />
+        Details
+      </summary>
+      <pre className="mt-[var(--space-2)] max-h-[220px] overflow-auto whitespace-pre-wrap bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+        {children}
+      </pre>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="mt-[var(--space-2)]"
+        onClick={() => {
+          void navigator.clipboard
+            ?.writeText(text)
+            .then(() => setCopied(true))
+            // The clipboard can be refused. The text is on screen and
+            // selectable either way, so say nothing and leave the label alone.
+            .catch(() => {});
+        }}
+      >
+        {copied ? "Copied" : "Copy the details"}
+      </Button>
+    </details>
   );
 }
 
@@ -131,7 +198,7 @@ export function DbOpenErrorScreen({
         The workspace file could not be opened. Another copy of Helix may have
         it, or the folder may not be writable.
       </p>
-      {path ? <Detail>{path}</Detail> : null}
+      {path ? <PathLine path={path} /> : null}
       <Detail>{error.message}</Detail>
       <Actions path={path} onRetry={onRetry} />
     </FullScreen>
@@ -143,8 +210,8 @@ export function Fts5MissingScreen({ error }: { error: Fts5MissingError }) {
     <FullScreen icon={<AlertTriangle size={28} weight="regular" />} title="This build is missing search">
       <p className="m-0">
         Helix was built against a copy of SQLite without FTS5, so search cannot
-        work. This should never reach a release; please report the build you
-        downloaded.
+        work. Download Helix again from wherever you got it — this copy is
+        broken and no setting will fix it.
       </p>
       <Detail>{error.message}</Detail>
     </FullScreen>
@@ -165,7 +232,7 @@ export function MigrationErrorScreen({ error }: { error: MigrationError }) {
         Install the previous version to keep working, and send us the detail
         below.
       </p>
-      {error.backupPath ? <Detail>{error.backupPath}</Detail> : null}
+      {error.backupPath ? <PathLine path={error.backupPath} /> : null}
       <Detail>
         {error.tag}
         {"\n"}
@@ -248,8 +315,9 @@ export class AppErrorBoundary extends Component<BoundaryProps, BoundaryState> {
     return (
       <FullScreen icon={<AlertTriangle size={28} weight="regular" />} title="Something broke">
         <p className="m-0">
-          Helix hit an error it did not expect. Your data is untouched. Here is
-          the log; copy it into an issue and we will fix it.
+          Helix hit an error it did not expect. Your data is untouched. Go back
+          to the app and carry on; if it keeps happening, copy the details and
+          send them to us.
         </p>
         <Detail>
           {error.message}
