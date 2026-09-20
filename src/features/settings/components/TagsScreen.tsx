@@ -1,19 +1,21 @@
 /**
  * Settings > Tags.
  *
- * A single grouped inset list, the way WorkspacesScreen lists workspaces
- * (docs/DESIGN.md §9 "Cards and grouped lists"): the swatch and the name carry
- * the row, the usage sentence and the row actions sit on the right, and colour
- * is never the only carrier of meaning - the name is always shown in full ink
- * next to the dot. Creating a tag used to be an inline form pinned above the
- * list; it is now the screen's one dialog, opened from the frame's primary
- * button, because a settings pane holds at most one black button and a form
- * bolted above a list is exactly the "SaaS card" shape §9 rejects. That one
- * button is in the header when there are tags and in the empty state when there
- * are none, never in both at once.
+ * A single grouped inset list, the way WorkspacesScreen lists workspaces: the
+ * swatch and the name carry the row, the usage sentence and the row actions
+ * sit on the right, and colour is never the only carrier of meaning - the name
+ * is always shown in full ink next to the swatch. Creating a tag is the
+ * screen's one dialog, opened from the frame's primary button. That button is
+ * in the header when there are tags and in the empty state when there are
+ * none, never in both at once, because the screen gets one block of primary
+ * and no more.
+ *
+ * The swatches are squares. The brand's corner language is radius 0 on every
+ * control and card, and a round dot beside square everything else is the one
+ * shape that gives the screen away as a web app.
  *
  * A destructive action always names the record and what it costs before it
- * runs (docs/DESIGN.md §7 "no dark patterns").
+ * runs.
  */
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -89,10 +91,9 @@ function ColorSwatchPicker(props: {
             title={c.name}
             onClick={() => onChange(c.token)}
             className={cn(
-              // A 24px swatch, the size macOS draws a colour well at. The
-              // selected one is marked by an ink hairline rather than a 2px
-              // ring, which on a small circle reads as a web control.
-              "h-[var(--space-6)] w-[var(--space-6)] shrink-0 rounded-[var(--radius-full)]",
+              // A 24px square swatch. The selected one is marked by an ink
+              // hairline rather than a 2px ring, which reads as a web control.
+              "h-[var(--space-6)] w-[var(--space-6)] shrink-0",
               "border transition-colors duration-[var(--dur-fast)] motion-reduce:transition-none",
               "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-2",
               checked ? "border-[var(--color-text)]" : "border-transparent",
@@ -121,7 +122,7 @@ function LabelledColorPicker(props: {
       </span>
       <ColorSwatchPicker value={value} onChange={onChange} aria-label={label} />
       {showName ? (
-        <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+        <span className="text-[length:var(--text-caption)] text-[var(--color-text-faint)]">
           {colorName(value)}
         </span>
       ) : null}
@@ -133,7 +134,7 @@ function TagSwatch(props: { color: string }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-block h-[var(--space-3)] w-[var(--space-3)] shrink-0 rounded-[var(--radius-full)]"
+      className="inline-block h-[var(--space-3)] w-[var(--space-3)] shrink-0"
       style={{ background: props.color }}
     />
   );
@@ -443,7 +444,7 @@ export function TagsScreen() {
       ) : tags.length === 0 ? (
         <EmptyState
           title="No tags yet"
-          description="Tags fill up as you label contacts, companies and deals. Add one and it shows up everywhere you can tag a record."
+          description="Add one and it shows up everywhere you can tag a contact, a company or a deal."
           action={addTagButton}
         />
       ) : (

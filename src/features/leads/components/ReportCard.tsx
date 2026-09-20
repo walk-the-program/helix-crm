@@ -10,8 +10,12 @@
  *
  * `data-report` names the card in the DOM. The leads e2e needs to scope its
  * locators to one card, and it used to do that by matching the shadow class
- * every card carried; cards cast no shadow any more (docs/DESIGN.md §6), so the
- * card says what it is instead of being recognised by how it was painted.
+ * every card carried; cards cast no shadow, so the card says what it is
+ * instead of being recognised by how it was painted.
+ *
+ * No button on this card is the primary one. The chart's bars already carry
+ * the screen's block of primary, and "Copy as CSV" is a convenience, not the
+ * thing the owner came to Reports to do.
  */
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -53,9 +57,9 @@ export function ReportCard(props: ReportCardProps) {
   async function handleCopyCsv() {
     try {
       await navigator.clipboard.writeText(csv());
-      toast.success("Copied to the clipboard");
+      toast.success("Copied the report to the clipboard");
     } catch {
-      toast.error("Could not copy the report to the clipboard");
+      toast.error("The clipboard refused it.");
     }
   }
 

@@ -1,9 +1,9 @@
 # Contributing to Helix CRM
 
 Helix is built by a small number of people working in parallel on separate
-folders. The rules below exist so that can keep working without anyone
-stepping on someone else's code. Read `docs/PLAN.md` for what the product is
-and why, and `docs/CONTRACTS.md` for the full interface contracts this file
+folders. The rules below exist so everyone can keep working without stepping
+on someone else's code. Read `docs/PLAN.md` for what the product is and why,
+and `docs/CONTRACTS.md` for the full interface contracts this file
 summarizes.
 
 ## Repository layout
@@ -51,15 +51,15 @@ helix-crm/
 ## The rules that matter
 
 **Repositories are the only place SQL lives.** One file per entity under
-`src/db/repos/`. Screens and services never write SQL directly, and a join
-must alias every column, two tables can share a column name, and the
-database driver returns rows as arrays, not objects, so an unaliased
-collision silently returns the wrong value.
+`src/db/repos/`. Screens and services never write SQL directly. A join must
+alias every column: two tables can share a column name, and the database
+driver returns rows as arrays, not objects, so an unaliased collision
+silently returns the wrong value.
 
 **The write lock is not reentrant.** Every repository write goes through
 `withWrite()` (`src/db/writeLock.ts`), which queues concurrent writes. A
 repository write function must never call another repository's write
-function, the inner call queues behind the outer one, and both wait
+function: the inner call queues behind the outer one, and both wait
 forever. If you need several writes to happen together, build the SQL
 statements yourself and send them as one `raw.batch()`, or wrap the whole
 thing in a single `withTransaction()`.
@@ -76,13 +76,13 @@ fixtures. A feature adds routes, sidebar items, and commands by exporting a
 `FeatureModule` from its `index.tsx` (routes, nav, commands, an optional
 `onBoot` and an optional `navProvider` for nav sections that depend on a
 database read). `src/app/registry.ts` is the single shared file that imports
-every feature and is owned by the app shell, not by feature code, if you
-need a new route or command, add it to your feature's `index.tsx`, not to
-the registry.
+every feature. It's owned by the app shell, not by feature code: if you need
+a new route or command, add it to your feature's `index.tsx`, not to the
+registry.
 
-Shared files, `package.json`, `src/app/*`, `src/db/*`, `src/ui/*`,
-`src-tauri/*`, `vite.config.ts`, `tsconfig*.json`, the Tailwind config,
-`drizzle/*`, are edited deliberately and reviewed, not casually. If your
+Shared files are edited deliberately and reviewed, not casually:
+`package.json`, `src/app/*`, `src/db/*`, `src/ui/*`, `src-tauri/*`,
+`vite.config.ts`, `tsconfig*.json`, the Tailwind config, `drizzle/*`. If your
 feature needs a new repository function or shared component, write it inside
 your own feature folder first and note it for promotion, rather than editing
 the shared file directly.
@@ -149,7 +149,7 @@ breakdown of what each suite can and can't prove.
 ### Windows end-to-end (WebdriverIO + tauri-driver)
 
 This suite drives the real compiled app through WebView2 and only runs on
-Windows, there's no macOS or Linux equivalent of the WebView2 driver
+Windows. There's no macOS or Linux equivalent of the WebView2 driver
 pairing. It runs in CI on `windows-latest` (`.github/workflows/e2e-win.yml`)
 and can be run locally on a Windows machine or VM:
 
@@ -163,7 +163,7 @@ npm i --no-save --no-audit --no-fund webdriverio @wdio/cli @wdio/local-runner @w
 npx wdio run tests/e2e-win/wdio.conf.ts
 ```
 
-The WebdriverIO toolchain is deliberately not in `package.json`, it only
+The WebdriverIO toolchain is deliberately not in `package.json`: it only
 runs on Windows, in this one suite, and `tests/e2e-win` is excluded from
 `tsconfig.json`'s `include` so it doesn't affect `npm run typecheck` for
 everyone else. See `tests/e2e-win/README.md` for the full explanation and
@@ -181,8 +181,8 @@ This reads `src/db/schema.ts`, compares it against the existing migrations,
 and writes a new SQL file under `drizzle/` plus a matching entry in
 `drizzle/meta/_journal.json`.
 
-Anything Drizzle Kit can't generate on its own, the FTS5 search tables and
-their triggers, or a set of SQL views like the reports migration, is a
+Anything Drizzle Kit can't generate on its own — the FTS5 search tables and
+their triggers, or a set of SQL views like the reports migration — is a
 **custom migration**, written by hand and registered the same way:
 
 ```sh
@@ -199,7 +199,7 @@ adding a migration doesn't require editing them:
 `tests/repo/migrations.test.ts` and `tests/repo/boot.test.ts` both call
 `diskMigrationSource.list()` to get the current set of applied migrations.
 If you add a migration and one of those tests fails, check that your new
-file is actually registered in the journal, don't edit the test's
+file is actually registered in the journal. Don't edit the test's
 expectations by hand.
 
 ## The unsigned-build Keychain prompt
@@ -209,7 +209,7 @@ database or in `helix.json`. On macOS, an app's Keychain access is tied to
 its code-signing identity. Because dev and release builds are unsigned in
 v1, **every rebuild gets treated as a new, unrecognized app**, so macOS will
 prompt for Keychain access again each time you rebuild and run the app
-locally, even if you already granted it. Click Allow, this is expected
+locally, even if you already granted it. Click Allow. This is expected
 during development and goes away once builds are signed (see the changelog's
 "Not in v1" list).
 

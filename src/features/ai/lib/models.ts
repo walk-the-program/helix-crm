@@ -24,8 +24,8 @@ export type AiModel = {
 export const AI_MODELS: AiModel[] = [
   {
     id: "claude-sonnet-5",
-    label: "Sonnet 5 (recommended)",
-    note: "The middle option. Fast, cheap enough to use all day, and accurate on a pasted email.",
+    label: "Sonnet 5",
+    note: "The default. Fast, cheap enough to use all day, and accurate on a pasted email.",
     supportsEffort: true,
   },
   {

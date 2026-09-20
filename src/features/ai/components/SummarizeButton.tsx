@@ -3,8 +3,8 @@
  * the owner can pick up a job he has not touched in a month.
  *
  * The sheet holds one paragraph and two buttons: Close as the ghost, and Copy
- * as the black one, because copying it somewhere he can use it is the only
- * thing this sheet is for (docs/DESIGN.md section 9).
+ * as the primary, because copying it somewhere he can use it is the only thing
+ * this sheet is for.
  *
  * The summary is shown and can be copied. It is never written into the record:
  * a model's paragraph is not a fact about the customer, and the timeline is the

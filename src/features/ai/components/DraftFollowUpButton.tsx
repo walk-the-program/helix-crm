@@ -3,8 +3,9 @@
  * copy or open in his mail app.
  *
  * The sheet is a title, a sentence, and two fields. Cancel is the ghost button,
- * Copy is a default push button, and "Open in Mail" is the one black button -
- * the thing he came to the sheet to do (docs/DESIGN.md section 9).
+ * Copy is a secondary push button, and "Open in Mail" is the sheet's one
+ * primary button and its one block of brand primary - the thing he came to the
+ * sheet to do.
  *
  * Nothing is sent from Helix. The draft opens in whatever mail app the OS uses,
  * through a mailto: URL and the opener plugin, so the owner reads it in his own

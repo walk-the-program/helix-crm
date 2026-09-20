@@ -1,12 +1,11 @@
 /**
  * The frame and the row vocabulary every settings screen is built from.
  *
- * This is macOS System Settings, in the words of docs/DESIGN.md §9 "Cards and
- * grouped lists": a list of sections on the left, grouped under 11px labels,
- * and a detail pane on the right made of **grouped inset lists** — a white
- * panel at --radius-lg with a hairline between rows, a label on the left and
- * the control on the right, and a small-capitals label sitting above the panel
- * in the canvas.
+ * This is macOS System Settings drawn in the Helix brand: a list of sections
+ * on the left, grouped under caption-sized labels, and a detail pane on the
+ * right made of **grouped inset lists** — a square-cornered panel with a
+ * hairline between rows, a label on the left and the control on the right,
+ * and a small-capitals label sitting above the panel in the canvas.
  *
  * Why a left section list rather than a segmented control along the top: it is
  * the idiom the reference application uses, it keeps every section one click
@@ -19,16 +18,17 @@
  * caught.
  *
  * Nothing here adds a page gutter: `Shell`'s `<main>` already pays
- * --space-7 / --space-6 (DESIGN.md §3), and a screen that pads itself again
+ * --space-7 / --space-6, and a screen that pads itself again
  * draws a double margin.
  */
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { navigate } from "wouter/use-browser-location";
-import { Card, CardGroupLabel, CardRow, NavItem, PageHeader, SidebarSection } from "@/ui";
+import { Card, CardGroupLabel, CardRow, PageHeader, SidebarSection } from "@/ui";
 import { cn } from "@/ui/cn";
 import { ICON_SIZE } from "@/ui/icons";
 import { sectionsByGroup } from "@/features/settings/lib/sections";
+import type { SettingsSection } from "@/features/settings/lib/sections";
 
 /* -------------------------------------------------------------------------- */
 /* The section list                                                           */
@@ -39,10 +39,55 @@ import { sectionsByGroup } from "@/features/settings/lib/sections";
  *
  * It lists the two rows other features own as well ("/pipeline" and "/trash"):
  * from the owner's side they are settings, and a list that hides them makes him
- * go back to the index to find them. The rows are `NavItem` — the same
- * primitive the shell's sidebar uses — so the selected tint, the ink and the
- * hit target cannot drift from the chrome they sit next to.
+ * go back to the index to find them.
+ *
+ * **Why these rows are not `NavItem`.** `NavItem` paints its selected row in
+ * the brand primary, and it says so in its own docstring: the shell's sidebar
+ * is where the application spends its one confident block. This list sits
+ * beside that sidebar, so a second `NavItem` would put two blocks of the
+ * primary on one screen and a third beside the screen's primary button — which the
+ * first screenshot pass caught immediately. The geometry is `NavItem`'s (same
+ * height, same gutter, same 18px glyph taking the row's ink); the selected row
+ * is the quiet `--color-selected` tint with full ink and weight 500, which is
+ * what a selected row that is not the sidebar gets.
  */
+function SettingsNavRow(props: { section: SettingsSection; active: boolean }) {
+  const { section, active } = props;
+
+  return (
+    <div data-testid="settings-nav-link" data-section={section.id}>
+      <a
+        href={section.to}
+        aria-current={active ? "page" : undefined}
+        onClick={(event) => {
+          event.preventDefault();
+          navigate(section.to);
+        }}
+        className={cn(
+          "flex min-h-[var(--control-h)] w-full items-center gap-[var(--space-2)]",
+          "px-[var(--space-3)] no-underline hover:no-underline",
+          "text-[length:var(--text-base)] text-[var(--color-text-muted)]",
+          "hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
+          "transition-colors duration-[var(--dur-fast)] motion-reduce:transition-none",
+          "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)]",
+          "focus-visible:-outline-offset-2",
+          active && "bg-[var(--color-selected)] font-medium text-[var(--color-text)]",
+        )}
+      >
+        <span
+          className="inline-flex flex-none items-center justify-center text-current"
+          aria-hidden="true"
+        >
+          <section.icon size={ICON_SIZE} aria-hidden />
+        </span>
+        <span className="flex-1 truncate text-left" title={section.title}>
+          {section.title}
+        </span>
+      </a>
+    </div>
+  );
+}
+
 export function SettingsNav() {
   const [location] = useLocation();
 
@@ -55,22 +100,11 @@ export function SettingsNav() {
       {sectionsByGroup().map((group) => (
         <SidebarSection key={group.id} label={group.label}>
           {group.sections.map((section) => (
-            <div
+            <SettingsNavRow
               key={section.id}
-              data-testid="settings-nav-link"
-              data-section={section.id}
-            >
-              <NavItem
-                label={section.title}
-                icon={<section.icon size={ICON_SIZE} aria-hidden />}
-                active={location === section.to}
-                href={section.to}
-                onClick={(event) => {
-                  event.preventDefault();
-                  navigate(section.to);
-                }}
-              />
-            </div>
+              section={section}
+              active={location === section.to}
+            />
           ))}
         </SidebarSection>
       ))}
@@ -85,7 +119,11 @@ export function SettingsNav() {
 export function SettingsScreenFrame(props: {
   title: string;
   subtitle?: ReactNode;
-  /** At most one, and it is the black button (DESIGN.md §9 "Buttons"). */
+  /**
+   * At most one, and it is the screen's only primary button - the single
+   * block of brand primary the guide allows per view. A screen with nothing
+   * to do passes none.
+   */
   actions?: ReactNode;
   children: ReactNode;
   /** Set on the outermost element so the e2e suite can find the screen. */
@@ -149,8 +187,6 @@ export function SettingsGroup(props: {
   return (
     <section className={cn("flex flex-col", className)} data-testid={props["data-testid"]}>
       {label ? <CardGroupLabel>{label}</CardGroupLabel> : null}
-      {/* overflow-hidden so a hovered or selected first/last row is clipped by
-          the panel's own 10px corner instead of painting a square one over it. */}
       <Card className="overflow-hidden">{children}</Card>
       {footnote ? (
         <p className="px-[var(--space-1)] pt-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
@@ -235,9 +271,10 @@ export function SettingsRow(props: {
  * the sentence that says what it does under the name.
  *
  * The radio itself is the native control, painted in ink rather than in an
- * accent — a chosen option is not asking for the owner's attention (DESIGN.md
- * §5) — and it stays a real `<input type="radio">` inside a `<label>`, so arrow
- * keys walk the group and a screen reader reads it without any help from us.
+ * accent — a chosen option is not asking for the owner's attention, and the
+ * screen's one block of primary is already spent on its primary button — and
+ * it stays a real `<input type="radio">` inside a `<label>`, so arrow keys
+ * walk the group and a screen reader reads it without any help from us.
  */
 export function SettingsChoiceRow(props: {
   /** The radio group's name: the same string on every row of one group. */
@@ -325,9 +362,9 @@ export function SettingsValueRow(props: {
  * The one line a screen shows while it reads the database or helix.json.
  *
  * A sentence, not a spinner: an animated ring on an otherwise empty pane reads
- * as a screen that has broken (DESIGN.md §8). The e2e screenshot pass also
- * waits on `p[role="status"]` starting with "Reading", so every screen says it
- * the same way.
+ * as a screen that has broken. The e2e screenshot pass also waits on
+ * `p[role="status"]` starting with "Reading", so every screen says it the same
+ * way.
  */
 export function SettingsLoading(props: { children: string }) {
   return (
@@ -341,9 +378,10 @@ export function SettingsLoading(props: { children: string }) {
  * Something the owner has to know before he acts — a switch that is refused
  * while a write holds the lock, a duplicate he is about to create.
  *
- * A muted pastel and its own ink, which is the only tint the product allows for
- * attention (DESIGN.md §5). It is a row inside the panel wherever there is a
- * panel to put it in, so it never becomes a floating coloured box.
+ * A muted tint and its own ink, which is the only tint the product allows for
+ * attention. Square corners, flat fill, no border: it is a note, not a card,
+ * and it sits inside the panel wherever there is a panel to put it in so it
+ * never becomes a floating coloured box.
  */
 export function SettingsNotice(props: {
   children: ReactNode;
@@ -355,7 +393,7 @@ export function SettingsNotice(props: {
       role="status"
       data-testid={props["data-testid"]}
       className={cn(
-        "rounded-[var(--radius-md)] bg-[var(--color-warning-soft)]",
+        "bg-[var(--color-warning-soft)]",
         "px-[var(--space-3)] py-[var(--space-2)]",
         "text-[length:var(--text-sm)] text-[var(--color-warning-ink)]",
         props.className,

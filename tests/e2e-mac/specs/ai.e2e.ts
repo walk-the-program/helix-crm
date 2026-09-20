@@ -20,10 +20,37 @@
  *     -c tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/ai.e2e.ts
  */
 import { createServer, type Server } from "node:http";
+import type { Page } from "@playwright/test";
 import { test, expect } from "../fixtures";
 
 const FAKE_PORT = 4795;
 const FAKE_ORIGIN = `http://127.0.0.1:${FAKE_PORT}`;
+
+/**
+ * Flip the theme and wait for it to finish arriving.
+ *
+ * Every surface, border and control in the kit carries `transition-colors`,
+ * so the frame right after `data-theme` changes is the OLD colour: a capture
+ * taken in the same tick photographs the light theme wearing a dark label.
+ * That is how the first brand pass produced "dark" screenshots with white
+ * text fields in every dialog. Wait for the canvas to actually change, then
+ * give the slowest transition (--dur-slow, 200ms) room to land.
+ */
+async function settleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+  await page
+    .waitForFunction(
+      (previous) => getComputedStyle(document.body).backgroundColor !== previous,
+      before,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      // Already on that theme: nothing transitions and nothing is wrong.
+    });
+  await page.waitForTimeout(250);
+}
+
 const GOOD_KEY = "sk-ant-e2e-good-key-1234";
 const BAD_KEY = "sk-ant-e2e-bad-key-0000";
 
@@ -394,7 +421,7 @@ test.describe("AI, screenshots", () => {
   test("the settings screen and all three sheets, light and dark", async ({ page, helix }) => {
     test.setTimeout(180_000);
     const { mkdirSync } = await import("node:fs");
-    const dir = new URL("../.cache/screens/sweep-settings/", import.meta.url).pathname;
+    const dir = new URL("../.cache/screens/brand-b/", import.meta.url).pathname;
     mkdirSync(dir, { recursive: true });
 
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -409,13 +436,10 @@ test.describe("AI, screenshots", () => {
      */
     async function shoot(name: string, fullPage = true): Promise<void> {
       for (const theme of ["light", "dark"] as const) {
-        await page.evaluate(
-          (value) => document.documentElement.setAttribute("data-theme", value),
-          theme,
-        );
+        await settleTheme(page, theme);
         await page.screenshot({ path: `${dir}${name}-${theme}.png`, fullPage });
       }
-      await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+      await settleTheme(page, "light");
     }
 
     /**
@@ -440,8 +464,8 @@ test.describe("AI, screenshots", () => {
     await page.getByTestId("ai-paste-text").fill(PASTED);
     await page.getByTestId("ai-paste-extract").click();
     await expect(page.getByTestId("ai-paste-form")).toBeVisible();
-    // One black button in a sheet: "Read it" is a default push button and Save
-    // is the primary, whether or not the form is up yet (DESIGN.md s9).
+    // One block of brand primary in a sheet: "Read it" is a secondary push
+    // button and Save is the primary, whether or not the form is up yet.
     await expect(page.getByTestId("ai-paste-extract")).not.toHaveClass(/color-accent\)\]/);
     await shoot("ai-paste", false);
 

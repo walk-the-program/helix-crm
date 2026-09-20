@@ -1,5 +1,7 @@
 <p align="center"><img src="assets/brand/helix-logo.png" width="120" alt="Helix CRM"></p>
 
+<p align="center"><em>A CRM that just works for small businesses.</em></p>
+
 # Helix CRM
 
 Helix CRM is a desktop CRM for people who run a trade or service business on
@@ -89,10 +91,10 @@ Sonnet 5 (the default), Opus 5, or Haiku 4.5.
 
 Download the latest release from this repository's Releases page.
 
-**v1 builds are not code-signed.** That costs money and time Helix doesn't
-have yet (see the changelog's "Not in v1" list), so both operating systems
-will warn you the first time you open it. This is expected; it isn't a sign
-anything is wrong.
+**v1 builds are not code-signed.** That costs money and time this project
+doesn't have yet (see the changelog's "Not in v1" list), so both operating
+systems will warn you the first time you open it. This is expected; it isn't
+a sign anything is wrong.
 
 ### macOS
 
@@ -154,8 +156,8 @@ Everything stays on your machine. Each workspace is one SQLite file:
 Backups live in a `backups` folder next to that file, and attachments in an
 `attachments` folder beside it. The list of your workspaces is kept in
 `helix.json` in the same app data folder. Nothing leaves your computer
-unless you turn on the AI module or connect a website, and even then, only
-the data those features need is sent, only when you ask.
+unless you turn on the AI module or connect a website, and even then only
+what those features need is sent, and only when you ask.
 
 The database file itself isn't encrypted; that's what your operating
 system's full-disk encryption (FileVault, BitLocker) is for.
@@ -197,5 +199,5 @@ Helix CRM is licensed under the GNU Affero General Public License v3.0. See
 
 ---
 
-Made by ClearPath Digital, which also builds the websites Helix pulls leads
-from.
+Built by ClearPath Digital, the same team that builds the websites Helix
+pulls leads from.

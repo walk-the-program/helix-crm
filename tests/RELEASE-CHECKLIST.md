@@ -9,11 +9,11 @@ real window.
 
 This checklist covers exactly what those suites can't. Run it on both
 macOS and Windows before tagging a release. Each line names what you're
-checking and what should happen, if it doesn't, don't ship.
+checking and what should happen. If it doesn't, don't ship.
 
 A real launch on this Mac has already confirmed the backend half of the
 first few items (workspace created, migrations applied, seed data present,
-backups written), see `docs/ORCHESTRATION.md`. Screen recording permission
+backups written) — see `docs/ORCHESTRATION.md`. Screen recording permission
 was not available for that run, so nothing about the actual window has been
 looked at yet. Check every box below regardless; a passing backend doesn't
 mean the window drew correctly.

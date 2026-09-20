@@ -3,12 +3,12 @@
  *
  *   paste -> Read it -> a form he can edit -> Save -> one transaction
  *
- * The sheet is native: a title, a sentence, one text area, and - once the model
- * has answered - the proposal as two grouped inset lists with the label on the
- * left and the field on the right. Cancel is the ghost button and Save is the
- * one black button in the sheet; "Read it" is a default push button even before
- * there is anything to save, because a dialog with two filled buttons in it has
- * no primary action at all (docs/DESIGN.md section 9).
+ * The sheet is a title, a sentence, one text area, and - once the model has
+ * answered - the proposal as two grouped inset lists with the label on the
+ * left and the field on the right. Save is the sheet's one primary button and
+ * its one block of brand primary; Cancel is a ghost and "Read it" is a
+ * secondary push button, because a sheet with two filled buttons in it has no
+ * primary action at all.
  *
  * Three rules make this safe:
  *   - what the model returns lands in a form, never in the database. Save is
@@ -189,7 +189,7 @@ export function PasteToRecordDialog(props: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* 680 is the form width (DESIGN.md section 9), and DialogContent is
+      {/* 680 is the form width, and DialogContent is
           already height-bound with its header and footer pinned, so a tall
           proposal scrolls inside the sheet and Save stays reachable. */}
       <DialogContent size="md" data-testid="ai-paste-dialog">
@@ -204,7 +204,7 @@ export function PasteToRecordDialog(props: {
         <div className="flex flex-col gap-[var(--space-4)]">
           {ai.disabledReason ? (
             <p
-              className="rounded-[var(--radius-md)] bg-[var(--color-accent-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)]"
+              className="bg-[var(--color-accent-soft)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)]"
               data-testid="ai-paste-disabled"
               role="status"
             >
@@ -254,7 +254,7 @@ export function PasteToRecordDialog(props: {
               </summary>
               <pre
                 data-testid="ai-paste-raw"
-                className="mt-[var(--space-2)] max-h-48 overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[var(--font-mono)] text-[length:var(--text-xs)] whitespace-pre-wrap"
+                className="mt-[var(--space-2)] max-h-48 overflow-auto border border-[var(--color-border)] bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] whitespace-pre-wrap"
               >
                 {rawAnswer}
               </pre>

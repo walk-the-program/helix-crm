@@ -4,21 +4,27 @@
  * Every report chart is a recharts `BarChart`, so the pieces that would
  * otherwise be copy-pasted five times live here instead: the mark specs, the
  * axis styling, the accessible figure wrapper, and a tooltip content renderer
- * that follows the dataviz skill's rule that values lead and labels follow,
- * keyed by a short line of the series colour rather than a filled box.
+ * that keeps values first and labels second, keyed by a short line of the
+ * series colour rather than a filled box.
  *
- * Colour (docs/DESIGN.md §5). A chart is not allowed its own palette:
+ * Colour. A chart is not allowed its own palette, so it draws from the brand:
  *
  *   - a series whose category IS a pipeline stage takes that stage's own
- *     muted colour, which the stage row already carries as `var(--stage-N)`;
- *   - every other bar is ink. One series is full-strength ink; a second series
- *     beside it is tertiary ink. Two steps of one grey ramp separate them, and
- *     the words are in the legend and on the bars either way.
+ *     colour, which the stage row already carries as `var(--stage-N)`;
+ *   - the leading series everywhere else is the brand primary. That is the
+ *     screen's one confident block of colour, which is why no report card
+ *     also carries a primary button;
+ *   - a second series beside it is the brand secondary, and anything
+ *     subordinate to both is a neutral.
+ *
+ * The accent stays out of the bars on purpose. It is a pale yellow meant to
+ * be a detail on a dark or saturated surface, and a bar of it on the
+ * near-white report canvas is a shape the owner cannot read.
  *
  * Every value here is a `var(--token)` string rather than a literal, so the
  * marks follow the theme: a presentation attribute is parsed as CSS, so
- * `fill="var(--color-text)"` resolves against whatever `data-theme` is on the
- * document, and the dark theme's charts need no second code path.
+ * `fill="var(--brand-primary)"` resolves against whatever `data-theme` is on
+ * the document, and the dark theme's charts need no second code path.
  *
  * There are no gridlines and no value axis anywhere in these reports. Every
  * bar carries its own number at the end of it, so a grid would be a second,
@@ -32,11 +38,11 @@ import type { NameType, ValueType } from "recharts/types/component/DefaultToolti
 /**
  * Charts never animate.
  *
- * docs/DESIGN.md section 8 is blunt about it: "Motion answers an action. It
- * never announces itself. No entrance animations." A bar chart that grows its
- * bars on load is an entrance animation, so it does not belong here - and
- * that rule is strictly stronger than `prefers-reduced-motion`, which it
- * therefore satisfies by construction with no media query to get wrong.
+ * Motion answers something the owner did; it never announces itself. A bar
+ * chart that grows its bars on load is an entrance animation, so it does not
+ * belong here - and that rule is strictly stronger than
+ * `prefers-reduced-motion`, which it therefore satisfies by construction with
+ * no media query to get wrong.
  *
  * It also fixes a real defect rather than only a matter of taste: recharts
  * 3.10 withholds a `LabelList` until the series animation finishes, so an
@@ -48,18 +54,22 @@ export const CHART_ANIMATION_ACTIVE = false;
 /** Bars are never thicker than this, per the mark spec. */
 export const MAX_BAR_SIZE = 20;
 
-/** Rounded on the data end only, square at the baseline. */
-export const HORIZONTAL_BAR_RADIUS: [number, number, number, number] = [0, 4, 4, 0];
-export const VERTICAL_BAR_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
+/**
+ * Square, both ends. The brand's corner language is radius 0 on every control,
+ * card and panel, and a bar with a rounded cap is the one shape on the screen
+ * disagreeing with it. The two names stay so the call sites read as before.
+ */
+export const HORIZONTAL_BAR_RADIUS: [number, number, number, number] = [0, 0, 0, 0];
+export const VERTICAL_BAR_RADIUS: [number, number, number, number] = [0, 0, 0, 0];
 
 /** The surface-coloured gap between adjacent bars in a group. */
 export const CHART_BAR_GAP = 2;
 
-/** The one bar colour: the page's own ink. */
-export const CHART_BAR_INK = "var(--color-text)";
+/** The leading series: the brand primary, and the screen's one block of it. */
+export const CHART_BAR_PRIMARY = "var(--brand-primary)";
 
-/** The second series beside it, two steps down the same grey ramp. */
-export const CHART_BAR_INK_SECONDARY = "var(--color-text-faint)";
+/** The second series beside it: the brand secondary. */
+export const CHART_BAR_SECONDARY = "var(--brand-secondary)";
 
 /**
  * No axis line and no tick line.
@@ -72,10 +82,11 @@ export const CHART_BAR_INK_SECONDARY = "var(--color-text-faint)";
 export const CHART_AXIS_LINE = false as const;
 export const CHART_TICK_LINE = false as const;
 
-/** Axis text is secondary grey, at the meta size, with tabular figures. */
+/** Axis text is a caption: the caption size, secondary ink, tabular figures. */
 export const CHART_TICK_STYLE = {
   fill: "var(--color-text-muted)",
-  fontSize: "var(--text-xs)",
+  fontSize: "var(--text-caption)",
+  fontFamily: "var(--font-body)",
   fontVariantNumeric: "tabular-nums lining-nums",
 } as const;
 
@@ -86,7 +97,8 @@ export const CHART_TICK_STYLE = {
  */
 export const CHART_LABEL_STYLE = {
   fill: "var(--color-text)",
-  fontSize: "var(--text-xs)",
+  fontSize: "var(--text-caption)",
+  fontFamily: "var(--font-body)",
   fontVariantNumeric: "tabular-nums lining-nums",
 } as const;
 
@@ -128,7 +140,7 @@ export function ChartTooltipContent(
   return (
     <div
       className={[
-        "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+        "border border-[var(--color-border)]",
         "bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]",
         "px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)]",
       ].join(" ")}
@@ -164,9 +176,9 @@ export function ChartTooltipContent(
  *
  * `formatMoneyCompact` only compacts above $1,000, so a single axis can come
  * out reading "$0.00, $400.00, $800.00, $1.2K, $1.6K" - three different
- * shapes in one row of ticks. To this audience a column of money that does
- * not line up reads as sloppy bookkeeping (docs/DESIGN.md section 4), so axis
- * ticks are always compact and never carry cents: "$0, $400, $800, $1.2K".
+ * shapes in one row of ticks. A column of money that does not line up reads
+ * as sloppy bookkeeping, so axis ticks are always compact and never carry
+ * cents: "$0, $400, $800, $1.2K".
  * The exact figure with its two decimals is on the bar's own label, in the
  * tooltip and in the table view.
  */

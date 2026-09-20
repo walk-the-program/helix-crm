@@ -6,10 +6,11 @@
  * first question about an AI feature is "what is it sending, and when".
  *
  * Four grouped inset lists in the System Settings idiom: the switch, the key,
- * the model, and a plain-language account of what leaves the machine. The
- * buttons carry no glyphs - "Save key" and "Test key" are already the shortest
- * true sentence, and a glyph on each of three adjacent buttons is the noise
- * DESIGN.md section 10 rules out.
+ * the model, and a plain-language account of what leaves the machine. "Save
+ * key" is the screen's one primary button and its one block of brand primary;
+ * Test key is secondary and Remove key is the destructive text button. None of
+ * the three carries a glyph - each label is already the shortest true sentence,
+ * and three glyphs in a row is noise.
  *
  * The key field is write-only. It is handed straight to the keychain through
  * secret_set and never read back; all the screen keeps is the last four

@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { test, expect, type HelixHarness } from "../fixtures";
 import type { Locator, Page } from "@playwright/test";
 
-const SCREENS = fileURLToPath(new URL("../.cache/screens/sweep-data/", import.meta.url));
+const SCREENS = fileURLToPath(new URL("../.cache/screens/brand-b/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
 
 const SITE_ORIGIN = "https://sorensenlandscaping.com";

@@ -9,9 +9,11 @@
  * webview would defeat the point of keeping it in Rust.
  *
  * The settings feature mounts this screen at "/settings/site"; this folder owns
- * it. The shape is the native settings shape (docs/DESIGN.md §9): three grouped
- * inset lists under small-capitals labels, one black button on the screen, and
- * the facts about the poll as label-and-value rows rather than a table.
+ * it. The shape is the settings shape: three grouped inset lists under
+ * small-capitals labels, and the facts about the poll as label-and-value rows
+ * rather than a table. "Save" is the screen's one primary button and its one
+ * block of brand primary; Test connection and Poll now are secondary, and
+ * Disconnect is the destructive text button.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -223,8 +225,8 @@ export function SiteConnectionScreen() {
                   label="Token"
                   hint={
                     hasToken
-                      ? "A token is saved on this Mac. Leave this empty to keep it, or paste a new one to replace it."
-                      : "Copy this from your site's admin page. It is kept in the Mac keychain, never in your Helix file."
+                      ? "A token is already saved. Leave this empty to keep it, or paste a new one to replace it."
+                      : "Copy it from your site's admin page. It goes into your Mac Keychain or Windows Credential Manager, never into your Helix file."
                   }
                 >
                   <Input

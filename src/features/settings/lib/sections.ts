@@ -3,9 +3,9 @@
  * the section navigation on every settings screen, so the two can never
  * disagree.
  *
- * macOS System Settings is the model (docs/DESIGN.md §1): a list of sections on
- * the left, grouped under 11px labels, and one detail pane on the right. The
- * groups here are the same four the index draws, in the same order.
+ * macOS System Settings is the model: a list of sections on the left, grouped
+ * under 11px labels, and one detail pane on the right. The groups here are the
+ * same four the index draws, in the same order.
  *
  * Two rows still point at screens other features own and are linked, never
  * registered: "/pipeline" (stages, records) and "/trash" (records). Website

@@ -2,12 +2,13 @@
  * "/settings/appearance" — theme and density.
  *
  * Both live in helix.json, not the workspace database
- * (src/app/appSettings.ts), and both apply live: no Save button, the change is
- * visible on <html> the instant it is picked.
+ * (src/app/appSettings.ts), and both apply live: no Save button, so no primary
+ * button and no block of brand primary on this screen. The change is visible
+ * on <html> the instant it is picked, which is the whole point.
  *
- * Three grouped lists: the two choices, then a sample that is drawn from the
- * real tokens, so the owner sees what he is picking rather than reading about
- * it. The sample is deliberately made of a name, a next step and one list row —
+ * Three grouped lists: the two choices, then a sample drawn from the real
+ * tokens, so the owner sees what he is picking rather than reading about it.
+ * The sample is deliberately made of a name, a next step and one list row —
  * the three things every screen in the product is made of.
  */
 import { useAppearance } from "@/app/hooks";
@@ -33,7 +34,7 @@ const DENSITY_OPTIONS: { value: Density; label: string; description: string }[] 
   {
     value: "compact",
     label: "Compact",
-    description: "About a third more rows on a list. Text never gets smaller than 11px.",
+    description: "About a third more rows on a list. Body text goes from 15px to 13px.",
   },
 ];
 
@@ -65,7 +66,7 @@ export function AppearanceScreen() {
 
       <SettingsGroup
         label="Density"
-        footnote="Density changes row height and padding, not the size of the text you read."
+        footnote="Density changes row height and padding first, and the type scale with them."
       >
         <div role="radiogroup" aria-label="Density">
           {DENSITY_OPTIONS.map((option) => (

@@ -2,9 +2,9 @@
  * Diagnostics: where the data is, how big it is, and what the app last did.
  *
  * Four grouped inset lists of label/value rows and nothing else — this screen
- * reads, it never writes. Both buttons are quiet (ghost): there is no primary
- * action here, and DESIGN.md §9 gives a screen a black button only when it has
- * one thing the owner came to do.
+ * reads, it never writes. Both buttons are quiet (ghost), so the screen shows
+ * no primary at all: a screen earns its one block of brand primary only when
+ * it has a single thing the owner came to do, and this one has two equals.
  *
  * Both say plainly when they cannot work rather than failing silently, which is
  * the whole point of the screen.
@@ -39,7 +39,7 @@ function Unknown(props: { children?: string }) {
 /** A path or a version string: the one place the product sets a monospace. */
 function Mono(props: { children: string }) {
   return (
-    <span className="font-[var(--font-mono)] text-[length:var(--text-sm)] break-all">
+    <span className="font-[family-name:var(--font-mono)] text-[length:var(--text-sm)] break-all">
       {props.children}
     </span>
   );

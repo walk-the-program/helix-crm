@@ -7,7 +7,12 @@
  * feature he paid for should be visible even when it is not ready.
  *
  * A disabled button cannot be hovered for a tooltip in every browser, so the
- * reason is rendered as text beside it rather than hidden behind a hover.
+ * reason is rendered as helper text beside it rather than hidden behind a
+ * hover.
+ *
+ * The button is secondary by default. An AI action is never the one thing a
+ * screen is for, so it does not take the screen's block of brand primary; the
+ * call site passes `variant="primary"` only inside a sheet it owns.
  */
 import type { ReactNode } from "react";
 import { Link } from "wouter";

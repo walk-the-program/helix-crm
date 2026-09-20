@@ -7,17 +7,21 @@
  * five queries in parallel), and the period picker in the page header scopes
  * every card at the same time so the numbers always agree with each other.
  *
- * Chart choices (form, colour, mark specs) come from the dataviz skill and
- * from `components/charts.tsx`, which owns every colour and every axis style
- * on this screen. Two rules decide what a bar looks like here:
+ * Colour comes from `components/charts.tsx`, which owns every fill and every
+ * axis style on this screen. Two rules decide what a bar looks like:
  *
  *   - if the category is a pipeline stage, the bar takes that stage's own
- *     muted colour, because the owner already reads those colours as stages
+ *     colour, because the owner already reads those colours as stages
  *     everywhere else in the product;
- *   - otherwise the bar is ink, and a second series beside it is tertiary ink.
+ *   - otherwise the leading series is the brand primary and a second series
+ *     beside it is the brand secondary.
  *
- * No chart on this screen has a gridline or a value axis. Every bar carries
- * its own figure at the end of it, which is exact where a gridline is a guess.
+ * The bars are this screen's one block of primary, which is why the header
+ * carries a period picker and no primary button: a report is something the
+ * owner reads, not something he does.
+ *
+ * No chart here has a gridline or a value axis. Every bar carries its own
+ * figure at the end of it, which is exact where a gridline is a guess.
  */
 import { useEffect, useState } from "react";
 import {
@@ -62,8 +66,8 @@ import {
   CHART_ANIMATION_ACTIVE,
   CHART_AXIS_LINE,
   CHART_BAR_GAP,
-  CHART_BAR_INK,
-  CHART_BAR_INK_SECONDARY,
+  CHART_BAR_PRIMARY,
+  CHART_BAR_SECONDARY,
   CHART_CURSOR_FILL,
   CHART_LABEL_STYLE,
   CHART_TICK_LINE,
@@ -120,7 +124,7 @@ export function ReportsScreen() {
             description={
               query.error instanceof Error
                 ? query.error.message
-                : "Something went wrong loading your reports."
+                : "The database gave no reason. Try picking the period again."
             }
           />
         ) : query.data ? (
@@ -251,17 +255,22 @@ function GranularityControl(props: { value: Granularity; onChange: (value: Granu
   );
 }
 
-/** The headline figure of a report: --text-3xl, tabular, with its two labels. */
+/**
+ * The headline figure of a report: the heading face at the heading size, with
+ * a caption above it and a caption under it. The figure is the only thing on
+ * the card set in the heading font, which is what makes it read as the number
+ * the card is about rather than as one more row of data.
+ */
 function StatTile(props: { label: string; value: string; count: string }) {
   return (
     <div className="flex flex-col gap-[var(--space-1)]">
-      <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+      <span className="text-[length:var(--text-caption)] text-[var(--color-text-muted)]">
         {props.label}
       </span>
-      <span className="tabular text-[length:var(--text-3xl)] font-semibold leading-[var(--leading-tight)] tracking-[var(--tracking-title)] text-[var(--color-text)]">
+      <span className="tabular font-[family-name:var(--font-heading)] text-[length:var(--text-heading)] leading-[var(--leading-heading)] text-[var(--color-heading)]">
         {props.value}
       </span>
-      <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+      <span className="tabular text-[length:var(--text-caption)] text-[var(--color-text-muted)]">
         {props.count}
       </span>
     </div>
@@ -382,16 +391,17 @@ function WonLostCard(props: {
                   iconSize={8}
                   wrapperStyle={{
                     color: "var(--color-text-muted)",
-                    fontSize: "var(--text-xs)",
+                    fontFamily: "var(--font-body)",
+                    fontSize: "var(--text-caption)",
                   }}
                 />
-                {/* Two peers, two steps of one grey ramp. The words are in the
-                    legend and on the bars; the colour is not carrying meaning
-                    on its own. */}
+                {/* Two peers: the brand primary and the brand secondary. The
+                    words are in the legend and on the bars, so the colour is
+                    not carrying the meaning on its own. */}
                 <Bar
                   dataKey="won"
                   name="Won"
-                  fill={CHART_BAR_INK}
+                  fill={CHART_BAR_PRIMARY}
                   maxBarSize={MAX_BAR_SIZE}
                   radius={VERTICAL_BAR_RADIUS}
                   isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -406,7 +416,7 @@ function WonLostCard(props: {
                 <Bar
                   dataKey="lost"
                   name="Lost"
-                  fill={CHART_BAR_INK_SECONDARY}
+                  fill={CHART_BAR_SECONDARY}
                   maxBarSize={MAX_BAR_SIZE}
                   radius={VERTICAL_BAR_RADIUS}
                   isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -503,7 +513,7 @@ function SourcesCard(props: { rows: SourceRow[] }) {
             <Bar
               dataKey="deals"
               name="Leads"
-              fill={CHART_BAR_INK}
+              fill={CHART_BAR_PRIMARY}
               maxBarSize={MAX_BAR_SIZE}
               radius={HORIZONTAL_BAR_RADIUS}
               isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -592,7 +602,7 @@ function ConversionCard(props: { rows: ConversionRow[] }) {
             <Bar
               dataKey="rate"
               name="Conversion rate"
-              fill={CHART_BAR_INK}
+              fill={CHART_BAR_PRIMARY}
               maxBarSize={MAX_BAR_SIZE}
               radius={HORIZONTAL_BAR_RADIUS}
               isAnimationActive={CHART_ANIMATION_ACTIVE}
@@ -635,7 +645,7 @@ function DwellMiniChart(props: {
       <div>
         <CardGroupLabel>{title}</CardGroupLabel>
         <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          Nothing to show for this slice yet.
+          Nothing here yet.
         </p>
       </div>
     );
@@ -744,7 +754,7 @@ function DwellCard(props: { rows: DwellRow[] }) {
       description="How long a stage visit takes, and how long today's open deals have been waiting."
       empty={empty}
       emptyTitle="No stage history yet"
-      emptyDescription="How long deals sit in each stage shows up here once some finish or some start waiting."
+      emptyDescription="How long deals sit in each stage shows up here once some have finished, or some are waiting."
       csv={csv}
       chart={
         <div className="grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-2">

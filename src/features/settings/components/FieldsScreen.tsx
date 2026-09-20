@@ -3,7 +3,7 @@
  *
  * The entity switch (Contacts / Companies / Deals) is chrome, not a setting,
  * so it sits directly under the page header as a plain segmented control -
- * not inside a group label or a panel of its own (docs/DESIGN.md §9 "Sidebar
+ * not inside a group label or a panel of its own (the shell's "Sidebar
  * and nav": a control that only points at a section is not itself a setting).
  * Below it is one grouped inset list per entity, a CardRow per field, in the
  * same shape WorkspacesScreen uses for its rows. The kind badge is gone: a
@@ -11,13 +11,14 @@
  * now reads as a plain second line under the name, the way a Finder list
  * subtitles a file with its kind and size.
  *
- * "Add a field" is the screen's one black button, and it is in exactly one
+ * "Add a field" is the screen's one primary button - its one block of brand
+ * primary - and it is in exactly one
  * place at a time: the header when there are fields, the empty state when there
- * are none (docs/DESIGN.md §9 - one primary button per screen, and an empty
+ * are none (one primary per view, and an empty
  * state is a title, a sentence and one button).
  *
  * A destructive action always names the record and what it costs before it
- * runs (docs/DESIGN.md §7 "no dark patterns"). The mutations, `move()`,
+ * runs (no dark patterns). The mutations, `move()`,
  * `parseOptions`, `optionsFromText` and every toast string are unchanged.
  */
 import { useEffect, useState } from "react";

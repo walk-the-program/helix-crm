@@ -4,8 +4,12 @@
  * A grouped inset list of workspaces, and a second one for the archived ones.
  * The open workspace wears the --color-selected tint and full ink, which is how
  * a native list marks the row you are in - position and weight, never a
- * coloured rail (DESIGN.md section 9). Its own row is the only one that cannot
- * be switched to or archived.
+ * coloured rail. Its own row is the only one that cannot be switched to or
+ * archived.
+ *
+ * "New workspace" is the screen's one block of brand primary. It is in the
+ * header when there are workspaces and in the empty state when there are none,
+ * never in both at once.
  *
  * The list is helix.json, not the database, because a closed workspace cannot be
  * queried - which is also why the last poll and last backup times are mirrored
@@ -258,9 +262,11 @@ export function WorkspacesScreen() {
       subtitle="One file per business. Only the one you have open polls for leads and backs up."
       testId="settings-workspaces"
       actions={
-        <Button variant="primary" onClick={() => setCreating(true)} data-testid="workspace-new">
-          New workspace
-        </Button>
+        live.length > 0 ? (
+          <Button variant="primary" onClick={() => setCreating(true)} data-testid="workspace-new">
+            New workspace
+          </Button>
+        ) : undefined
       }
     >
       {blocked ? (
@@ -274,7 +280,11 @@ export function WorkspacesScreen() {
           title="No workspaces yet"
           description="A workspace is one business: its own file, its own contacts, its own backups."
           action={
-            <Button variant="primary" onClick={() => setCreating(true)}>
+            <Button
+              variant="primary"
+              onClick={() => setCreating(true)}
+              data-testid="workspace-new"
+            >
               New workspace
             </Button>
           }

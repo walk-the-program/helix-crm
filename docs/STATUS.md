@@ -2571,3 +2571,72 @@ Gallery captured at 1280 in light, dark and compact, plus 14 sections in both
 themes, into `design/brand/`. Verified: typecheck clean, `npm test` green
 (15 new tests for Brand, NavItem and Badge), `vite build` succeeds, zero
 console messages and zero failed requests.
+
+---
+
+## 2026-09-19 — Brand sweep: leads, settings, AI, and the four documents
+
+The supplied brand guide (`assets/brand/guide/helix-crm-brand-guide.html`)
+applied to `src/features/{leads,settings,ai}`, their three e2e specs, and
+`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `tests/RELEASE-CHECKLIST.md`.
+Built on the foundation agent's `42e2bc6` (tokens and self-hosted fonts) and
+`fa221ab` (component kit, lockup, shell). The per-screen record — which element
+carries the primary on each view, what changed, and what the screenshots caught
+— is `design/brand/sweep-leads-settings-ai.md`.
+
+**What changed**
+
+- **One block of primary per view.** Two screens were painting more than one.
+  The settings **section list** was built from `NavItem`, whose selected row is
+  the shell's block of primary by design, which put two blocks on every settings
+  screen and three wherever the screen also had a primary button; it is now a
+  local `SettingsNavRow` with the same geometry and the quiet `--color-selected`
+  tint. **Workspaces** rendered its header button and its empty-state button at
+  the same time when the list was empty; the header one is now conditional, the
+  rule Tags and Custom fields already followed.
+- **Charts on the brand.** The leading series is `--brand-primary` and a second
+  is `--brand-secondary`; stage-coloured bars keep the stage ramp. Bar caps are
+  square. Axis ticks, value labels and the legend are the caption step in
+  `--font-body`, so SVG text matches the HTML around it. The accent is
+  deliberately **not** used as a bar fill: it is a pale yellow, and on the
+  near-white report canvas it is a shape the owner cannot read.
+- **Radius 0 and no literals.** Every rounded-corner utility is gone from the
+  three folders, including the tag colour swatches, which are squares now. The
+  verification grep over the three features returns nothing.
+- **Voice pass** on every string in the screens and on the four documents.
+
+**Two real defects found by the screenshot pass**
+
+1. `font-[var(--font-mono)]` is not a Tailwind utility and had silently never
+   resolved, so the database paths on **Diagnostics** and the raw-answer dump in
+   the **AI paste sheet** were never monospace. Both are
+   `font-[family-name:var(--font-mono)]` now. Worth grepping for elsewhere.
+2. **Every dark-mode screenshot of a dialog was a lie.** The `shoot()` helpers
+   in `settings.e2e.ts` and `ai.e2e.ts` set `data-theme` and captured in the
+   same tick; every control in the kit carries `transition-colors`, so the
+   captured frame still held the light colours and each dark sheet photographed
+   with white text fields. A computed-style probe confirmed it —
+   `--color-surface` already read the dark value while `background-color` was
+   still white. Both helpers now wait for the canvas colour to change and give
+   the slowest transition 250ms to land. `leads.e2e.ts` already waited, which is
+   why only its captures were trustworthy. The same white fields are in the
+   pre-brand captures under `.cache/screens/sweep-settings/`, so any other
+   spec that flips `data-theme` and shoots immediately has the same problem.
+
+**Verified**: `npm run typecheck` clean; `npm test` 67 files / 815 tests green;
+`E2E_PORT=4195 E2E_OUT=dist-brand-b` over `leads`, `settings` and `ai` — 30
+passed; `npx vite build --outDir dist-brand-b` succeeded and the folder was
+deleted. Screens at 1280 in both themes are in
+`tests/e2e-mac/.cache/screens/brand-b/` (42 images, gitignored).
+
+**Not done / for someone else**
+
+- The stage ramp is still revision 2's eight hues, which `tokens.css` says is
+  deliberate because the guide is silent on it. In light mode a stage-coloured
+  bar is noticeably more saturated than a brand-primary one sitting two cards
+  above it. It reads as two kinds of bar, which is defensible, but if the ramp
+  is ever re-derived against the brand the Reports screen is where it will show.
+- `docs/STATUS.md` and `design/brand/sweep-records-today-data.md` both contain
+  the literal text `rounded-[var(--radius-*)]`, which Tailwind's scanner picks
+  up out of the markdown and then warns about while optimising the CSS ("Unexpected
+  token Delim('*')"). Harmless, but it is two lines of noise on every build.

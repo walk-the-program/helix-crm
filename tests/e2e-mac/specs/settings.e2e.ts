@@ -23,13 +23,38 @@ import type { Page } from "@playwright/test";
 import { test, expect, type HelixHarness } from "../fixtures";
 import { SETTINGS_SECTIONS } from "../../../src/features/settings/lib/sections";
 
-const SCREENS_DIR = fileURLToPath(new URL("../.cache/screens/sweep-settings/", import.meta.url));
+const SCREENS_DIR = fileURLToPath(new URL("../.cache/screens/brand-b/", import.meta.url));
 
 const APP_VERSION = (
   JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")) as {
     version: string;
   }
 ).version;
+
+/**
+ * Flip the theme and wait for it to finish arriving.
+ *
+ * Every surface, border and control in the kit carries `transition-colors`,
+ * so the frame right after `data-theme` changes is the OLD colour: a capture
+ * taken in the same tick photographs the light theme wearing a dark label.
+ * That is how the first brand pass produced "dark" screenshots with white
+ * text fields in every dialog. Wait for the canvas to actually change, then
+ * give the slowest transition (--dur-slow, 200ms) room to land.
+ */
+async function settleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+  await page
+    .waitForFunction(
+      (previous) => getComputedStyle(document.body).backgroundColor !== previous,
+      before,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      // Already on that theme: nothing transitions and nothing is wrong.
+    });
+  await page.waitForTimeout(250);
+}
 
 /* -------------------------------------------------------------------------- */
 /* Shapes read back out of the e2e shim's in-memory state                     */
@@ -529,11 +554,11 @@ test("captures every settings screen in both themes", async ({ page, helix }) =>
    */
   async function shoot(name: string, fullPage = true): Promise<void> {
     for (const theme of ["light", "dark"] as const) {
-      await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+      await settleTheme(page, theme);
       await page.screenshot({ path: `${SCREENS_DIR}${name}-${theme}.png`, fullPage });
     }
     // Leave it as the app found it before moving on.
-    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    await settleTheme(page, "light");
   }
 
   // Every route reachable from the index, including the two screens other
