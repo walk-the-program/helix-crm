@@ -34,6 +34,9 @@ export type Stage = {
   quietDays: number;
   isWon: boolean;
   isLost: boolean;
+  /** The per-stage follow-up rule (LR-PX-C). Null means no rule. */
+  followUpDays: number | null;
+  followUpTitle: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -47,6 +50,8 @@ export const newStageSchema = z.object({
   quietDays: z.number().int().min(0).default(14),
   isWon: z.boolean().default(false),
   isLost: z.boolean().default(false),
+  followUpDays: z.number().int().min(1).max(365).nullable().optional(),
+  followUpTitle: z.string().nullable().optional(),
 });
 
 export type NewStage = z.input<typeof newStageSchema>;
@@ -60,6 +65,8 @@ const STAGE_COLS: readonly Col<Stage>[] = [
   ["quietDays", "s.quiet_days", "int"],
   ["isWon", "s.is_won", "bool"],
   ["isLost", "s.is_lost", "bool"],
+  ["followUpDays", "s.follow_up_days", "intNull"],
+  ["followUpTitle", "s.follow_up_title", "textNull"],
   ["createdAt", "s.created_at", "text"],
   ["updatedAt", "s.updated_at", "text"],
   ["deletedAt", "s.deleted_at", "textNull"],
@@ -142,6 +149,8 @@ export async function create(
       quietDays: parsed.quietDays,
       isWon: parsed.isWon,
       isLost: parsed.isLost,
+      followUpDays: parsed.followUpDays ?? null,
+      followUpTitle: parsed.followUpTitle ?? null,
       deletedAt: null,
     };
     const stmt = insertStatement("stages", row);
@@ -152,7 +161,17 @@ export async function create(
 }
 
 export type StagePatch = Partial<
-  Pick<NewStage, "name" | "color" | "quietDays" | "isWon" | "isLost" | "position">
+  Pick<
+    NewStage,
+    | "name"
+    | "color"
+    | "quietDays"
+    | "isWon"
+    | "isLost"
+    | "position"
+    | "followUpDays"
+    | "followUpTitle"
+  >
 >;
 
 export async function update(
@@ -169,6 +188,8 @@ export async function update(
     if (patch.isWon !== undefined) values.isWon = patch.isWon;
     if (patch.isLost !== undefined) values.isLost = patch.isLost;
     if (patch.position !== undefined) values.position = patch.position;
+    if (patch.followUpDays !== undefined) values.followUpDays = patch.followUpDays;
+    if (patch.followUpTitle !== undefined) values.followUpTitle = patch.followUpTitle;
     const stmt = updateStatement("stages", id, values);
     await raw.execute(stmt.sql, stmt.params);
     await logWrite("stage", id, "update", before, values, options.batchId);
