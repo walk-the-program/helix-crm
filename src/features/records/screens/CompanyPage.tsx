@@ -114,9 +114,25 @@ export function CompanyPage() {
         subtitle={
           <span className="inline-flex flex-wrap items-center gap-[var(--space-2)]">
             <span className="tabular">
-              {counts?.contacts ?? 0} {counts?.contacts === 1 ? "person" : "people"} ·{" "}
-              {counts?.openDeals ?? 0} open {vocabulary.lowerMany} · {counts?.closedDeals ?? 0}{" "}
-              closed
+              {[
+                counts?.contacts === 0 || counts?.contacts === undefined
+                  ? "No people yet"
+                  : counts.contacts === 1
+                    ? "1 person"
+                    : `${counts.contacts} people`,
+                counts?.openDeals === 0 || counts?.openDeals === undefined
+                  ? `no open ${vocabulary.lowerMany}`
+                  : counts.openDeals === 1
+                    ? `1 open ${vocabulary.lower}`
+                    : `${counts.openDeals} open ${vocabulary.lowerMany}`,
+                !counts?.closedDeals
+                  ? null
+                  : counts.closedDeals === 1
+                    ? `1 closed ${vocabulary.lower}`
+                    : `${counts.closedDeals} closed ${vocabulary.lowerMany}`,
+              ]
+                .filter((part): part is string => part !== null)
+                .join(" · ")}
             </span>
             {archived ? <Badge tone="warning">Archived</Badge> : null}
           </span>
