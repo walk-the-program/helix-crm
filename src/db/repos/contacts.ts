@@ -75,6 +75,12 @@ export type Contact = {
   lastName: string;
   companyId: string | null;
   companyName: string | null;
+  /**
+   * Set when the linked company is in the Trash. The join does not filter it
+   * out: dropping the name would read as "No company" on a contact who has
+   * one. Screens say "(in Trash)" beside it instead (CPO audit, F-LA-9).
+   */
+  companyDeletedAt: string | null;
   addressJson: string | null;
   sourceId: string | null;
   notes: string | null;
@@ -86,6 +92,26 @@ export type Contact = {
 export type ContactWithChildren = Contact & {
   phones: ContactPhone[];
   emails: ContactEmail[];
+};
+
+/**
+ * One row of the Contacts list.
+ *
+ * The list used to show the name, the company and two tags, which is not what
+ * the owner opens it for: PLAN.md says he scans for the name, the money and
+ * the phone number, and there was no phone on the screen at all (CPO audit,
+ * F-LA-7). These four extras come from correlated subqueries in the same
+ * statement rather than a read per row, and they are declared here rather than
+ * on `Contact` so that `get`, the pickers and the dedupe scan keep their
+ * cheaper select.
+ */
+export type ContactListRow = Contact & {
+  primaryPhoneRaw: string | null;
+  primaryPhoneE164: string | null;
+  /** The soonest open task on this person: the promise still outstanding. */
+  nextTaskTitle: string | null;
+  nextTaskDueOn: string | null;
+  nextTaskDueAt: string | null;
 };
 
 export const phoneInput = z.object({
@@ -136,6 +162,7 @@ const CONTACT_COLS: readonly Col<Contact>[] = [
   ["lastName", "c.last_name", "text"],
   ["companyId", "c.company_id", "textNull"],
   ["companyName", "co.name", "textNull"],
+  ["companyDeletedAt", "co.deleted_at", "textNull"],
   ["addressJson", "c.address_json", "textNull"],
   ["sourceId", "c.source_id", "textNull"],
   ["notes", "c.notes", "textNull"],
@@ -159,6 +186,40 @@ const EMAIL_COLS: readonly Col<ContactEmail>[] = [
   ["emailLower", "e.email_lower", "text"],
   ["label", "e.label", "text"],
   ["isPrimary", "e.is_primary", "bool"],
+] as const;
+
+/**
+ * `CONTACT_COLS` plus what the list screen shows and nothing else reads.
+ *
+ * The task subqueries repeat their WHERE because SQLite has no LATERAL: three
+ * correlated reads of one indexed column are still one statement and one plan,
+ * which is what "no N+1" means here. `due_on IS NULL` sorts last so a dated
+ * promise always wins over an undated one - the same order `tasks.list` uses.
+ */
+const NEXT_TASK = `SELECT %s FROM tasks t
+     WHERE t.contact_id = c.id AND t.deleted_at IS NULL AND t.done_at IS NULL
+     ORDER BY (t.due_on IS NULL) ASC, t.due_on ASC, t.due_at ASC, t.created_at ASC
+     LIMIT 1`;
+
+const CONTACT_LIST_COLS: readonly Col<ContactListRow>[] = [
+  ...CONTACT_COLS,
+  [
+    "primaryPhoneRaw",
+    `(SELECT p.raw FROM contact_phones p
+      WHERE p.contact_id = c.id AND p.deleted_at IS NULL
+      ORDER BY p.is_primary DESC, p.created_at ASC LIMIT 1)`,
+    "textNull",
+  ],
+  [
+    "primaryPhoneE164",
+    `(SELECT p.e164 FROM contact_phones p
+      WHERE p.contact_id = c.id AND p.deleted_at IS NULL
+      ORDER BY p.is_primary DESC, p.created_at ASC LIMIT 1)`,
+    "textNull",
+  ],
+  ["nextTaskTitle", `(${NEXT_TASK.replace("%s", "t.title")})`, "textNull"],
+  ["nextTaskDueOn", `(${NEXT_TASK.replace("%s", "t.due_on")})`, "textNull"],
+  ["nextTaskDueAt", `(${NEXT_TASK.replace("%s", "t.due_at")})`, "textNull"],
 ] as const;
 
 const CONTACT_FROM = `FROM contacts c LEFT JOIN companies co ON co.id = c.company_id`;
@@ -254,11 +315,11 @@ function whereFor(filter: ContactFilter): { sql: string; params: unknown[] } {
 export async function list(
   filter: ContactFilter = {},
   page?: Page,
-): Promise<{ rows: Contact[]; total: number }> {
+): Promise<{ rows: ContactListRow[]; total: number }> {
   const where = whereFor(filter);
   const limit = pageClause(page);
   const rows = await raw.query(
-    `SELECT ${selectList(CONTACT_COLS, "c")} ${CONTACT_FROM}${where.sql}
+    `SELECT ${selectList(CONTACT_LIST_COLS, "c")} ${CONTACT_FROM}${where.sql}
      ORDER BY c.last_name COLLATE NOCASE ASC, c.first_name COLLATE NOCASE ASC${limit.sql}`,
     [...where.params, ...limit.params],
   );
@@ -266,7 +327,7 @@ export async function list(
     `SELECT count(*) AS total ${CONTACT_FROM}${where.sql}`,
     where.params,
   );
-  return { rows: mapRows(CONTACT_COLS, rows), total };
+  return { rows: mapRows(CONTACT_LIST_COLS, rows), total };
 }
 
 /* -------------------------------------------------------------------------- */

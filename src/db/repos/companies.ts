@@ -58,6 +58,19 @@ export type Company = {
   deletedAt: string | null;
 };
 
+/**
+ * One row of the Companies list.
+ *
+ * The list showed the name, the phone and two tags; what it could not answer
+ * was "is there work on here" (CPO audit, F-LA-7). Two correlated subqueries
+ * in the same statement, declared here rather than on `Company` so the picker
+ * and the dedupe scan keep their cheaper select.
+ */
+export type CompanyListRow = Company & {
+  openDealCount: number;
+  openDealValueCents: number;
+};
+
 export const newCompanySchema = z.object({
   name: z.string().min(1, "A company needs a name."),
   website: z.string().nullable().optional(),
@@ -88,6 +101,20 @@ const COMPANY_COLS: readonly Col<Company>[] = [
   ["createdAt", "co.created_at", "text"],
   ["updatedAt", "co.updated_at", "text"],
   ["deletedAt", "co.deleted_at", "textNull"],
+] as const;
+
+const OPEN_DEALS = `FROM deals d JOIN stages st ON st.id = d.stage_id
+     WHERE d.company_id = co.id AND d.deleted_at IS NULL
+       AND st.is_won = 0 AND st.is_lost = 0`;
+
+const COMPANY_LIST_COLS: readonly Col<CompanyListRow>[] = [
+  ...COMPANY_COLS,
+  ["openDealCount", `(SELECT count(*) ${OPEN_DEALS})`, "int"],
+  [
+    "openDealValueCents",
+    `(SELECT coalesce(sum(d.value_cents), 0) ${OPEN_DEALS})`,
+    "int",
+  ],
 ] as const;
 
 export async function get(id: string): Promise<Company | null> {
@@ -126,11 +153,11 @@ function whereFor(filter: CompanyFilter): { sql: string; params: unknown[] } {
 export async function list(
   filter: CompanyFilter = {},
   page?: Page,
-): Promise<{ rows: Company[]; total: number }> {
+): Promise<{ rows: CompanyListRow[]; total: number }> {
   const where = whereFor(filter);
   const limit = pageClause(page);
   const rows = await raw.query(
-    `SELECT ${selectList(COMPANY_COLS, "co")} FROM companies co${where.sql}
+    `SELECT ${selectList(COMPANY_LIST_COLS, "co")} FROM companies co${where.sql}
      ORDER BY co.name COLLATE NOCASE ASC${limit.sql}`,
     [...where.params, ...limit.params],
   );
@@ -138,7 +165,7 @@ export async function list(
     `SELECT count(*) AS total FROM companies co${where.sql}`,
     where.params,
   );
-  return { rows: mapRows(COMPANY_COLS, rows), total };
+  return { rows: mapRows(COMPANY_LIST_COLS, rows), total };
 }
 
 /** Exact-name lookup, used by the CSV import to link or create a company. */

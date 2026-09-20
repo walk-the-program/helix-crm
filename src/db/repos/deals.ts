@@ -55,8 +55,18 @@ export type Deal = {
   contactId: string | null;
   contactFirstName: string | null;
   contactLastName: string | null;
+  /**
+   * Set when the linked contact or company is in the Trash. The joins below
+   * deliberately do NOT filter on it: dropping the name would leave "No
+   * company" on a deal that plainly has one, which is worse than saying so.
+   * A screen renders the name with "(in Trash)" beside it instead, so the
+   * owner can tell a live customer from a deleted one at a glance
+   * (CPO audit, F-LA-9).
+   */
+  contactDeletedAt: string | null;
   companyId: string | null;
   companyName: string | null;
+  companyDeletedAt: string | null;
   sourceId: string | null;
   externalId: string | null;
   expectedOn: string | null;
@@ -133,8 +143,10 @@ const DEAL_COLS: readonly Col<Deal>[] = [
   ["contactId", "d.contact_id", "textNull"],
   ["contactFirstName", "c.first_name", "textNull"],
   ["contactLastName", "c.last_name", "textNull"],
+  ["contactDeletedAt", "c.deleted_at", "textNull"],
   ["companyId", "d.company_id", "textNull"],
   ["companyName", "co.name", "textNull"],
+  ["companyDeletedAt", "co.deleted_at", "textNull"],
   ["sourceId", "d.source_id", "textNull"],
   ["externalId", "d.external_id", "textNull"],
   ["expectedOn", "d.expected_on", "textNull"],
@@ -561,13 +573,26 @@ export async function moveToStage(
     const at = options.at ?? now;
     const changedStage = before.stageId !== toStageId;
     const closing = target.isWon || target.isLost;
+    /**
+     * Re-picking the stage a closed deal already sits in, with a date, is how
+     * a wrong won or lost date is corrected.
+     *
+     * Before this, `closed_at` was `before.closedAt ?? at`, so the first close
+     * won forever and the only way to fix a mistyped date was to reopen and
+     * re-win - two stage events and two timeline lines for one correction
+     * (CPO audit, F-LA-10; ruling R2). An explicitly passed `at` now wins.
+     * Nothing else changes: no `deal_stage_events` row, because the deal did
+     * not move, and the timeline says what actually happened.
+     */
+    const redatingClose =
+      !changedStage && closing && options.at !== undefined && options.at !== before.closedAt;
 
     const values: Record<string, unknown> = {
       stageId: toStageId,
       updatedAt: now,
-      closedAt: closing ? (before.closedAt ?? at) : null,
+      closedAt: closing ? (redatingClose ? at : (before.closedAt ?? at)) : null,
     };
-    if (changedStage) values.stageEnteredAt = at;
+    if (changedStage || redatingClose) values.stageEnteredAt = at;
     // An open stage has no outcome, so leaving won or lost clears the reason:
     // that is the reopen path.
     values.outcomeReason = closing ? trimmedOrNull(effectiveReason) : null;
@@ -592,6 +617,13 @@ export async function moveToStage(
       const sys = systemStatement({
         dealId: id,
         body: `Moved to ${target.name} on ${formatDateDisplay(at)}`,
+        occurredAt: at,
+      });
+      await raw.execute(sys.sql, sys.params);
+    } else if (redatingClose) {
+      const sys = systemStatement({
+        dealId: id,
+        body: `${target.isWon ? "Won" : "Lost"} date changed to ${formatDateDisplay(at)}`,
         occurredAt: at,
       });
       await raw.execute(sys.sql, sys.params);
@@ -714,10 +746,39 @@ export async function restore(
   );
 }
 
+/**
+ * The document that stops this deal being purged, if there is one.
+ *
+ * A quote or an invoice that has left draft is a real piece of paper the owner
+ * sent someone. `documents.deal_id` is ON DELETE SET NULL, so purging the deal
+ * would silently cut the invoice loose from the job it was raised for and the
+ * revenue report would never find its way back (Lead B's F-LB-3, ruling R6b).
+ * Drafts and voids are not refused: nothing left the building.
+ *
+ * Returns the document's number, so the Trash row can say which one.
+ */
+export async function purgeBlockedBy(id: string): Promise<string | null> {
+  const rows = await raw.query(
+    `SELECT dc.number AS dc_number FROM documents dc
+     WHERE dc.deal_id = ? AND dc.deleted_at IS NULL
+       AND dc.status NOT IN ('draft', 'void')
+     ORDER BY dc.number ASC LIMIT 1`,
+    [id],
+  );
+  return rows.length > 0 ? String(rows[0][0]) : null;
+}
+
 export async function purge(
   id: string,
   options: { batchId?: string } = {},
 ): Promise<void> {
+  const blocker = await purgeBlockedBy(id);
+  if (blocker) {
+    throw new ValidationError(
+      `${blocker} refers to this one, so it stays until that document is void or deleted.`,
+      [{ path: "id", message: `${blocker} refers to it.` }],
+    );
+  }
   await withWrite(
     () => purgeRow("deals", "deal", id, options.batchId),
     "Purging a deal",
