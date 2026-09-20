@@ -4,14 +4,18 @@
  * The owner this product is built for (docs/DESIGN.md, design/research.md) is
  * not going to read documentation for its own sake — he opens this page once,
  * scans for the paragraph that answers the thing in front of him, and leaves.
- * So there is no table of contents (six short sections do not need one), no
- * card-on-card stacking, and no illustration: just a title, a heading and two
- * short paragraphs per topic, in the same column width the eye already reads
- * prose in (`--content-max`, the guide's 60-75 character measure).
+ * So there is no table of contents (a handful of short sections do not need
+ * one), no card-on-card stacking, and no illustration: just a title, a
+ * heading and two short paragraphs per topic, in the same column width the
+ * eye already reads prose in (`--content-max`, the guide's 60-75 character
+ * measure).
  *
  * The copy itself lives in lib/content.ts as data, not in this file, so it
  * can be unit-tested without rendering anything and so this component stays
- * layout only.
+ * layout only. `HELP_WEBSITE_ENDPOINT` (docs/rounds/2026-09-20-round-3.md
+ * #17) is one such section that is not part of `HELP_SECTIONS`: it is
+ * spliced in right after "Your website's leads" so `HELP_SECTIONS` can keep
+ * its own six-item contract in tests/unit/help/content.test.ts.
  *
  * Two sections carry a real action instead of just words:
  *  - "Keyboard shortcuts" opens the same sheet the "?" key does. It looks the
@@ -28,6 +32,7 @@
  * One hairline, at most, separates the everyday sections from the "something
  * is wrong" one; every other gap is air, not a rule.
  */
+import { Fragment } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { navigate } from "wouter/use-browser-location";
 import { Button, PageHeader, toast } from "@/ui";
@@ -35,6 +40,7 @@ import { findCommand } from "@/app/registry";
 import {
   HELP_SECTIONS,
   HELP_TROUBLE,
+  HELP_WEBSITE_ENDPOINT,
   ISSUES_URL,
   type HelpSection,
 } from "@/features/help/lib/content";
@@ -131,7 +137,12 @@ export function HelpScreen() {
 
       <div className="flex max-w-[var(--content-max)] flex-col gap-[var(--space-8)]">
         {HELP_SECTIONS.map((section) => (
-          <HelpSectionBlock key={section.id} section={section} />
+          <Fragment key={section.id}>
+            <HelpSectionBlock section={section} />
+            {section.id === "website-leads" ? (
+              <HelpSectionBlock section={HELP_WEBSITE_ENDPOINT} />
+            ) : null}
+          </Fragment>
         ))}
         <TroubleSection />
       </div>

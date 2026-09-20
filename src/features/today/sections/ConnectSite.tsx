@@ -40,9 +40,9 @@ export function ConnectSiteCard() {
           Send quote-form leads straight here
         </h2>
         <p className="mt-[var(--space-2)] max-w-[var(--content-max)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-          Paste your site address and the token from your website settings.
-          Helix checks for new quote requests when it opens and every five
-          minutes while it is running.
+          Connect a website that sends leads to Helix. Sites built by
+          ClearPath work out of the box; any site can implement the endpoint
+          described in Help, which Helix polls for new leads.
         </p>
         <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
           <Link

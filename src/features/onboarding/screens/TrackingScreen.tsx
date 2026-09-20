@@ -3,8 +3,16 @@
  *
  * Nothing here is a wizard question. It is the finished setup, shown, so the
  * owner can look at it and change the two things that do not match how he
- * works. Rename a stage, drop a source, add a field — and then one button
- * writes the lot in one transaction.
+ * works. Rename a stage, add a field — and then one button writes the lot in
+ * one transaction.
+ *
+ * The preset's sources are not shown or editable here (docs/rounds/2026-09-20
+ * -round-3.md #17 — Walker: "I don't know what you do with these sources. I
+ * just want to make sure that all the information you're taking is actually
+ * necessary"). `plan.sources` still rides along untouched from
+ * `planFromPreset` straight into `applyPlan`'s transaction, so the trade's own
+ * sources are still written; there is just nothing on this screen to look at
+ * or change about them.
  *
  * One primary block: "Use this setup". The chosen word for the work is a quiet
  * tile, not a second block.
@@ -16,7 +24,6 @@ import {
   planKey,
   planProblems,
   type PlanField,
-  type PlanSource,
   type PlanStage,
   type SetupPlan,
 } from "@/features/onboarding/lib/applyPreset";
@@ -74,7 +81,6 @@ export function TrackingScreen({
   const blocking = error ?? problems[0]?.message ?? null;
 
   const setStages = (stages: PlanStage[]) => onChange({ ...plan, stages });
-  const setSources = (sources: PlanSource[]) => onChange({ ...plan, sources });
   const setFields = (fields: PlanField[]) => onChange({ ...plan, fields });
 
   const patchStage = (key: string, patch: Partial<PlanStage>) =>
@@ -174,45 +180,6 @@ export function TrackingScreen({
           }
         >
           Add a stage
-        </Button>
-      </SetupSection>
-
-      <SetupSection label="Where the work comes from">
-        <Card>
-          {plan.sources.map((source) => (
-            <CardRow key={source.key} className="gap-[var(--space-2)]">
-              <Input
-                aria-label="Where the work comes from"
-                value={source.name}
-                onChange={(e) =>
-                  setSources(
-                    plan.sources.map((s) =>
-                      s.key === source.key ? { ...s, name: e.target.value } : s,
-                    ),
-                  )
-                }
-                className="min-w-0 flex-1"
-              />
-              <IconButton
-                label={`Remove ${source.name || "this source"}`}
-                title="Remove"
-                size="sm"
-                icon={<Trash size={16} weight="bold" aria-hidden />}
-                onClick={() => setSources(plan.sources.filter((s) => s.key !== source.key))}
-              />
-            </CardRow>
-          ))}
-        </Card>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="self-start"
-          iconLeft={<Plus size={16} weight="bold" aria-hidden />}
-          onClick={() =>
-            setSources([...plan.sources, { key: planKey("source"), name: "", kind: "manual" }])
-          }
-        >
-          Add a source
         </Button>
       </SetupSection>
 

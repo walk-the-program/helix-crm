@@ -66,6 +66,27 @@ export const HELP_SECTIONS: HelpSection[] = [
   },
 ];
 
+/**
+ * Not one of the six in `HELP_SECTIONS` — it is new this round (docs/rounds/
+ * 2026-09-20-round-3.md #17), sits between "Your website's leads" and
+ * "Backups" on the screen, and is kept as its own export the same way
+ * `HELP_TROUBLE` is, so the existing "exactly six sections" contract on
+ * `HELP_SECTIONS` still holds.
+ *
+ * The shape here is the real one: `src/features/leads/lib/types.ts`'s `Lead`
+ * and `LeadPage`, and docs/CONTRACTS.md's "Site endpoint contract". Helix
+ * polls (`GET`), it does not receive a push, so a site that is not built by
+ * ClearPath answers this request rather than calling out to Helix.
+ */
+export const HELP_WEBSITE_ENDPOINT: HelpSection = {
+  id: "website-leads-endpoint",
+  title: "Connecting a site Helix didn't build",
+  paragraphs: [
+    "A website does not have to be built by ClearPath to send its leads to Helix. It needs one endpoint, GET /api/crm/leads, that answers a bearer token in the Authorization header with a 200 response shaped like { leads: [...], nextCursor }. Each lead needs an id, a createdAt, and whatever it has of name, email, phone, service, message and pageUrl; leave a field null rather than leaving it out, list leads oldest first by createdAt then id, and cap a page at 200.",
+    "Paste your site's address and that token under Settings, then Website, the same as a ClearPath site. Helix stores the token in your Mac Keychain or Windows Credential Manager and sends it back as the bearer token on every request; it is never written to a file you could lose. Helix polls this endpoint on its own, once when it starts and every few minutes after, so your site never has to reach out to Helix. It only has to answer when Helix asks, and hand back the cursor it was given as after on the next page.",
+  ],
+};
+
 export const HELP_TROUBLE: HelpSection = {
   id: "trouble",
   title: "Something's wrong?",

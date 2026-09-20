@@ -22,6 +22,13 @@ import type { Page } from "@playwright/test";
 const SCREENS = fileURLToPath(new URL("../.cache/screens/onboarding/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
 
+// Round 3 criterion 17 (docs/rounds/2026-09-20-round-3.md): equal trade tiles,
+// no sources step, and public website wording. Screenshots for these go
+// beside the design review's own files rather than into the e2e cache, the
+// same way tests/e2e-mac/specs/hig.e2e.ts writes into design/hig/.
+const ROUND3_SHOTS = fileURLToPath(new URL("../../../design/round3/", import.meta.url));
+mkdirSync(ROUND3_SHOTS, { recursive: true });
+
 const LANDSCAPING_STAGES = [
   "New lead",
   "Walked the property",
@@ -56,11 +63,11 @@ async function settleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
 }
 
 /** Light and dark, at the width docs/DESIGN.md's review pass asks for. */
-async function shoot(page: Page, name: string): Promise<void> {
+async function shoot(page: Page, name: string, dir: string = SCREENS): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 900 });
   for (const theme of ["light", "dark"] as const) {
     await settleTheme(page, theme);
-    await page.screenshot({ path: `${SCREENS}${name}-${theme}.png`, fullPage: true });
+    await page.screenshot({ path: `${dir}${name}-${theme}.png`, fullPage: true });
   }
   await settleTheme(page, "light");
 }
@@ -194,6 +201,77 @@ test.describe("first run", () => {
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
+  test("trade tiles are equal height, the sources step is gone, and the website wording is public", async ({
+    page,
+    helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.goto("/");
+    await page.setViewportSize({ width: 1280, height: 900 });
+
+    /* -- screen 1: every trade tile is the same height, hint or no hint ---- */
+
+    const tradeGroup = page.getByRole("group", { name: "What kind of work" });
+    const tiles = tradeGroup.getByRole("button");
+    await expect(tiles).toHaveCount(10);
+
+    for (const theme of ["light", "dark"] as const) {
+      await settleTheme(page, theme);
+      const heights = await tiles.evaluateAll((nodes) =>
+        nodes.map((node) => node.getBoundingClientRect().height),
+      );
+      expect(heights).toHaveLength(10);
+      const [first, ...rest] = heights;
+      for (const height of rest) {
+        expect(Math.abs(height - first)).toBeLessThanOrEqual(1);
+      }
+    }
+    await settleTheme(page, "light");
+
+    await page.getByLabel("What is the business called?").fill("Alpine Ridge Landscape");
+    await page.getByRole("button", { name: "Landscaping", exact: true }).click();
+    await shoot(page, "onboarding-1", ROUND3_SHOTS);
+
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    /* -- screen 2: no "Where the work comes from", no "Add a source" ------- */
+
+    await expect(
+      page.getByRole("heading", { name: "How you'll track work", level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByText("Where the work comes from")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add a source" })).toHaveCount(0);
+    // The rest of the screen is still here: stages, vocabulary, custom fields.
+    await expect(page.getByRole("button", { name: "Add a stage" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add a detail" })).toBeVisible();
+
+    await shoot(page, "onboarding-2", ROUND3_SHOTS);
+
+    await page.getByRole("button", { name: "Use this setup" }).click();
+
+    /* -- the preset's sources were still written, silently ----------------- */
+
+    await expect(
+      page.getByRole("heading", { name: "Bring your customers in", level: 1 }),
+    ).toBeVisible();
+    const sourceCount = Number(
+      helix.bridge.query("SELECT count(*) FROM sources", [])[0][0],
+    );
+    expect(sourceCount).toBe(4); // landscaping.ts ships Website, Referral, Drive-by, Repeat customer.
+
+    /* -- screen 3: the website card speaks to any owner, not just ClearPath */
+
+    await expect(
+      page.getByText(
+        "Connect a website that sends leads to Helix. Sites built by ClearPath work out of the box; any site can implement the endpoint described in Help, which Helix polls for new leads.",
+      ),
+    ).toBeVisible();
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
   test("skipping goes to Today and setup does not come back on reload", async ({
     page,
     helix,
@@ -225,5 +303,24 @@ test.describe("first run", () => {
     await expect(page.getByRole("navigation")).toBeVisible();
 
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+});
+
+test.describe("the public website endpoint, documented", () => {
+  // Default fixtures skip onboarding, so this goes straight to the shell.
+
+  // `helix` binds the database bridge and pre-seeds helix.json before the app
+  // boots (see tests/e2e-mac/specs/hig.e2e.ts's own note on this fixture);
+  // leave it out of the signature and the app has nowhere to read from and
+  // never renders.
+  test("Help explains the endpoint a non-ClearPath site answers", async ({ page, helix }) => {
+    expect(helix.dbPath).toContain("helix.db");
+    await page.goto("/help");
+    await expect(
+      page.getByRole("heading", { name: "Connecting a site Helix didn't build" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("GET /api/crm/leads", { exact: false }),
+    ).toBeVisible();
   });
 });

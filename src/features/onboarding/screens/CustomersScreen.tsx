@@ -23,8 +23,8 @@ const CHOICES: { id: CustomersChoice; title: string; body: string }[] = [
   },
   {
     id: "site",
-    title: "Connect your website",
-    body: "Every form fill lands here as a new lead, within a minute, by itself.",
+    title: "Connect a website",
+    body: "Connect a website that sends leads to Helix. Sites built by ClearPath work out of the box; any site can implement the endpoint described in Help, which Helix polls for new leads.",
   },
   {
     id: "sample",

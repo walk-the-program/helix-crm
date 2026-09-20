@@ -134,7 +134,11 @@ export function BusinessScreen({
             {visible.trade}
           </p>
         ) : null}
-        <div role="group" aria-label="What kind of work" className="grid grid-cols-3 gap-[var(--space-2)]">
+        <div
+          role="group"
+          aria-label="What kind of work"
+          className="grid grid-cols-3 gap-[var(--space-2)] [grid-auto-rows:1fr]"
+        >
           {TRADE_OPTIONS.map((option) => (
             <ChoiceTile
               key={option.id}

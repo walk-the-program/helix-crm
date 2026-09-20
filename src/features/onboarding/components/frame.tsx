@@ -131,7 +131,12 @@ export function ChoiceTile({
       onClick={onSelect}
       aria-pressed={selected}
       className={[
-        "flex min-h-[var(--row-h)] flex-col items-start justify-center gap-[var(--space-1)]",
+        // Every tile in a grid takes this same min-height, hint or no hint, so a
+        // row that happens to hold the one tile with a hint (docs/rounds/2026-09-20
+        // -round-3.md #17) never grows taller than the rows around it. The extra
+        // --space-6 over --row-h is room for the hint's own line plus its gap, not
+        // a guess: it comes off the same 4px scale as everything else here.
+        "flex h-full min-h-[calc(var(--row-h)_+_var(--space-6))] flex-col items-start justify-center gap-[var(--space-1)]",
         "border px-[var(--space-3)] py-[var(--space-2)] text-left",
         "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)]",
         "motion-reduce:transition-none",
