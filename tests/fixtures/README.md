@@ -88,3 +88,45 @@ elapsed time in milliseconds, row count, and final file size in bytes when
 done. `100k.csv` is not committed — it is listed in
 `malformed/.gitignore` and should be generated locally when needed for
 performance testing.
+
+## Deal and company fixtures
+
+| File | Rows | Line endings | Delimiter | Encoding | Quoting | What makes it messy | What it tests |
+|---|---|---|---|---|---|---|---|
+| `hubspot-deals.csv` | 30 | CRLF | `,` | UTF-8, no BOM | Quoted only where needed | Mixed `Amount` formats (`$12,500.00`, `4200`, `$850`, `18,400.00`, ...) including one unparseable `Call for quote`; `Deal Stage` mixes the real seeded stage names in varied casing (`new`, `CONTACTED`, `SCHEDULED`, `WON`, ...) with one unknown stage (`Contract Sent`) and two blank stages; `Close Date` mixes US format (`3/14/2026`), ISO (`2026-04-02`), and three blank; four rows carry a contact name with no email or phone, two rows have no contact at all; five blank companies and one company name containing a comma (quoted); two notes with escaped double quotes (`""Ask for Dave""`) | A HubSpot-style deal export exercising deal-stage, amount, close-date, and contact-matching mapping paths |
+| `pipedrive-deals.csv` | 30 | LF | `,` | UTF-8 | Every field quoted (matches real Pipedrive exports) | Same stage/amount/contact messiness as the HubSpot deal file — mixed casing on real seeded stages, one unknown stage (`Proposal Sent`), two blank stages, one unparseable `Value` (`Call for quote`) — but `Expected close date` is ISO throughout, `Value` is a bare number, and organization names and notes contain commas, which is why every cell is blanket-quoted; two notes with escaped double quotes | A Pipedrive-style deal export where the exporter quotes every cell regardless of content |
+| `hubspot-companies.csv` | 25 | CRLF | `,` | UTF-8, no BOM | Quoted only where needed | Blank phone on 5 rows and blank street address on 5 rows, one company name containing a comma (quoted), one description with escaped double quotes (`""Ask for Dave""`), one exact duplicate company name appearing on two separate rows, tags semicolon-separated on some rows | A HubSpot-style company export for the company dedupe-policy test |
+
+Row counts, field counts, and parse results were verified against the
+actual generated files with the repo's own `sniffCsv` + `parseCsvText`
+(`src/lib/csv.ts`) — all three parse with **zero parse errors**, and every
+row's field count matches its header.
+
+`hubspot-deals.csv` has exactly 30 data rows: 1 row with an unknown Deal
+Stage (`Contract Sent`), 2 rows with a blank Deal Stage, 1 row with an
+unparseable Amount (`Call for quote`), and 6 rows whose Associated Contact
+Email is copied verbatim from `hubspot-contacts.csv` —
+`sarah.mitchell83@gmail.example`, `dchen.hvac@yahoo.example`,
+`jwhitfield@comcast.example`, `amybrewer99@gmail.example`,
+`joseph.martin347@example.com`, and `maria.murphy131@example.com`. Its
+Associated Company column has 10 distinct non-blank company names (5 rows
+are blank), one of which — `Jordan River Pest Control, LLC` — contains a
+comma. Note that those 6 shared emails sit on **7** deal rows: David Chen
+has two jobs in the file, which is what makes importing the deals after the
+contacts attach both to one person instead of making a twin.
+
+`pipedrive-deals.csv` has exactly 30 data rows: 1 row with an unknown
+Stage (`Proposal Sent`), 2 rows with a blank Stage, 1 row with an
+unparseable Value (`Call for quote`), and 4 rows whose `Person - Email` is
+copied verbatim from `pipedrive-persons.csv` —
+`mgonzalez.plumbing@outlook.example`, `jwhitfield@comcast.example`,
+`jessica.sanders624@example.com`, and `sharon.murphy422@example.com`. Its
+Organization column has 10 distinct non-blank names (5 rows are blank),
+one of which — `Deseret Pest Control, LLC` — contains a comma.
+
+`hubspot-companies.csv` has exactly 25 data rows and 24 distinct company
+names: `Wasatch Front Sprinkler Repair` appears twice (an exact duplicate,
+for the dedupe-policy test). 5 rows have a blank Phone Number, 5 rows have
+a blank Street Address, one company name (`Jordan River Plumbing, Inc`)
+contains a comma, and one Description contains an escaped double quote
+(`""Ask for Dave""`).

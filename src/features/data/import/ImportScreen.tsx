@@ -6,39 +6,62 @@
  *     +------------- import another -------+
  *
  * Nothing is written before "Import": the file is read, sniffed and mapped in
- * memory, and the write happens in one transaction (see lib/importRun.ts).
+ * memory, and the write happens in one transaction (lib/importRun.ts for
+ * contacts, lib/typedImportRun.ts for everything else).
  *
- * The shape is a macOS setup assistant (docs/DESIGN.md §1): a quiet trail of
- * step names in the canvas, one panel of content under it, and the two buttons
- * that move the assistant pinned to the bottom right - Back, then the single
- * primary button for the step. Nothing else on the step is coloured.
+ * The first step asks what is in the file before it asks for the file, because
+ * the answer changes every screen after it: which columns the guesser knows,
+ * which fields the preview shows, and which duplicate question is worth asking.
+ * Contacts is the default and the contacts path is untouched - it is the one
+ * import with a year of fixtures behind it.
+ *
+ * The shape is a macOS setup assistant (docs/DESIGN.md section 1): a quiet
+ * trail of step names in the canvas, one panel of content under it, and the two
+ * buttons that move the assistant pinned to the bottom right - Back, then the
+ * single primary button for the step. Nothing else on the step is coloured, and
+ * that includes the examples menu in the header.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Upload } from "@/ui/icons";
 import { Button, Card, CardBody, EmptyState, PageHeader, Spinner, toast } from "@/ui";
-import {
-  ImportParseError,
-  delimiterLabel,
-  parseCsvText,
-} from "@/lib/csv";
+import { ImportParseError, delimiterLabel, parseCsvText } from "@/lib/csv";
 import type { LoadedCsv } from "@/features/data/lib/filePick";
 import { applyMapping, type ColumnMapping, type MappedRow } from "@/features/data/lib/mapping";
 import {
+  SKIP,
+  readDraftRow,
+  type DraftRow,
+  type TypedColumnMapping,
+} from "@/features/data/lib/typedMapping";
+import {
   initialMapping,
+  initialTypedMapping,
   rememberMapping,
+  rememberTypedMapping,
 } from "@/features/data/lib/rememberMapping";
 import {
   runImport,
   type DedupePolicy,
   type ImportProgress,
-  type ImportResult,
 } from "@/features/data/lib/importRun";
+import { runTypedImport } from "@/features/data/lib/typedImportRun";
+import {
+  contactsResultView,
+  typedResultView,
+  type ResultView,
+} from "@/features/data/lib/importResultView";
+import { DEFAULT_IMPORT_TYPE, importType } from "@/features/data/import/fields/index";
+import type { ImportTypeId } from "@/features/data/import/fields/types";
 import { FilePickStep } from "@/features/data/import/FilePickStep";
 import { MappingStep } from "@/features/data/import/MappingStep";
 import { PreviewStep } from "@/features/data/import/PreviewStep";
+import { TypedMappingStep } from "@/features/data/import/TypedMappingStep";
+import { TypedPreviewStep } from "@/features/data/import/TypedPreviewStep";
 import { ResultStep } from "@/features/data/import/ResultStep";
 import { ProgressBar } from "@/features/data/import/ProgressBar";
+import { TypePicker } from "@/features/data/import/TypePicker";
+import { ExamplesMenu } from "@/features/data/import/ExamplesMenu";
 
 type Step = "pick" | "map" | "preview" | "running" | "result";
 
@@ -54,11 +77,10 @@ const PREVIEW_ROWS = 20;
 /**
  * Where the owner is, in words.
  *
- * The old trail was four tinted pills, one of them green - four filled shapes
- * and two colours to say one thing. A native assistant states the step names
- * in a row and lets weight and ink carry the position: the current step is
- * full-strength ink at weight 500, the ones behind it are secondary, the ones
- * ahead are tertiary, and a hairline joins them.
+ * A native assistant states the step names in a row and lets weight and ink
+ * carry the position: the current step is full-strength ink at weight 500, the
+ * ones behind it are secondary, the ones ahead are tertiary, and a hairline
+ * joins them.
  */
 function StepTrail({ step }: { step: Step }) {
   const current = step === "running" ? "preview" : step;
@@ -104,8 +126,9 @@ function StepFooter(props: {
   onNext: () => void;
   nextLabel: string;
   nextIcon: "continue" | "import";
+  nextDisabled?: boolean;
 }) {
-  const { onBack, backLabel, onNext, nextLabel, nextIcon } = props;
+  const { onBack, backLabel, onNext, nextLabel, nextIcon, nextDisabled } = props;
   return (
     <div className="flex flex-wrap items-center justify-end gap-[var(--space-2)]">
       <Button
@@ -118,6 +141,7 @@ function StepFooter(props: {
       <Button
         variant="primary"
         onClick={onNext}
+        disabled={nextDisabled}
         iconLeft={
           nextIcon === "import" ? <Upload size={16} weight="bold" aria-hidden="true" /> : undefined
         }
@@ -161,19 +185,24 @@ function ParseFailure(props: { error: ImportParseError; onRetry: () => void }) {
 export function ImportScreen() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("pick");
+  const [typeId, setTypeId] = useState<ImportTypeId>(DEFAULT_IMPORT_TYPE);
   const [file, setFile] = useState<LoadedCsv | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [sampleRows, setSampleRows] = useState<string[][]>([]);
   const [totalPreviewed, setTotalPreviewed] = useState(0);
   const [mapping, setMapping] = useState<ColumnMapping[]>([]);
+  const [typedMapping, setTypedMapping] = useState<TypedColumnMapping[]>([]);
   const [signature, setSignature] = useState("");
   const [remembered, setRemembered] = useState(false);
   const [policy, setPolicy] = useState<DedupePolicy>("skip");
   const [progress, setProgress] = useState<ImportProgress | null>(null);
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [view, setView] = useState<ResultView | null>(null);
   const [parseError, setParseError] = useState<ImportParseError | null>(null);
   const [emptyFile, setEmptyFile] = useState(false);
   const headingRef = useRef<HTMLDivElement>(null);
+
+  const type = importType(typeId);
+  const isLegacy = type.legacy === true;
 
   // Moving between steps should move the keyboard too.
   useEffect(() => {
@@ -186,41 +215,53 @@ export function ImportScreen() {
     setHeaders([]);
     setSampleRows([]);
     setMapping([]);
-    setResult(null);
+    setTypedMapping([]);
+    setView(null);
     setParseError(null);
     setEmptyFile(false);
     setProgress(null);
+    setPolicy("skip");
   }, []);
 
-  const onLoaded = useCallback(async (loaded: LoadedCsv) => {
-    setParseError(null);
-    setEmptyFile(false);
-    try {
-      const preview = parseCsvText(loaded.text, {
-        delimiter: loaded.delimiter,
-        limit: PREVIEW_ROWS,
-      });
-      setFile(loaded);
-      setHeaders(preview.headers);
-      setSampleRows(preview.rows);
-      setTotalPreviewed(preview.rowCount);
-      if (preview.rowCount === 0) {
-        setEmptyFile(true);
-        return;
+  const onLoaded = useCallback(
+    async (loaded: LoadedCsv) => {
+      setParseError(null);
+      setEmptyFile(false);
+      try {
+        const preview = parseCsvText(loaded.text, {
+          delimiter: loaded.delimiter,
+          limit: PREVIEW_ROWS,
+        });
+        setFile(loaded);
+        setHeaders(preview.headers);
+        setSampleRows(preview.rows);
+        setTotalPreviewed(preview.rowCount);
+        if (preview.rowCount === 0) {
+          setEmptyFile(true);
+          return;
+        }
+        if (isLegacy) {
+          const initial = await initialMapping(preview.headers);
+          setMapping(initial.mapping);
+          setSignature(initial.signature);
+          setRemembered(initial.remembered);
+        } else {
+          const initial = await initialTypedMapping(type, preview.headers);
+          setTypedMapping(initial.mapping);
+          setSignature(initial.signature);
+          setRemembered(initial.remembered);
+        }
+        setStep("map");
+      } catch (err) {
+        if (err instanceof ImportParseError) {
+          setParseError(err);
+          return;
+        }
+        throw err;
       }
-      const initial = await initialMapping(preview.headers);
-      setMapping(initial.mapping);
-      setSignature(initial.signature);
-      setRemembered(initial.remembered);
-      setStep("map");
-    } catch (err) {
-      if (err instanceof ImportParseError) {
-        setParseError(err);
-        return;
-      }
-      throw err;
-    }
-  }, []);
+    },
+    [isLegacy, type],
+  );
 
   const onError = useCallback((err: unknown) => {
     if (err instanceof ImportParseError) {
@@ -232,10 +273,35 @@ export function ImportScreen() {
 
   const previewRows: MappedRow[] = useMemo(
     () =>
-      sampleRows.map((cells, i) =>
-        applyMapping(cells, mapping, i + 2, { region: undefined }),
-      ),
-    [sampleRows, mapping],
+      isLegacy
+        ? sampleRows.map((cells, i) => applyMapping(cells, mapping, i + 2, { region: undefined }))
+        : [],
+    [isLegacy, sampleRows, mapping],
+  );
+
+  const typedPreviewRows: DraftRow[] = useMemo(
+    () =>
+      isLegacy
+        ? []
+        : sampleRows.map((cells, i) => readDraftRow(type, cells, typedMapping, i + 2)),
+    [isLegacy, sampleRows, typedMapping, type],
+  );
+
+  const mappedFieldKeys = useMemo(
+    () => typedMapping.filter((m) => m.field !== SKIP).map((m) => m.field),
+    [typedMapping],
+  );
+
+  /** A required field with no column behind it: there is nothing to import. */
+  const missingRequired = useMemo(
+    () =>
+      isLegacy
+        ? false
+        : type.fields.some(
+            (field) =>
+              field.required === true && !typedMapping.some((m) => m.field === field.key),
+          ),
+    [isLegacy, type, typedMapping],
   );
 
   async function startImport() {
@@ -243,19 +309,38 @@ export function ImportScreen() {
     setStep("running");
     setProgress({ phase: "reading", processed: 0, total: 0 });
     try {
-      await rememberMapping(signature, mapping);
-      const outcome = await runImport({
+      if (isLegacy) {
+        await rememberMapping(signature, mapping);
+        const outcome = await runImport({
+          text: file.text,
+          mapping,
+          delimiter: file.delimiter,
+          policy,
+          onProgress: setProgress,
+        });
+        setView(contactsResultView(outcome));
+        setStep("result");
+        await queryClient.invalidateQueries();
+        toast.success(
+          `${outcome.created.toLocaleString()} created, ${outcome.updated.toLocaleString()} updated.`,
+        );
+        return;
+      }
+
+      await rememberTypedMapping(signature, typedMapping);
+      const outcome = await runTypedImport({
+        typeId,
         text: file.text,
-        mapping,
+        mapping: typedMapping,
         delimiter: file.delimiter,
         policy,
         onProgress: setProgress,
       });
-      setResult(outcome);
+      setView(typedResultView(outcome));
       setStep("result");
       await queryClient.invalidateQueries();
       toast.success(
-        `${outcome.created.toLocaleString()} created, ${outcome.updated.toLocaleString()} updated.`,
+        `${outcome.created.toLocaleString()} created, ${outcome.skipped.toLocaleString()} skipped.`,
       );
     } catch (err) {
       setStep("preview");
@@ -279,11 +364,14 @@ export function ImportScreen() {
         title="Import"
         subtitle={subtitle}
         actions={
-          step !== "pick" && step !== "running" ? (
-            <Button variant="ghost" onClick={reset}>
-              Start over
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+            {step !== "pick" && step !== "running" ? (
+              <Button variant="ghost" onClick={reset}>
+                Start over
+              </Button>
+            ) : null}
+            <ExamplesMenu />
+          </div>
         }
       />
 
@@ -311,10 +399,13 @@ export function ImportScreen() {
         ) : null}
 
         {step === "pick" && !parseError && !emptyFile ? (
-          <FilePickStep onLoaded={(f) => void onLoaded(f)} onError={onError} />
+          <>
+            <TypePicker value={typeId} onChange={setTypeId} />
+            <FilePickStep typeLabel={type.label} onLoaded={(f) => void onLoaded(f)} onError={onError} />
+          </>
         ) : null}
 
-        {step === "map" ? (
+        {step === "map" && isLegacy ? (
           <>
             <MappingStep
               headers={headers}
@@ -333,10 +424,50 @@ export function ImportScreen() {
           </>
         ) : null}
 
-        {step === "preview" ? (
+        {step === "map" && !isLegacy ? (
+          <>
+            <TypedMappingStep
+              type={type}
+              sampleRows={sampleRows}
+              mapping={typedMapping}
+              remembered={remembered}
+              onChange={setTypedMapping}
+            />
+            <StepFooter
+              onBack={reset}
+              backLabel="Back"
+              onNext={() => setStep("preview")}
+              nextLabel="Continue"
+              nextIcon="continue"
+              nextDisabled={missingRequired}
+            />
+          </>
+        ) : null}
+
+        {step === "preview" && isLegacy ? (
           <>
             <PreviewStep
               rows={previewRows}
+              totalRows={totalPreviewed}
+              policy={policy}
+              onPolicyChange={setPolicy}
+            />
+            <StepFooter
+              onBack={() => setStep("map")}
+              backLabel="Back"
+              onNext={() => void startImport()}
+              nextLabel="Import"
+              nextIcon="import"
+            />
+          </>
+        ) : null}
+
+        {step === "preview" && !isLegacy ? (
+          <>
+            <TypedPreviewStep
+              type={type}
+              rows={typedPreviewRows}
+              mappedFieldKeys={mappedFieldKeys}
               totalRows={totalPreviewed}
               policy={policy}
               onPolicyChange={setPolicy}
@@ -382,9 +513,9 @@ export function ImportScreen() {
           </Card>
         ) : null}
 
-        {step === "result" && result ? (
+        {step === "result" && view ? (
           <ResultStep
-            result={result}
+            view={view}
             fileName={file?.name ?? "your file"}
             onImportAnother={reset}
           />

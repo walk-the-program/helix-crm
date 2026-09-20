@@ -102,9 +102,10 @@ export function MappingStep(props: {
 
         {dealColumns.length > 0 ? (
           <p role="note" className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            This file has deal columns ({dealColumns.join(", ")}). Helix imports
-            people and companies in this version; deals are not imported, so
-            those columns stay on Skip. You can add the deals by hand afterwards.
+            This file has deal columns ({dealColumns.join(", ")}). You are
+            importing it as contacts, so those columns stay on Skip. To bring the
+            jobs in too, import the same file a second time and choose Deals on
+            the first step.
           </p>
         ) : null}
       </div>

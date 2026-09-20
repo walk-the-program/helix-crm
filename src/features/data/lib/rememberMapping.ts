@@ -15,6 +15,14 @@ import {
   type ColumnMapping,
   type FieldId,
 } from "@/features/data/lib/mapping";
+import {
+  applyRememberedTyped,
+  guessMappingFor,
+  toRememberedTyped,
+  typedSignature,
+  type TypedColumnMapping,
+} from "@/features/data/lib/typedMapping";
+import type { ImportTypeDefinition } from "@/features/data/import/fields/types";
 
 type Remembered = { header: string; field: FieldId; customName?: string; label?: string };
 
@@ -64,4 +72,60 @@ export async function rememberMapping(
 
 export async function forgetMapping(signature: string): Promise<void> {
   await setRaw(keyFor(signature), null);
+}
+
+/* -------------------------------------------------------------------------- */
+/* the same thing for companies and deals                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The typed signature already carries the type id (`deals.14-1abc`), so the
+ * setting key is keyed per type and header shape without any extra work: the
+ * same file mapped once as Companies and once as Deals remembers both.
+ *
+ * Contacts keeps the original un-prefixed key above. Owners who have already
+ * mapped their CRM's export should not be asked again because the code around
+ * them grew a second import type.
+ */
+type RememberedTyped = { header: string; field: string };
+
+function isRememberedTyped(value: unknown): value is RememberedTyped[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as RememberedTyped).header === "string" &&
+        typeof (item as RememberedTyped).field === "string",
+    )
+  );
+}
+
+export async function initialTypedMapping(
+  type: ImportTypeDefinition,
+  headers: string[],
+): Promise<{ mapping: TypedColumnMapping[]; remembered: boolean; signature: string }> {
+  const signature = typedSignature(type.id, headers);
+  let stored: unknown;
+  try {
+    stored = await getRaw(keyFor(signature));
+  } catch {
+    stored = undefined;
+  }
+  if (isRememberedTyped(stored)) {
+    return {
+      mapping: applyRememberedTyped(headers, stored),
+      remembered: true,
+      signature,
+    };
+  }
+  return { mapping: guessMappingFor(type, headers), remembered: false, signature };
+}
+
+export async function rememberTypedMapping(
+  signature: string,
+  mapping: TypedColumnMapping[],
+): Promise<void> {
+  await setRaw(keyFor(signature), toRememberedTyped(mapping));
 }

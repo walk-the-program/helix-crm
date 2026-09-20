@@ -40,7 +40,7 @@ export function Kbd(props: { keys: string }) {
         "min-w-[var(--space-5)] px-[var(--space-1)]",
         "border border-[var(--color-border)]",
         "bg-[var(--color-accent-soft)] text-[var(--color-text-faint)]",
-        // family-name: is required here — `font-[var(--font-sans)]` is
+        // family-name: is required here — the plain var() form is
         // ambiguous to Tailwind and compiles to a font-weight. macOS draws
         // shortcut glyphs in the system face, not mono.
         "font-[family-name:var(--font-sans)] text-[length:var(--text-xs)]",

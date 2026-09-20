@@ -22,10 +22,12 @@ import {
 } from "@/features/data/lib/filePick";
 
 export function FilePickStep(props: {
+  /** "Contacts", "Companies", "Deals": what the owner picked one step above. */
+  typeLabel: string;
   onLoaded: (file: LoadedCsv) => void;
   onError: (error: unknown) => void;
 }) {
-  const { onLoaded, onError } = props;
+  const { typeLabel, onLoaded, onError } = props;
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -106,8 +108,9 @@ export function FilePickStep(props: {
       </div>
 
       <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-        Helix imports people and their companies. Deals, tasks and notes stay
-        where they are for now.
+        Helix will read this file as {typeLabel.toLowerCase()}. Not sure what the
+        columns should be? Download an example from the top right, fill it in,
+        and bring it back.
       </p>
     </div>
   );

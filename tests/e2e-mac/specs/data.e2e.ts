@@ -26,13 +26,52 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "../fixtures";
 import type { Page } from "@playwright/test";
+// A relative import straight into src, the same way settings.e2e.ts reaches
+// SETTINGS_SECTIONS: the header this test expects has to come from the field
+// list itself, never a copy of it typed into the spec, or a rename here would
+// stop meaning anything.
+import { DEALS_IMPORT } from "../../../src/features/data/import/fields/deals";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = join(here, "..", "..", "..");
 const SCREENS = join(here, "..", ".cache", "screens", "brand-a");
+const TYPES_SCREENS = join(here, "..", ".cache", "screens", "import-types");
 
 function fixture(...parts: string[]): string {
   return readFileSync(join(REPO, "tests", "fixtures", ...parts), "utf8");
+}
+
+/**
+ * A line-level RFC 4180 split: quoted commas do not break a cell apart, and a
+ * doubled quote inside a quoted cell decodes to one. Good enough for a header
+ * row and a single example row, neither of which carries an embedded newline.
+ */
+function splitCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i += 1;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      cells.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur);
+  return cells;
 }
 
 /** Put a file where the stubbed filesystem can find it and queue the dialog. */
@@ -126,6 +165,21 @@ async function shootBoth(page: Page, name: string) {
   await shoot(page, `${name}-light`);
   await switchTheme(page, "dark");
   await shoot(page, `${name}-dark`);
+  await switchTheme(page, "light");
+}
+
+/** `shoot`, into the import-types screen set rather than brand-a's. */
+async function shootTypes(page: Page, name: string) {
+  mkdirSync(TYPES_SCREENS, { recursive: true });
+  await page.screenshot({ path: join(TYPES_SCREENS, `${name}.png`) });
+}
+
+/** `shootBoth`, into the import-types screen set rather than brand-a's. */
+async function shootTypesBoth(page: Page, name: string) {
+  await switchTheme(page, "light");
+  await shootTypes(page, `${name}-light`);
+  await switchTheme(page, "dark");
+  await shootTypes(page, `${name}-dark`);
   await switchTheme(page, "light");
 }
 
@@ -497,6 +551,143 @@ test.describe("data", () => {
 
     await files.first().scrollIntoViewIfNeeded();
     await shootBoth(page, "attachments");
+  });
+
+  /**
+   * Deals is the newest of the generic (non-legacy) import types: same wizard
+   * shell as contacts, but its own field list, its own guesser, and its own
+   * duplicate question. This proves the type picker actually switches the
+   * wizard onto that path, that the guesser reads a real HubSpot deals export
+   * the way `fields/deals.ts` promises, that a stage HubSpot has but this
+   * workspace does not ("Contract Sent") and an amount typed as prose ("Call
+   * for quote") both surface as warnings rather than failing the row, and
+   * that the deals really land on the pipeline afterwards.
+   *
+   * What it cannot prove: the annual-value math or the contact/company
+   * matching rules behind the scenes - those belong to
+   * `lib/typedImportRun.ts`'s own unit tests. This is the wizard end to end
+   * for one real-looking file.
+   */
+  test("imports deals and shows what it had to decide", async ({ page, helix: _helix }) => {
+    await page.goto("/import");
+    await expect(page.getByTestId("import-type-picker")).toBeVisible();
+    await expect(page.locator('input[type="radio"][value="contacts"]')).toBeChecked();
+    await shootTypesBoth(page, "type-picker");
+
+    await page.locator('input[type="radio"][value="deals"]').check();
+
+    const deals = fixture("hubspot-deals.csv");
+    await offerFile(page, "/tmp/helix-e2e/hubspot-deals.csv", deals);
+    await page.getByRole("button", { name: "Choose a file" }).click();
+
+    // Step 2: the guess landed on the columns that matter. "Deal" is
+    // required, so its option reads "Deal (needed)" - toContainText rather
+    // than an exact match keeps this test honest about that without caring
+    // which way the suffix is worded.
+    await expect(page.getByRole("columnheader", { name: "Import as" })).toBeVisible();
+    const dealNameRow = page.getByRole("row").filter({ hasText: "Deal Name" }).first();
+    await expect(dealNameRow.getByRole("combobox")).toContainText("Deal");
+    const stageRow = page.getByRole("row").filter({ hasText: "Deal Stage" }).first();
+    await expect(stageRow.getByRole("combobox")).toHaveText("Stage");
+    const emailRow = page
+      .getByRole("row")
+      .filter({ hasText: "Associated Contact Email" })
+      .first();
+    await expect(emailRow.getByRole("combobox")).toHaveText("Contact email");
+    await expect(page.getByRole("row").filter({ hasText: "Record ID" })).toContainText(
+      "Skip this column",
+    );
+    await shootTypesBoth(page, "mapping-deals");
+
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    // Step 3: straight through with the default duplicate policy - this is a
+    // first import into an empty workspace, so nothing is a duplicate yet.
+    await expect(page.getByRole("columnheader", { name: "What Helix noticed" })).toBeVisible();
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+
+    // Step 4: the counts, and the two rows the file could not match cleanly.
+    await expect(page.getByText("deals created")).toBeVisible({ timeout: 30_000 });
+    const created = page
+      .locator("div")
+      .filter({ hasText: /^30deals created$/ })
+      .first();
+    await expect(created).toBeVisible();
+    await expect(page.getByText("contacts created")).toBeVisible();
+    await expect(page.getByText("companies created")).toBeVisible();
+
+    await expect(page.getByText("rows Helix had to decide something about")).toBeVisible();
+    await expect(page.locator("li").filter({ hasText: "Contract Sent" })).toHaveCount(1);
+    await expect(page.locator("li").filter({ hasText: "Call for quote" })).toHaveCount(1);
+    await shootTypesBoth(page, "result-warnings");
+
+    // The deals really landed on the board, not just in the count.
+    await page.goto("/pipeline");
+    await expect(page.getByText("Water heater replacement - Holladay")).toBeVisible({
+      timeout: 20_000,
+    });
+  });
+
+  /**
+   * "Download an example" for Deals: the file is generated at click time from
+   * `DEALS_IMPORT` and the workspace's own live stage names rather than being
+   * a static asset, so this is the one place that promise is checked against
+   * a webview instead of only in `tests/unit/data/importExamples.test.ts`.
+   *
+   * What it cannot prove: the round trip (that Helix reads this file straight
+   * back in without anything landing on Skip) - that is the unit test's job.
+   * This only checks what actually crossed the fs plugin: the header the
+   * field list promises, and a Stage cell holding a name this workspace
+   * really has.
+   */
+  test("downloads the deals example", async ({ page, helix: _helix }) => {
+    await page.goto("/import");
+    await offerSavePath(page, "/tmp/helix-e2e/helix-deals-example.csv");
+
+    async function openExamplesMenu() {
+      await page.getByRole("button", { name: "Download an example" }).click();
+      await expect(page.getByRole("menuitem", { name: "Deals" })).toBeVisible();
+    }
+
+    // The menu, in both themes. Reopened between shots rather than shared
+    // across them: a Radix menu does not survive the click that would
+    // otherwise pick an item, and this does not lean on it surviving a theme
+    // change either.
+    await switchTheme(page, "light");
+    await openExamplesMenu();
+    await shootTypes(page, "examples-menu-light");
+    await page.keyboard.press("Escape");
+
+    await switchTheme(page, "dark");
+    await openExamplesMenu();
+    await shootTypes(page, "examples-menu-dark");
+    await page.keyboard.press("Escape");
+    await switchTheme(page, "light");
+
+    // Now actually pick it.
+    await openExamplesMenu();
+    await page.getByRole("menuitem", { name: "Deals" }).click();
+    await expect(page.getByText(/Saved helix-deals-example\.csv/)).toBeVisible();
+
+    // The save dialog really was asked, and real CSV went through the fs
+    // plugin - the same proof the export test at the top of this file uses.
+    const state = await e2eState(page);
+    const saveCalls = state.calls.filter((c) => c.cmd === "plugin:dialog|save");
+    expect(saveCalls.length, "the example opened the save dialog").toBeGreaterThan(0);
+
+    const written = await lastWrittenText(page);
+    expect(written, "the CSV was written through the fs plugin").toBeTruthy();
+
+    const lines = written!.split("\r\n").filter((line) => line.length > 0);
+    const header = splitCsvLine(lines[0]);
+    expect(header).toEqual(DEALS_IMPORT.fields.map((f) => f.label));
+
+    // The Stage column holds a stage this workspace really has, not a
+    // stranger's - the whole point of generating the file live.
+    const stageIndex = header.indexOf("Stage");
+    const seededStageNames = ["New", "Contacted", "Quoted", "Scheduled", "Won", "Lost"];
+    const firstDataRow = splitCsvLine(lines[1]);
+    expect(seededStageNames).toContain(firstDataRow[stageIndex]);
   });
 });
 
