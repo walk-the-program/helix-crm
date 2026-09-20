@@ -237,6 +237,67 @@ export async function documentPdfPathFor(entityId: string): Promise<string | nul
 }
 
 /**
+ * The tables that point at a record with `ON DELETE set null` and carry the
+ * owner's own words about it, keyed by the columns that say who a row belongs
+ * to. `documents` is deliberately absent: an invoice is a financial record
+ * that hangs off a deal, and ruling R6b already refuses to purge a deal a sent
+ * document refers to.
+ */
+const ORPHANABLE: { table: string; links: readonly string[] }[] = [
+  { table: "activities", links: ["contact_id", "company_id", "deal_id"] },
+  { table: "tasks", links: ["contact_id", "company_id", "deal_id"] },
+  { table: "recurring_rules", links: ["contact_id", "company_id"] },
+];
+
+/** Which link column names the record being purged. */
+const LINK_COLUMN: Partial<Record<TrashEntityType, string>> = {
+  contact: "contact_id",
+  company: "company_id",
+  deal: "deal_id",
+};
+
+/**
+ * Delete the notes, tasks and recurring rules whose ONLY subject was the record
+ * being purged (F-SEC-10).
+ *
+ * `activities`, `tasks` and `recurring_rules` all reference a contact with
+ * `ON DELETE set null` (drizzle/0000_init.sql), so purging a contact used to
+ * leave every note about them behind with `contact_id` nulled — and because
+ * `search_activities_ad` only fires on a real DELETE, the note stayed in
+ * `search_docs`. The owner emptied the trash, Helix said the customer was gone
+ * for good, and typing that customer's name still found "Called Jane about the
+ * leak, she's at 42 Elm St". That is the gap between what a purge promises and
+ * what it did.
+ *
+ * Only rows with nothing else to belong to are removed. A note filed against
+ * both a contact and a deal is a note about the deal as well, and the deal is
+ * still there, so it keeps it and loses only the link — which is what the
+ * foreign key was always for. This runs FIRST, inside the purge transaction,
+ * because once the parent row goes the `set null` has already fired and there
+ * is no way left to tell whose row it was.
+ *
+ * Deleting through these tables fires their own `AFTER DELETE` search triggers,
+ * so the FTS rows go with them; that is the half that makes the customer
+ * actually unfindable.
+ */
+function orphanSweep(
+  entityType: TrashEntityType,
+  entityId: string,
+): { sql: string; params: unknown[] }[] {
+  const owned = LINK_COLUMN[entityType];
+  if (!owned) return [];
+
+  return ORPHANABLE.filter((t) => t.links.includes(owned)).map(({ table, links }) => {
+    const others = links.filter((c) => c !== owned);
+    const nulls = others.map((c) => `${c} IS NULL`).join(" AND ");
+    return {
+      sql: `DELETE FROM ${table} WHERE ${owned} = ?${nulls ? ` AND ${nulls}` : ""}`,
+      params: [entityId],
+    };
+  });
+}
+
+/**
  * Hard delete, in the documented order, as one transaction.
  * Attachment files on disk are the caller's job and must be gone first.
  */
@@ -261,6 +322,7 @@ export async function purge(
   }
   await withTransaction(async () => {
     await raw.batch([
+      ...orphanSweep(entityType, entityId),
       { sql: `DELETE FROM custom_values WHERE entity_id = ?`, params: [entityId] },
       {
         sql: `DELETE FROM tag_links WHERE entity_type = ? AND entity_id = ?`,
