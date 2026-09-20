@@ -3,7 +3,7 @@
  *
  * On the first run this is the whole window: no sidebar, no toolbar, the Helix
  * lockup at the top and one column of content under it. The lockup is where the
- * screen spends `--shadow-sticker` (docs/DESIGN.md §6 allows exactly one hero
+ * screen once carried the (now retired) sticker shadow (docs/DESIGN.md §6 allowed one hero
  * element per screen to wear it, and the brand saying who is talking is worth
  * more here than anywhere else), so nothing else in these screens carries it.
  *

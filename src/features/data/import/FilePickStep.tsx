@@ -97,7 +97,7 @@ export function FilePickStep(props: {
         <Button
           ref={buttonRef}
           variant="primary"
-          className="shadow-[var(--shadow-sticker)]"
+         
           loading={busy}
           loadingLabel="Opening…"
           iconLeft={<FolderOpen size={16} weight="bold" aria-hidden="true" />}

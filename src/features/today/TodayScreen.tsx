@@ -116,7 +116,7 @@ function StarterCard(props: {
 /** A link drawn as the one black button on the screen. */
 const primaryLinkClasses = [
   "inline-flex h-[var(--control-h)] flex-none items-center justify-center",
-  "bg-[var(--color-accent)] px-[var(--space-4)] no-underline shadow-[var(--shadow-sticker)]",
+  "bg-[var(--color-accent)] px-[var(--space-4)] no-underline",
   "text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-accent-text)]",
   "hover:bg-[var(--color-accent-hover)] hover:no-underline",
   "active:scale-[var(--press-scale)] motion-reduce:active:scale-100",
