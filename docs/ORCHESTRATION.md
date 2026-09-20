@@ -47,3 +47,7 @@
 - sweep B (5573fb9) follow-ups for the final pass: grep repo for `font-[var(--font-mono)]` (not a Tailwind utility; use `font-[family-name:var(--font-mono)]`); consider deriving the stage ramp from the brand tints so stage bars are not louder than brand bars; other specs that flip data-theme must wait for the transition before screenshots.
 - onboarding (106aafc): mount <RemoveSampleDataButton/> in Settings Workspace section and on Today's first-run card; promote lib/settings.ts keys + settingStatement into repos/settings.ts; sidebar "Pipeline" label should follow vocabulary (records/index.tsx).
 - depth (cd5fb38): add the Templates row to src/features/settings/lib/sections.ts (id templates, group general, icon Article); Trash should list recurring rules and templates (move the seed guard to a settings key first).
+
+## After round 3 (Walker, 2026-09-20)
+- Sequence: round 3 leads finish → Fable integrates and verifies (no push) → ONE Fable agent runs docs/rounds/2026-09-20-cpo-cdqo-prompt.md verbatim (ceilings: 3 Opus, 9 Sonnet; local commits) → one push to GitHub, tag moved → no app launch (Walker asleep).
+- Cost check before every push: subscription-only models, public repo Actions free, artifacts failure-only 3 days.
