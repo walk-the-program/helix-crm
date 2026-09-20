@@ -6,7 +6,7 @@
  * contact, and every deal carries the external_id that makes the first two
  * possible.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSeededHarness, type Harness } from "../harness";
 import { raw } from "../../../src/db/client";
 import * as contacts from "../../../src/db/repos/contacts";
@@ -437,6 +437,112 @@ describe("applyLeadPage - a dedupe merge adds a new phone/email as secondary", (
     const contact = await contacts.getOrThrow(existing.id);
     expect(contact.phones).toHaveLength(0);
     expect(contact.emails).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* F-SEC-28: a UNIQUE violation on deals.external_id is "already have this    */
+/* one", not a failure - drizzle/0005_lead_dedup.sql, LR-OPS-W2 A3           */
+/* -------------------------------------------------------------------------- */
+
+describe("applyLeadPage - a UNIQUE violation on external_id is treated as already-applied (F-SEC-28)", () => {
+  // deals.findByExternalId is a read-then-write: the whole point of
+  // idx_deals_external_id_unique is to make the write side safe even when
+  // that read is stale. tests/repo/leads/pollerRace.test.ts shows the write
+  // lock keeps the read from ever actually going stale for the poller's own
+  // two callers - so to exercise this path at all, the read has to be forced
+  // stale here with a spy standing in for whatever future change (or
+  // component outside this file) might one day call `findByExternalId` a
+  // moment before somebody else's write lands.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("skips the lead and writes nothing extra when the row already exists but the read that checks for it missed", async () => {
+    const context = await prepareApply();
+    const already = await deals.create({
+      title: "Already on file",
+      stageId: context!.stageId,
+      externalId: externalIdFor(SITE, "forced-1"),
+    });
+
+    const spy = vi.spyOn(deals, "findByExternalId").mockResolvedValueOnce(null);
+    const result = await applyLeadPage(
+      [lead({ id: "forced-1", email: "forced1@example.com" })],
+      SITE,
+      context!,
+    );
+    spy.mockRestore();
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.dealIds).toEqual([]);
+
+    // Still exactly one live deal at this external_id - the constraint did
+    // its job - and no orphan contact was left behind by the rolled-back
+    // attempt to create a second one.
+    const live = await raw.query(
+      "SELECT count(*) FROM deals WHERE external_id = ? AND deleted_at IS NULL",
+      [externalIdFor(SITE, "forced-1")],
+    );
+    expect(Number(live[0][0])).toBe(1);
+    const contactCount = await raw.query(
+      "SELECT count(*) FROM contacts WHERE deleted_at IS NULL",
+    );
+    expect(Number(contactCount[0][0])).toBe(0);
+
+    // The original deal itself is untouched.
+    const untouched = await deals.getOrThrow(already.id);
+    expect(untouched.title).toBe("Already on file");
+  });
+
+  it("the leads around the conflicting one in the same page still get created", async () => {
+    const context = await prepareApply();
+    await deals.create({
+      title: "Already on file",
+      stageId: context!.stageId,
+      externalId: externalIdFor(SITE, "forced-2"),
+    });
+
+    // findByExternalId reports "not found" for every lead in this page - the
+    // fallback has to be the thing that tells the conflicting one apart from
+    // its two good neighbours, not the initial read.
+    vi.spyOn(deals, "findByExternalId").mockResolvedValue(null);
+    const result = await applyLeadPage(
+      [
+        lead({ id: "forced-before", email: "before@example.com" }),
+        lead({ id: "forced-2", email: "forced2@example.com" }),
+        lead({ id: "forced-after", email: "after@example.com" }),
+      ],
+      SITE,
+      context!,
+    );
+    vi.restoreAllMocks();
+
+    expect(result.created).toBe(2);
+    expect(result.skipped).toBe(1);
+
+    const beforeDeal = await deals.findByExternalId(externalIdFor(SITE, "forced-before"));
+    const afterDeal = await deals.findByExternalId(externalIdFor(SITE, "forced-after"));
+    expect(beforeDeal).not.toBeNull();
+    expect(afterDeal).not.toBeNull();
+
+    const live = await raw.query(
+      "SELECT count(*) FROM deals WHERE external_id = ? AND deleted_at IS NULL",
+      [externalIdFor(SITE, "forced-2")],
+    );
+    expect(Number(live[0][0])).toBe(1);
+  });
+
+  it("a genuinely different failure in the same page is not swallowed as a conflict", async () => {
+    const context = await prepareApply();
+    const broken = { ...context!, stageId: "no-such-stage" };
+    await expect(
+      applyLeadPage([lead({ id: "forced-3" })], SITE, broken),
+    ).rejects.toThrow();
+
+    const count = await raw.query("SELECT count(*) FROM deals WHERE deleted_at IS NULL");
+    expect(Number(count[0][0])).toBe(0);
   });
 });
 

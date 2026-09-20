@@ -120,6 +120,33 @@ export async function prepareApply(): Promise<ApplyContext | null> {
 }
 
 /**
+ * True for the one error this file treats as "already have this one" rather
+ * than a poll failure: the partial unique index `idx_deals_external_id_unique`
+ * (drizzle/0005_lead_dedup.sql, F-SEC-28) refusing a second live deal at an
+ * external_id.
+ *
+ * Matched on the message text, not an error code, because the two drivers
+ * this file runs under disagree on everything else: the test driver
+ * (better-sqlite3) throws its own `SqliteError` with `code:
+ * "SQLITE_CONSTRAINT_UNIQUE"`, while the production path wraps whatever Rust's
+ * `rusqlite` produced into `DbError` with the generic `code: "SQL_ERROR"`
+ * (docs/CONTRACTS.md) - the specific code is thrown away before this file
+ * ever sees it. What both share is the literal string SQLite itself puts in
+ * the error, "UNIQUE constraint failed: deals.external_id" - that text comes
+ * from the SQLite engine, not from either binding, so it survives both paths.
+ */
+function isExternalIdConflict(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /unique constraint failed/i.test(message) && /external_id/i.test(message);
+}
+
+/** One lead's own statements, and how to undo what `result` assumed about it. */
+type LeadUnit = {
+  statements: Statement[];
+  onConflict: () => void;
+};
+
+/**
  * Apply one page. Idempotent: leads whose external_id is already on a deal are
  * counted as skipped and nothing is written for them.
  */
@@ -138,13 +165,16 @@ export async function applyLeadPage(
   if (leads.length === 0) return result;
 
   return withTransaction(async () => {
-    const statements: Statement[] = [];
     let position = context.nextPosition;
     // externalIdFor -> the deal id this page already created for it. Closes
     // the gap `deals.findByExternalId` cannot: it only sees COMMITTED rows,
     // so two leads sharing one id within the same page would otherwise both
     // slip past it and both create a deal (CPO audit, F-LB-8).
     const claimedThisPage = new Map<string, string>();
+    // One entry per lead that produced something to write. Batched together
+    // below in the common case (one round trip); see the catch block for why
+    // each entry is also able to stand alone.
+    const units: LeadUnit[] = [];
 
     for (const lead of leads) {
       // No usable id, no external_id worth keying anything on. Belt and
@@ -174,7 +204,12 @@ export async function applyLeadPage(
       if (existingDeal) {
         result.skipped += 1;
         const update = await leadUpdateStatement(existingDeal, mapped);
-        if (update) statements.push(update);
+        // A plain activity insert against an already-existing deal id: it
+        // cannot collide with idx_deals_external_id_unique (it never touches
+        // deals.external_id), so `onConflict` here is unreachable in
+        // practice and only guards against ever silently swallowing a
+        // genuinely different failure.
+        if (update) units.push({ statements: [update], onConflict: () => {} });
         continue;
       }
 
@@ -183,6 +218,8 @@ export async function applyLeadPage(
         mapped.email,
         mapped.phone,
       );
+      const unitStatements: Statement[] = [];
+      const reusedContact = contactId !== null;
       if (contactId) {
         result.contactsReused += 1;
         // The visitor is known, but this submission may carry a phone or
@@ -190,7 +227,7 @@ export async function applyLeadPage(
         // instead of a personal one. That used to be dropped on the floor
         // with no trace at all; now it is added as a secondary entry. Never
         // overwrites or removes what is already there (CPO audit, F-LB-16).
-        statements.push(
+        unitStatements.push(
           ...(await secondaryContactStatements(contactId, mapped, context.region)),
         );
       } else {
@@ -209,8 +246,8 @@ export async function applyLeadPage(
           context.region,
         );
         contactId = created.id;
-        statements.push(...created.statements);
-        statements.push(
+        unitStatements.push(...created.statements);
+        unitStatements.push(
           changeLogStatement({
             entityType: "contact",
             entityId: created.id,
@@ -236,8 +273,8 @@ export async function applyLeadPage(
         externalId: mapped.externalId,
       });
       const dealId = deal.id;
-      statements.push(...deal.statements);
-      statements.push(
+      unitStatements.push(...deal.statements);
+      unitStatements.push(
         changeLogStatement({
           entityType: "deal",
           entityId: dealId,
@@ -252,8 +289,8 @@ export async function applyLeadPage(
         dealId,
         occurredAt: mapped.occurredAt,
       });
-      statements.push({ sql: activity.sql, params: activity.params });
-      statements.push(
+      unitStatements.push({ sql: activity.sql, params: activity.params });
+      unitStatements.push(
         changeLogStatement({
           entityType: "activity",
           entityId: activity.id,
@@ -265,10 +302,50 @@ export async function applyLeadPage(
       claimedThisPage.set(mapped.externalId, dealId);
       result.created += 1;
       result.dealIds.push(dealId);
+
+      units.push({
+        statements: unitStatements,
+        onConflict: () => {
+          // `deals.findByExternalId` said nobody had this external_id, and
+          // between that read and this write somebody did (F-SEC-28: the
+          // check has always been read-then-write, safe only because the
+          // write lock serialises every writer that could race it -
+          // tests/repo/leads/pollerRace.test.ts proves that holds for both
+          // of the poller's own callers today). Whatever this lead's own
+          // unit was about to add - a brand-new contact, the deal, the
+          // system activity - rolled back with it as one nested savepoint,
+          // so there is nothing left behind to clean up. Reclassify it
+          // exactly like an ordinary re-poll: already have this one.
+          result.created -= 1;
+          result.skipped += 1;
+          result.dealIds = result.dealIds.filter((id) => id !== dealId);
+          if (reusedContact) result.contactsReused -= 1;
+          claimedThisPage.delete(mapped.externalId);
+        },
+      });
     }
 
-    if (statements.length > 0) {
-      await raw.batch(statements);
+    if (units.length > 0) {
+      try {
+        await raw.batch(units.flatMap((u) => u.statements));
+      } catch (err) {
+        if (!isExternalIdConflict(err)) throw err;
+        // The fallback path: retry each lead's own statements as its own
+        // nested savepoint (raw.batch already does this whenever it runs
+        // inside an open transaction - see src/db/writeLock.ts and
+        // tests/repo/driver.ts's header comment), so the leads that do not
+        // conflict are not taken down with the one that does. This never
+        // runs on the common path - only once the single combined batch
+        // above has already failed for exactly this reason.
+        for (const unit of units) {
+          try {
+            await raw.batch(unit.statements);
+          } catch (unitErr) {
+            if (!isExternalIdConflict(unitErr)) throw unitErr;
+            unit.onConflict();
+          }
+        }
+      }
     }
     return result;
   }, "Saving website leads");
