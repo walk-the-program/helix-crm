@@ -26,6 +26,15 @@
  * fills the workspace, so the first-run screen is gone by the time the owner
  * wants the example gone, and a button he can only reach by emptying the
  * workspace first is no button at all.
+ *
+ * Above all of it, in either state, sits the recovery-key card (LR-6): a
+ * fresh workspace cannot reach a steady state without the owner having seen
+ * the key and confirmed they kept it, and Settings > Backups is a screen a
+ * client may never open. It is the one first-run screen with a fourth thing on
+ * it rather than a fourth onboarding step, because it is not part of setup —
+ * it is a standing condition on every Today until it is met, then gone for
+ * good. While it is showing it is also the screen's one primary block, which
+ * is why FirstRun's "Import a CSV" steps down to secondary underneath it (§5).
  */
 
 import type { ReactNode } from "react";
@@ -42,6 +51,10 @@ import { NewLeadsSection } from "@/features/today/sections/NewLeads";
 import { GoneQuietSection } from "@/features/today/sections/GoneQuiet";
 import { RecentActivitySection } from "@/features/today/sections/RecentActivity";
 import { ConnectSiteCard } from "@/features/today/sections/ConnectSite";
+import {
+  RecoveryKeyCard,
+  useShowRecoveryKeyCard,
+} from "@/features/today/sections/RecoveryKeyCard";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useTodayIsUnstarted } from "@/features/today/lib/useToday";
 import { useVocabulary } from "@/app/vocabulary";
@@ -167,8 +180,14 @@ function SampleDataNote() {
   );
 }
 
-/** The first-run screen: the three actions that put something on Today. */
-function FirstRun() {
+/**
+ * The first-run screen: the three actions that put something on Today.
+ *
+ * `primary` is false while the recovery-key card is showing above it: the
+ * card owns the screen's one primary block then, so "Import a CSV" steps down
+ * to the secondary treatment rather than the two of them competing for it.
+ */
+function FirstRun({ primary }: { primary: boolean }) {
   const vocabulary = useVocabulary();
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
@@ -188,7 +207,10 @@ function FirstRun() {
           title="Import a spreadsheet"
           description="A CSV from your old CRM, your accountant, or a sheet you keep yourself. Five minutes, and you keep every column you care about."
           action={
-            <Link href="/import" className={primaryLinkClasses}>
+            <Link
+              href="/import"
+              className={primary ? primaryLinkClasses : secondaryLinkClasses}
+            >
               Import a CSV
             </Link>
           }
@@ -218,6 +240,7 @@ function FirstRun() {
 
 export function TodayScreen() {
   const { data: isEmpty, isLoading } = useTodayIsUnstarted();
+  const showRecoveryCard = useShowRecoveryKeyCard();
   const formats = useFormats();
 
   return (
@@ -245,12 +268,13 @@ export function TodayScreen() {
       />
 
       <div className="max-w-[1100px]">
+        {showRecoveryCard ? <RecoveryKeyCard /> : null}
         {isLoading ? (
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             Reading the database.
           </p>
         ) : isEmpty ? (
-          <FirstRun />
+          <FirstRun primary={!showRecoveryCard} />
         ) : (
           <TodayPanels />
         )}
