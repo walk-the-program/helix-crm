@@ -147,4 +147,53 @@ describe("DatePicker", () => {
     expect(classNames).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(classNames).not.toMatch(/\btext-blue\b|\btext-purple\b|\bbg-blue\b|\bbg-purple\b/);
   });
+
+  /**
+   * The bug the round-3 e2e caught. The grid draws leading and trailing days
+   * from the adjacent months, and while the visible month was DERIVED from
+   * the focused date, a mousedown on one of those cells changed the month
+   * mid-gesture: the grid rebuilt, the button's node moved, and the browser
+   * had nothing to pair mousedown and mouseup into a click. The day was never
+   * selected and the popover stayed open.
+   */
+  it("selects a leading day from the previous month on one click, and closes", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderDatePicker({ value: "2026-09-15", onChange, locale: "en-US" });
+
+    await user.click(screen.getByTestId("date-picker"));
+    await screen.findByTestId("date-picker-grid");
+
+    // Whatever the locale's week start is, the first cell of September 2026
+    // belongs to August - that is the whole point of a leading day.
+    const first = screen.getAllByTestId("date-picker-day")[0];
+    const leadingDate = first.getAttribute("data-date");
+    expect(leadingDate?.startsWith("2026-08")).toBe(true);
+
+    await user.click(first);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(leadingDate);
+    await waitFor(() => {
+      expect(screen.queryByTestId("date-picker-grid")).toBeNull();
+    });
+  });
+
+  it("moving focus across the grid never re-pages the month by itself", async () => {
+    renderDatePicker({ value: "2026-09-15", locale: "en-US" });
+    const trigger = screen.getByTestId("date-picker");
+    trigger.click();
+    await screen.findByTestId("date-picker-grid");
+
+    const heading = () => screen.getByText(/September 2026|August 2026|October 2026/);
+    expect(heading().textContent).toContain("September 2026");
+
+    // Focusing a trailing day from October must not flip the grid to October:
+    // only a deliberate navigation moves the month.
+    const cells = screen.getAllByTestId("date-picker-day");
+    const trailing = cells[cells.length - 1] as HTMLButtonElement;
+    expect(trailing.getAttribute("data-date")?.startsWith("2026-10")).toBe(true);
+    trailing.focus();
+    expect(heading().textContent).toContain("September 2026");
+  });
 });

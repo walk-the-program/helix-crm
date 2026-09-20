@@ -224,14 +224,23 @@ function getDayAccessibleLabel(dateString: string, locale?: string): string {
  * surface and focus ring, so a date field sits in a form next to a `Select`
  * or an `Input` without announcing itself as a different kind of control.
  *
- * State model: the single source of truth inside the popover is
- * `focusedDate`, one "YYYY-MM-DD" string. The visible month is *derived* from
- * it (`startOfMonth(focusedDate)`), not tracked separately - so paging a
- * month, pressing an arrow key that crosses a month boundary, and opening on
- * a value from three years ago all just fall out of "what month is
- * `focusedDate` in", instead of needing to keep a second piece of state in
- * sync with the first. Selecting a day calls `onChange` and closes; moving
- * focus around inside the grid never does.
+ * State model: two pieces, `focusedDate` (the roving tab stop) and
+ * `viewMonth` (what the grid is showing). They were one for a while - the
+ * month was derived as `startOfMonth(focusedDate)` - and that is a trap worth
+ * recording, because it broke clicking.
+ *
+ * The grid draws leading and trailing days from the adjacent months. With the
+ * month derived, a mousedown on one of those cells fired `onFocus`, which set
+ * `focusedDate`, which changed the month, which rebuilt the grid and moved
+ * that button's DOM node to a different position - all between mousedown and
+ * mouseup. The browser then had no single element to pair the two into a
+ * click, so the day never got selected and the popover stayed open. The e2e
+ * caught it on the first cell of September 2026, which is the 31st of August.
+ *
+ * So the month only ever changes on a DELIBERATE navigation: opening, the
+ * prev/next buttons, PageUp/PageDown, or an arrow step that walks out of the
+ * visible month. Plain focus moves the tab stop and nothing else. Selecting a
+ * day calls `onChange` and closes; moving focus around never does.
  *
  * Keyboard model is a roving tabindex, the same pattern `useRovingRowNav`
  * gives list rows: exactly one day (`focusedDate`) is a tab stop, every other
@@ -303,13 +312,24 @@ export function DatePicker(props: {
 
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [focusedDate, setFocusedDate] = useState<string>(() => defaultFocusDate(value, min, max));
+  const [viewMonth, setViewMonth] = useState<string>(() =>
+    toLocalDateString(startOfMonth(parseDateOnly(defaultFocusDate(value, min, max)) ?? new Date())),
+  );
+
+  /** Move the tab stop AND bring its month into view. Every keyboard step
+   *  goes through this; plain focus does not. */
+  function goToDate(dateString: string): void {
+    setFocusedDate(dateString);
+    const month = parseDateOnly(dateString);
+    if (month) setViewMonth(toLocalDateString(startOfMonth(month)));
+  }
   const contentRef = useRef<HTMLDivElement>(null);
 
   const today = todayLocal();
   const weekStartsOn = useMemo(() => getWeekStartsOn(locale), [locale]);
   const viewMonthDate = useMemo(
-    () => startOfMonth(parseDateOnly(focusedDate) ?? new Date()),
-    [focusedDate],
+    () => startOfMonth(parseDateOnly(viewMonth) ?? new Date()),
+    [viewMonth],
   );
   const monthYearLabel = useMemo(() => getMonthYearLabel(viewMonthDate, locale), [viewMonthDate, locale]);
   const weekdayLabels = useMemo(() => getWeekdayLabels(weekStartsOn, locale), [weekStartsOn, locale]);
@@ -329,7 +349,7 @@ export function DatePicker(props: {
   function handleOpenChange(next: boolean): void {
     setOpen(next);
     if (next) {
-      setFocusedDate(defaultFocusDate(value, min, max));
+      goToDate(defaultFocusDate(value, min, max));
     }
   }
 
@@ -350,7 +370,7 @@ export function DatePicker(props: {
     const resolved = isDateDisabled(candidate, min, max)
       ? firstEnabledDayInMonth(targetMonthDate, min, max)
       : candidate;
-    setFocusedDate(resolved);
+    goToDate(resolved);
     return resolved;
   }
 
@@ -369,28 +389,28 @@ export function DatePicker(props: {
       case "ArrowRight": {
         event.preventDefault();
         const next = stepFocusedDate(cellDate, 1, min, max);
-        setFocusedDate(next);
+        goToDate(next);
         focusDay(next);
         return;
       }
       case "ArrowLeft": {
         event.preventDefault();
         const next = stepFocusedDate(cellDate, -1, min, max);
-        setFocusedDate(next);
+        goToDate(next);
         focusDay(next);
         return;
       }
       case "ArrowDown": {
         event.preventDefault();
         const next = stepFocusedDate(cellDate, 7, min, max);
-        setFocusedDate(next);
+        goToDate(next);
         focusDay(next);
         return;
       }
       case "ArrowUp": {
         event.preventDefault();
         const next = stepFocusedDate(cellDate, -7, min, max);
-        setFocusedDate(next);
+        goToDate(next);
         focusDay(next);
         return;
       }
@@ -398,7 +418,7 @@ export function DatePicker(props: {
         event.preventDefault();
         const target = startOfWeek(cellDate, weekStartsOn);
         const next = findEnabledDate(target, 1, min, max) ?? cellDate;
-        setFocusedDate(next);
+        goToDate(next);
         focusDay(next);
         return;
       }
@@ -406,7 +426,7 @@ export function DatePicker(props: {
         event.preventDefault();
         const target = endOfWeek(cellDate, weekStartsOn);
         const next = findEnabledDate(target, -1, min, max) ?? cellDate;
-        setFocusedDate(next);
+        goToDate(next);
         focusDay(next);
         return;
       }
@@ -547,6 +567,9 @@ export function DatePicker(props: {
                 disabled={cell.isDisabled}
                 aria-label={getDayAccessibleLabel(cell.dateString, locale)}
                 onClick={() => selectDate(cell.dateString)}
+                /* The tab stop only. Moving the MONTH from here is what
+                   used to rebuild the grid between mousedown and mouseup and
+                   swallow the click on an adjacent-month day. */
                 onFocus={() => setFocusedDate(cell.dateString)}
                 onKeyDown={(event) => handleGridKeyDown(event, cell.dateString)}
                 className={cn(
