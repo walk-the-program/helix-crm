@@ -125,6 +125,37 @@ async function insertDocument(options: {
   );
 }
 
+let paymentSeq = 0;
+
+/**
+ * PX-5: Collected is now the sum of `payments`, not `documents.status =
+ * 'paid'`. A "paid" document inserted above with nothing to back it is no
+ * longer collected money - so every `status: "paid"` row in this file needs
+ * one of these alongside it, for the same amount, on the same day, exactly
+ * the way `payments.create` would have written it.
+ */
+async function insertPayment(options: {
+  documentId: string;
+  amountCents: number;
+  paidOn: string;
+  dealId?: string | null;
+}): Promise<void> {
+  paymentSeq += 1;
+  await raw.execute(
+    `INSERT INTO payments (id, document_id, deal_id, amount_cents, paid_on, method, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'other', ?, ?)`,
+    [
+      `pay-${paymentSeq}`,
+      options.documentId,
+      options.dealId ?? null,
+      options.amountCents,
+      options.paidOn,
+      "2026-03-01T00:00:00.000Z",
+      "2026-03-01T00:00:00.000Z",
+    ],
+  );
+}
+
 /** March 2026, as the period picker builds it: half-open local instants. */
 const MARCH = {
   from: new Date(2026, 2, 1).toISOString(),
@@ -137,6 +168,7 @@ describe("dealMoney", () => {
     await insertDocument({ id: "q1", kind: "quote", status: "sent", totalCents: 600_00, dealId: "d1", issuedOn: "2026-03-02" });
     await insertDocument({ id: "q2", kind: "quote", status: "draft", totalCents: 999_00, dealId: "d1", issuedOn: "2026-03-02" });
     await insertDocument({ id: "i1", kind: "invoice", status: "paid", totalCents: 300_00, dealId: "d1", issuedOn: "2026-03-05", paidOn: "2026-03-20" });
+    await insertPayment({ documentId: "i1", dealId: "d1", amountCents: 300_00, paidOn: "2026-03-20" });
     await insertDocument({ id: "i2", kind: "invoice", status: "sent", totalCents: 200_00, dealId: "d1", issuedOn: "2026-03-06" });
     await insertDocument({ id: "i3", kind: "invoice", status: "draft", totalCents: 111_00, dealId: "d1" });
     await insertDocument({ id: "i4", kind: "invoice", status: "void", totalCents: 222_00, dealId: "d1", issuedOn: "2026-03-07" });
@@ -209,6 +241,7 @@ describe("customerMoney", () => {
     await insertCompany("co1", "Harker Builders");
     await insertDeal({ id: "d4", valueCents: 250_00, stage: "Won", closedAt: "2026-03-09T00:00:00.000Z", companyId: "co1" });
     await insertDocument({ id: "i6", kind: "invoice", status: "paid", totalCents: 250_00, dealId: "d4", companyId: "co1", issuedOn: "2026-03-09", paidOn: "2026-03-15" });
+    await insertPayment({ documentId: "i6", dealId: "d4", amountCents: 250_00, paidOn: "2026-03-15" });
 
     const money = await customerMoney({ companyId: "co1" });
     expect(money.quotedCents).toBe(250_00);
@@ -252,6 +285,7 @@ describe("periodMoney", () => {
   it("bills on issued_on and collects on paid_on, so a month can collect more than it billed", async () => {
     // February's invoice, paid in March.
     await insertDocument({ id: "i7", kind: "invoice", status: "paid", totalCents: 800_00, issuedOn: "2026-02-20", paidOn: "2026-03-04" });
+    await insertPayment({ documentId: "i7", amountCents: 800_00, paidOn: "2026-03-04" });
     // March's invoice, still unpaid.
     await insertDocument({ id: "i8", kind: "invoice", status: "sent", totalCents: 100_00, issuedOn: "2026-03-12" });
 
