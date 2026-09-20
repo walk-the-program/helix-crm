@@ -83,6 +83,7 @@ import { useConnectCard, useTodayScreenState } from "@/features/today/lib/useTod
 import { useVocabulary } from "@/app/vocabulary";
 import { SampleDataNote } from "@/features/onboarding";
 import { UnpaidInvoicesSection } from "@/features/invoices";
+import { OutstandingLine } from "@/features/today/sections/OutstandingLine";
 import { PollNotice } from "@/features/leads";
 
 /**
@@ -153,7 +154,17 @@ function TodayPanels() {
        */}
       <TodaySchedule />
       <ComingUpSection />
-      <UnpaidInvoicesSection />
+      {/*
+       * The invoices section lists the rows; the line under it says what they
+       * add up to now that payments exist - balances rather than totals, and
+       * the part-paid count with them (LR-PX-A). Wrapped with a small gap so
+       * the sentence tucks under the section instead of floating a full
+       * section gap below it, the same way the section's own drafts line does.
+       */}
+      <div className="flex flex-col gap-[var(--space-2)]">
+        <UnpaidInvoicesSection />
+        <OutstandingLine />
+      </div>
       <NewLeadsSection />
       <GoneQuietSection />
       <RecentActivitySection />
