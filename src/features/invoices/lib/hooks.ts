@@ -81,6 +81,15 @@ export function useDealDocuments(dealId: string) {
   });
 }
 
+/** A deal's own priced lines, for prefilling a document from it. */
+export function useDealLines(dealId: string | null) {
+  return useQuery({
+    queryKey: ["invoices", "deal-lines", dealId] as const,
+    queryFn: () => dealItems.list(dealId ?? ""),
+    enabled: Boolean(dealId),
+  });
+}
+
 export function useDealSchedule(dealId: string) {
   return useQuery({
     queryKey: iqk.schedule(dealId),
@@ -315,6 +324,92 @@ export function useCreateDealForDocument() {
   });
 }
 
+/**
+ * Push the document editor's lines back onto the deal they came from.
+ *
+ * Round 3 revision 4 §23 is explicit: the deal's services panel is the ONLY
+ * place a deal's money is defined, and invoices and quotes pull their lines
+ * from the deal. The New document screen broke that rule quietly - lines typed
+ * against an EXISTING deal went on the document alone, so the deal's value
+ * stayed at whatever it was and the deal page could read Quoted $0 beside
+ * Invoiced $5,000 for the same job (F-LB-13).
+ *
+ * It is a diff, not a rewrite. A line that came from the deal keeps its id, so
+ * an edit is an UPDATE and the line keeps its `product_id` - the Services
+ * page's deal counts and the catalog price history hang off that. A line the
+ * owner typed is added; a line he deleted is removed. Each call goes through
+ * the `dealItems` repository, which owns the recompute that keeps the deal's
+ * value and its lines from disagreeing, so nothing here writes `value_cents`.
+ *
+ * `keep` is the lines the document is NOT carrying - an invoice takes the
+ * one-time lines only, and the deal's monthly line must survive that.
+ */
+export function useSyncDealLines() {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: async (input: {
+      dealId: string;
+      lines: {
+        dealItemId?: string;
+        name: string;
+        description: string | null;
+        qty: number;
+        unitCents: number;
+        taxable: boolean;
+        kind: "one_time" | "recurring";
+        interval: "month" | "year" | null;
+      }[];
+      /** Deal line ids the document never showed, which must not be removed. */
+      keep: string[];
+    }) => {
+      const existing = await dealItems.list(input.dealId);
+      const kept = new Set(input.keep);
+      const seen = new Set<string>();
+
+      for (const line of input.lines) {
+        const current = line.dealItemId
+          ? existing.find((item) => item.id === line.dealItemId)
+          : undefined;
+        if (current) {
+          seen.add(current.id);
+          const unchanged =
+            current.name === line.name &&
+            (current.description ?? null) === line.description &&
+            current.qty === line.qty &&
+            current.actualUnitCents === line.unitCents &&
+            current.taxable === line.taxable;
+          if (unchanged) continue;
+          await dealItems.update(current.id, {
+            name: line.name,
+            description: line.description,
+            qty: line.qty,
+            actualUnitCents: line.unitCents,
+            taxable: line.taxable,
+          });
+          continue;
+        }
+        await dealItems.add({
+          dealId: input.dealId,
+          name: line.name,
+          description: line.description,
+          kind: line.kind,
+          interval: line.kind === "recurring" ? (line.interval ?? "month") : null,
+          qty: line.qty,
+          suggestedUnitCents: line.unitCents,
+          actualUnitCents: line.unitCents,
+          taxable: line.taxable,
+        });
+      }
+
+      for (const item of existing) {
+        if (seen.has(item.id) || kept.has(item.id)) continue;
+        await dealItems.remove(item.id);
+      }
+    },
+    onSuccess: invalidate,
+  });
+}
+
 export function useReplaceItems() {
   const invalidate = useInvalidateInvoices();
   return useMutation({
@@ -366,6 +461,32 @@ export function useVoidDocument() {
   const invalidate = useInvalidateInvoices();
   return useMutation({
     mutationFn: (id: string) => documents.markVoid(id),
+    onSuccess: invalidate,
+  });
+}
+
+/** Undo a payment recorded by mistake: back to sent, and owed again. */
+export function useMarkUnpaid() {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: (id: string) => documents.markUnpaid(id),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Delete a DRAFT into the trash.
+ *
+ * Only a draft: a sent or paid document is a record of something a customer
+ * received and is written off with Void, which keeps the number spent. A draft
+ * was never anybody's but the owner's, and before this a draft raised by
+ * accident - or raised for him by the billing schedule - could only be voided,
+ * so it sat on the list for ever with the word Void on it (F-LB-23).
+ */
+export function useDeleteDocument() {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: (id: string) => documents.softDelete(id),
     onSuccess: invalidate,
   });
 }

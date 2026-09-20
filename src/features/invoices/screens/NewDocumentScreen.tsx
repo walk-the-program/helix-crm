@@ -42,13 +42,15 @@ import {
   useCreateDealForDocument,
   useCreateDocument,
   useCustomerDeals,
+  useDealLines,
   useInvoiceSettings,
+  useSyncDealLines,
 } from "@/features/invoices/lib/hooks";
 import { formatTaxRate } from "@/features/invoices/lib/settings";
 import { summarizeTaxLines, taxRowLabel } from "@/features/invoices/lib/taxLabel";
 import {
   DocumentLines,
-  blankLine,
+  fromDealItems,
   toNewItems,
   type DraftLine,
 } from "@/features/invoices/components/DocumentLines";
@@ -81,7 +83,15 @@ export function NewDocumentScreen() {
   const [validUntil, setValidUntil] = useState<string | null>(null);
   const [validUntilTouched, setValidUntilTouched] = useState(false);
 
-  const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
+  // No blank row before a customer is chosen. The screen used to open with an
+  // empty line above three empty pickers, asking the owner to price work for a
+  // customer he had not named yet (F-LB-13). The first row arrives with the
+  // deal, or when he asks for one.
+  const [lines, setLines] = useState<DraftLine[]>([]);
+  /** Deal line ids this document is not carrying, which must survive a save. */
+  const [keptDealLineIds, setKeptDealLineIds] = useState<string[]>([]);
+  /** True once the owner has changed the lines himself. */
+  const [linesTouched, setLinesTouched] = useState(false);
 
   const [notes, setNotes] = useState("");
   const [paymentInstructions, setPaymentInstructions] = useState("");
@@ -89,6 +99,8 @@ export function NewDocumentScreen() {
   const [saving, setSaving] = useState(false);
 
   const { data: customerDeals } = useCustomerDeals(contactId, companyId);
+  const { data: dealLines } = useDealLines(dealId);
+  const syncDealLines = useSyncDealLines();
 
   // Due date defaults to issued plus the workspace's payment terms, and stays
   // in sync with the issue date until the owner picks his own.
@@ -117,6 +129,41 @@ export function NewDocumentScreen() {
     if (!dealId || !customerDeals) return;
     if (!customerDeals.some((deal) => deal.id === dealId)) setDealId(null);
   }, [dealId, customerDeals]);
+
+  /**
+   * The deal already knows what the work is, so picking it fills the lines
+   * instead of asking the owner to type them again. Same selection rule the
+   * deal page's own "Create invoice" uses: a quote carries the whole
+   * agreement, an invoice carries the one-time lines because the recurring
+   * ones are billed by the schedule.
+   *
+   * It stops as soon as he has edited anything, so a prefill can never eat
+   * work he has already done.
+   */
+  useEffect(() => {
+    if (linesTouched || !dealId || !dealLines) return;
+    const selection = kind === "quote" ? "all" : "one_time";
+    const filled = fromDealItems(dealLines, selection);
+    setLines(filled);
+    setKeptDealLineIds(
+      dealLines
+        .filter((item) => selection === "all" || item.kind === "recurring")
+        .map((item) => item.id),
+    );
+  }, [dealId, dealLines, kind, linesTouched]);
+
+  // Dropping the deal drops what it filled in, unless the owner has since made
+  // the lines his own.
+  useEffect(() => {
+    if (dealId || linesTouched) return;
+    setLines([]);
+    setKeptDealLineIds([]);
+  }, [dealId, linesTouched]);
+
+  function changeLines(next: DraftLine[]) {
+    setLinesTouched(true);
+    setLines(next);
+  }
 
   const dealItems = useMemo<ComboboxItem[]>(
     () =>
@@ -205,6 +252,36 @@ export function NewDocumentScreen() {
 
     setSaving(true);
     try {
+      // The deal is where a deal's money is defined (round 3 rev 4, §23), so
+      // anything typed here goes back onto it before the document is raised.
+      // Without this the document and its deal disagree, and after D1 that
+      // shows as Quoted $0 beside a real Invoiced figure on the same job.
+      if (linesTouched) {
+        try {
+          await syncDealLines.mutateAsync({
+            dealId: deal,
+            lines: items.map((item, index) => ({
+              dealItemId: lines[index]?.dealItemId,
+              name: item.name,
+              description: item.description ?? null,
+              qty: item.qty ?? 1,
+              unitCents: item.unitCents ?? 0,
+              taxable: item.taxable ?? false,
+              kind: item.kind ?? "one_time",
+              interval: item.interval ?? null,
+            })),
+            keep: keptDealLineIds,
+          });
+        } catch (err) {
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "The job's services were not updated, so this was not saved.",
+          );
+          return;
+        }
+      }
+
       const created = await createDocument.mutateAsync({
         kind,
         dealId: deal,
@@ -363,7 +440,7 @@ export function NewDocumentScreen() {
             </div>
             <DocumentLines
               lines={lines}
-              onChange={setLines}
+              onChange={changeLines}
               editable
               taxRateBp={settings?.taxRateBp ?? 0}
               currency={settings?.currency}

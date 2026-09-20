@@ -19,7 +19,7 @@
  */
 import { useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, DownloadSimple, Envelope, Prohibit } from "@/ui/icons";
+import { ArrowLeft, DownloadSimple, Envelope, Prohibit, Trash } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -51,6 +51,8 @@ import {
   useInvoiceSettings,
   useMarkPaid,
   useReplaceItems,
+  useDeleteDocument,
+  useMarkUnpaid,
   useSendDocument,
   useUpdateDocument,
   useVoidDocument,
@@ -110,6 +112,8 @@ export function DocumentPage() {
   const [paying, setPaying] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [declining, setDeclining] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [unpaying, setUnpaying] = useState(false);
   // ONE action at a time, named. A single shared boolean used to put a
   // spinner on every button in the header at once; see documentActions.ts.
   const [busy, setBusy] = useState<BusyState>(null);
@@ -119,6 +123,8 @@ export function DocumentPage() {
   const send = useSendDocument();
   const markPaid = useMarkPaid();
   const voidIt = useVoidDocument();
+  const markUnpaid = useMarkUnpaid();
+  const deleteDocument = useDeleteDocument();
   const accept = useAcceptQuote();
   const decline = useDeclineQuote();
 
@@ -250,6 +256,14 @@ export function DocumentPage() {
     }
     if (next !== "sent") return;
 
+    // Going back to "sent" from "paid" is an undo, not a send: it clears the
+    // payment rather than stamping a new sent date, and it is worth one
+    // confirmation because it moves money off the reports.
+    if (document.status === "paid") {
+      setUnpaying(true);
+      return;
+    }
+
     setBusy("status");
     try {
       if (editable && !(await saveLines())) return;
@@ -333,6 +347,19 @@ export function DocumentPage() {
                 onClick={() => setVoiding(true)}
               >
                 Void
+              </Button>
+            ) : null}
+            {/* A draft was never anybody's but the owner's, so it can be
+                thrown away. Anything he has sent is written off with Void,
+                which keeps the number spent (F-LB-23). */}
+            {document.status === "draft" ? (
+              <Button
+                variant="destructive"
+                iconLeft={<Trash size={16} weight="bold" aria-hidden="true" />}
+                disabled={anyBusy(busy)}
+                onClick={() => setDeleting(true)}
+              >
+                Delete
               </Button>
             ) : null}
           </>
@@ -557,6 +584,41 @@ export function DocumentPage() {
             toast.success(`Voided ${document.number}.`);
           } catch (err) {
             toast.error(err instanceof Error ? err.message : "That did not void.");
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={`Delete ${document.number}?`}
+        description="It goes to the trash, where you can put it back. Nothing was sent, so nobody is expecting it."
+        confirmLabel={`Delete this ${noun}`}
+        destructive
+        onConfirm={async () => {
+          try {
+            await deleteDocument.mutateAsync(id);
+            toast.success(`Deleted ${document.number}.`);
+            navigate("/invoices");
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "That was not deleted.");
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={unpaying}
+        onOpenChange={setUnpaying}
+        title={`Mark ${document.number} unpaid?`}
+        description="The payment comes off, and the invoice is owed again. It goes back on Receivables and out of what you have collected."
+        confirmLabel="Mark unpaid"
+        destructive
+        onConfirm={async () => {
+          try {
+            await markUnpaid.mutateAsync(id);
+            toast.success(`${document.number} is owed again.`);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "That did not save.");
           }
         }}
       />

@@ -33,6 +33,18 @@ export type DraftLine = {
   taxable: boolean;
   kind: "one_time" | "recurring";
   interval: "month" | "year" | null;
+  /**
+   * The deal line this row came from, when the row was prefilled from a deal
+   * on the New document screen.
+   *
+   * It is what lets an edit go back to the deal as an UPDATE rather than as a
+   * delete and a re-add, which would throw away the line's `product_id` and
+   * with it the Services page's deal counts and the price history that points
+   * at the catalog row. Undefined on a line the owner typed himself and on
+   * every line of an existing document, where the document's own items are
+   * the record and the deal is not being touched.
+   */
+  dealItemId?: string;
 };
 
 let keySeed = 0;
@@ -70,6 +82,43 @@ export function fromPickedService(service: PickedService): DraftLine {
     kind: service.kind,
     interval: service.kind === "recurring" ? (service.interval ?? "month") : null,
   };
+}
+
+/**
+ * A deal's own line items, as document lines.
+ *
+ * `selection` matches `documents.selectLines`: a quote carries the whole
+ * agreement, an invoice for the work carries the one-time lines because the
+ * recurring ones are billed month by month by the schedule. The price is the
+ * ACTUAL one - what the deal agreed, not what the catalog suggests.
+ */
+export function fromDealItems(
+  items: {
+    id: string;
+    name: string;
+    description: string | null;
+    qty: number;
+    actualUnitCents: number;
+    taxable: boolean;
+    kind: string;
+    interval: string | null;
+  }[],
+  selection: "all" | "one_time",
+): DraftLine[] {
+  return items
+    .filter((item) => selection === "all" || item.kind !== "recurring")
+    .map((item) => ({
+      key: nextKey(),
+      dealItemId: item.id,
+      name: item.name,
+      description: item.description ?? "",
+      qty: String(item.qty),
+      unit: centsToDecimalString(item.actualUnitCents),
+      taxable: item.taxable,
+      kind: item.kind === "recurring" ? ("recurring" as const) : ("one_time" as const),
+      interval:
+        item.kind === "recurring" ? (item.interval === "year" ? "year" : "month") : null,
+    }));
 }
 
 export function toDraftLines(items: DocumentItem[]): DraftLine[] {

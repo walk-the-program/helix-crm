@@ -69,11 +69,18 @@ describe("status choices", () => {
     }
   });
 
-  it("leaves a settled document with nothing but the status it has", () => {
-    expect(statusChoices("invoice", "paid")).toEqual([{ value: "paid", label: "Paid" }]);
-    expect(statusIsFixed("invoice", "paid")).toBe(true);
+  it("leaves a written-off document with nothing but the status it has", () => {
+    // Void is the one end state. Paid is not: marking the wrong invoice paid
+    // used to be permanent, so the control offers the way back (F-LB-4).
     expect(statusIsFixed("invoice", "void")).toBe(true);
     expect(statusIsFixed("quote", "declined")).toBe(true);
+  });
+
+  it("offers a paid invoice the way back, with the current status first", () => {
+    const choices = statusChoices("invoice", "paid");
+    expect(choices[0]).toEqual({ value: "paid", label: "Paid" });
+    expect(choices.map((choice) => choice.value)).toContain("sent");
+    expect(statusIsFixed("invoice", "paid")).toBe(false);
   });
 
   it("does not call a movable document fixed", () => {
