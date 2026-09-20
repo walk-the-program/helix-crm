@@ -48,6 +48,7 @@ import {
   softDeleteRow,
   trimmedOrNull,
   updateStatement,
+  type Bindable,
   type Col,
   type Page,
   type Statement,
@@ -1286,42 +1287,199 @@ export async function send(
   return setStatus(id, "sent", extra, "Marking it sent");
 }
 
-export async function markPaid(
-  id: string,
-  input: { paidOn?: string; method?: string | null; note?: string | null } = {},
-): Promise<Document> {
-  return setStatus(
-    id,
-    "paid",
-    {
-      paidOn: input.paidOn ?? todayLocal(),
-      paidMethod: trimmedOrNull(input.method ?? null),
-      paidNote: trimmedOrNull(input.note ?? null),
-    },
-    "Marking it paid",
+/* -------------------------------------------------------------------------- */
+/* payments: the status is derived, never typed                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What has been paid against one invoice, in cents.
+ *
+ * Lives here rather than in `payments.ts` so that the status derivation - the
+ * rule that decides whether an invoice reads sent, partially paid or paid -
+ * has no import back into the payments repository. `payments.ts` depends on
+ * this file; this file depends on nothing of its own.
+ */
+export async function paidCentsFor(documentId: string): Promise<number> {
+  const rows = await raw.query(
+    `SELECT coalesce(sum(p.amount_cents), 0) AS paid_cents
+     FROM payments p WHERE p.document_id = ? AND p.deleted_at IS NULL`,
+    [documentId],
   );
+  const value = rows[0]?.[0];
+  return value === null || value === undefined ? 0 : Number(value);
+}
+
+/** The same sum for a list of invoices, one query. Empty ids answer empty. */
+export async function paidCentsForMany(
+  documentIds: readonly string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (documentIds.length === 0) return out;
+  const placeholders = documentIds.map(() => "?").join(", ");
+  const rows = await raw.query(
+    `SELECT p.document_id AS p_document_id, coalesce(sum(p.amount_cents), 0) AS paid_cents
+     FROM payments p
+     WHERE p.deleted_at IS NULL AND p.document_id IN (${placeholders})
+     GROUP BY p.document_id`,
+    [...documentIds],
+  );
+  for (const row of rows) out.set(String(row[0]), Number(row[1] ?? 0));
+  return out;
 }
 
 /**
- * Undo a payment: the invoice goes back to `sent` and is owed again.
+ * The rule, in one pure function so it can be unit tested and so no screen
+ * ever invents its own version of it (LR-PX contract 5):
  *
- * The payment fields are cleared rather than kept "for the record", because a
- * `paid_on` sitting on an invoice whose status is `sent` is a lie waiting to
- * be read by the next query somebody writes. What happened is on the timeline,
- * which is where history belongs.
+ *   payments >= total   paid
+ *   0 < payments < total partially paid
+ *   payments = 0        sent
+ *
+ * `>=` rather than `=` is deliberate. An overpayment is allowed explicitly
+ * (`payments.create` with `allowOverpayment`), and when it happens the invoice
+ * is certainly not still owed.
  */
-export async function markUnpaid(id: string): Promise<Document> {
-  return setStatus(
-    id,
-    "sent",
-    { paidOn: null, paidMethod: null, paidNote: null },
-    "Marking it unpaid",
-    "unpaid",
-  );
+export function deriveInvoiceStatus(
+  totalCents: number,
+  paidCents: number,
+): "sent" | "partial" | "paid" {
+  if (paidCents >= totalCents) return "paid";
+  if (paidCents > 0) return "partial";
+  return "sent";
 }
 
-/** Void: the document stands, its number is spent, and nothing is owed. */
+/**
+ * Whether this document can take a payment at all, with the sentence to show
+ * the owner when it cannot.
+ *
+ * A draft has not been billed to anybody yet, so money against it would be
+ * money against nothing - the error says to send it first, because that is the
+ * one action that fixes it. A void invoice is a billing that was taken back. A
+ * quote is not a bill.
+ */
+export function assertTakesPayments(document: Document): void {
+  if (document.kind !== "invoice") {
+    throw new ValidationError("Only an invoice can take a payment.", [
+      { path: "documentId", message: `${document.number} is a quote.` },
+    ]);
+  }
+  if (document.status === "draft") {
+    throw new ValidationError(
+      `${document.number} is still a draft. Send it before recording a payment.`,
+      [{ path: "documentId", message: "A draft has not been billed to anybody yet." }],
+    );
+  }
+  if (document.status === "void") {
+    throw new ValidationError(
+      `${document.number} is void, so there is nothing to pay.`,
+      [{ path: "documentId", message: "A voided invoice is a billing that was taken back." }],
+    );
+  }
+}
+
+/**
+ * Write the status the payments justify, and nothing else.
+ *
+ * Called by `payments.ts` inside the same write as every payment create,
+ * update and delete, which is what makes "delete the last payment and the
+ * invoice is owed again" true rather than aspirational.
+ *
+ * It writes no timeline line: the payment write already wrote the one line
+ * that describes what the owner did ("Paid $500.00 by check - $700.00 still
+ * owed"), and a second line saying the status moved would be the same event
+ * twice. It does keep `paid_on` and `paid_method` on the document in step,
+ * because they are what the invoice PDF and the older reports read; they are
+ * now a cache of the payments, cleared the moment the invoice is not settled.
+ *
+ * A document that is not an invoice, or is a draft or void, is left alone.
+ */
+export async function recomputeInvoiceStatus(
+  documentId: string,
+  options: { batchId?: string } = {},
+): Promise<Document> {
+  const current = await getOrThrow(documentId);
+  const document = current.document;
+  if (document.kind !== "invoice") return document;
+  if (document.status === "draft" || document.status === "void") return document;
+
+  const paidCents = await paidCentsFor(documentId);
+  const to = deriveInvoiceStatus(document.totalCents, paidCents);
+
+  const settled = to === "paid";
+  const latest = settled ? await latestPaymentFacts(documentId) : null;
+  const values: Record<string, unknown> = {
+    status: to,
+    paidOn: latest?.paidOn ?? null,
+    paidMethod: latest?.method ?? null,
+    updatedAt: nowIso(),
+  };
+  if (
+    document.status === to &&
+    document.paidOn === values.paidOn &&
+    document.paidMethod === values.paidMethod
+  ) {
+    return document;
+  }
+
+  await raw.execute(...statementTuple(updateStatement("documents", documentId, values)));
+  await logWrite("document", documentId, "update", document, values, options.batchId);
+  const next = await get(documentId);
+  if (!next) throw new NotFoundError("document", documentId);
+  if (document.status !== to) {
+    await notifyStatusChanged({
+      document: next.document,
+      from: document.status as DocumentStatus,
+      to: to as DocumentStatus,
+    });
+  }
+  return next.document;
+}
+
+function statementTuple(statement: Statement): [string, Bindable[]] {
+  return [statement.sql, statement.params as Bindable[]];
+}
+
+/** The day and the method of the most recent payment on an invoice. */
+async function latestPaymentFacts(
+  documentId: string,
+): Promise<{ paidOn: string; method: string } | null> {
+  const rows = await raw.query(
+    `SELECT p.paid_on AS p_paid_on, p.method AS p_method
+     FROM payments p
+     WHERE p.document_id = ? AND p.deleted_at IS NULL
+     ORDER BY p.paid_on DESC, p.created_at DESC
+     LIMIT 1`,
+    [documentId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { paidOn: String(row[0]), method: String(row[1]) };
+}
+
+/**
+ * Void: the document stands, its number is spent, and nothing is owed.
+ *
+ * An invoice with money against it cannot be voided. Voiding it would leave
+ * payments pointing at a billing the product says was taken back, and the
+ * owner's Collected figure would quietly disagree with his bank. The error
+ * names the way out: remove the payments first, then void it.
+ */
 export async function markVoid(id: string): Promise<Document> {
+  const current = await getOrThrow(id);
+  if (current.document.kind === "invoice") {
+    const paid = await paidCentsFor(id);
+    if (paid > 0) {
+      throw new ValidationError(
+        `${current.document.number} has payments against it, so it cannot be voided.`,
+        [
+          {
+            path: "status",
+            message: "Remove the payments on it first, then void it.",
+          },
+        ],
+      );
+    }
+  }
   return setStatus(id, "void", {}, "Voiding it");
 }
 

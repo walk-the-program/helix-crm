@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createSeededHarness, type Harness } from "../harness";
 import * as documents from "../../../src/db/repos/documents";
+import * as payments from "../../../src/db/repos/payments";
 import * as deals from "../../../src/db/repos/deals";
 import * as contacts from "../../../src/db/repos/contacts";
 import * as companies from "../../../src/db/repos/companies";
@@ -107,7 +108,8 @@ async function paidInvoice(
   options: InvoiceOptions & { paidOn: string },
 ): Promise<documents.Document> {
   const sent = await sentInvoice(options);
-  return documents.markPaid(sent.id, { paidOn: options.paidOn });
+  await payments.recordFullPayment(sent.id, { paidOn: options.paidOn });
+  return (await documents.getOrThrow(sent.id)).document;
 }
 
 /* -------------------------------------------------------------------------- */

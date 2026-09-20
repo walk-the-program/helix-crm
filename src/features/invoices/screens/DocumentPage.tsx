@@ -35,6 +35,7 @@ import {
   toast,
 } from "@/ui";
 import { canTransition, get as getDocument } from "@/db/repos/documents";
+import { normalizeMethod } from "@/db/repos/payments";
 import { useFormats } from "@/app/formats";
 import {
   customerLabel,
@@ -601,7 +602,7 @@ export function DocumentPage() {
           await markPaid.mutateAsync({
             id,
             paidOn: values.paidOn,
-            method: values.method,
+            method: normalizeMethod(values.method),
             note: values.note,
           });
           toast.success(`Marked ${document.number} paid.`);

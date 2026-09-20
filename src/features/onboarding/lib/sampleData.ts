@@ -30,6 +30,7 @@ import * as tagsRepo from "@/db/repos/tags";
 import * as productsRepo from "@/db/repos/products";
 import * as dealItemsRepo from "@/db/repos/dealItems";
 import * as documentsRepo from "@/db/repos/documents";
+import * as paymentsRepo from "@/db/repos/payments";
 import * as settingsRepo from "@/db/repos/settings";
 import { contactEmailStatement, contactPhoneStatement } from "@/db/repos/contacts";
 import { normalizePhone } from "@/lib/phone";
@@ -537,9 +538,12 @@ async function raiseSampleDocument(doc: SampleDocument, dealId: string): Promise
     });
 
     if (doc.status === "paid") {
-      await documentsRepo.markPaid(created.id, {
+      // A paid invoice in the example workspace now carries a real payment
+      // row, like one the owner would record himself, so the Payments card and
+      // the Revenue report have something true to show on a fresh install.
+      await paymentsRepo.recordFullPayment(created.id, {
         paidOn: daysAgoLocal(doc.paidDaysAgo ?? doc.issuedDaysAgo),
-        method: doc.paidMethod ?? "bank",
+        method: paymentsRepo.normalizeMethod(doc.paidMethod ?? "transfer"),
       });
     }
     return true;

@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSeededHarness, type Harness } from "../harness";
 import { raw } from "../../../src/db/client";
 import * as documents from "../../../src/db/repos/documents";
+import * as payments from "../../../src/db/repos/payments";
 import * as deals from "../../../src/db/repos/deals";
 import * as contacts from "../../../src/db/repos/contacts";
 import * as companies from "../../../src/db/repos/companies";
@@ -401,21 +402,27 @@ describe("documents: status rules", () => {
     expect(sent.sentAt).toBeTruthy();
     expect(sent.dueOn).toBeTruthy();
 
-    const paid = await documents.markPaid(doc.id, {
-      paidOn: "2026-10-01",
-      method: "bank",
+    // Paid is derived from a payment now, not typed: one payment for the
+    // whole total lands the invoice in `paid`, and the document's own
+    // `paid_on`/`paid_method` are kept as a cache of that payment.
+    await payments.create({
+      documentId: doc.id,
+      amountCents: 5000,
+      paidOn: "2026-09-01",
+      method: "transfer",
       note: "cleared",
     });
+    const paid = (await documents.getOrThrow(doc.id)).document;
     expect(paid.status).toBe("paid");
-    expect(paid.paidOn).toBe("2026-10-01");
-    expect(paid.paidMethod).toBe("bank");
+    expect(paid.paidOn).toBe("2026-09-01");
+    expect(paid.paidMethod).toBe("transfer");
   });
 
   it("refuses to pay an invoice that was never sent", async () => {
     h = await createSeededHarness();
     const dealId = await aDeal();
     const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(5000) });
-    await expect(documents.markPaid(doc.id)).rejects.toBeInstanceOf(ValidationError);
+    await expect(payments.recordFullPayment(doc.id)).rejects.toBeInstanceOf(ValidationError);
   });
 
   it("refuses to send an invoice twice, and refuses to pay a void one", async () => {
@@ -428,7 +435,7 @@ describe("documents: status rules", () => {
     const other = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(100) });
     await documents.send(other.id);
     await documents.markVoid(other.id);
-    await expect(documents.markPaid(other.id)).rejects.toBeInstanceOf(ValidationError);
+    await expect(payments.recordFullPayment(other.id)).rejects.toBeInstanceOf(ValidationError);
   });
 
   it("allows an invoice to be corrected after it is paid, but never a voided one", async () => {
@@ -642,7 +649,7 @@ describe("documents: listing", () => {
     const quote = await documents.create({ kind: "quote", dealId, prefix: "QUO", items: lines(400) });
     await documents.send(sent.id);
     await documents.send(paid.id);
-    await documents.markPaid(paid.id);
+    await payments.recordFullPayment(paid.id);
 
     const unpaid = await documents.list({ unpaidOnly: true });
     const ids = unpaid.rows.map((row) => row.id);
@@ -828,7 +835,7 @@ describe("documents: the money model - a document belongs to a deal", () => {
     const paid = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(3000) });
     await documents.send(sent.id);
     await documents.send(paid.id);
-    await documents.markPaid(paid.id);
+    await payments.recordFullPayment(paid.id);
 
     const result = await documents.syncCustomerFromDeal(deal.id);
     // The deal has not moved yet, so nothing at all should have happened.
@@ -871,17 +878,20 @@ describe("documents: the money model - a document belongs to a deal", () => {
     const deal = await deals.create({ title: "Wrong one", stageId: await firstStageId() });
     const invoice = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(5000) });
     await documents.send(invoice.id);
-    await documents.markPaid(invoice.id, { method: "cheque", note: "Cheque 4471" });
+    await payments.recordFullPayment(invoice.id, { method: "check", note: "Cheque 4471" });
 
-    const unpaid = await documents.markUnpaid(invoice.id);
+    // "Marked unpaid" is now "every payment taken off it", and the status
+    // follows the payments rather than being edited behind their back.
+    await payments.clearForDocument(invoice.id);
+    const unpaid = (await documents.getOrThrow(invoice.id)).document;
     expect(unpaid.status).toBe("sent");
     expect(unpaid.paidOn).toBeNull();
     expect(unpaid.paidMethod).toBeNull();
-    expect(unpaid.paidNote).toBeNull();
     expect(unpaid.number).toBe(invoice.number);
 
     // It is owed again, so it can be paid again or written off.
-    await documents.markPaid(invoice.id);
+    await payments.recordFullPayment(invoice.id);
+    await payments.clearForDocument(invoice.id);
     const voided = await documents.markVoid(invoice.id);
     expect(voided.status).toBe("void");
 
@@ -1079,8 +1089,10 @@ describe("documents: activity", () => {
     expect(afterSend.total).toBe(afterCreate.total + 1);
     expect(afterSend.rows.some((r) => r.body.includes("sent"))).toBe(true);
 
-    await documents.markPaid(doc.id, { method: "bank transfer" });
+    await payments.recordFullPayment(doc.id, { method: "transfer" });
     const afterPaid = await activities.list({ dealId });
+    // One user action, one timeline line: the payment writes it, and the
+    // status change it causes writes nothing of its own.
     expect(afterPaid.total).toBe(afterSend.total + 1);
     expect(
       afterPaid.rows.some((r) => r.body.includes("Paid") && r.body.includes("bank transfer")),

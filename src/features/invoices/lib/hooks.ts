@@ -14,6 +14,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/app/queryClient";
 import * as documents from "@/db/repos/documents";
+import * as payments from "@/db/repos/payments";
+import type { PaymentMethod } from "@/db/repos/payments";
 import * as deals from "@/db/repos/deals";
 import * as dealItems from "@/db/repos/dealItems";
 import * as pipelines from "@/db/repos/pipelines";
@@ -467,18 +469,28 @@ export function useSendDocument() {
   });
 }
 
+/**
+ * "Mark paid": record a payment for whatever is left, dated today.
+ *
+ * The one-click action survives the payments table - it is still one click -
+ * but it now writes a payment like any other rather than setting a flag, so
+ * the Revenue report counts the money on the day it was taken and the invoice
+ * can be walked back by removing that payment.
+ */
 export function useMarkPaid() {
   const invalidate = useInvalidateInvoices();
   return useMutation({
     mutationFn: (input: {
       id: string;
       paidOn?: string;
-      method?: string | null;
+      method?: PaymentMethod;
+      reference?: string | null;
       note?: string | null;
     }) =>
-      documents.markPaid(input.id, {
+      payments.recordFullPayment(input.id, {
         paidOn: input.paidOn,
-        method: input.method ?? null,
+        method: input.method,
+        reference: input.reference ?? null,
         note: input.note ?? null,
       }),
     onSuccess: invalidate,
@@ -493,11 +505,15 @@ export function useVoidDocument() {
   });
 }
 
-/** Undo a payment recorded by mistake: back to sent, and owed again. */
+/**
+ * Undo a payment recorded by mistake: every payment off the invoice, and it is
+ * owed again. The status follows the payments, so this is one write rather
+ * than a status edit that the payments would immediately contradict.
+ */
 export function useMarkUnpaid() {
   const invalidate = useInvalidateInvoices();
   return useMutation({
-    mutationFn: (id: string) => documents.markUnpaid(id),
+    mutationFn: (id: string) => payments.clearForDocument(id),
     onSuccess: invalidate,
   });
 }

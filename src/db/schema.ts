@@ -19,6 +19,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   real,
@@ -188,6 +189,14 @@ export const stages = sqliteTable(
     quietDays: integer("quiet_days").notNull().default(14),
     isWon: integer("is_won", { mode: "boolean" }).notNull().default(false),
     isLost: integer("is_lost", { mode: "boolean" }).notNull().default(false),
+    /**
+     * The per-stage follow-up rule (LR-PX-C, PX-4). NULL means no rule: a
+     * deal that lands here gets no automatic task. Both are nullable rather
+     * than defaulted, because "no rule" and "a rule with an empty title" are
+     * different states and only the first one is silent.
+     */
+    followUpDays: integer("follow_up_days"),
+    followUpTitle: text("follow_up_title"),
     ...stamps(),
   },
   (t) => [
@@ -751,6 +760,68 @@ export const documentItems = sqliteTable(
 );
 
 /**
+ * A payment against an invoice (PX-5).
+ *
+ * Money arriving is its own record, not a flag on the invoice. A trade owner
+ * takes a deposit before the job and the balance after, and he is paid in
+ * cash, by check, by card and by transfer - all of which the old model threw
+ * away: an invoice was paid or it was not, `Collected` was the total of the
+ * paid invoices, and a deposit needed two invoices to express. Anything
+ * finer than that lived in a spreadsheet beside the CRM.
+ *
+ * Shape decisions:
+ *   - `document_id` is RESTRICT, not CASCADE. A purge of an invoice that has
+ *     money against it must fail loudly rather than quietly destroy the
+ *     record of what the customer paid. A soft-deleted invoice keeps its
+ *     payments; the purge sweep is the only thing that would ever try, and it
+ *     is right for it to be refused.
+ *   - `deal_id` is denormalised from the document at write time and is SET
+ *     NULL, exactly like `documents.deal_id`. It buys the per-deal money
+ *     query one join fewer and matches the column it was copied from; the
+ *     invoice remains the truth if the two ever disagree.
+ *   - `amount_cents` is CHECKed positive at the table. A refund is not a
+ *     negative payment in this product - it is the invoice being voided or
+ *     the payment being removed - and a zero payment is a typo.
+ *   - `method` is CHECKed against the five words the dialog offers, so a bad
+ *     write cannot reach the "Payments by method" table.
+ *   - `paid_on` is a local calendar day, like `issued_on` and `due_on`, and
+ *     is the date every Collected figure counts against.
+ *   - it soft-deletes like any other record, so removing a payment is
+ *     undoable and the invoice's status recomputes behind it.
+ */
+export const payments = sqliteTable(
+  "payments",
+  {
+    id: id(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "restrict" }),
+    /** Copied from the document when the payment is written. */
+    dealId: text("deal_id").references(() => deals.id, { onDelete: "set null" }),
+    amountCents: integer("amount_cents").notNull(),
+    /** Local calendar day 'YYYY-MM-DD': the day the money arrived. */
+    paidOn: text("paid_on").notNull(),
+    /** 'cash' | 'check' | 'card' | 'transfer' | 'other'. */
+    method: text("method").notNull(),
+    /** A check number, a transfer reference, the last four of a card. */
+    reference: text("reference"),
+    note: text("note"),
+    ...stamps(),
+  },
+  (t) => [
+    index("idx_payments_document_id").on(t.documentId),
+    index("idx_payments_deal_id").on(t.dealId),
+    index("idx_payments_paid_on").on(t.paidOn),
+    index("idx_payments_deleted_at").on(t.deletedAt),
+    check("ck_payments_amount_positive", sql`${t.amountCents} > 0`),
+    check(
+      "ck_payments_method",
+      sql`${t.method} IN ('cash', 'check', 'card', 'transfer', 'other')`,
+    ),
+  ],
+);
+
+/**
  * The next number for each kind of document, one row per kind.
  *
  * A counter row rather than `max(number) + 1`: the numbers have a prefix, they
@@ -789,6 +860,53 @@ export const invoiceSchedules = sqliteTable(
     index("idx_invoice_schedules_next_issue_on").on(t.nextIssueOn),
     index("idx_invoice_schedules_active").on(t.active),
     index("idx_invoice_schedules_deleted_at").on(t.deletedAt),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
+/* automations (LR-PX-C, PX-4)                                                */
+/* -------------------------------------------------------------------------- */
+
+/** The three fixed rules, switchable in Settings. One row per kind. */
+export const automations = sqliteTable(
+  "automations",
+  {
+    id: id(),
+    /** 'lead_arrived' | 'quote_sent' | 'invoice_overdue'. */
+    kind: text("kind").notNull().unique(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    delayMinutes: integer("delay_minutes").notNull().default(0),
+    titleTemplate: text("title_template").notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check(
+      "ck_automations_kind",
+      sql`${t.kind} IN ('lead_arrived', 'quote_sent', 'invoice_overdue')`,
+    ),
+  ],
+);
+
+/**
+ * The idempotency ledger: one row per rule firing, so a rule fires once and
+ * only once per subject. See drizzle/0008_automations.sql for why this is a
+ * dedicated table rather than a column on `tasks`. No `deleted_at`: a run
+ * record is never soft-deleted, and no `updated_at`: it is written once and
+ * never changed.
+ */
+export const automationRuns = sqliteTable(
+  "automation_runs",
+  {
+    id: id(),
+    /** One of AUTOMATION_KINDS, or the literal "stage" for a stage rule. */
+    kind: text("kind").notNull(),
+    subjectId: text("subject_id").notNull(),
+    taskId: text("task_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("idx_automation_runs_unique").on(t.kind, t.subjectId),
   ],
 );
 
@@ -891,9 +1009,15 @@ export type DocumentRow = typeof documents.$inferSelect;
 export type NewDocumentRow = typeof documents.$inferInsert;
 export type DocumentItemRow = typeof documentItems.$inferSelect;
 export type NewDocumentItemRow = typeof documentItems.$inferInsert;
+export type PaymentRow = typeof payments.$inferSelect;
+export type NewPaymentRow = typeof payments.$inferInsert;
 export type DocumentSequenceRow = typeof documentSequences.$inferSelect;
 export type InvoiceScheduleRow = typeof invoiceSchedules.$inferSelect;
 export type NewInvoiceScheduleRow = typeof invoiceSchedules.$inferInsert;
+export type AutomationRow = typeof automations.$inferSelect;
+export type NewAutomationRow = typeof automations.$inferInsert;
+export type AutomationRunRow = typeof automationRuns.$inferSelect;
+export type NewAutomationRunRow = typeof automationRuns.$inferInsert;
 export type SettingRow = typeof settings.$inferSelect;
 export type LeadSyncRow = typeof leadSync.$inferSelect;
 export type ChangeLogRow = typeof changeLog.$inferSelect;
