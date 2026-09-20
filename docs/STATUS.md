@@ -2818,6 +2818,36 @@ survives the migration; a backup is encrypted and opens with the same key; the
 wrong key is refused with a readable message; 10k inserts in one batch), 9 parser
 tests in `src-tauri/src/disk.rs`, and 5 in `src-tauri/src/secrets.rs`.
 
+### What CI proved, on both runners
+
+Run for the encryption commit `b23e56f`:
+<https://github.com/walk-the-program/helix-crm/actions/runs/35478831801> (e2e-win) and
+<https://github.com/walk-the-program/helix-crm/actions/runs/35478831807> (CI).
+Run for the fix on top, `890bf8e`, all three jobs green:
+<https://github.com/walk-the-program/helix-crm/actions/runs/35479424653>.
+
+- `rust (windows-latest)` and `rust (macos-latest)` both built SQLCipher and OpenSSL
+  from source and ran the whole Rust suite, with `ci.yml` untouched. No NASM step
+  and no Perl step was needed.
+- `e2e-win` **passed on `b23e56f`**, which is the strongest evidence here: that job
+  compiles the real Tauri app on Windows and drives it through WebView2. It proves
+  the Windows binary links the static OpenSSL, that `db_open` created and read a
+  `dbkey` from Windows Credential Manager in a real launch, and that the app
+  reached the Today screen on a freshly encrypted workspace. The app log from that
+  run carries no `SECRET_ERROR` and no `DB_OPEN_FAILED`.
+- The Windows link step emits a wall of `LNK4099: PDB 'ossl_static.pdb' was not
+  found` warnings from the vendored OpenSSL objects. They are debug-info warnings
+  only, the link succeeds, and they are expected for a statically vendored
+  OpenSSL. Not worth silencing.
+- `e2e-win` then went red on `890bf8e`
+  (<https://github.com/walk-the-program/helix-crm/actions/runs/35479424651>), and it
+  is not this work: the build step passed and the suite failed waiting for `nav`
+  and `h1*=Today`, which is the onboarding feature that landed in `106aafc`
+  ("industry-first setup, trade presets, sample data") now showing its flow on a
+  fresh workspace instead of Today. `tests/e2e-win/specs/smoke.e2e.ts` needs to
+  either complete or skip onboarding before it looks for Today. That is outside
+  this agent's scope and is left for whoever owns onboarding.
+
 ### The bug CI caught
 
 The first push went red on `rust (macos-latest)` while Windows and the JS job
