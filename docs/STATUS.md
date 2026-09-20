@@ -3680,3 +3680,189 @@ I did not touch `src/app`.
   it, because `recompute` would silently overwrite anything typed there. A deal
   with no services keeps the inline editor exactly as it was, so a workspace
   that never opens the catalog is unchanged.
+
+---
+
+## 2026-09-20 — Invoices agent (quotes, invoices, recurring billing, AR aging, the PDF)
+
+D21 and D22, built on the catalog agent's `0004_revenue` migration. Full local
+invoicing with a branded PDF, statuses marked by hand, AR aging and overdue on
+Today; a quote is a document whose acceptance converts to an invoice; a
+schedule bills monthly services on won deals. No online payments, nothing
+leaves the machine.
+
+### The model
+
+- **`src/db/repos/documents.ts`** — quotes and invoices, one table, two kinds.
+  - **Numbering** is `<prefix>-<year>-<0001>` from `document_sequences`, a
+    counter row per kind, read and bumped inside the same transaction that
+    writes the document. A counter rather than `max(number)+1` because the
+    number is text with a prefix in it and because a voided invoice must never
+    hand its number back out. Ten creates fired at once through the write lock
+    produce ten consecutive numbers; the test does not await them in turn, so
+    if the sequence read ever escapes the transaction the unique index on
+    `(kind, number)` fails the build rather than quietly duplicating.
+  - **Tax is rounded once over the whole taxable subtotal**, not per line.
+    Three lines of $3.33 at 8.25% are 82 cents, not 81 — per-line rounding
+    puts an invoice a cent away from the customer's own arithmetic.
+  - **Status is a table, not a pile of ifs.** `canTransition(kind, from, to)`
+    is the one rule, and the document page asks the same function before it
+    draws a button — so the screen never offers a move the repository will
+    refuse. Editing lines is draft-only.
+  - **Accepting a quote creates its invoice in the same transaction**, linked
+    by `converted_to_id`. Only the one-time lines cross over: a recurring line
+    is what the schedule bills, and invoicing it here as well would charge the
+    first month twice. A recurring-only quote therefore accepts without an
+    invoice and answers `invoice: null`, which is deliberate and tested.
+- **`src/db/repos/invoiceSchedules.ts`** — "bill this deal every month".
+  `next_issue_on` is the only state and nothing runs in the background to keep
+  it honest, the same design `recurring_rules` uses: a workspace closed for a
+  quarter is correct the moment it opens. `issueDue` catches up one draft
+  invoice per missed period, each dated to the period it belonged to, rather
+  than one lump the owner cannot explain. Month arithmetic clamps to the end of
+  a short month, so billing on the 31st means 28 February and not 3 March.
+  Each schedule is its own transaction so a deal that lost its services does
+  not take the rest of the run down with it; failures are collected and logged.
+  **Everything it raises is a draft — nothing is sent to a customer by a timer.**
+- **`src/db/repos/receivables.ts`** — AR aging in five buckets, `bucketFor`
+  pure and exported. Outstanding means exactly `kind='invoice' AND
+  status='sent' AND deleted_at IS NULL`: a draft is not money anyone owes yet,
+  and paid and void are settled. The bucketing is done in TypeScript rather
+  than a SQL `CASE` over `julianday`, because SQLite's date functions are UTC
+  and this product's due dates are local calendar days.
+
+### Where the schedule comes from
+
+`ensureForWonDeals()` runs on boot and finds every won deal with recurring
+lines and no schedule. It is deliberately not hooked to the deal page's stage
+change: a deal can also be won by an import, by an undo, or by a drag on the
+board, and one query that asks "which won deals are missing a schedule" cannot
+forget a call site.
+
+### The PDF
+
+`src/features/invoices/pdf/` with pdf-lib. US Letter, the business name large
+with the Helix mark small beside it (it is the customer's invoice, not Helix's
+advertisement), a line table that breaks after 18 rows and repeats its header,
+and the total row as the one flat `#97B1C3` block with `#141414` ink on it.
+`brand.ts` is the single file holding colour literals, with a comment saying
+why a PDF is the one place DESIGN.md's rule cannot apply.
+
+Saved through the dialog and fs plugins as `<number>.pdf`, defaulting to the
+workspace's own `documents/` folder and storing `pdf_path`, then opened with
+the OS opener. The default folder is not a convenience:
+`src-tauri/capabilities/default.json` scopes fs writes to app data and
+`opener:allow-open-path` to `$APPDATA/workspaces/**`, so inside the workspace
+is the one place the app may both write the file and then open it. Saving
+elsewhere still works; the open is caught and reported rather than thrown.
+
+**Rendering it and looking at it caught a defect no assertion would have:** the
+first line of the business address ran straight through the bottom edge of the
+logo. The info block now clears whichever of the name and the mark reaches
+lower. `HELIX_PDF_SAMPLE=1 npx vitest run tests/unit/invoices/pdfSample.test.ts`
+regenerates the sample; the run is skipped in a normal `npm test` because it
+writes a file and asserts nothing.
+
+### Screens
+
+`/invoices` (nav "Invoices", order 58) with Unpaid / Paid / Quotes / All,
+status pills, the outstanding money as the screen's one primary block and one
+specific sentence beside it — "3 unpaid, $4,150 outstanding, 1 overdue by 12
+days". `/invoices/:id` with the lines editable while it is a draft, Send
+(which marks it sent and opens the PDF), a Mark paid dialog with date, method
+and note, Void behind a confirm, and Download PDF. `/invoices/new` from
+scratch. `/reports/receivables` with the aging block and every invoice behind
+it. `/settings/invoices` for prefixes, tax rate, terms and payment
+instructions, with Address and Tax ID added to the Workspace screen so a value
+printed on every invoice has one place it is edited.
+
+Two pieces live on other features' screens and are whole components in this
+folder with one mount line at the call site, so two agents never edit the same
+region: `DealInvoicesPanel` on the deal page ("Create quote", "Create invoice",
+and "Create this month's invoice" when a schedule exists) and
+`UnpaidInvoicesSection` on Today (overdue first with the days out loud, then
+due within seven days, each with Mark paid and Open). `AgingBlock` is mounted
+on the catalog agent's `/reports/revenue` the same way.
+
+**Today's section carries no emphasis and no colour.** Today's one primary
+block is the Due now count and it is already spent; DESIGN.md §5 lists the word
+"overdue" under "What has no colour", so the badge is neutral and the wording
+does the work. Every screen here spends its primary on the money rather than on
+a button, which is why "New invoice", "Send" and "Create invoice" are all
+secondary.
+
+### What the screenshots caught
+
+Three defects, all fixed, none of which an assertion would have found:
+
+1. **The line table's totals row was one column short.** `colSpan` was 3 on a
+   five-column table, so "Subtotal" and "Total" put their figures under Tax and
+   left Amount empty. It is four in both modes now, with a named constant and a
+   comment, because the editable table's sixth column is the remove button and
+   that is exactly the off-by-one that produced this.
+2. **The document page said the total three times** — the primary block, the
+   table footer, and again in the Details card. The Details card keeps who,
+   when and how it was paid; the money is stated where it is being worked out.
+3. **The All tab summed a quote, a draft and a paid invoice into one figure.**
+   That number is of nothing. Unpaid, Paid and Quotes still total, because
+   every row on those means the same thing; All counts and does not sum.
+
+And in the PDF, the first line of the business address ran through the bottom
+of the logo (above).
+
+### Verified
+
+```
+npm run typecheck                                      clean
+npm test                                 94 files / 1483 tests, 1 skipped
+npx vite build                                      succeeds (deleted)
+E2E_PORT=4204 E2E_OUT=dist-inv playwright test
+  invoices.e2e.ts + today.e2e.ts + records.e2e.ts       25 passed
+forbidden-literal grep over the feature and its repos  clean
+```
+
+The skipped test is `pdfSample.test.ts`, which is opt-in by design. The
+forbidden-literal grep covers colour literals, `rounded-*`, `shadow-sm`,
+gradients, hard-coded px font sizes and heights, and emoji across
+`src/features/invoices`, `src/db/repos/{documents,invoiceSchedules,receivables}.ts`
+and both test folders. `src/features/invoices/pdf/brand.ts` is the one
+deliberate exception and says so at the top.
+
+Screens at 1280 in light and dark in `tests/e2e-mac/.cache/screens/invoices/`
+(10 images, gitignored), plus `sample-invoice.pdf` and `sample-invoice.png`.
+
+### Contract change needed
+
+**`@pdf-lib/fontkit` is not installed and is not in the lockfile.** pdf-lib
+cannot embed a TTF without it, so the PDF currently renders in Helvetica. The
+Zilla Slab and Lato TTFs are downloaded, committed with their OFL files, and
+bundling correctly (Vite emits all four), and `renderDocument` already tries
+`@pdf-lib/fontkit` behind a dynamic import and falls back cleanly when it is
+absent. One `npm install @pdf-lib/fontkit` switches the brand faces on with no
+code change. A feature agent may not add a dependency (docs/CONTRACTS.md), so
+this is the orchestrator's call.
+
+### Left open
+
+- **The brand faces, per the above.** The sample PDF in the screens folder is
+  the Helvetica fallback, not what will ship.
+- **"Add from your services" on `/invoices/new` is hidden.** The catalog
+  feature exports no picker yet. The button is behind a dynamic import and a
+  `typeof === "function"` check, so it appears by itself the day one lands; if
+  their props differ from the shape assumed there, that render needs a look.
+- **Three shared files carry one mount line each and are NOT in this commit**
+  — `src/features/records/screens/DealPage.tsx` (`<DealInvoicesPanel dealId={id} />`),
+  `src/features/settings/lib/sections.ts` (the Invoices row) and
+  `src/features/leads/screens/RevenueScreen.tsx` (`<AgingBlock />`). All three
+  also hold the catalog agent's uncommitted work, and committing them would
+  sweep that in. They are in the working tree and green; whoever commits the
+  catalog work should carry them.
+- **A transient `plugin:event|listen` stub gap.** One `today.e2e.ts` run
+  mid-session failed three tests on "no stub for Tauri command
+  `plugin:event|listen`". It did not reproduce: `today.e2e.ts` alone passed
+  10/10 immediately after, and the final three-spec run passed 25/25. Worth
+  knowing about if it comes back, since `tests/e2e-mac/fixtures.ts` rejects
+  anything unstubbed by design.
+- **`npx vite build` prints four CSS parse warnings** from a Tailwind
+  arbitrary-value class written inside a comment in `src/ui/Kbd.tsx`. Not new
+  and not this feature's, but it puts a dead rule in the shipped stylesheet.

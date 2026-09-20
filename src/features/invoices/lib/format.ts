@@ -1,0 +1,149 @@
+/**
+ * The words this feature puts on a screen, in one file so no two screens
+ * describe the same state differently.
+ *
+ * An invoice is money someone owes you, so the copy is calm and specific:
+ * "3 unpaid, $4,150 outstanding, 1 overdue by 12 days" rather than a warning.
+ * DESIGN.md section 5 says the word "overdue" has no colour; it is the words
+ * and the position at the top of a list that carry the weight.
+ */
+import { formatMoney } from "@/lib/money";
+import { parseDateOnly, todayLocal } from "@/lib/dates";
+
+export type BadgeTone =
+  | "neutral"
+  | "accent"
+  | "brand"
+  | "secondary"
+  | "highlight"
+  | "success"
+  | "warning"
+  | "danger";
+
+/** The word on a status pill. Sentence case, always a word, never a colour alone. */
+export function statusLabel(status: string): string {
+  switch (status) {
+    case "draft":
+      return "Draft";
+    case "sent":
+      return "Sent";
+    case "paid":
+      return "Paid";
+    case "void":
+      return "Void";
+    case "accepted":
+      return "Accepted";
+    case "declined":
+      return "Declined";
+    default:
+      return status;
+  }
+}
+
+/**
+ * The tint a status pill wears. Only two states carry a semantic colour -
+ * paid (success) and declined (danger) - because those are the two the owner
+ * reads as an outcome. Everything else is neutral: a sent invoice is the
+ * normal state of an invoice, not an alarm.
+ */
+export function statusTone(status: string): BadgeTone {
+  if (status === "paid" || status === "accepted") return "success";
+  if (status === "declined") return "danger";
+  return "neutral";
+}
+
+/** Whole days from `dueOn` to `reference`. Positive means past due. */
+export function daysOverdue(dueOn: string | null, reference: string = todayLocal()): number {
+  if (!dueOn) return 0;
+  const due = parseDateOnly(dueOn);
+  const now = parseDateOnly(reference);
+  if (!due || !now) return 0;
+  return Math.round((now.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+export function isOverdue(
+  document: { status: string; kind: string; dueOn: string | null },
+  reference: string = todayLocal(),
+): boolean {
+  if (document.kind !== "invoice" || document.status !== "sent") return false;
+  return daysOverdue(document.dueOn, reference) > 0;
+}
+
+/** "Overdue by 12 days", "Due today", "Due in 4 days". */
+export function dueLabel(dueOn: string | null, reference: string = todayLocal()): string {
+  if (!dueOn) return "No due date";
+  const days = daysOverdue(dueOn, reference);
+  if (days > 0) return days === 1 ? "Overdue by 1 day" : `Overdue by ${days} days`;
+  if (days === 0) return "Due today";
+  const ahead = Math.abs(days);
+  return ahead === 1 ? "Due in 1 day" : `Due in ${ahead} days`;
+}
+
+/** "per month" / "per year" on a recurring line. */
+export function intervalLabel(kind: string, interval: string | null): string {
+  if (kind !== "recurring") return "";
+  return interval === "year" ? "per year" : "per month";
+}
+
+export type OutstandingSummary = {
+  /** Invoices that are sent and not yet paid. */
+  sentCount: number;
+  outstandingCents: number;
+  overdueCount: number;
+  /** The worst one, for the sentence. */
+  worstOverdueDays: number;
+  draftCount: number;
+};
+
+/**
+ * The one sentence the list and Today both print. Specific numbers, no
+ * adjectives, and it never says anything it cannot show a row for.
+ */
+export function summarySentence(
+  summary: OutstandingSummary,
+  currency?: string,
+  locale?: string,
+): string {
+  if (summary.sentCount === 0 && summary.draftCount === 0) {
+    return "Nothing outstanding.";
+  }
+
+  const parts: string[] = [];
+  if (summary.sentCount > 0) {
+    parts.push(`${summary.sentCount} unpaid`);
+    parts.push(`${formatMoney(summary.outstandingCents, currency, locale)} outstanding`);
+  }
+  if (summary.overdueCount === 1 && summary.worstOverdueDays > 0) {
+    parts.push(
+      `1 overdue by ${summary.worstOverdueDays} ${
+        summary.worstOverdueDays === 1 ? "day" : "days"
+      }`,
+    );
+  } else if (summary.overdueCount > 1) {
+    parts.push(
+      `${summary.overdueCount} overdue, the oldest by ${summary.worstOverdueDays} days`,
+    );
+  }
+  if (summary.draftCount > 0) {
+    parts.push(`${summary.draftCount} still a draft`);
+  }
+  return `${parts.join(", ")}.`;
+}
+
+/** Who a document is for, in the one line a row has room for. */
+export function customerLabel(document: {
+  companyName: string | null;
+  contactFirstName: string | null;
+  contactLastName: string | null;
+}): string {
+  const person = [document.contactFirstName ?? "", document.contactLastName ?? ""]
+    .join(" ")
+    .trim();
+  if (document.companyName && person) return `${document.companyName} · ${person}`;
+  return document.companyName || person || "No customer yet";
+}
+
+/** The file name a PDF is offered under: the number, and nothing else. */
+export function pdfFileName(numberText: string): string {
+  return `${numberText.replace(/[^A-Za-z0-9._-]+/g, "-")}.pdf`;
+}

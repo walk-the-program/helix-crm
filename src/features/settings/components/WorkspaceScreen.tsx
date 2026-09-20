@@ -18,7 +18,7 @@
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Input, Select, toast } from "@/ui";
+import { Button, Input, Select, Textarea, toast } from "@/ui";
 import * as settingsRepo from "@/db/repos/settings";
 import { readRegistry, updateRegistry } from "@/app/appSettings";
 import { formatMoney } from "@/lib/money";
@@ -72,11 +72,20 @@ export function WorkspaceScreen() {
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [address, setAddress] = useState("");
+  const [taxId, setTaxId] = useState("");
   // Read before the loading branch below, because it is a hook.
   const hasSampleData = useHasSampleData();
 
   useEffect(() => {
     if (data) setName(data.workspaceName);
+  }, [data]);
+
+  useEffect(() => {
+    if (data) {
+      setAddress(data["business.address"]);
+      setTaxId(data["business.taxId"]);
+    }
   }, [data]);
 
   async function refresh() {
@@ -121,6 +130,20 @@ export function WorkspaceScreen() {
     if (key === "currency") await settingsRepo.set("currency", value);
     else if (key === "locale") await settingsRepo.set("locale", value);
     else await settingsRepo.set("defaultRegion", value);
+    await refresh();
+    toast.success(said);
+  }
+
+  /** The two invoice-header fields, saved the moment the owner leaves the field. */
+  async function saveBusinessField(
+    key: "business.address" | "business.taxId",
+    value: string,
+    current: string,
+    said: string,
+  ) {
+    const trimmed = value.trim();
+    if (trimmed === current) return;
+    await settingsRepo.set(key, trimmed);
     await refresh();
     toast.success(said);
   }
@@ -184,6 +207,45 @@ export function WorkspaceScreen() {
             }}
             placeholder="Sorensen Landscaping"
             data-testid="workspace-name-input"
+          />
+        </SettingsRow>
+        <SettingsRow label="Address" htmlFor="workspace-address" field>
+          <Textarea
+            id="workspace-address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            onBlur={() =>
+              void saveBusinessField(
+                "business.address",
+                address,
+                data["business.address"],
+                "Saved your address",
+              )
+            }
+            placeholder={"123 Main Street\nProvo, UT 84601"}
+            data-testid="workspace-address-input"
+          />
+        </SettingsRow>
+        <SettingsRow
+          label="Tax ID"
+          htmlFor="workspace-tax-id"
+          field
+          hint="These print at the top of every invoice and quote."
+        >
+          <Input
+            id="workspace-tax-id"
+            value={taxId}
+            onChange={(e) => setTaxId(e.target.value)}
+            onBlur={() =>
+              void saveBusinessField(
+                "business.taxId",
+                taxId,
+                data["business.taxId"],
+                "Saved your tax ID",
+              )
+            }
+            placeholder="87-1234567"
+            data-testid="workspace-tax-id-input"
           />
         </SettingsRow>
       </SettingsGroup>

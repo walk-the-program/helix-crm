@@ -1,0 +1,493 @@
+/**
+ * One quote or one invoice.
+ *
+ *   draft   -> edit the lines, Send
+ *   sent    -> Mark paid (invoice) / Accept or Decline (quote), Void
+ *   settled -> read only, with the PDF still one click away
+ *
+ * The status is what decides which controls exist, so the page never shows a
+ * button that will be refused: the repository's transition table is the same
+ * rule, and `canTransition` is what both of them ask.
+ *
+ * Statuses are marked by hand (D21). Nothing here talks to a bank or takes a
+ * payment; "Send" means the owner is about to email the PDF himself, which is
+ * why it opens the file rather than just changing a word on the screen.
+ *
+ * The one primary block is the total. The actions in the header are all
+ * secondary, which is deliberate - DESIGN.md allows the brand primary once per
+ * view, and on a page about money the money is what earns it.
+ */
+import { useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "wouter";
+import { ArrowLeft, DownloadSimple, Envelope, Prohibit } from "@/ui/icons";
+import {
+  Badge,
+  Button,
+  Card,
+  CardGroupLabel,
+  CardRow,
+  ConfirmDialog,
+  EmptyState,
+  PageHeader,
+  Spinner,
+  Textarea,
+  toast,
+} from "@/ui";
+import { canTransition, get as getDocument } from "@/db/repos/documents";
+import { formatMoney } from "@/lib/money";
+import { formatDateDisplay } from "@/lib/dates";
+import {
+  customerLabel,
+  dueLabel,
+  isOverdue,
+  statusLabel,
+  statusTone,
+} from "@/features/invoices/lib/format";
+import {
+  useAcceptQuote,
+  useDeclineQuote,
+  useDocument,
+  useInvoiceSettings,
+  useMarkPaid,
+  useReplaceItems,
+  useSendDocument,
+  useUpdateDocument,
+  useVoidDocument,
+} from "@/features/invoices/lib/hooks";
+import {
+  DocumentLines,
+  toNewItems,
+  useDraftLines,
+} from "@/features/invoices/components/DocumentLines";
+import { MarkPaidDialog } from "@/features/invoices/components/MarkPaidDialog";
+import { saveDocumentPdf } from "@/features/invoices/lib/pdfFile";
+
+/**
+ * A label/value row. `CardRow` is a bare flex row with a hairline under it, so
+ * the two halves are supplied here rather than as props - the kit deliberately
+ * does not fix what goes in a row.
+ */
+function DetailRow(props: { label: string; children: React.ReactNode }) {
+  return (
+    <CardRow>
+      <span className="flex-none text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        {props.label}
+      </span>
+      <span className="min-w-0 truncate text-right">{props.children}</span>
+    </CardRow>
+  );
+}
+
+export function DocumentPage() {
+  const { id = "" } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const { data, isLoading } = useDocument(id);
+  const { data: settings } = useInvoiceSettings();
+
+  const document = data?.document ?? null;
+  const items = data?.items;
+  const editable = document?.status === "draft";
+  const [lines, setLines] = useDraftLines(items, Boolean(editable));
+
+  // Null means "showing what is stored"; a string means the owner has typed.
+  // It is cleared whenever the route moves to another document, because wouter
+  // reuses this component instance across :id changes and the note from the
+  // last invoice would otherwise appear on the next one.
+  const [notes, setNotes] = useState<string | null>(null);
+  useEffect(() => {
+    setNotes(null);
+  }, [id]);
+
+  const [paying, setPaying] = useState(false);
+  const [voiding, setVoiding] = useState(false);
+  const [declining, setDeclining] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const replaceItems = useReplaceItems();
+  const updateDocument = useUpdateDocument();
+  const send = useSendDocument();
+  const markPaid = useMarkPaid();
+  const voidIt = useVoidDocument();
+  const accept = useAcceptQuote();
+  const decline = useDeclineQuote();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-[var(--space-2)] p-[var(--space-6)]">
+        <Spinner /> <span className="text-[var(--color-text-muted)]">Loading</span>
+      </div>
+    );
+  }
+
+  if (!document || !settings) {
+    return (
+      <EmptyState
+        title="That document is gone"
+        description="It may have been deleted."
+        action={
+          <Button variant="primary" onClick={() => navigate("/invoices")}>
+            Back to invoices
+          </Button>
+        }
+      />
+    );
+  }
+
+  const isQuote = document.kind === "quote";
+  const noun = isQuote ? "quote" : "invoice";
+  const money = (cents: number) => formatMoney(cents, settings.currency, settings.locale);
+
+  async function saveLines() {
+    const next = toNewItems(lines);
+    if (!next) {
+      toast.error("Every line needs a description, a quantity and an amount.");
+      return false;
+    }
+    try {
+      await replaceItems.mutateAsync({ id, items: next });
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Those lines did not save.");
+      return false;
+    }
+  }
+
+  /** Render, save and open the PDF. Used by Send and by Download. */
+  async function writePdf(openAfter: boolean): Promise<string | null> {
+    if (!document || !settings) return null;
+    // Re-read rather than trust the render's copy: Send saves the lines and
+    // flips the status immediately before this runs, and the PDF has to show
+    // what was actually stored, not what was on screen a moment ago.
+    const fresh = await getDocument(document.id);
+    if (!fresh) return null;
+    const result = await saveDocumentPdf(fresh.document, fresh.items, settings, {
+      openAfter,
+    });
+    return result.path;
+  }
+
+  async function onSend() {
+    setBusy(true);
+    try {
+      if (editable && !(await saveLines())) return;
+      await send.mutateAsync(id);
+      const path = await writePdf(true);
+      toast.success(
+        path
+          ? `Marked ${document?.number} sent, and opened the PDF.`
+          : `Marked ${document?.number} sent.`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `That ${noun} did not send.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDownload() {
+    setBusy(true);
+    try {
+      const path = await writePdf(false);
+      if (path) toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "The PDF could not be written.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onAccept() {
+    setBusy(true);
+    try {
+      const result = await accept.mutateAsync(id);
+      if (result.invoice) {
+        toast.success(`Accepted. ${result.invoice.number} is ready to send.`);
+        navigate(`/invoices/${result.invoice.id}`);
+      } else {
+        toast.success("Accepted. The monthly billing starts from here.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "That did not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const overdue = isOverdue(document);
+  const canSend = canTransition(document.kind, document.status, "sent");
+  const canPay = canTransition(document.kind, document.status, "paid");
+  const canVoid = canTransition(document.kind, document.status, "void");
+  const canAccept = canTransition(document.kind, document.status, "accepted");
+
+  return (
+    <div className="flex flex-col gap-[var(--space-6)]">
+      <PageHeader
+        breadcrumb={
+          <Link
+            href="/invoices"
+            className="inline-flex w-fit items-center gap-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-faint)] no-underline hover:text-[var(--color-text)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+          >
+            <ArrowLeft size={14} weight="bold" aria-hidden="true" /> Invoices
+          </Link>
+        }
+        title={document.number}
+        subtitle={customerLabel(document)}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              iconLeft={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}
+              loading={busy}
+              onClick={() => void onDownload()}
+            >
+              Download PDF
+            </Button>
+            {canSend ? (
+              <Button
+                variant="secondary"
+                iconLeft={<Envelope size={16} weight="bold" aria-hidden="true" />}
+                loading={busy}
+                onClick={() => void onSend()}
+              >
+                Send
+              </Button>
+            ) : null}
+            {canAccept ? (
+              <>
+                <Button variant="secondary" loading={busy} onClick={() => void onAccept()}>
+                  Accepted
+                </Button>
+                <Button variant="secondary" onClick={() => setDeclining(true)}>
+                  Declined
+                </Button>
+              </>
+            ) : null}
+            {canPay ? (
+              <Button variant="secondary" onClick={() => setPaying(true)}>
+                Mark paid
+              </Button>
+            ) : null}
+            {canVoid ? (
+              <Button
+                variant="destructive"
+                iconLeft={<Prohibit size={16} weight="bold" aria-hidden="true" />}
+                onClick={() => setVoiding(true)}
+              >
+                Void
+              </Button>
+            ) : null}
+          </>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-[var(--space-3)]">
+        {/* The one primary block on this page: what the document is worth. */}
+        <span
+          data-testid="document-total"
+          className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]"
+        >
+          {money(document.totalCents)}
+        </span>
+        <Badge tone={statusTone(document.status)}>{statusLabel(document.status)}</Badge>
+        {isQuote ? <Badge>Quote</Badge> : null}
+        {overdue ? (
+          <span className="tabular text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
+            {dueLabel(document.dueOn)}
+          </span>
+        ) : null}
+        {document.dealId && document.dealTitle ? (
+          <Link
+            href={`/deals/${document.dealId}`}
+            className="text-[length:var(--text-sm)] text-[var(--color-link)] underline-offset-2 hover:underline"
+          >
+            {document.dealTitle}
+          </Link>
+        ) : null}
+      </div>
+
+      {document.status === "draft" ? (
+        <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+          This is still a draft, so you can change anything on it. Sending it
+          fixes the lines and starts the clock on the money.
+        </p>
+      ) : null}
+      {document.convertedToId ? (
+        <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+          This quote became{" "}
+          <Link
+            href={`/invoices/${document.convertedToId}`}
+            className="text-[var(--color-link)] underline-offset-2 hover:underline"
+          >
+            an invoice
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      <div className="grid grid-cols-1 gap-[var(--space-5)] xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 flex flex-col gap-[var(--space-5)]">
+          <div>
+            <CardGroupLabel>Lines</CardGroupLabel>
+            <DocumentLines
+              lines={lines}
+              onChange={setLines}
+              editable={Boolean(editable)}
+              taxRateBp={document.taxRateBp}
+              currency={settings.currency}
+              locale={settings.locale}
+            />
+            {editable ? (
+              <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-3)]">
+                <Button
+                  variant="secondary"
+                  loading={replaceItems.isPending}
+                  onClick={() => {
+                    void saveLines().then((ok) => {
+                      if (ok) toast.success("Saved the lines.");
+                    });
+                  }}
+                >
+                  Save changes
+                </Button>
+                <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                  Sending saves them too.
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          <div>
+            <CardGroupLabel>Notes</CardGroupLabel>
+            {editable ? (
+              <Textarea
+                rows={3}
+                aria-label="Notes"
+                placeholder="Anything the customer should read on the document."
+                value={notes ?? document.notes ?? ""}
+                onChange={(event) => setNotes(event.target.value)}
+                onBlur={() => {
+                  if (notes === null || notes === (document.notes ?? "")) return;
+                  void updateDocument
+                    .mutateAsync({ id, patch: { notes } })
+                    .then(() => toast.success("Saved the note."))
+                    .catch(() => toast.error("That note did not save."));
+                }}
+              />
+            ) : (
+              <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+                {document.notes || "No note on this one."}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
+          <div>
+            {/* Subtotal, tax and total are deliberately NOT repeated here.
+                The lines table carries them in its own footer and the block at
+                the top of the page carries the total; a third copy is filler,
+                and filler is what DESIGN.md section 11 rules out. */}
+            <CardGroupLabel>Details</CardGroupLabel>
+            <Card>
+              <DetailRow label="Customer">{customerLabel(document)}</DetailRow>
+              <DetailRow label="Issued">
+                {formatDateDisplay(document.issuedOn) || "Not yet"}
+              </DetailRow>
+              {isQuote ? (
+                <DetailRow label="Valid until">
+                  {formatDateDisplay(document.validUntil) || "No end date"}
+                </DetailRow>
+              ) : (
+                <DetailRow label="Due">
+                  {document.dueOn
+                    ? `${formatDateDisplay(document.dueOn)} · ${dueLabel(document.dueOn)}`
+                    : "No due date"}
+                </DetailRow>
+              )}
+              {document.paidOn ? (
+                <DetailRow label="Paid">
+                  {formatDateDisplay(document.paidOn)}
+                  {document.paidMethod ? ` · ${document.paidMethod}` : ""}
+                </DetailRow>
+              ) : null}
+              {document.pdfPath ? (
+                <DetailRow label="PDF">
+                  <span
+                    className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                    title={document.pdfPath}
+                  >
+                    {document.pdfPath.split(/[\\/]/).pop()}
+                  </span>
+                </DetailRow>
+              ) : null}
+            </Card>
+          </div>
+
+          {document.paymentInstructions ? (
+            <div>
+              <CardGroupLabel>How to pay</CardGroupLabel>
+              <Card>
+                <CardRow className="items-stretch">
+                  <p className="whitespace-pre-line text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                    {document.paymentInstructions}
+                  </p>
+                </CardRow>
+              </Card>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <MarkPaidDialog
+        open={paying}
+        onOpenChange={setPaying}
+        number={document.number}
+        totalCents={document.totalCents}
+        currency={settings.currency}
+        locale={settings.locale}
+        onConfirm={async (values) => {
+          await markPaid.mutateAsync({
+            id,
+            paidOn: values.paidOn,
+            method: values.method,
+            note: values.note,
+          });
+          toast.success(`Marked ${document.number} paid.`);
+        }}
+      />
+
+      <ConfirmDialog
+        open={voiding}
+        onOpenChange={setVoiding}
+        title={`Void ${document.number}?`}
+        description={`It stays on the list with the word "Void" on it, and nothing is owed. The number is not handed out again.`}
+        confirmLabel={`Void this ${noun}`}
+        destructive
+        onConfirm={async () => {
+          try {
+            await voidIt.mutateAsync(id);
+            toast.success(`Voided ${document.number}.`);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "That did not void.");
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={declining}
+        onOpenChange={setDeclining}
+        title={`Mark ${document.number} declined?`}
+        description="The quote stays on the list so you can see what was asked for."
+        confirmLabel="Mark declined"
+        onConfirm={async () => {
+          try {
+            await decline.mutateAsync(id);
+            toast.success(`Marked ${document.number} declined.`);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "That did not save.");
+          }
+        }}
+      />
+    </div>
+  );
+}

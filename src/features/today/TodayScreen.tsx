@@ -37,6 +37,7 @@ import { ConnectSiteCard } from "@/features/today/sections/ConnectSite";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useWorkspaceIsEmpty } from "@/features/today/lib/useToday";
 import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
+import { UnpaidInvoicesSection } from "@/features/invoices";
 
 /**
  * Quick add belongs to the records agent and is registered as a palette
@@ -79,6 +80,7 @@ function TodayPanels() {
     <div className="flex flex-col gap-[var(--space-8)]">
       <DueNowSection />
       <ComingUpSection />
+      <UnpaidInvoicesSection />
       <NewLeadsSection />
       <GoneQuietSection />
       <RecentActivitySection />
