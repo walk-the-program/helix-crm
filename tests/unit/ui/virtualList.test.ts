@@ -212,3 +212,61 @@ describe("VirtualList keyboardNav", () => {
     expect(onActivate).toHaveBeenCalledWith("row-0");
   });
 });
+
+/**
+ * `fit`: the list stops at its last row instead of painting a slab of surface
+ * white underneath it, and it still has a real height for the virtualiser to
+ * measure — which is why simply dropping `flex-1` at the call site is not the
+ * fix (the scroll element then measures zero and no row renders at all).
+ */
+describe("VirtualList fit", () => {
+  it("takes the rows' own height and shrinks rather than grows", () => {
+    render(
+      React.createElement(VirtualList<Row>, {
+        items: makeItems(4),
+        estimateSize: 40,
+        fit: true,
+        "aria-label": "Contacts",
+        renderRow: (item: Row) => React.createElement("div", null, item.label),
+      }),
+    );
+    const list = screen.getByRole("list", { name: "Contacts" });
+    expect(list.getAttribute("data-fit")).toBe("");
+    expect(list.style.flex).toBe("0 1 auto");
+    // The scroller is exactly as tall as the virtualiser's own sizer — the
+    // content — so there is nothing left over to paint white.
+    const sizer = list.firstElementChild as HTMLElement;
+    expect(list.style.height).toBe(sizer.style.height);
+    expect(Number.parseFloat(list.style.height)).toBeGreaterThan(0);
+  });
+
+  it("keeps a measurable, non-zero height so the rows still render", () => {
+    render(
+      React.createElement(VirtualList<Row>, {
+        items: makeItems(3),
+        estimateSize: 40,
+        fit: true,
+        "aria-label": "Companies",
+        renderRow: (item: Row) => React.createElement("div", null, item.label),
+      }),
+    );
+    expect(Number.parseFloat(screen.getByRole("list", { name: "Companies" }).style.height)).
+      toBeGreaterThan(0);
+    expect(screen.getByText("Item 0")).toBeTruthy();
+  });
+
+  it("changes nothing at all when it is off", () => {
+    render(
+      React.createElement(VirtualList<Row>, {
+        items: makeItems(4),
+        estimateSize: 40,
+        "aria-label": "Plain",
+        renderRow: (item: Row) => React.createElement("div", null, item.label),
+      }),
+    );
+    const list = screen.getByRole("list", { name: "Plain" });
+    expect(list.hasAttribute("data-fit")).toBe(false);
+    expect(list.style.height).toBe("");
+    expect(list.style.flex).toBe("");
+  });
+});

@@ -36,6 +36,30 @@ export type VirtualListKeyboardNav<T> = {
 /**
  * 10 000 rows are virtualised (docs/DESIGN.md section 9). Only the rows in
  * view, plus the overscan, are ever in the DOM.
+ *
+ * `fit` is the phase-two answer to the empty white slab under a short list.
+ *
+ * A virtualised list needs a scroll element with a real, measurable height, so
+ * every caller made it `flex-1` inside a bordered panel. That is right when
+ * there are four hundred contacts and wrong when there are four: the scroller
+ * fills the panel, the sizer inside it is only four rows tall, and the rest is
+ * a slab of surface white with a border around it — worst in compact, where
+ * the rows are shorter and the slab is taller. Dropping `flex-1` is not the
+ * fix either: the parent goes content-height, the scroll element measures
+ * zero, and the list renders nothing at all.
+ *
+ * With `fit`, the scroller takes the virtualiser's own total size as an
+ * explicit height and becomes `flex: 0 1 auto`. Short list: the height is the
+ * content and the panel ends at the last row. Long list: the flex parent
+ * shrinks it to the space available and it scrolls exactly as before. Either
+ * way the height is definite and non-zero on the very first paint, which is
+ * the property the virtualiser actually needs.
+ *
+ * The panel around it has to stop stretching too — a `flex-1` surface still
+ * paints white under a `fit` list. Give it `min-h-0 max-h-full` in place of
+ * `min-h-0 flex-1` and it caps at the column instead of filling it.
+ *
+ * Default is off, so every existing caller behaves exactly as it did.
  */
 export function VirtualList<T>(props: {
   items: T[];
@@ -53,8 +77,11 @@ export function VirtualList<T>(props: {
    *  gets the row's nav props as a third argument to spread onto whichever
    *  element in the row should hold keyboard focus. */
   keyboardNav?: VirtualListKeyboardNav<T>;
+  /** Shrink to the rows' own height, capped by the space the flex parent has. */
+  fit?: boolean;
 }) {
-  const { items, estimateSize, overscan = 8, renderRow, className, getKey, keyboardNav } = props;
+  const { items, estimateSize, overscan = 8, renderRow, className, getKey, keyboardNav, fit } =
+    props;
   const ariaLabel = props["aria-label"] ?? props.ariaLabel;
   const parentRef = useRef<HTMLDivElement | null>(null);
 
@@ -106,15 +133,20 @@ export function VirtualList<T>(props: {
   });
 
   const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
 
   return (
     <div
       ref={parentRef}
       role="list"
       aria-label={ariaLabel}
+      data-fit={fit ? "" : undefined}
+      // Inline, so it wins over whatever `flex-1` a caller still has in
+      // `className` and the two cannot silently disagree.
+      style={fit ? { flex: "0 1 auto", height: totalSize } : undefined}
       className={cn("relative w-full overflow-auto", className)}
     >
-      <div style={{ height: virtualizer.getTotalSize(), width: "100%", position: "relative" }}>
+      <div style={{ height: totalSize, width: "100%", position: "relative" }}>
         {virtualItems.map((virtualRow) => {
           const item = items[virtualRow.index];
           if (item === undefined) return null;
