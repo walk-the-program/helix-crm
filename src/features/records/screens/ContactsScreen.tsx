@@ -19,7 +19,7 @@
  * filtered out here in JS, so the header count and the virtualised list agree.
  */
 import { useEffect, useMemo, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "@/ui/icons";
@@ -39,8 +39,10 @@ import {
 } from "@/ui";
 import { focusRingInset } from "@/ui/styles";
 import { cn } from "@/ui/cn";
-import { contactName, type Contact } from "@/db/repos/contacts";
+import { contactName, type ContactListRow } from "@/db/repos/contacts";
 import * as settingsRepo from "@/db/repos/settings";
+import { formatPhone } from "@/lib/phone";
+import { oneTap } from "@/lib/actions";
 import { qk } from "@/app/queryClient";
 import {
   useContacts,
@@ -49,7 +51,9 @@ import {
   useSources,
   useTags,
 } from "@/features/records/lib/hooks";
+import { dueLabel } from "@/features/records/lib/taskGroups";
 import { NewContactDialog } from "@/features/records/components/NewContactDialog";
+import { trashSuffix, TrashMark } from "@/features/records/components/RecordChip";
 import {
   queryFromState,
   sortIdOf,
@@ -69,7 +73,7 @@ const NO_COMPANY_LABEL = "No company";
 /** A flattened row for the virtualised list: either a group header or a contact. */
 type ListRow =
   | { kind: "header"; key: string; label: string }
-  | { kind: "contact"; key: string; contact: Contact };
+  | { kind: "contact"; key: string; contact: ContactListRow };
 
 const SORTS = [
   { value: "name-asc", label: "Name A to Z" },
@@ -384,7 +388,13 @@ export function ContactsScreen() {
               that same `sort` state, so the two never disagree. Grouped "by
               company" ignores `sort` entirely (groupByCompany always sorts by
               company then name), so the header goes inert there too, exactly
-              like the Select does. */}
+              like the Select does.
+
+              Widths narrow to what fits the owner's own scan (PLAN.md: the
+              name, the money, the phone number) as the window shrinks: at
+              1024px only Name, Phone and Next step show; Company returns at
+              1280px and Tags at 1440px (F-LA-7, the CPO audit's dense-contacts
+              screenshot). */}
           <div
             role="row"
             className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]"
@@ -397,10 +407,12 @@ export function ContactsScreen() {
             >
               Name
             </ColumnHeaderCell>
+            <ColumnHeaderCell className="hidden w-[130px] flex-none lg:block">Phone</ColumnHeaderCell>
             {showAs === "name" ? (
-              <ColumnHeaderCell className="w-[200px] flex-none">Company</ColumnHeaderCell>
+              <ColumnHeaderCell className="hidden w-[200px] flex-none xl:block">Company</ColumnHeaderCell>
             ) : null}
-            <ColumnHeaderCell align="right" className="hidden w-[180px] flex-none md:block">
+            <ColumnHeaderCell className="hidden w-[220px] flex-none lg:block">Next step</ColumnHeaderCell>
+            <ColumnHeaderCell align="right" className="hidden w-[180px] flex-none min-[1440px]:block">
               Tags
             </ColumnHeaderCell>
           </div>
@@ -441,8 +453,13 @@ export function ContactsScreen() {
   );
 }
 
+/** An em dash for a cell with nothing to show — never a sentence like "No
+ *  phone" or "No next step", which reads as an error at 40px rows scanned in
+ *  bulk. */
+const EMPTY_CELL = "—";
+
 function ContactRow(props: {
-  contact: Contact;
+  contact: ContactListRow;
   tagNames: string[];
   showCompany: boolean;
   onOpen: () => void;
@@ -469,6 +486,38 @@ function ContactRow(props: {
     },
   };
 
+  const phoneDisplay = contact.primaryPhoneRaw
+    ? formatPhone(contact.primaryPhoneRaw) || contact.primaryPhoneRaw
+    : null;
+
+  function handleCallClick(event: MouseEvent<HTMLButtonElement>) {
+    // The one-tap call is the whole reason this column exists (PLAN.md: he
+    // scans for the name, the money and the phone number). It must never
+    // also open the record - the click is the call, not a row selection.
+    event.stopPropagation();
+    if (!phoneDisplay) return;
+    void oneTap(
+      "call",
+      contact.primaryPhoneE164 ?? contact.primaryPhoneRaw ?? "",
+      { contactId: contact.id },
+      { label: phoneDisplay },
+    );
+  }
+
+  const nextStepLabel = contact.nextTaskTitle
+    ? `${contact.nextTaskTitle} · ${dueLabel({
+        id: contact.id,
+        dueOn: contact.nextTaskDueOn,
+        dueAt: contact.nextTaskDueAt,
+        doneAt: null,
+      })}`
+    : null;
+
+  const companyLabel = contact.companyName ?? NO_COMPANY_LABEL;
+  const companyTitle = contact.companyName
+    ? `${contact.companyName}${trashSuffix(contact.companyDeletedAt)}`
+    : NO_COMPANY_LABEL;
+
   return (
     <div
       role="button"
@@ -487,16 +536,54 @@ function ContactRow(props: {
       >
         {name}
       </div>
+
+      <div className="hidden w-[130px] shrink-0 lg:block">
+        {phoneDisplay ? (
+          <button
+            type="button"
+            onClick={handleCallClick}
+            title={`Call ${phoneDisplay}`}
+            className={cn(
+              "block w-full truncate text-left tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]",
+              "hover:text-[var(--color-text)] hover:underline",
+              "focus-visible:outline-2 focus-visible:outline-[var(--color-focus)] focus-visible:outline-offset-1",
+            )}
+          >
+            {phoneDisplay}
+          </button>
+        ) : (
+          <span className="block truncate text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+            {EMPTY_CELL}
+          </span>
+        )}
+      </div>
+
       {showCompany ? (
         <div
-          className="w-[200px] shrink-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-          title={contact.companyName ?? ""}
+          className="hidden w-[200px] shrink-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)] xl:block"
+          title={companyTitle}
         >
-          {contact.companyName ?? NO_COMPANY_LABEL}
+          {companyLabel}
+          <TrashMark deletedAt={contact.companyDeletedAt} />
         </div>
       ) : null}
 
-      <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] md:flex">
+      <div className="hidden w-[220px] shrink-0 lg:block">
+        {nextStepLabel ? (
+          <span
+            className="block truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+            title={nextStepLabel}
+          >
+            {nextStepLabel}
+          </span>
+        ) : (
+          <span className="block truncate text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+            {EMPTY_CELL}
+          </span>
+        )}
+      </div>
+
+      <div className="hidden w-[180px] shrink-0 items-center justify-end gap-[var(--space-1)] min-[1440px]:flex">
         {tagNames.slice(0, 2).map((tag) => (
           <Badge key={tag}>
             <span className="max-w-[70px] truncate" title={tag}>
@@ -519,7 +606,7 @@ function nameSortDirection(sort: string): SortDirection {
   return null;
 }
 
-function sortContacts(rows: Contact[], sort: string): Contact[] {
+function sortContacts(rows: ContactListRow[], sort: string): ContactListRow[] {
   const copy = [...rows];
   if (sort === "name-desc") {
     return copy.sort((a, b) => contactName(b).localeCompare(contactName(a)));
@@ -533,16 +620,18 @@ function sortContacts(rows: Contact[], sort: string): Contact[] {
   return copy.sort((a, b) => contactName(a).localeCompare(contactName(b)));
 }
 
-function contactRow(contact: Contact): ListRow {
+function contactRow(contact: ContactListRow): ListRow {
   return { kind: "contact", key: contact.id, contact };
 }
 
 /**
  * "By company": one header per company, sorted by company name then contact
  * name, with contacts that have no company grouped last under "No company"
- * regardless of where that label would otherwise sort alphabetically.
+ * regardless of where that label would otherwise sort alphabetically. A
+ * trashed company keeps its heading rather than disappearing, marked the same
+ * way a row would mark it (F-LA-9).
  */
-function groupByCompany(contacts: Contact[]): ListRow[] {
+function groupByCompany(contacts: ContactListRow[]): ListRow[] {
   const withCompany = contacts.filter((c) => c.companyId);
   const withoutCompany = contacts.filter((c) => !c.companyId);
 
@@ -559,7 +648,9 @@ function groupByCompany(contacts: Contact[]): ListRow[] {
       out.push({
         kind: "header",
         key: `header:${contact.companyId}`,
-        label: contact.companyName ?? NO_COMPANY_LABEL,
+        label: contact.companyName
+          ? `${contact.companyName}${trashSuffix(contact.companyDeletedAt)}`
+          : NO_COMPANY_LABEL,
       });
     }
     out.push(contactRow(contact));
