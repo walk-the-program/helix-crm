@@ -145,7 +145,7 @@ function AddServicesControl(props: {
       items={searchServiceItems}
       placeholder="Add services"
       summaryLabel={() => "Add services"}
-      emptyText="No services yet. Add them under Settings, Services."
+      emptyText="No services match. Pick New service to add one."
       onCreate={(query) => onNewService(query)}
       createLabel={() => "New service…"}
       aria-label="Add services"

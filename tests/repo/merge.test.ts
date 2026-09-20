@@ -66,7 +66,10 @@ describe("merge: contacts", () => {
     );
 
     const result = await merge.merge("contact", survivor.id, loser.id);
-    expect(result.movedCounts.activities).toBe(1);
+    // The call, plus the "Task added" system entry tasks.create has written
+    // alongside the task since round 3 (criterion 26). Both belong to the
+    // loser and both have to move.
+    expect(result.movedCounts.activities).toBe(2);
     expect(result.movedCounts.tasks).toBe(1);
     expect(result.movedCounts.deals).toBe(1);
     expect(result.movedCounts.contact_phones).toBe(1);

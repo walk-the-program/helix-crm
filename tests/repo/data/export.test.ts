@@ -237,12 +237,19 @@ describe("exportRun: buildEntityCsv", () => {
       "Deal",
       "Created At",
     ]);
-    expect(activityRows).toHaveLength(1);
-    expect(activityRows[0][0]).toBe("call");
-    expect(activityRows[0][1]).toBe("Discussed the engine");
-    expect(activityRows[0][3]).toBe("Ada Lovelace");
-    expect(activityRows[0][4]).toBe("Acme Inc");
-    expect(activityRows[0][5]).toBe("Analytical Engine");
+    // The call the test logged, plus the "Task added" entry that "Follow up"
+    // wrote with itself (round 3, criterion 26). "Already done" is linked to
+    // no record, so it has no timeline to write to and adds no row. The
+    // export carries the whole timeline, system entries included.
+    expect(activityRows).toHaveLength(2);
+    const call = activityRows.find((r) => r[0] === "call");
+    expect(call?.[1]).toBe("Discussed the engine");
+    expect(call?.[3]).toBe("Ada Lovelace");
+    expect(call?.[4]).toBe("Acme Inc");
+    expect(call?.[5]).toBe("Analytical Engine");
+    expect(activityRows.filter((r) => r[0] === "system").map((r) => r[1])).toEqual([
+      "Task added: Follow up",
+    ]);
   });
 
   it("guards a formula-like company name so it survives a spreadsheet round trip", async () => {

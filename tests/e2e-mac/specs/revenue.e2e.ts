@@ -166,10 +166,19 @@ async function addServiceThroughSettings(
   await expect(dialog).toBeHidden();
 }
 
+/**
+ * Round 3, criterion 11: the deal's services panel is a MultiCombobox over the
+ * catalog, not the old popover with its own search box. Ticking an option adds
+ * the line, so this closes the popover afterwards to leave the page settled.
+ */
 async function addServiceToDeal(page: Page, serviceName: string): Promise<void> {
-  await page.getByTestId("add-service").click();
-  await page.getByPlaceholder("Search your services").fill(serviceName);
-  await page.getByTestId("add-service-option").filter({ hasText: serviceName }).click();
+  await page.getByTestId("deal-services-panel").getByTestId("combobox").click();
+  await page.getByTestId("combobox-input").fill(serviceName);
+  await page.getByTestId("combobox-option").filter({ hasText: serviceName }).first().click();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByTestId("deal-services-panel").getByText(serviceName),
+  ).toBeVisible();
 }
 
 test.use({ viewport: { width: 1280, height: 900 } });

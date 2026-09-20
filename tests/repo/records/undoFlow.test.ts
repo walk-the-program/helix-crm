@@ -129,7 +129,12 @@ describe("undoBatch on a soft delete", () => {
 
     await undoBatch(batchId);
 
-    expect(await activitiesRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(1);
+    // Filtered to the call: since round 3 the timeline also carries the system
+    // entry tasks.create writes ("Task added: ..."), which is not what this
+    // test is about and is never deleted by hand.
+    expect(
+      await activitiesRepo.list({ contactId: contact.id, kind: "call" }).then((r) => r.rows),
+    ).toHaveLength(1);
     expect(await tasksRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(1);
   });
 
@@ -193,12 +198,16 @@ describe("undo on a delete", () => {
 
     await activitiesRepo.softDelete(note.id);
     await tasksRepo.softDelete(task.id);
-    expect(await activitiesRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(0);
+    // Filtered to the call: the task's own "Task added" system entry is part
+    // of the record's history since round 3 and stays put.
+    const calls = () =>
+      activitiesRepo.list({ contactId: contact.id, kind: "call" }).then((r) => r.rows);
+    expect(await calls()).toHaveLength(0);
 
     await activitiesRepo.restore(note.id);
     await tasksRepo.restore(task.id);
 
-    expect(await activitiesRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(1);
+    expect(await calls()).toHaveLength(1);
     expect(await tasksRepo.list({ contactId: contact.id }).then((r) => r.rows)).toHaveLength(1);
   });
 

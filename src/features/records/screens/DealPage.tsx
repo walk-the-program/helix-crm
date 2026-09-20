@@ -54,7 +54,7 @@ import { TagEditor } from "@/features/records/components/TagEditor";
 import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPanel";
 import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
-import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
+import { StageMoveDialog } from "@/features/records/components/StageMoveDialog";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
 import { DealMoneyStrip } from "@/features/records/components/MoneyStrip";
 import { DealServicesPanel } from "@/features/catalog/components/DealServicesPanel";
@@ -76,7 +76,7 @@ export function DealPage() {
   // the same read rather than a second one.
   const { data: dealItems } = useDealItems(id);
   const { data: money } = useDealMoney(id);
-  const [pendingLostStage, setPendingLostStage] = useState<string | null>(null);
+  const [pendingStage, setPendingStage] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const openStages = useMemo(
@@ -120,10 +120,17 @@ export function DealPage() {
     await invalidateRecords();
   }
 
+  /**
+   * Round 3, criterion 24: closing a deal is a dated event, not a side effect
+   * of touching a dropdown. Winning or losing opens the confirm, which asks
+   * when it happened (and why, when it is lost) and writes nothing until the
+   * owner says so. Moving between open stages still applies straight away -
+   * that is a working gesture, not a decision worth a dialog.
+   */
   async function changeStage(stageId: string) {
     const target = (stages ?? []).find((stage) => stage.id === stageId);
-    if (target?.isLost && (deal?.outcomeReason ?? "").trim().length === 0) {
-      setPendingLostStage(stageId);
+    if (target?.isWon || target?.isLost) {
+      setPendingStage(stageId);
       return;
     }
     try {
@@ -145,6 +152,9 @@ export function DealPage() {
   }
 
   const closed = deal.stageIsWon || deal.stageIsLost;
+  const pendingStageRow = (stages ?? []).find((stage) => stage.id === pendingStage);
+  const pendingStageName = pendingStageRow?.name ?? "";
+  const pendingStageIsLost = pendingStageRow?.isLost ?? false;
   const pricedFromServices = (dealItems ?? []).length > 0;
   const primaryEmail = contact
     ? (contact.emails.find((email) => email.isPrimary) ?? contact.emails[0] ?? null)
@@ -487,18 +497,26 @@ export function DealPage() {
         </div>
       </div>
 
-      <LostReasonDialog
-        open={pendingLostStage !== null}
-        dealTitle={deal.title}
+      <StageMoveDialog
+        open={pendingStage !== null}
+        stageName={pendingStageName}
+        requiresReason={pendingStageIsLost}
+        initialReason={deal.outcomeReason}
         onOpenChange={(open) => {
-          if (!open) setPendingLostStage(null);
+          if (!open) setPendingStage(null);
         }}
-        onConfirm={async (reason) => {
-          const stageId = pendingLostStage;
-          setPendingLostStage(null);
+        onConfirm={async ({ at, outcomeReason }) => {
+          const stageId = pendingStage;
+          setPendingStage(null);
           if (!stageId) return;
           try {
-            await dealsRepo.moveToStage(id, stageId, { outcomeReason: reason });
+            await writeWithUndo({
+              label: `moved ${dealTitle} to ${pendingStageName}`,
+              write: (batchId) =>
+                dealsRepo
+                  .moveToStage(id, stageId, { at, outcomeReason, batchId })
+                  .then(() => undefined),
+            });
             await dealItemsRepo.recompute(id);
             await invalidateRecords();
           } catch (err) {
