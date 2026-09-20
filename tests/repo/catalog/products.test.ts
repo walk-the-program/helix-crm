@@ -272,6 +272,55 @@ describe("products: removeOrDeactivate", () => {
   });
 });
 
+describe("products: dealCounts", () => {
+  it("counts DISTINCT live deals per product, over the whole catalog in one query", async () => {
+    h = await createSeededHarness();
+    const mowing = await products.create({ name: "Mowing", unitPriceCents: 5000 });
+    const edging = await products.create({ name: "Edging", unitPriceCents: 2000 });
+    const unused = await products.create({ name: "Unused", unitPriceCents: 1000 });
+    const stageId = await firstStageId();
+    const dealA = await deals.create({ title: "Yard A", stageId });
+    const dealB = await deals.create({ title: "Yard B", stageId });
+
+    // Two different deals use "Mowing" - counts as 2.
+    await insertDealItem({ dealId: dealA.id, productId: mowing.id });
+    await insertDealItem({ dealId: dealB.id, productId: mowing.id });
+    // The same deal uses "Edging" twice (two lines) - still counts as 1 deal.
+    await insertDealItem({ dealId: dealA.id, productId: edging.id });
+    await insertDealItem({ dealId: dealA.id, productId: edging.id });
+    // "Unused" is never referenced.
+
+    const counts = await products.dealCounts();
+    expect(counts.get(mowing.id)).toBe(2);
+    expect(counts.get(edging.id)).toBe(1);
+    expect(counts.has(unused.id)).toBe(false);
+  });
+
+  it("ignores a soft-deleted line and a soft-deleted deal", async () => {
+    h = await createSeededHarness();
+    const product = await products.create({ name: "Sod install", unitPriceCents: 9000 });
+    const stageId = await firstStageId();
+    const liveDeal = await deals.create({ title: "Live deal", stageId });
+    const goneDeal = await deals.create({ title: "Deleted deal", stageId });
+
+    await insertDealItem({ dealId: liveDeal.id, productId: product.id });
+    const deletedLineDealItem = await insertDealItem({
+      dealId: liveDeal.id,
+      productId: product.id,
+      deletedAt: new Date().toISOString(),
+    });
+    await insertDealItem({ dealId: goneDeal.id, productId: product.id });
+    await raw.execute(`UPDATE deals SET deleted_at = ? WHERE id = ?`, [
+      new Date().toISOString(),
+      goneDeal.id,
+    ]);
+
+    const counts = await products.dealCounts();
+    expect(counts.get(product.id)).toBe(1);
+    expect(deletedLineDealItem).toBeTruthy();
+  });
+});
+
 describe("products: productStatements", () => {
   it("produces an insert that applies through raw.batch", async () => {
     h = await createSeededHarness();

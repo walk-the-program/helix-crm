@@ -23,21 +23,13 @@
  * secondary button.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Check, Plus, Trash, X } from "@/ui/icons";
-import {
-  Button,
-  Card,
-  CardGroupLabel,
-  IconButton,
-  Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Select,
-  toast,
-} from "@/ui";
+import { Check, Trash, X } from "@/ui/icons";
+import { Button, Card, CardGroupLabel, IconButton, Input, Select, toast } from "@/ui";
+import { MultiCombobox, type ComboboxItem } from "@/ui/Combobox";
 import * as dealItemsRepo from "@/db/repos/dealItems";
 import { totalsFor, type DealItem } from "@/db/repos/dealItems";
+import * as productsRepo from "@/db/repos/products";
+import type { Product } from "@/db/repos/products";
 import {
   centsToDecimalString,
   formatBreakdown,
@@ -45,11 +37,9 @@ import {
   parseMoneyToCents,
 } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
-import {
-  invalidateDealMoney,
-  useActiveProducts,
-  useDealItems,
-} from "@/features/catalog/lib/dealItemHooks";
+import { invalidateDealMoney, useDealItems } from "@/features/catalog/lib/dealItemHooks";
+import { CUSTOM_LINE_ID, diffServiceSelection } from "@/features/catalog/lib/servicePicker";
+import { NewServiceDialog } from "@/features/catalog/components/NewServiceDialog";
 
 /** "one-time", "per month", "per year" - the words the owner uses. */
 export function chargeLabel(
@@ -69,109 +59,97 @@ function report(err: unknown, fallback: string): void {
 /* -------------------------------------------------------------------------- */
 
 /**
- * A searchable list of the price list, plus one way out of it.
- *
- * "Custom line" is not an afterthought: half of what a trade sells on any given
- * day is not on a price list, and a picker that forces a catalog row first
- * would have the owner inventing junk services to get past it.
+ * The catalog search, as `ComboboxItem`s, with "Custom line" pinned to the
+ * top of every result set - it is not a catalog row, so it cannot come back
+ * from `products.search` on its own, and the owner needs it whether or not
+ * anything he has typed matches a real service.
  */
-function AddServiceMenu(props: { dealId: string; onCustom: () => void }) {
-  const { dealId, onCustom } = props;
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const { data: products } = useActiveProducts();
+async function searchServiceItems(query: string): Promise<ComboboxItem[]> {
+  const results = await productsRepo.search(query);
+  const items: ComboboxItem[] = results.map((result) => ({
+    id: result.id,
+    label: result.label,
+    detail: `${formatMoneyTrim(result.unitPriceCents)} · ${chargeLabel(result.kind, result.interval)}`,
+  }));
+  return [{ id: CUSTOM_LINE_ID, label: "Custom line" }, ...items];
+}
 
-  const matches = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const rows = products ?? [];
-    if (needle.length === 0) return rows;
-    return rows.filter((product) => product.name.toLowerCase().includes(needle));
-  }, [products, query]);
+/**
+ * The panel's one action. `values` is the deal's own line-item product ids,
+ * so a tick always means "on this deal" and survives a reopen honestly - see
+ * `diffServiceSelection`. Picking several in one session adds each in turn;
+ * unticking one removes its line the same way the trash icon on the row does.
+ *
+ * "New service..." opens the quick form (`NewServiceDialog`) with whatever
+ * was typed as the starting name; a successful save both writes the catalog
+ * row and adds it as a line, in one motion.
+ */
+function AddServicesControl(props: {
+  dealId: string;
+  lines: DealItem[];
+  onCustom: () => void;
+  onNewService: (initialName: string) => void;
+}) {
+  const { dealId, lines, onCustom, onNewService } = props;
 
-  async function addProduct(productId: string) {
-    setOpen(false);
-    setQuery("");
-    try {
-      await dealItemsRepo.addFromProduct(dealId, productId);
-      await invalidateDealMoney();
-    } catch (err) {
-      report(err, "That service was not added.");
+  const productIds = useMemo(() => {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const line of lines) {
+      if (line.productId && !seen.has(line.productId)) {
+        seen.add(line.productId);
+        ids.push(line.productId);
+      }
     }
+    return ids;
+  }, [lines]);
+
+  const lineByProductId = useMemo(() => {
+    const map = new Map<string, DealItem>();
+    for (const line of lines) {
+      if (line.productId && !map.has(line.productId)) map.set(line.productId, line);
+    }
+    return map;
+  }, [lines]);
+
+  async function handleChange(nextIdsRaw: string[]) {
+    const { added, removed, customLineRequested } = diffServiceSelection(
+      productIds,
+      nextIdsRaw,
+    );
+    if (customLineRequested) onCustom();
+
+    for (const productId of added) {
+      try {
+        await dealItemsRepo.addFromProduct(dealId, productId);
+      } catch (err) {
+        report(err, "That service was not added.");
+      }
+    }
+    for (const productId of removed) {
+      const line = lineByProductId.get(productId);
+      if (!line) continue;
+      try {
+        await dealItemsRepo.remove(line.id);
+      } catch (err) {
+        report(err, "That service was not removed.");
+      }
+    }
+    if (added.length > 0 || removed.length > 0) await invalidateDealMoney();
   }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) setQuery("");
-      }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          variant="secondary"
-          data-testid="add-service"
-          iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
-        >
-          Add a service
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[320px] p-0" align="end">
-        <div className="border-b border-[var(--color-border)] p-[var(--space-2)]">
-          <Input
-            autoFocus
-            value={query}
-            placeholder="Search your services"
-            aria-label="Search your services"
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        <div className="max-h-[280px] overflow-y-auto">
-          {matches.length === 0 ? (
-            <p className="px-[var(--space-3)] py-[var(--space-3)] text-[length:var(--text-sm)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
-              {(products ?? []).length === 0
-                ? "No services yet. Add them under Settings, Services."
-                : "Nothing matches that."}
-            </p>
-          ) : (
-            matches.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                data-testid="add-service-option"
-                onClick={() => void addProduct(product.id)}
-                className="flex min-h-[var(--control-h-sm)] w-full items-center gap-[var(--space-3)] px-[var(--space-3)] py-[var(--space-2)] text-left hover:bg-[var(--color-selected)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-              >
-                <span className="min-w-0 flex-1 truncate text-[length:var(--text-base)] text-[var(--color-text)]">
-                  {product.name}
-                </span>
-                <span className="money flex-none text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  {formatMoneyTrim(product.unitPriceCents)}
-                </span>
-                <span className="flex-none text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-                  {chargeLabel(product.kind, product.interval)}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-        <div className="border-t border-[var(--color-border)]">
-          <button
-            type="button"
-            data-testid="add-custom-line"
-            onClick={() => {
-              setOpen(false);
-              setQuery("");
-              onCustom();
-            }}
-            className="flex min-h-[var(--control-h-sm)] w-full items-center gap-[var(--space-2)] px-[var(--space-3)] py-[var(--space-2)] text-left text-[length:var(--text-base)] text-[var(--color-text)] hover:bg-[var(--color-selected)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-          >
-            <Plus size={16} weight="bold" aria-hidden="true" />
-            Custom line
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <MultiCombobox
+      values={productIds}
+      onChange={(ids) => void handleChange(ids)}
+      items={searchServiceItems}
+      placeholder="Add services"
+      summaryLabel={() => "Add services"}
+      emptyText="No services yet. Add them under Settings, Services."
+      onCreate={(query) => onNewService(query)}
+      createLabel={() => "New service…"}
+      aria-label="Add services"
+    />
   );
 }
 
@@ -428,10 +406,29 @@ export function DealServicesPanel(props: {
   const { dealId, currency, isWon, recurringStartedOn, recurringEndedOn } = props;
   const { data: items } = useDealItems(dealId);
   const [addingCustom, setAddingCustom] = useState(false);
+  const [newServiceOpen, setNewServiceOpen] = useState(false);
+  const [newServiceName, setNewServiceName] = useState("");
 
   const lines = items ?? [];
   const totals = useMemo(() => totalsFor(lines), [lines]);
   const hasRecurring = totals.recurringMonthlyCents > 0;
+
+  function openNewService(initialName: string) {
+    setNewServiceName(initialName);
+    setNewServiceOpen(true);
+  }
+
+  /** A quick-form save both writes the catalog row (already done by the
+   *  dialog itself) and adds it to this deal, in the same motion the picker
+   *  promises. */
+  async function addCreatedService(service: Product) {
+    try {
+      await dealItemsRepo.addFromProduct(dealId, service.id);
+      await invalidateDealMoney();
+    } catch (err) {
+      report(err, "That service was not added.");
+    }
+  }
 
   async function endRecurring() {
     try {
@@ -457,10 +454,22 @@ export function DealServicesPanel(props: {
     <section data-testid="deal-services-panel">
       <div className="flex items-end justify-between gap-[var(--space-3)]">
         <CardGroupLabel>Services</CardGroupLabel>
-        <div className="pb-[var(--space-2)]">
-          <AddServiceMenu dealId={dealId} onCustom={() => setAddingCustom(true)} />
+        <div className="w-[240px] pb-[var(--space-2)]">
+          <AddServicesControl
+            dealId={dealId}
+            lines={lines}
+            onCustom={() => setAddingCustom(true)}
+            onNewService={openNewService}
+          />
         </div>
       </div>
+
+      <NewServiceDialog
+        open={newServiceOpen}
+        onOpenChange={setNewServiceOpen}
+        initialName={newServiceName}
+        onCreated={(service) => addCreatedService(service)}
+      />
 
       <Card>
         {lines.length === 0 && !addingCustom ? (

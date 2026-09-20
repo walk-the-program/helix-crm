@@ -13,6 +13,7 @@ import type { NewProduct, Product, ProductPatch } from "@/db/repos/products";
 export const ck = {
   all: () => ["catalog"] as const,
   list: () => ["catalog", "services", "list"] as const,
+  dealCounts: () => ["catalog", "services", "dealCounts"] as const,
 };
 
 export async function invalidateServices(): Promise<void> {
@@ -31,6 +32,18 @@ export function useServices() {
       const { rows } = await productsRepo.list();
       return rows;
     },
+  });
+}
+
+/**
+ * How many live deals use each service, for the "/services" page's list. One
+ * query for the whole catalog rather than one per row - see
+ * `productsRepo.dealCounts`.
+ */
+export function useDealCounts() {
+  return useQuery({
+    queryKey: ck.dealCounts(),
+    queryFn: (): Promise<Map<string, number>> => productsRepo.dealCounts(),
   });
 }
 

@@ -11,7 +11,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/app/queryClient";
 import * as dealItemsRepo from "@/db/repos/dealItems";
-import * as productsRepo from "@/db/repos/products";
+import { ck } from "@/features/catalog/lib/hooks";
 
 export const catalogKeys = {
   dealItems: (dealId: string) => ["dealItems", dealId] as const,
@@ -27,13 +27,11 @@ export function useDealItems(dealId: string) {
   });
 }
 
-/** The active price list, for the "Add a service" picker. */
-export function useActiveProducts() {
-  return useQuery({
-    queryKey: catalogKeys.products({ activeOnly: true }),
-    queryFn: async () => (await productsRepo.list({ activeOnly: true }, { limit: 500 })).rows,
-  });
-}
+// The "Add services" picker (`DealServicesPanel`) reads the catalog through
+// `products.search` directly - it is already ranked and already excludes
+// inactive and deleted services, so there is no client-side product list to
+// cache here any more (the plain `useActiveProducts()` this file used to
+// export served the old substring-filtered picker, which is gone).
 
 export async function invalidateDealMoney(): Promise<void> {
   await Promise.all([
@@ -43,5 +41,8 @@ export async function invalidateDealMoney(): Promise<void> {
     queryClient.invalidateQueries({ queryKey: ["board"] }),
     queryClient.invalidateQueries({ queryKey: ["revenue"] }),
     queryClient.invalidateQueries({ queryKey: ["today"] }),
+    // A line added or removed changes how many deals a service is on, which
+    // the "/services" page shows per row.
+    queryClient.invalidateQueries({ queryKey: ck.dealCounts() }),
   ]);
 }

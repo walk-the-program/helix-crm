@@ -201,6 +201,35 @@ export async function usageCount(id: string): Promise<number> {
   );
 }
 
+/**
+ * How many live deals use each service, for the whole catalog in one query.
+ *
+ * The Services page shows this on every row; a page of N services calling
+ * `usageCount` N times would be N round trips for one screen. A deal can hold
+ * more than one line against the same product (rare, but not forbidden), so
+ * this counts DISTINCT deals rather than lines. Both the line and the deal it
+ * belongs to have to still be live - a deal_items row survives a deal only
+ * long enough for the deal's own soft delete to cascade, so the join guards
+ * against that gap.
+ */
+export async function dealCounts(): Promise<Map<string, number>> {
+  const rows = await raw.query(
+    `SELECT di.product_id      AS product_id,
+            count(DISTINCT di.deal_id) AS deal_count
+     FROM deal_items di
+     JOIN deals d ON d.id = di.deal_id
+     WHERE di.deleted_at IS NULL
+       AND di.product_id IS NOT NULL
+       AND d.deleted_at IS NULL
+     GROUP BY di.product_id`,
+  );
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(String(row[0]), Number(row[1]));
+  }
+  return counts;
+}
+
 /* -------------------------------------------------------------------------- */
 /* writes                                                                     */
 /* -------------------------------------------------------------------------- */

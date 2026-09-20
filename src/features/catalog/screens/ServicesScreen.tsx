@@ -50,9 +50,14 @@ import {
 import { ServiceDialog } from "@/features/catalog/components/ServiceDialog";
 import type { Product } from "@/db/repos/products";
 
-/** Active first (each in `position` order), inactive trailing (also in
- * `position` order) - the sort the whole screen treats as canonical. */
-function sortForDisplay(products: Product[]): Product[] {
+/**
+ * Active first (each in `position` order), inactive trailing (also in
+ * `position` order) - the sort the whole screen treats as canonical.
+ *
+ * Exported so `ServicesPage` (the "/services" first-class page, round 3
+ * criterion 23) draws the identical order rather than inventing its own.
+ */
+export function sortForDisplay(products: Product[]): Product[] {
   return [...products].sort((a, b) => {
     if (a.active !== b.active) return a.active ? -1 : 1;
     return a.position - b.position;
@@ -67,7 +72,7 @@ function sortForDisplay(products: Product[]): Product[] {
  * the same formatter the deal page's breakdown uses, so a service costs the
  * same number of characters wherever it is quoted.
  */
-function priceLabel(service: Product): string {
+export function priceLabel(service: Product): string {
   const amount = formatMoneyTrim(service.unitPriceCents);
   if (service.kind === "one_time") return amount;
   return service.interval === "year" ? `${amount}/yr` : `${amount}/mo`;
@@ -77,18 +82,38 @@ function priceLabel(service: Product): string {
 /* Row                                                                        */
 /* -------------------------------------------------------------------------- */
 
-function ServiceRow(props: {
+/** "3 deals", "1 deal", "No deals" - always shown so the count is legible even
+ * at zero, which is the number that tells the owner a service is safe to
+ * delete outright rather than only deactivate. */
+function dealCountLabel(count: number): string {
+  if (count === 0) return "No deals";
+  return count === 1 ? "1 deal" : `${count} deals`;
+}
+
+export function ServiceRow(props: {
   service: Product;
   isFirst: boolean;
   isLast: boolean;
+  /** Live deals using this service. Omitted on the settings list, which has
+   *  never shown it and stays focused on editing rather than reporting. */
+  dealCount?: number;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onEdit: () => void;
   onToggleActive: () => void;
   onDelete: () => void;
 }) {
-  const { service, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onToggleActive, onDelete } =
-    props;
+  const {
+    service,
+    isFirst,
+    isLast,
+    dealCount,
+    onMoveUp,
+    onMoveDown,
+    onEdit,
+    onToggleActive,
+    onDelete,
+  } = props;
   const quiet = !service.active;
 
   return (
@@ -121,6 +146,15 @@ function ServiceRow(props: {
       >
         {priceLabel(service)}
       </span>
+
+      {dealCount !== undefined ? (
+        <span
+          data-testid="service-deal-count"
+          className="money flex-none whitespace-nowrap text-[length:var(--text-sm)] text-[var(--color-text-faint)]"
+        >
+          {dealCountLabel(dealCount)}
+        </span>
+      ) : null}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -161,21 +195,22 @@ function ServiceRow(props: {
  * asks for. Two groups would file a yearly plan under "every month", and a
  * section label the rows contradict is worse than no label.
  */
-function groupOf(service: Product): "one_time" | "month" | "year" {
+export function groupOf(service: Product): "one_time" | "month" | "year" {
   if (service.kind === "one_time") return "one_time";
   return service.interval === "year" ? "year" : "month";
 }
 
-function ServiceGroup(props: {
+export function ServiceGroup(props: {
   label: string;
   kind: string;
   services: Product[];
+  dealCounts?: Map<string, number>;
   onMove: (service: Product, list: Product[], direction: -1 | 1) => void;
   onEdit: (service: Product) => void;
   onToggleActive: (service: Product) => void;
   onDelete: (service: Product) => void;
 }): ReactElement | null {
-  const { label, kind, services, onMove, onEdit, onToggleActive, onDelete } = props;
+  const { label, kind, services, dealCounts, onMove, onEdit, onToggleActive, onDelete } = props;
   if (services.length === 0) return null;
 
   return (
@@ -186,6 +221,7 @@ function ServiceGroup(props: {
           service={service}
           isFirst={index === 0}
           isLast={index === services.length - 1}
+          dealCount={dealCounts?.get(service.id) ?? (dealCounts ? 0 : undefined)}
           onMoveUp={() => onMove(service, services, -1)}
           onMoveDown={() => onMove(service, services, 1)}
           onEdit={() => onEdit(service)}
