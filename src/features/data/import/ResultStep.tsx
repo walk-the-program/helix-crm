@@ -127,6 +127,16 @@ export function ResultStep(props: {
         {view.extras.map((extra) => `, ${extra}`).join("")}.
       </p>
 
+      {view.preImportBackupPath ? (
+        <p
+          title={view.preImportBackupPath}
+          className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+        >
+          Helix saved a backup before this import. If the file was wrong, restore it
+          from Settings, then Backups.
+        </p>
+      ) : null}
+
       {view.warnings.length > 0 ? (
         <Card>
           <CardRow className="flex-wrap py-[var(--space-3)]">

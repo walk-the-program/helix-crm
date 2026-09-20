@@ -29,6 +29,14 @@ export type ResultView = {
   warnings: ImportWarning[];
   warningsTruncated: boolean;
   /**
+   * The backup Helix took immediately before this import, or null on a run
+   * that did not take one. The result screen names it, because "restore the
+   * backup" is what undoing an import means and an owner who has just imported
+   * the wrong file needs to know the way back exists before he goes looking
+   * for it (LR-OPS, F-OPS-4).
+   */
+  preImportBackupPath: string | null;
+  /**
    * The black button at the bottom: where the owner goes to see the result,
    * and which glyph goes on it. `icon` is a name from src/ui/icons.ts rather
    * than an element, so this file stays free of JSX.
@@ -72,6 +80,7 @@ export function contactsResultView(result: ImportResult): ResultView {
     skippedTruncated: result.skippedTruncated,
     warnings: [],
     warningsTruncated: false,
+    preImportBackupPath: result.preImportBackupPath,
     destination: { href: "/contacts", label: "See the contacts", icon: "people" },
   };
 }
@@ -119,6 +128,7 @@ export function typedResultView(result: TypedImportResult): ResultView {
     skippedTruncated: result.skippedTruncated,
     warnings: result.warnings,
     warningsTruncated: result.warningsTruncated,
+    preImportBackupPath: result.preImportBackupPath,
     destination:
       result.typeId === "deals"
         ? { href: "/pipeline", label: "See the pipeline", icon: "board" as const }

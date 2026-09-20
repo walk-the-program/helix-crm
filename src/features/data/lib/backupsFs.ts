@@ -211,6 +211,34 @@ export async function copyOutIfConfigured(): Promise<MirrorResult | null> {
   }
 }
 
+/**
+ * The backup an import is undone with.
+ *
+ * `importRun.ts` has always said, in a comment, that "undo for an import is
+ * restore the backup, not walk the log": it writes ONE `change_log` row for a
+ * whole file rather than one per contact, because a hundred thousand of them
+ * would double the work. That reasoning is sound and the backup it points at
+ * did not exist. An import that updates existing contacts - which it does,
+ * happily, on a dedupe match - overwrote real data with nothing behind it but
+ * the last scheduled backup, which can be six hours old (LR-OPS, F-OPS-4).
+ *
+ * So the same rule the migrator already follows: take the backup first, and if
+ * it cannot be taken, do not start. `migrate()` refuses on exactly this
+ * reasoning, and an import is the other operation in this product that rewrites
+ * a lot of rows at once.
+ */
+export async function backupBeforeImport(): Promise<BackupFile> {
+  try {
+    return await runBackup("pre-import");
+  } catch (err) {
+    throw new BackupWriteError(
+      "Helix could not back up your data before the import, so the import was " +
+        `not started. Nothing has been changed. ${reasonOf(err)}`,
+      err,
+    );
+  }
+}
+
 /** Applies planRetention() to what's on disk and removes the dropped files. */
 export async function pruneBackups(
   now: Date = new Date(),

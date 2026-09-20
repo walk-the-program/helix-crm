@@ -19,6 +19,7 @@
  */
 import { raw } from "@/db/client";
 import { pauseTimers, withTransaction } from "@/db/writeLock";
+import { backupBeforeImport } from "@/features/data/lib/backupsFs";
 import { changeLogStatement } from "@/db/changeLog";
 import { newBatchId } from "@/lib/ids";
 import { nowIso } from "@/lib/dates";
@@ -130,6 +131,12 @@ export type ImportResult = ImportCounts & {
   headers: string[];
   skippedRows: SkippedRow[];
   skippedTruncated: boolean;
+  /**
+   * The backup taken immediately before this import, which is what undoing it
+   * means (see `backupBeforeImport`). Null on a dry run, and null when the
+   * caller asked for no backup - only the tests do.
+   */
+  preImportBackupPath: string | null;
 };
 
 export type ImportProgress = {
@@ -147,6 +154,11 @@ export type ImportOptions = {
   onProgress?: (progress: ImportProgress) => void;
   /** Lets a test or a preview stop before the write phase. */
   dryRun?: boolean;
+  /**
+   * Off in the repo tests, which run against a better-sqlite3 file with no
+   * Rust pipe behind `raw.backup`. The product never passes it.
+   */
+  backup?: boolean;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -333,8 +345,15 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
       headers,
       skippedRows,
       skippedTruncated,
+      preImportBackupPath: null,
     };
   }
+
+  // Before the write lock and before the transaction: an import that updates
+  // existing rows is undone by restoring this file, and a backup taken after
+  // the first statement would be a backup of the damage (F-OPS-4). A failure
+  // here throws BackupWriteError and the import never starts.
+  const preImportBackupPath = options.backup === false ? null : (await backupBeforeImport()).path;
 
   const resumeTimers = pauseTimers();
   try {
@@ -571,5 +590,6 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
     headers,
     skippedRows,
     skippedTruncated,
+    preImportBackupPath,
   };
 }

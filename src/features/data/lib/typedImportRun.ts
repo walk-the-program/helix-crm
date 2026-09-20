@@ -35,6 +35,7 @@ import { formatMoney } from "@/lib/money";
 import { getAll as getAllSettings } from "@/db/repos/settings";
 import type { Delimiter } from "@/lib/csv";
 import { splitFullName } from "@/features/data/lib/mapping";
+import { backupBeforeImport } from "@/features/data/lib/backupsFs";
 import {
   readDraftRow,
   type DraftRow,
@@ -98,6 +99,12 @@ export type TypedImportResult = TypedImportCounts & {
   skippedTruncated: boolean;
   warnings: ImportWarning[];
   warningsTruncated: boolean;
+  /**
+   * The backup taken immediately before this import, which is what undoing it
+   * means (`backupBeforeImport`). Null on a dry run, and null when the caller
+   * asked for no backup - only the tests do.
+   */
+  preImportBackupPath: string | null;
 };
 
 export type TypedImportOptions = {
@@ -109,6 +116,11 @@ export type TypedImportOptions = {
   region?: string;
   onProgress?: (progress: ImportProgress) => void;
   dryRun?: boolean;
+  /**
+   * Off in the repo tests, which run against a better-sqlite3 file. The product
+   * never passes it.
+   */
+  backup?: boolean;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -485,6 +497,8 @@ export async function runTypedImport(
     });
   };
 
+  let preImportBackupPath: string | null = null;
+
   const finish = (): TypedImportResult => ({
     ...counts,
     typeId,
@@ -496,6 +510,7 @@ export async function runTypedImport(
     skippedTruncated,
     warnings,
     warningsTruncated,
+    preImportBackupPath,
   });
 
   if (options.dryRun) {
@@ -509,6 +524,14 @@ export async function runTypedImport(
     }
     report({ phase: "done", processed: total, total });
     return finish();
+  }
+
+  // Before the write lock and before the transaction, for the same reason the
+  // contacts importer does it: restoring this file is what undoing an import
+  // means, and a backup taken after the first statement is a backup of the
+  // damage (F-OPS-4). A failure here throws and the import never starts.
+  if (options.backup !== false) {
+    preImportBackupPath = (await backupBeforeImport()).path;
   }
 
   const resumeTimers = pauseTimers();
