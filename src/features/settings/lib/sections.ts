@@ -7,9 +7,10 @@
  * under 11px labels, and one detail pane on the right. The groups here are the
  * same four the index draws, in the same order.
  *
- * Four rows point at screens other features own and are linked, never
+ * Five rows point at screens other features own and are linked, never
  * registered here: "/pipeline" (stages, records), "/trash" (records),
- * "/recurring" (reminders) and "/setup" (onboarding). Three more sit under
+ * "/recurring" (reminders), "/setup" (onboarding) and "/export" (data - the
+ * once-a-year action that does not also get a sidebar row). Three more sit under
  * "/settings" but belong to another feature, which registers them itself:
  * "/settings/templates" (templates), "/settings/ai" (ai) and
  * "/settings/services" (catalog). Website connection and Backups are mounted
@@ -23,6 +24,7 @@ import {
   ClockCounterClockwise,
   Cpu,
   Database,
+  Download,
   FileText,
   Globe,
   Keyboard,
@@ -180,6 +182,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     to: "/settings/backups",
     icon: ClockCounterClockwise,
     group: "data",
+  },
+  {
+    id: "export",
+    title: "Export",
+    description: "Take a copy of everything as CSV and JSON.",
+    to: "/export",
+    icon: Download,
+    group: "data",
+    external: true,
   },
   {
     id: "trash",
