@@ -48,7 +48,12 @@ export function DealsCard(props: {
             <CardRow key={deal.id} interactive className="p-0">
               <Link
                 href={`/deals/${deal.id}`}
-                className="flex min-h-[var(--row-h)] w-full items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]"
+                // `no-underline`: the row IS the link, so the ink-link rule
+                // (round 3: links are ink with an underline) was underlining the
+                // title, the stage badge and the money as three separate
+                // fragments. A row is a destination, not a sentence with a link
+                // in it; the CardRow's own hover is the affordance.
+                className="flex min-h-[var(--row-h)] w-full items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]"
               >
                 <span
                   className="min-w-0 truncate text-[length:var(--text-base)] text-[var(--color-text)]"

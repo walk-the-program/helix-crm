@@ -248,7 +248,7 @@ export function CompanyPage() {
                   <CardRow key={contact.id} interactive className="p-0">
                     <Link
                       href={`/contacts/${contact.id}`}
-                      className="flex min-h-[var(--row-h)] w-full items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] text-[length:var(--text-base)] text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]"
+                      className="flex min-h-[var(--row-h)] w-full items-center justify-between gap-[var(--space-3)] px-[var(--space-4)] text-[length:var(--text-base)] text-[var(--color-text)] no-underline hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-focus)]"
                     >
                       <span className="truncate" title={contactName(contact)}>
                         {contactName(contact)}
