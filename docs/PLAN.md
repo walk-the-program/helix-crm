@@ -506,8 +506,12 @@ No catch-all handlers in services. A single top-level React error boundary shows
 - Tauri capabilities: only the plugins listed; fs scoped to the app data dir plus
   dialog-selected paths; opener limited to `https:`, `mailto:`, `tel:`, `sms:` URLs and
   files inside the workspace folder. CSP: `default-src 'self'; img-src 'self' asset:
-  http://asset.localhost data:; style-src 'self' 'unsafe-inline'` (Radix and React set
-  inline styles); `connect-src 'self'` only, since network calls run on the Rust side
+  http://asset.localhost data:; style-src 'self' 'unsafe-inline'` (Radix, sonner and
+  cmdk inject `<style>` elements at runtime, so this one cannot go; scripts are NOT
+  exempted - `script-src` falls back to `default-src 'self'` and there is no
+  `unsafe-eval` anywhere) plus the four directives that do not fall back to
+  `default-src`: `object-src 'none'; base-uri 'self'; form-action 'none';
+  frame-ancestors 'none'` (F-SEC-4); `connect-src 'self'` only, since network calls run on the Rust side
   (`tauri-plugin-http` scoped to the Anthropic API; `leads_fetch` for the site). No
   remote code, no CDN fonts; the app works offline.
 - Secrets (site token, Anthropic key, and now the per-workspace database key) in the OS

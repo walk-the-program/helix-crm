@@ -12,6 +12,14 @@
 //! edition installed, require elevation, hang, or print something we don't
 //! recognize. Every one of those is reported as `encrypted: None` with a
 //! `detail` explaining what happened, never as a command error.
+//!
+//! Each tool is named by its ABSOLUTE path rather than left to a PATH or
+//! working-directory search. This is a diagnostics screen, not a privileged
+//! operation, so the exposure was small - but `Command::new("manage-bde")` on
+//! Windows searches the process's current directory before PATH, and a CRM
+//! whose window was opened from a downloads folder should not be the reason a
+//! planted binary runs. `SystemRoot` is read from the environment rather than
+//! hard-coded to `C:\Windows` (F-SEC-8).
 
 use serde::Serialize;
 
@@ -90,7 +98,7 @@ fn fdesetup_detail(raw: &str, encrypted: Option<bool>) -> String {
 fn check_macos() -> DiskEncryptionStatus {
     let platform = "macos".to_string();
 
-    let child = match std::process::Command::new("fdesetup")
+    let child = match std::process::Command::new("/usr/bin/fdesetup")
         .arg("status")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -176,6 +184,14 @@ fn system_drive() -> String {
     std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string())
 }
 
+/// `<SystemRoot>\System32\<name>`, so neither the current directory nor PATH
+/// decides which binary runs.
+#[cfg(target_os = "windows")]
+fn system32(name: &str) -> String {
+    let root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+    format!("{root}\\System32\\{name}")
+}
+
 #[cfg(target_os = "windows")]
 fn run_hidden(program: &str, args: &[&str]) -> Option<std::process::Output> {
     use std::os::windows::process::CommandExt;
@@ -198,7 +214,7 @@ fn check_windows() -> DiskEncryptionStatus {
     let platform = "windows".to_string();
     let drive = system_drive();
 
-    if let Some(output) = run_hidden("manage-bde", &["-status", &drive]) {
+    if let Some(output) = run_hidden(&system32("manage-bde.exe"), &["-status", &drive]) {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         let combined = format!("{stdout}\n{stderr}");
@@ -223,7 +239,8 @@ fn check_windows() -> DiskEncryptionStatus {
         "(Get-CimInstance -Namespace root/CIMV2/Security/MicrosoftVolumeEncryption \
          -ClassName Win32_EncryptableVolume -Filter \"DriveLetter='{drive}'\").ProtectionStatus"
     );
-    if let Some(output) = run_hidden("powershell", &["-NoProfile", "-NonInteractive", "-Command", &script]) {
+    let powershell = system32("WindowsPowerShell\\v1.0\\powershell.exe");
+    if let Some(output) = run_hidden(&powershell, &["-NoProfile", "-NonInteractive", "-Command", &script]) {
         let stdout = String::from_utf8_lossy(&output.stdout);
         if let Some(encrypted) = parse_wmi_protection_status(&stdout) {
             let detail = if encrypted {
