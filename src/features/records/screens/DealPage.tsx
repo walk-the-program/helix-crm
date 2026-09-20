@@ -4,7 +4,8 @@
  * Won and lost are stage flags, so both are reached through the stage picker;
  * moving to a lost stage asks for a reason, which the repository requires.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "wouter";
 import { ArrowCounterClockwise, ArrowLeft, Buildings, Trash, User } from "@/ui/icons";
 import {
@@ -13,8 +14,16 @@ import {
   Card,
   CardGroupLabel,
   CardRow,
+  Combobox,
   ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   EmptyState,
+  Field,
   PageHeader,
   Spinner,
 } from "@/ui";
@@ -27,6 +36,7 @@ import {
   parseMoneyToCents,
 } from "@/lib/money";
 import { formatDateDisplay, formatRelative } from "@/lib/dates";
+import { toDateInputValue } from "@/lib/periods";
 import {
   useContact,
   useDeal,
@@ -60,6 +70,7 @@ import { DealMoneyStrip } from "@/features/records/components/MoneyStrip";
 import { DealServicesPanel } from "@/features/catalog/components/DealServicesPanel";
 import { useDealItems } from "@/features/catalog/lib/dealItemHooks";
 import * as dealItemsRepo from "@/db/repos/dealItems";
+import * as invoiceSchedulesRepo from "@/db/repos/invoiceSchedules";
 import { DraftFollowUpButton, SummarizeButton } from "@/features/ai";
 import { DealInvoicesPanel } from "@/features/invoices";
 
@@ -77,6 +88,8 @@ export function DealPage() {
   const { data: dealItems } = useDealItems(id);
   const { data: money } = useDealMoney(id);
   const [pendingStage, setPendingStage] = useState<string | null>(null);
+  const [redatingClose, setRedatingClose] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const openStages = useMemo(
@@ -95,13 +108,21 @@ export function DealPage() {
 
   if (!deal) {
     return (
+      /* "is gone ... may have been deleted" asserted a deletion nobody
+         checked: the id may simply be wrong. Say what is true and offer the
+         one place it could be (CPO audit, F-LA-17d). */
       <EmptyState
-        title={`That ${vocabulary.lower} is gone`}
-        description="It may have been deleted."
+        title={`That ${vocabulary.lower} is not here`}
+        description="It may be in the Trash, or the link may be wrong."
         action={
-          <Button variant="primary" onClick={() => navigate("/pipeline")}>
-            Back to {vocabulary.lowerMany}
-          </Button>
+          <>
+            <Button variant="primary" onClick={() => navigate("/pipeline")}>
+              Back to {vocabulary.lowerMany}
+            </Button>
+            <Button variant="secondary" onClick={() => navigate("/trash")}>
+              Open Trash
+            </Button>
+          </>
         }
       />
     );
@@ -178,12 +199,7 @@ export function DealPage() {
               <Button
                 variant="secondary"
                 iconLeft={<ArrowCounterClockwise size={16} weight="bold" aria-hidden="true" />}
-                onClick={() => {
-                  void dealsRepo
-                    .reopen(id, openStages[0].id)
-                    .then(invalidateRecords)
-                    .catch((err: unknown) => reportError(err, "That did not reopen."));
-                }}
+                onClick={() => setReopening(true)}
               >
                 Reopen
               </Button>
@@ -208,6 +224,7 @@ export function DealPage() {
           oneTimeCents={deal.oneTimeCents}
           recurringMonthlyCents={deal.recurringMonthlyCents}
           currency={deal.currency}
+          isWon={deal.stageIsWon}
         />
 
         <div className="flex flex-wrap items-center gap-[var(--space-3)]">
@@ -265,11 +282,6 @@ export function DealPage() {
                 {deal.companyName}
               </span>
             </Link>
-          ) : null}
-          {deal.expectedOn ? (
-            <span className="tabular text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-              Expected {formatDateDisplay(deal.expectedOn)}
-            </span>
           ) : null}
         </div>
 
@@ -353,16 +365,29 @@ export function DealPage() {
                     set by the stage move, so it is read here rather than
                     edited in two places. */}
                 {deal.stageIsWon || deal.stageIsLost ? (
+                  /* The row used to say "Change it by moving the stage again",
+                     which was not true: the stage picker cannot re-pick the
+                     stage the deal is already in, so a mistyped won date could
+                     only be fixed by reopening and re-winning - two stage
+                     events and two timeline lines for one correction. It is a
+                     control now, and moveToStage takes the new date on the
+                     current stage (CPO audit, F-LA-10; ruling R2). */
                   <div className="w-full">
                     <span className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
                       {deal.stageIsWon ? "Won on" : "Lost on"}
                     </span>
-                    <p className="tabular m-0 text-[length:var(--text-base)] text-[var(--color-text)]">
-                      {deal.closedAt ? formatDateDisplay(deal.closedAt) : "Not recorded"}
-                    </p>
-                    <p className="mt-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-                      Change it by moving the stage again.
-                    </p>
+                    <div className="flex items-baseline justify-between gap-[var(--space-3)]">
+                      <p className="tabular m-0 text-[length:var(--text-base)] text-[var(--color-text)]">
+                        {deal.closedAt ? formatDateDisplay(deal.closedAt) : "Not recorded"}
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setRedatingClose(true)}
+                      >
+                        Change the date
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <InlineDate
@@ -497,6 +522,47 @@ export function DealPage() {
         </div>
       </div>
 
+      {/* Correcting the closed date: the same dialog, pointed at the stage the
+          deal is already in, opened on the date currently stored. */}
+      <StageMoveDialog
+        open={redatingClose}
+        stageName={deal.stageName}
+        title={`Change the date this was ${deal.stageIsWon ? "won" : "lost"}?`}
+        confirmLabel="Save the date"
+        requiresReason={false}
+        initialReason={deal.outcomeReason}
+        initialDate={deal.closedAt ? toDateInputValue(deal.closedAt) : null}
+        onOpenChange={setRedatingClose}
+        onConfirm={async ({ at }) => {
+          setRedatingClose(false);
+          try {
+            await writeWithUndo({
+              label: `changed when ${dealTitle} closed`,
+              write: (batchId) =>
+                dealsRepo
+                  .moveToStage(id, deal.stageId, {
+                    at,
+                    outcomeReason: deal.outcomeReason,
+                    batchId,
+                  })
+                  .then(() => undefined),
+            });
+            await invalidateRecords();
+          } catch (err) {
+            reportError(err, "That date did not save.");
+          }
+        }}
+      />
+
+      <ReopenDialog
+        open={reopening}
+        onOpenChange={setReopening}
+        dealId={id}
+        dealTitle={dealTitle}
+        openStages={openStages}
+        vocabularyLower={vocabulary.lower}
+      />
+
       <StageMoveDialog
         open={pendingStage !== null}
         stageName={pendingStageName}
@@ -546,5 +612,119 @@ export function DealPage() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Reopening a closed deal.
+ *
+ * Three things were wrong with the old one-line version. It wrote outside
+ * `writeWithUndo`, so an accidental Reopen could not be taken back at all. It
+ * silently dropped the deal into `openStages[0]` — a job reopened from "Paid"
+ * landed in "New lead". And it never called `dealItems.recompute`, so a deal
+ * with recurring lines kept the clock that winning it started, and went on
+ * contributing to MRR after it was no longer won (CPO audit, F-LA-11;
+ * ruling R4).
+ *
+ * The default stage is the one the deal was in before it closed, read from its
+ * own stage events, because that is where the owner left it.
+ */
+function ReopenDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  dealId: string;
+  dealTitle: string;
+  openStages: { id: string; name: string }[];
+  vocabularyLower: string;
+}) {
+  const { open, onOpenChange, dealId, dealTitle, openStages } = props;
+  const [stageId, setStageId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const { data: previousStageId } = useQuery({
+    queryKey: ["deal-previous-open-stage", dealId, open] as const,
+    enabled: open,
+    queryFn: async () => {
+      const events = await dealsRepo.listStageEvents(dealId);
+      const openIds = new Set(openStages.map((stage) => stage.id));
+      // The last stage it entered that is still an open one: where it was
+      // working before somebody closed it.
+      for (let i = events.length - 1; i >= 0; i -= 1) {
+        if (openIds.has(events[i].toStageId)) return events[i].toStageId;
+      }
+      return null;
+    },
+  });
+
+  // Whether this deal has a billing schedule, so the dialog can say what
+  // reopening does to it rather than leaving the owner to find out.
+  const { data: schedule } = useQuery({
+    queryKey: ["deal-schedule-note", dealId, open] as const,
+    enabled: open,
+    queryFn: () => invoiceSchedulesRepo.forDeal(dealId),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setStageId(previousStageId ?? openStages[0]?.id ?? "");
+  }, [open, previousStageId, openStages]);
+
+  async function confirm() {
+    if (!stageId) return;
+    setSaving(true);
+    try {
+      await writeWithUndo({
+        label: `reopened ${dealTitle}`,
+        write: (batchId) =>
+          dealsRepo.reopen(dealId, stageId, { batchId }).then(() => undefined),
+      });
+      // Winning a deal starts its recurring clock (D20); leaving Won has to
+      // stop it, or the reports keep billing a job nobody won.
+      await dealItemsRepo.recompute(dealId);
+      await invalidateRecords();
+      onOpenChange(false);
+    } catch (err) {
+      reportError(err, "That did not reopen.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Reopen {dealTitle}?</DialogTitle>
+          <DialogDescription>
+            It goes back to an open stage and stops counting as won or lost.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Field label="Back to">
+          <Combobox
+            value={stageId}
+            onChange={(next) => setStageId(next ?? "")}
+            items={openStages.map((stage) => ({ id: stage.id, label: stage.name }))}
+            aria-label={`Stage to reopen this ${props.vocabularyLower} into`}
+          />
+        </Field>
+
+        {schedule ? (
+          <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            Billing was paused when this {props.vocabularyLower} left Won; it
+            resumes if you win it again.
+          </p>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" loading={saving} onClick={() => void confirm()}>
+            Reopen
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

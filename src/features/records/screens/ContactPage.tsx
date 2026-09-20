@@ -103,12 +103,17 @@ export function ContactPage() {
   if (!contact) {
     return (
       <EmptyState
-        title="That contact is gone"
-        description="It may have been deleted or merged into another record."
+        title="That contact is not here"
+        description="They may be in the Trash, or they may have been merged into another record."
         action={
-          <Button variant="primary" onClick={() => navigate("/contacts")}>
-            Back to contacts
-          </Button>
+          <>
+            <Button variant="primary" onClick={() => navigate("/contacts")}>
+              Back to contacts
+            </Button>
+            <Button variant="secondary" onClick={() => navigate("/trash")}>
+              Open Trash
+            </Button>
+          </>
         }
       />
     );

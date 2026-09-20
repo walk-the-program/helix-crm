@@ -66,12 +66,19 @@ export function MoneyStrip(props: { figures: MoneyFigure[]; testId?: string }) {
  * The deal page's strip. Quoted is the deal's own value, so it keeps the
  * accent fill and carries the upfront + monthly breakdown when the deal has a
  * recurring part.
+ *
+ * On a WON deal the same figure is labelled "Won", because that is what it
+ * now is. The strip used to read Quoted on a won job, and it read it from the
+ * sum of quote DOCUMENTS rather than the deal's value, so a won $1,450 job
+ * showed $0 in all four figures and nothing on the screen said it had been
+ * won at all (CPO audit, F-LA-3; ruling R5 settled Quoted = value_cents).
  */
 export function DealMoneyStrip(props: {
   money: MoneyTotals | undefined;
   oneTimeCents: number;
   recurringMonthlyCents: number;
   currency?: string;
+  isWon?: boolean;
 }) {
   const money = props.money;
   const breakdown =
@@ -87,7 +94,7 @@ export function DealMoneyStrip(props: {
       testId="deal-money"
       figures={[
         {
-          label: "Quoted",
+          label: props.isWon ? "Won" : "Quoted",
           cents: money?.quotedCents ?? 0,
           primary: true,
           note: breakdown,
@@ -109,6 +116,12 @@ export function DealMoneyStrip(props: {
  * The lifetime strip on a contact or a company: what this customer has ever
  * been worth, with nothing highlighted — a record page's primary block belongs
  * to the record, not to a summary of it.
+ *
+ * Open leads the four, because a customer with a live job and nothing closed
+ * yet is not worth nothing. The strip used to open on Won, so a contact with a
+ * $14,800 job in flight read $0 · $0 · $0 — every figure honest, and the
+ * screen still wrong about the person (CPO audit, F-LA-14; ruling R1 added
+ * `openCents`).
  */
 export function CustomerMoneyStrip(props: { money: MoneyTotals | undefined }) {
   const money = props.money;
@@ -116,6 +129,7 @@ export function CustomerMoneyStrip(props: { money: MoneyTotals | undefined }) {
     <MoneyStrip
       testId="customer-money"
       figures={[
+        { label: "Open", cents: money?.openCents ?? 0, testId: "customer-open" },
         { label: "Won", cents: money?.wonCents ?? 0, testId: "customer-won" },
         {
           label: "Invoiced",

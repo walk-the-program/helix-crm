@@ -45,6 +45,16 @@ export function StageMoveDialog(props: {
   requiresReason: boolean;
   /** Prefill when the deal already carries a reason. */
   initialReason?: string | null;
+  /**
+   * A local "YYYY-MM-DD" to open the date on instead of today. Set when the
+   * dialog is correcting a date rather than recording a new move, so the
+   * owner sees what is currently stored before he changes it (F-LA-10).
+   */
+  initialDate?: string | null;
+  /** Overrides the title; used by the "change the date" path. */
+  title?: string;
+  /** Overrides the confirm button's label. */
+  confirmLabel?: string;
   /** ISO timestamp for the move, and the reason when one was asked for. */
   onConfirm: (result: { at: string; outcomeReason: string | null }) => void | Promise<void>;
 }) {
@@ -53,13 +63,14 @@ export function StageMoveDialog(props: {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const initialDate = props.initialDate ?? null;
   useEffect(() => {
     if (props.open) {
-      setDateOnly(todayLocal());
+      setDateOnly(initialDate ?? todayLocal());
       setReason(props.initialReason ?? "");
       setError(null);
     }
-  }, [props.open, props.initialReason]);
+  }, [props.open, props.initialReason, initialDate]);
 
   async function confirm() {
     if (!dateOnly) {
@@ -86,7 +97,7 @@ export function StageMoveDialog(props: {
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent size="sm">
         <DialogHeader>
-          <DialogTitle>Move to {props.stageName}?</DialogTitle>
+          <DialogTitle>{props.title ?? `Move to ${props.stageName}?`}</DialogTitle>
           <DialogDescription>Nothing changes until you confirm.</DialogDescription>
         </DialogHeader>
 
@@ -122,7 +133,7 @@ export function StageMoveDialog(props: {
             Cancel
           </Button>
           <Button variant="primary" loading={saving} onClick={() => void confirm()}>
-            Confirm
+            {props.confirmLabel ?? "Confirm"}
           </Button>
         </DialogFooter>
       </DialogContent>
