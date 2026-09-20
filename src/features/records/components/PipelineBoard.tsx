@@ -80,19 +80,34 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
     return map;
   }, [board]);
 
-  // `deals.board()` already returns one entry per stage in position order
-  // (empty ones included), so the columns are its shape, not the stage list's.
-  // `stages` is still what the headers render from, and a stage the board has
-  // not heard of yet - one added in another window - gets an empty column.
+  /**
+   * The columns the board draws: every live stage in pipeline order, then any
+   * stage the board reports that the stage list no longer has a row for.
+   *
+   * `deals.board()` deliberately keeps a deal whose stage was deleted
+   * underneath it (docs/CONTRACTS.md, "deals.board()"), but this component used
+   * to build its columns from `stages` alone, so that entry was dropped on the
+   * floor: the cards vanished from the board while the header total still
+   * counted them - $53,200 of invisible pipeline in the audit's fixture (CPO
+   * audit, F-LA-18). Those deals get one unnamed column at the end, which is
+   * also the drop target the owner needs to drag them back out of.
+   */
+  const orphanStageIds = useMemo(() => {
+    const known = new Set(stages.map((stage) => stage.id));
+    return board
+      .filter((column) => !known.has(column.stageId) && column.deals.length > 0)
+      .map((column) => column.stageId);
+  }, [stages, board]);
+
   const serverColumns: BoardColumn[] = useMemo(() => {
     const dealIdsByStage = new Map(
       board.map((column) => [column.stageId, column.deals.map((deal) => deal.id)]),
     );
-    return stages.map((stage) => ({
-      stageId: stage.id,
-      dealIds: dealIdsByStage.get(stage.id) ?? [],
+    return [...stages.map((stage) => stage.id), ...orphanStageIds].map((stageId) => ({
+      stageId,
+      dealIds: dealIdsByStage.get(stageId) ?? [],
     }));
-  }, [stages, board]);
+  }, [stages, board, orphanStageIds]);
 
   // Optimistic copy: the board redraws the moment the card lands, and the
   // refetch after the write replaces it.
@@ -229,14 +244,16 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
         onDragCancel={() => setActiveId(null)}
       >
         <div className="flex min-h-0 flex-1 gap-[var(--space-6)] overflow-x-auto pb-[var(--space-4)]">
-          {stages.map((stage) => {
-            const column = columns.find((candidate) => candidate.stageId === stage.id);
-            const deals = (column?.dealIds ?? [])
+          {columns.map((column) => {
+            const stage =
+              stages.find((candidate) => candidate.id === column.stageId) ??
+              orphanStage(column.stageId);
+            const deals = column.dealIds
               .map((id) => dealsById.get(id))
               .filter((deal): deal is Deal => deal !== undefined);
             return (
               <StageColumn
-                key={stage.id}
+                key={column.stageId}
                 stage={stage}
                 deals={deals}
                 nextStepByDealId={nextStepByDealId}
@@ -280,6 +297,26 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
       />
     </>
   );
+}
+
+/**
+ * The stand-in header for a stage that no longer exists. No colour: a dot in
+ * the brand palette would make a broken column look like a deliberate one.
+ */
+function orphanStage(stageId: string): Stage {
+  return {
+    id: stageId,
+    pipelineId: "",
+    name: "Unassigned stage",
+    color: "transparent",
+    position: Number.MAX_SAFE_INTEGER,
+    quietDays: 0,
+    isWon: false,
+    isLost: false,
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  };
 }
 
 function StageColumn(props: {

@@ -118,12 +118,28 @@ export function PipelineScreen() {
     return map;
   }, [openTasks]);
 
+  /**
+   * The headline counts OPEN work only.
+   *
+   * `deals.board()` returns every live stage of the pipeline, won and lost
+   * included, because those columns are drop targets. Totalling all of them and
+   * calling the result "open" overstated the pipeline by everything ever won or
+   * lost, and it grew forever: the landscaping sample read "10 open · Upfront
+   * $108,280" for 7 open deals worth $103,930 (CPO audit, F-LA-2). Each deal
+   * carries its own stage flags, so the filter needs no second read and covers
+   * a deal sitting in a stage the board no longer has a row for.
+   */
   const totals = useMemo(() => {
-    const deals = (board ?? []).flatMap((column) => column.deals);
+    const deals = (board ?? [])
+      .flatMap((column) => column.deals)
+      .filter((deal) => !deal.stageIsWon && !deal.stageIsLost);
     return {
       count: deals.length,
-      cents: deals.reduce((sum, deal) => sum + deal.valueCents, 0),
-      // The same two halves the columns show (D20).
+      // The two halves the columns show (D20). A deal with nothing recurring
+      // contributes its whole value, so on a workspace that never sells a
+      // contract this is simply the open value - which is why the word
+      // "Upfront" only appears when there is a monthly half to distinguish it
+      // from.
       upfront: deals.reduce((sum, deal) => sum + upfrontCents(deal), 0),
       monthly: deals.reduce((sum, deal) => sum + deal.recurringMonthlyCents, 0),
       currency: deals[0]?.currency ?? "USD",
@@ -160,7 +176,7 @@ export function PipelineScreen() {
         title={vocabulary.many}
         subtitle={
           <span className="tabular" data-testid="pipeline-total">
-            {totals.count} open · Upfront{" "}
+            {totals.count} open · {totals.monthly > 0 ? "Upfront " : null}
             {formatMoneyTrim(totals.upfront, totals.currency)}
             {totals.monthly > 0
               ? ` \u00b7 ${formatMonthly(totals.monthly, totals.currency)}`
@@ -216,10 +232,15 @@ export function PipelineScreen() {
           }
         />
       ) : view === "board" ? (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <p className="pb-[var(--space-4)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-            Drag a card, or focus one and hold shift with an arrow key to move it.
-          </p>
+        // The keyboard hint used to be a permanent paragraph above the board. A
+        // sentence that never goes away is not help, it is furniture: it costs a
+        // line of the board every day to teach something once. The card's own
+        // accessible name already carries it (DealCard), the board region
+        // carries it as a tooltip, and Help says it in prose (F-LA-17c).
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          title="Drag a card, or focus one and hold shift with an arrow key to move it."
+        >
           <PipelineBoard
             stages={stages}
             board={board ?? []}
