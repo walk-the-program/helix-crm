@@ -676,10 +676,12 @@ test.describe("the reports tab strip", () => {
   }) => {
     await bootThenSeedReports(page, helix);
 
-    // One won and one lost closed this month: 50.0%.
-    await expect(page.getByText("Won rate", { exact: true })).toBeVisible();
-    await expect(page.getByText("50.0%", { exact: true })).toBeVisible();
-    await expect(page.getByText("1 of 2 closed", { exact: true })).toBeVisible();
+    // One won and one lost closed this month: 50.0%. Scoped to the tile,
+    // because the conversion chart's own bars are labelled in percentages too
+    // and "50.0%" on its own matches three elements on this page.
+    const wonRate = page.getByText("Won rate", { exact: true }).locator("..");
+    await expect(wonRate).toContainText("50.0%");
+    await expect(wonRate).toContainText("1 of 2 closed");
     await expect(page.getByRole("heading", { name: "New deals", exact: true })).toBeVisible();
   });
 

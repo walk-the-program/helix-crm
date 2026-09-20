@@ -3946,3 +3946,69 @@ One harness gap was fixed on the way: `@tauri-apps/api`'s `unlisten` reaches
 for `window.__TAURI_EVENT_PLUGIN_INTERNALS__` directly rather than through
 `invoke`, which the shim did not have, so the menu bridge threw on teardown
 once per page load. `tests/e2e-mac/fixtures.ts` stubs it.
+
+## 2026-09-19 — Round 3, L2 (reports, the money model, onboarding)
+
+Walker's round-3 notes, the three that were mine: Reports dead-ended, there
+were no reports beyond revenue, and setup asked for things it did not need.
+Criteria 15, 16 and 17 of `docs/rounds/2026-09-20-round-3.md`, plus the parts
+of 20 and 22 the coordinator routed here mid-round, and `src/db/repos/money.ts`.
+
+### What changed
+
+- **Reports is one place with five views.** `ReportsFrame`
+  (`src/features/leads/components/ReportsFrame.tsx`) carries the tab strip —
+  Overview, Revenue, Deals, Contacts and companies, Receivables — and the
+  period control, on every page. The period is component state, never a route,
+  so the control next to it cannot strand anybody. Routes: `/reports`,
+  `/reports/revenue`, `/reports/deals`, `/reports/people`; Receivables stays
+  the invoices feature's own route.
+- **The dead end.** Revenue rendered a page title and nothing else, so the
+  "Revenue" button on the old Reports page was a one-way door and the sidebar
+  was the only way off it. It wears the frame now.
+- **Two new reports.** Deals: new deals over a trailing twelve weeks or twelve
+  months, won rate, average won value, median days from creation to won, open
+  deals by stage — and the five cards that used to be the whole of `/reports`,
+  which are all about deals. Contacts and companies: new per month, totals,
+  by source, the share of each with at least one deal, and the companies that
+  won the most.
+- **The money model.** `src/db/repos/money.ts` is the one definition of Quoted,
+  Won, Invoiced, Collected and Outstanding, in cents: `dealMoney`,
+  `customerMoney`, `periodMoney`, `perDealMoney`. Drafts and voided documents
+  are not billings. Collected falls on `paid_on` and Invoiced on `issued_on`,
+  so a period can collect more than it billed, and the Revenue card says so in
+  words rather than leaving the owner to work out why the numbers disagree.
+  Outstanding over a period is what that period issued and has not been paid
+  for; over a deal it is exactly Invoiced minus Collected.
+- **Onboarding.** The trade tiles are one height, hint or no hint. Screen 2 no
+  longer asks about sources — the preset's sources are still written on apply,
+  silently. The website step, the Today first-run card and the Today connect
+  card now read for any owner: ClearPath sites work out of the box, any site
+  can answer the endpoint Help documents. Help gained that section.
+- **Setup stops stacking pipelines.** Applying a preset now deletes every stage
+  that holds nothing — no deal, live or in the trash, and no stage history —
+  instead of appending on top of the six defaults. A stage holding work is
+  kept, moved below the new ones, and named in a toast, because
+  `deals.stage_id` and `deal_stage_events.to_stage_id` are both ON DELETE
+  RESTRICT and a stage under a trashed deal is not empty.
+
+### Left open, deliberately
+
+- **Receivables has no tab strip yet.** It is `src/features/invoices`'s screen
+  and this round's ownership put that folder off limits, and a second route
+  registration for the same path would give the shell two React children with
+  the same key. The tab links there, the sidebar keeps Reports lit and one
+  click comes back, so it is not a dead end — but the strip is missing on that
+  one page until the invoices lead wraps its body in the exported
+  `ReportsFrame` (`active="receivables"`), which is a one-line change.
+- **The trend charts ignore the period picker** on purpose: twelve weeks or
+  twelve months is a trend, and a trend over "this month" is one bar.
+
+### Verification
+
+`npm run typecheck` clean for these folders; `npx vitest run tests/repo/leads
+tests/repo/onboarding tests/unit/leads tests/unit/onboarding tests/unit/revenue
+tests/unit/today tests/unit/help` 469 passed; the leads, onboarding and today
+e2e specs 32 passed on port 4212; `npx vite build` clean. Screenshots at 1280
+in light and dark in `design/round3/` — every report tab, and onboarding
+screens 1 and 2.
