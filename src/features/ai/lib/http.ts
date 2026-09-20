@@ -27,8 +27,28 @@ export type FetchLike = (
   text: () => Promise<string>;
 }>;
 
+/**
+ * `import.meta.env.VITE_E2E` is only defined in the e2e build (Vite replaces
+ * it at build time), so in a shipped build this whole branch is dead code and
+ * no global can reach it - the same guarantee `src/app/appSettings.ts` and
+ * `src/features/onboarding/gate.ts` give their own harness gates. Before this
+ * fix, this was the one gate in the product that checked only the runtime
+ * flag: a shipped Helix would still evaluate `window.__HELIX_E2E__ === true`
+ * and, if it were ever true, hand back the browser's own `fetch` instead of
+ * `@tauri-apps/plugin-http`'s - bypassing the capability file's scoping of
+ * that plugin to `https://api.anthropic.com/*`. Not currently reachable
+ * (nothing in the app sets that global, and the CSP's `connect-src 'self'`
+ * would block the browser fetch outright even if it were), but it should not
+ * have been the only such gate in the codebase that a release build still
+ * carries.
+ */
 function underE2eHarness(): boolean {
+  // `import.meta.env.VITE_E2E` is a Vite-injected env string ("1" in the e2e
+  // build's own command, see tests/e2e-mac/playwright.config.ts), not a
+  // boolean - a truthy check, matching src/features/onboarding/gate.ts's
+  // `!import.meta.env.VITE_E2E`, not `=== true`.
   return (
+    Boolean(import.meta.env.VITE_E2E) &&
     typeof window !== "undefined" &&
     (window as unknown as { __HELIX_E2E__?: boolean }).__HELIX_E2E__ === true
   );
