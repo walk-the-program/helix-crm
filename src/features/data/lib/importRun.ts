@@ -115,6 +115,25 @@ export type SkippedRow = {
   cells: string[];
 };
 
+/**
+ * A row that imported - it is not in `skippedRows` - but that Helix had to
+ * make a judgement call on: an email that does not look like one, a phone it
+ * could not dial, a row with no name at all. `applyMapping` (mapping.ts)
+ * raises these as warning-level `RowFlag`s; this is where they are kept
+ * rather than dropped, so the result screen can say what happened to the row
+ * instead of going quiet the moment it stops being an error.
+ */
+export type ImportWarning = {
+  rowNumber: number;
+  /** Groups the list on the result screen: "email", "phone", "name". */
+  kind: string;
+  message: string;
+  column?: string;
+};
+
+/** How many warnings are kept for the "save warnings" CSV, same ceiling as skipped rows. */
+export const MAX_WARNINGS_KEPT = 5_000;
+
 export type ImportCounts = {
   created: number;
   updated: number;
@@ -131,6 +150,8 @@ export type ImportResult = ImportCounts & {
   headers: string[];
   skippedRows: SkippedRow[];
   skippedTruncated: boolean;
+  warnings: ImportWarning[];
+  warningsTruncated: boolean;
   /**
    * The backup taken immediately before this import, which is what undoing it
    * means (see `backupBeforeImport`). Null on a dry run, and null when the
@@ -292,6 +313,69 @@ async function loadLookups(): Promise<Lookups> {
 }
 
 /* -------------------------------------------------------------------------- */
+/* the duplicate preview                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type DuplicateEstimate = {
+  /**
+   * Rows whose email or phone already belongs to a contact in this workspace,
+   * OR to an earlier row in this same file (two rows of the same file can
+   * name the same person without either matching anything already in Helix).
+   */
+  matched: number;
+  /** Rows Helix could actually file (name, company, email or phone present). */
+  importableRows: number;
+  totalRows: number;
+};
+
+/**
+ * How many rows in the WHOLE file - not just the 20-row preview - already
+ * match someone in Helix, before the owner commits to a duplicate policy.
+ *
+ * Read-only: it re-reads the file and re-runs the same lookups `runImport`
+ * would, registering each row's email/phone as it goes so a later row that
+ * only matches an EARLIER row of this same file is counted too - exactly
+ * what `runImport` itself does for "skip" and "update" (a within-file repeat
+ * is still a duplicate; it just was not in the database yet when the file
+ * started). It takes no write lock and touches no table. The preview
+ * screen's three policy options ("Skip them" / "Fill in the blanks" /
+ * "Import anyway") said what WOULD happen to a match; without this, the
+ * owner had no way to know how many rows that even applied to until after
+ * the import ran.
+ */
+export async function estimateDuplicateMatches(
+  text: string,
+  mapping: ColumnMapping[],
+  options: { delimiter?: Delimiter; region?: string } = {},
+): Promise<DuplicateEstimate> {
+  const { rows } = await readMappedRows(text, mapping, {
+    delimiter: options.delimiter,
+    region: options.region,
+  });
+  const lookups = await loadLookups();
+
+  let matched = 0;
+  let importableRows = 0;
+  for (const row of rows) {
+    if (!row.importable) continue;
+    importableRows += 1;
+    const key = dedupeKeyFor(row);
+    if (!key) continue;
+    const map = key.kind === "email" ? lookups.emailToContact : lookups.phoneToContact;
+    if (map.has(key.value)) {
+      matched += 1;
+    } else {
+      // Not a real contact id - just a placeholder so the NEXT row with this
+      // same key is recognised as a repeat, the way runImport's own
+      // mid-loop registration works.
+      map.set(key.value, "");
+    }
+  }
+
+  return { matched, importableRows, totalRows: rows.length };
+}
+
+/* -------------------------------------------------------------------------- */
 /* the run                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -316,7 +400,9 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
     customFieldsCreated: 0,
   };
   const skippedRows: SkippedRow[] = [];
+  const warnings: ImportWarning[] = [];
   let skippedTruncated = false;
+  let warningsTruncated = false;
   const batchId = newBatchId();
 
   const noteSkip = (row: MappedRow, reason: string) => {
@@ -332,9 +418,34 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
     });
   };
 
+  // A row that DID import may still carry warning-level flags from
+  // `applyMapping` (an email that does not look like one, a phone Helix
+  // could not dial, a row with no name). Those used to be computed and then
+  // thrown away the moment the row was not an outright skip - the owner had
+  // no way to learn about them short of re-reading the whole file himself.
+  const collectWarnings = (row: MappedRow) => {
+    for (const flag of row.flags) {
+      if (flag.level !== "warning") continue;
+      if (warnings.length >= MAX_WARNINGS_KEPT) {
+        warningsTruncated = true;
+        continue;
+      }
+      warnings.push({
+        rowNumber: row.rowNumber,
+        kind: flag.kind,
+        message: flag.message,
+        column: flag.column,
+      });
+    }
+  };
+
   if (options.dryRun) {
     for (const row of rows) {
-      if (!row.importable) noteSkip(row, row.flags[0]?.message ?? "Nothing to file this row under.");
+      if (!row.importable) {
+        noteSkip(row, row.flags[0]?.message ?? "Nothing to file this row under.");
+      } else {
+        collectWarnings(row);
+      }
     }
     report({ phase: "done", processed: total, total });
     return {
@@ -345,6 +456,8 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
       headers,
       skippedRows,
       skippedTruncated,
+      warnings,
+      warningsTruncated,
       preImportBackupPath: null,
     };
   }
@@ -385,6 +498,7 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
         if (!row.importable) {
           noteSkip(row, row.flags[0]?.message ?? "Nothing to file this row under.");
         } else {
+          collectWarnings(row);
           const key = dedupeKeyFor(row);
           const existingId =
             options.policy === "duplicate" || key === null
@@ -590,6 +704,8 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
     headers,
     skippedRows,
     skippedTruncated,
+    warnings,
+    warningsTruncated,
     preImportBackupPath,
   };
 }

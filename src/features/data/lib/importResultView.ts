@@ -78,8 +78,8 @@ export function contactsResultView(result: ImportResult): ResultView {
     skipped: result.skipped,
     skippedRows: result.skippedRows,
     skippedTruncated: result.skippedTruncated,
-    warnings: [],
-    warningsTruncated: false,
+    warnings: result.warnings,
+    warningsTruncated: result.warningsTruncated,
     preImportBackupPath: result.preImportBackupPath,
     destination: { href: "/contacts", label: "See the contacts", icon: "people" },
   };
