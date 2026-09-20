@@ -200,13 +200,20 @@ export function ImportScreen() {
   const [parseError, setParseError] = useState<ImportParseError | null>(null);
   const [emptyFile, setEmptyFile] = useState(false);
   const headingRef = useRef<HTMLDivElement>(null);
+  const hasMountedRef = useRef(false);
 
   const type = importType(typeId);
   const isLegacy = type.legacy === true;
 
-  // Moving between steps should move the keyboard too.
+  // Moving between steps should move the keyboard too — but not on the very
+  // first mount, where focus() would scroll the fresh page under its own
+  // title before the owner has done anything (F-LC-5).
   useEffect(() => {
-    headingRef.current?.focus();
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    headingRef.current?.focus({ preventScroll: true });
   }, [step]);
 
   const reset = useCallback(() => {
