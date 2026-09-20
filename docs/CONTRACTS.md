@@ -203,6 +203,13 @@ Vocabulary: the DB always says `deals` and `stages`. Labels come from
 `settings.vocabulary` (`"deals" | "jobs" | "quotes"`), read through `useVocabulary()` in
 `src/app/vocabulary.ts`, which returns `{ one: "Deal", many: "Deals" }` etc.
 
+**Vocabulary (CPO pass, 2026-09-20).** `src/lib/vocabulary.ts` holds the pure table:
+`VocabularyKey`, `Vocabulary`, `DEFAULT_VOCABULARY` and `vocabularyFor(key)`. It imports
+nothing, so `src/db` may use it: a repository pairs it with `settings.get("vocabulary")`
+so a validation message says the owner's word for a deal. `src/app/vocabulary.ts` adds
+the React reads, `useVocabulary()` and `readVocabulary()`, and re-exports the pure table
+so existing imports are unaffected.
+
 ## Feature module contract
 
 ```ts
