@@ -160,6 +160,7 @@ export function RuleDialog(props: {
               autoFocus
               value={title}
               placeholder="Spring cleanup"
+              invalid={Boolean(error) && title.trim().length === 0}
               onChange={(event) => setTitle(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -203,7 +204,12 @@ export function RuleDialog(props: {
                 min={1}
                 max={120}
                 value={everyN}
-                invalid={!everyValid}
+                // Bound to a save attempt, not to every keystroke: clearing
+                // the field to type a new number would otherwise flash the
+                // danger border before the owner has finished typing, which
+                // is a different (and worse) timing than every other field in
+                // this dialog uses (rule 3, validation timing).
+                invalid={Boolean(error) && !everyValid}
                 onChange={(event) => setEveryN(event.target.value)}
               />
             </Field>

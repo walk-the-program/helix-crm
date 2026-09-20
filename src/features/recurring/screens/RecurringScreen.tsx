@@ -113,6 +113,14 @@ export function RecurringScreen() {
             }
           />
         ) : (
+          // At 1024px - the app's own documented minimum width - six columns
+          // of real dates, names and three text actions do not fit inside
+          // 1100px without either truncating a customer's name or clipping
+          // Edit/Pause/Delete off the edge of the window with no way back to
+          // them. This scrolls the table horizontally instead of losing the
+          // actions; nothing above 1024px notices, because the table already
+          // fits there.
+          <div className="overflow-x-auto">
           <Table>
             <THead>
               <TR>
@@ -215,6 +223,7 @@ export function RecurringScreen() {
               </TR>
             </TFoot>
           </Table>
+          </div>
         )}
       </div>
 
