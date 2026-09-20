@@ -3403,3 +3403,76 @@ Walker changed his mind on the body face. Headings stay Zilla Slab.
   succeeds with no `poppins` string in the output and `lato-400.woff2` preloaded,
   and the regenerated `design/ui-screens/gallery.css` / `gallery.html` carry Lato,
   not Poppins.
+
+## 2026-09-19 — UI fixes: macOS title bar, a filled window, and the font switch
+
+Walker reviewed the running app in dark mode and asked for five things. All
+five are in, plus the font switch they turned into.
+
+- **The macOS title bar is integrated.** `titleBarStyle: "Overlay"` with
+  `hiddenTitle` in `src-tauri/tauri.conf.json` — both are macOS-only keys that
+  Tauri ignores elsewhere, so the Windows window keeps its native bar and the
+  config stays in one file. The web view now starts at the very top of the
+  window. `applyPlatform()` (`src/app/appSettings.ts`, called from `boot()`)
+  puts `data-platform="macos"` on `<html>` from the user agent; the sidebar's
+  brand slot pays `--titlebar-inset` (38px) under that attribute so the lockup
+  clears the traffic lights, and the toolbar and that same slot carry
+  `data-tauri-drag-region`, which is what makes the window drag and
+  double-click-zoom. The e2e harness is Chromium on a Mac with no Tauri under
+  it, so `isMacOS()` returns false whenever `VITE_E2E` is set and every
+  screenshot stays comparable to the ones before this change.
+- **The shell fills the window.** `html`, `body` and `#root` are all 100% tall,
+  so the shell's `h-full` is a definite viewport height instead of "as tall as
+  the content". `<main>` is the only scroller. Before this, a short screen left
+  the sidebar and the canvas stopping at the content's own height with the bare
+  window showing underneath — obvious in dark mode — and a long screen scrolled
+  the body, dragging the chrome off the top with it. Checked at 1280×900 and
+  1280×1400, light and dark, on Today, a contact page and Settings.
+- **Nothing clips in a dialog.** The workspace switcher's row was a raw
+  `<button>`, and a bare button comes out of the webview with
+  `white-space: pre`, which nothing reset for plain text: the backup line
+  refused to wrap, stretched the row past the panel, and pushed the check mark
+  and "Open" off the edge. `whitespace-normal` plus `min-w-0` and `truncate`
+  on both lines fixes it, and the name now carries a `title` like every other
+  row in the app. `DialogContent`'s scroll box also takes `overflow-x: hidden`
+  as a backstop. Every `DialogContent` call site was read; the only other one
+  at risk is `MergeDialog.tsx:170`, whose `grid-cols-[9rem_1fr_1fr]` should be
+  `minmax(0,1fr)` tracks — left for the data feature's owner.
+- **The sticker shadow is an outline.** `--shadow-sticker` was a solid 4px slab
+  of accent yellow; it is now two layered hard shadows — `--sticker-gap` inset
+  1.5px painted over `--sticker-outline` at full size — so what shows is a
+  1.5px ring with the surface visible through a 2.5px gap. `--sticker-outline`
+  is the brand neutral the canvas is not (#FAFAFF dark, #4E555A light), and
+  `--sticker-gap` defaults to `--color-bg` with the sidebar setting its own,
+  because the lockup stands on the sidebar rather than the canvas. It applies
+  everywhere the token was already used: the lockup, Today's first-run button,
+  the deal page's money block, the import file picker. No accent-yellow fill
+  is left on a button or a control anywhere; badges keep their pastel tints.
+  Screenshots in `design/brand/sticker-outline/`.
+- **Date and time inputs take the app's ink.** `input[type=date|time]` and the
+  nine WebKit `::-webkit-datetime-edit-*` pseudo-elements are styled in
+  `globals.css`, with the faint ink for an empty field, the disabled ink for a
+  disabled one, a filtered calendar indicator, and `color-scheme` following
+  `[data-theme]` so the native picker popup — the one thing CSS cannot reach —
+  is dark in dark mode. No more UA blue in a near-black window.
+- **Fonts are a switch.** `src/styles/fonts.css` is new and declares every
+  family the app ships — Zilla Slab, DM Sans, Lato, Poppins — each under its
+  own `--family-*` name. Which two the app wears is two lines at the top of
+  `tokens.css` under a `FONT SWITCH` banner. Headings moved to **DM Sans**,
+  body stays Lato. `--tracking-title` went from -0.01em to **-0.02em**, because
+  a geometric sans opens up at the display and heading steps where a slab did
+  not; headings stay at 700. The `index.html` preloads are derived from the
+  switch (dm-sans-700, lato-400) and say so. Poppins was re-added at 400/500/700
+  after the Lato pass removed it, so all four families are switchable. Nothing
+  outside `fonts.css` names a family any more, in code or in a comment.
+
+**Verified:** `npm run typecheck` clean, `npm test` green (1,441 passed, 1
+skipped), `npx vite build` succeeds, and the full macOS e2e suite on port 4202
+is green at 72 passed — the one failure, `revenue.e2e.ts`, is the revenue
+agent's own in-flight spec and untracked. `cargo build` (debug) validates the
+Tauri config. The debug app was **not** launched: `tauri dev` runs under the
+same bundle identifier as the installed app and would open against Walker's
+real workspace folder. Screenshots at 1280 in light and dark — Today empty and
+populated, Tasks, a contact page, Settings, the workspace switcher (including a
+name long enough to truncate) and onboarding screen 1 — are in
+`design/brand/uifix/`.
