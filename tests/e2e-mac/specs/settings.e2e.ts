@@ -319,6 +319,41 @@ test("theme and density set the html attributes and reach helix.json", async ({ 
   await expect(html).toHaveAttribute("data-density", "comfortable");
 });
 
+/**
+ * Round 3, criterion 6: the toolbar button is now a plain Light/Dark toggle
+ * with no Auto stop, and Auto moved to being a named choice here instead. This
+ * is the other half of that contract - the settings radio must still work,
+ * exactly as it did before the toolbar button changed underneath it.
+ */
+test("choosing Auto in Settings still sets the theme and follows the resolved appearance", async ({
+  page,
+  helix,
+}) => {
+  void helix; // requesting the fixture installs the e2e shim - see test 1's comment
+  await bootApp(page);
+  await openSection(page, "appearance");
+  await expect(page.getByTestId("settings-appearance")).toBeVisible();
+
+  const html = page.locator("html");
+
+  await page.getByTestId("theme-auto").click();
+  // helix.json says "auto" - not resolved to "light" or "dark" - because Auto
+  // is a real, named state, and the next launch has to know to keep following
+  // the OS rather than being frozen at whatever it resolved to today. The
+  // write is async (persistTheme awaits a file write) and the resolved value
+  // here is the SAME "light" the registry already held, so the `data-theme`
+  // attribute never changes and cannot be used to wait for it the way the
+  // dark/light round below can - poll the file directly instead.
+  await expect.poll(async () => (await readRegistryFile(page)).theme).toBe("auto");
+  // With no dark OS preference in this environment, Auto resolves to light.
+  await expect(html).toHaveAttribute("data-theme", "light");
+
+  // And it is still a real radio: picking Dark afterwards moves off Auto.
+  await page.getByTestId("theme-dark").click();
+  await expect(html).toHaveAttribute("data-theme", "dark");
+  await expect.poll(async () => (await readRegistryFile(page)).theme).toBe("dark");
+});
+
 /* -------------------------------------------------------------------------- */
 /* 4. Tags                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -615,4 +650,48 @@ test("captures every settings screen in both themes", async ({ page, helix }) =>
   await expect(page.getByTestId("workspace-picker")).toBeVisible();
   await shoot("workspace-switcher", false);
   await page.keyboard.press("Escape");
+});
+
+/* -------------------------------------------------------------------------- */
+/* 11. The sidebar footer shows the live workspace name (round 3, criterion 8) */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `Shell.tsx`'s footer used to print the boot-time `workspace.name` prop and
+ * nothing after that: renaming the workspace here wrote helix.json, redrew
+ * this screen, and left the footer saying the old name until the next
+ * relaunch. `subscribeToRegistry` (src/app/appSettings.ts) is the fix - every
+ * `writeRegistry` publishes the new registry to any listener, and the footer
+ * subscribes - so this asserts the footer moves WITHOUT a reload.
+ *
+ * The rename control exists (`workspace-name-input` / `workspace-name-save`
+ * on WorkspaceScreen), so this drives it directly rather than falling back to
+ * creating a second workspace.
+ */
+test("renaming the workspace updates the sidebar footer immediately, with no reload", async ({
+  page,
+  helix,
+}) => {
+  void helix; // requesting the fixture installs the e2e shim - see test 1's comment
+  await bootApp(page);
+
+  const footer = page.getByTestId("workspace-footer");
+  // The seeded name from fixtures.ts's registry, not the settings table's own
+  // "My business" default - the footer reads the registry entry, and the two
+  // are allowed to disagree until a save ties them together.
+  await expect(footer).toHaveText("E2E Workspace");
+
+  await openSection(page, "workspace");
+  await expect(page.getByTestId("settings-workspace")).toBeVisible();
+
+  const newName = `Fitzgerald & Daughters ${Date.now()}`;
+  await page.getByTestId("workspace-name-input").fill(newName);
+  await page.getByTestId("workspace-name-save").click();
+
+  // No reload, no navigation away and back - just the write landing.
+  await expect(footer).toHaveText(newName);
+
+  const registry = await readRegistryFile(page);
+  const openEntry = registry.workspaces.find((w) => w.id === registry.lastOpened);
+  expect(openEntry?.name).toBe(newName);
 });

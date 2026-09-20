@@ -32,7 +32,7 @@
  * `window.__TAURI_INTERNALS__` with nothing behind it — "Cannot read
  * properties of undefined (reading 'invoke')" and the boot error screen.
  */
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 import Database from "better-sqlite3";
 import { mkdtempSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { dirname } from "node:path";
@@ -759,5 +759,71 @@ export const test = base.extend<{
     rmSync(root, { recursive: true, force: true });
   },
 });
+
+// ---------------------------------------------------------------------------
+// Round-3 additions: proving a reload against real state, not just the seed
+// ---------------------------------------------------------------------------
+
+/**
+ * Merge `patch` into the registry the e2e fs shim will hand the app on its
+ * NEXT navigation — the coming `page.goto` or a later `page.reload` — without
+ * touching the `helix` fixture's own seed (still "light"/"comfortable"/one
+ * workspace) for every other test in every other spec.
+ *
+ * Call this BEFORE the first `page.goto("/")` to make the app boot as though
+ * helix.json already held `patch` (e.g. `{ theme: "auto" }`) — the shape a
+ * spec needs when it is proving what boot does with a value the fixture does
+ * not seed, rather than what a write during the test does (which
+ * `readRegistryFile`-style helpers already prove by reading the file back).
+ *
+ * Registered as one more `page.addInitScript`, which Playwright always runs
+ * in the order scripts were added. The `helix` fixture's own
+ * `addInitScript(installShim, seed)` was added first (in fixture setup, which
+ * runs before the test body), so by the time this one runs,
+ * `window.__helixE2E` already exists — this is always the last word on what
+ * `window.__helixE2E.files["…/helix.json"]` contains when the app's first
+ * line of boot code reads it. The merge is shallow: a top-level key in
+ * `patch` (`theme`, `density`, `lastOpened`, …) replaces the seeded one
+ * outright, which is enough for every scalar field on `HelixRegistry`.
+ */
+export async function seedRegistryPatch(page: Page, patch: Record<string, unknown>): Promise<void> {
+  await page.addInitScript((patchArg: Record<string, unknown>) => {
+    const w = window as unknown as { __helixE2E?: { files: Record<string, string> } };
+    const state = w.__helixE2E;
+    if (!state) return;
+    const key = Object.keys(state.files).find((k) => k.endsWith("helix.json"));
+    if (!key) return;
+    const current = JSON.parse(state.files[key]) as Record<string, unknown>;
+    state.files[key] = JSON.stringify({ ...current, ...patchArg });
+  }, patch);
+}
+
+/**
+ * Reload the page while carrying forward whatever the e2e fs shim currently
+ * holds, so a reload can prove an owner's own change survives a relaunch
+ * instead of falling back to the `helix` fixture's original seed.
+ *
+ * Every navigation — a reload included — reruns `installShim` with the seed
+ * object captured once, at fixture setup, which is exactly what lets
+ * `settings.e2e.ts`'s theme test prove "boot reads helix.json and applies
+ * what it finds" against the seeded light/comfortable value and nothing the
+ * test itself wrote (see the comment on that test). A spec that instead needs
+ * to prove a WRITE the test made survives a reload captures the current
+ * in-memory files map first and re-injects it as one more `addInitScript`,
+ * registered after the fixture's own and so run after it on every subsequent
+ * navigation (Playwright preserves registration order), overwriting the
+ * shim's fresh copy with what this page actually wrote right before the
+ * reload takes effect.
+ */
+export async function reloadWithCurrentFiles(page: Page): Promise<void> {
+  const files = await page.evaluate(
+    () => (window as unknown as { __helixE2E: { files: Record<string, string> } }).__helixE2E.files,
+  );
+  await page.addInitScript((snapshot: Record<string, string>) => {
+    const w = window as unknown as { __helixE2E?: { files: Record<string, string> } };
+    if (w.__helixE2E) Object.assign(w.__helixE2E.files, snapshot);
+  }, files);
+  await page.reload();
+}
 
 export { expect };
