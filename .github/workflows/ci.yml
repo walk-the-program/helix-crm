@@ -25,6 +25,15 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+      # LR-SEC measured production (non-dev) advisories at zero (sec.md §7.1).
+      # --omit=dev keeps that true without forcing a semver-major downgrade of
+      # drizzle-kit over the esbuild dev-server advisory that only affects
+      # `npm run` migration tooling and never ships (sec.md F-SEC-36). This is
+      # a read-only npm registry query already implied by `npm ci` above; no
+      # new tool, no cost, free on a public repo.
+      - name: npm audit (production dependencies only)
+        run: npm audit --omit=dev --audit-level=high
+
   # Ubuntu is deliberately excluded from this matrix: Tauri's Linux build
   # depends on system packages (webkit2gtk, libappindicator, etc.) that are
   # not installed in this project's CI setup yet, so `cargo test` would fail
@@ -48,3 +57,29 @@ jobs:
       - name: cargo test
         working-directory: src-tauri
         run: cargo test
+
+  # `cargo audit` is not installed on any of our machines and nobody has run
+  # it against src-tauri's dependency tree (sec.md §7.2: LR-SEC explicitly
+  # left this to CI rather than installing tooling locally). rustsec/audit-check
+  # wraps cargo-audit and runs it against src-tauri/Cargo.lock. Pinned to the
+  # `v2` major-version ref (github.com/rustsec/audit-check, branch v2, matches
+  # release v2.0.0), same convention as actions/checkout@v4 elsewhere in this
+  # repo. On a push/pull_request trigger (not `schedule`) the action only
+  # fails the check for a new advisory; it does not open GitHub issues -
+  # issue creation is a scheduled-run-only behavior we are not using, so no
+  # `issues:` permission is requested. `checks: write` is the one permission
+  # the action needs, to publish its pass/fail check; nothing else is
+  # granted. Free for a public repo: one more job on the existing runners,
+  # no artifacts, no third-party service.
+  rust-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: src-tauri
