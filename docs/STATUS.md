@@ -4121,3 +4121,72 @@ than a second copy of that form. Both leads reached for one in the same round;
 the catalog's is the one that survived, because the deal page's services panel
 opens the same form and a service created from an invoice line has to be the
 same catalog row either way.
+
+## 2026-09-19 — Round 3, records and deals (R3-L4)
+
+The records side of Walker's feedback: the pickers, the dates, the deal page's
+money and services, the timeline, and stages.
+
+### Pickers (criterion 4)
+
+`Pickers.tsx` is the choke point, so contact and company became `Combobox` over
+new repository search helpers in one place and every caller got it at once —
+new deal, quick add, the deal page, the contact page, and the invoices lead's
+New document. Walker's actual complaint was that the contact list ran off the
+bottom of a short window; the popover is viewport-aware and the owner types
+instead of scrolling. Typing a name nothing matches offers `Add "…"`, which
+creates the record and selects it without leaving the form. Picking a contact
+fills the company beside it; on the deal page both go in one write, so the pair
+is never briefly inconsistent and one undo puts both back.
+
+Stage and source stayed `Select`. Both are short, fixed, workspace-level lists
+where seeing every option at once is the point, and a stage list is an ordered
+thing the owner arranged rather than something to search.
+
+`contacts.search`, `companies.search` and `products.search` find candidates two
+ways — FTS5 over `search_docs`, which knows every phone, email and note, and a
+column LIKE, which still works on a database whose index is missing or behind —
+then rank in JS, because relevance here is not bm25: typing "pri" should find
+Priya Raman before the contact whose notes say "priority".
+
+### Dates, money, timeline
+
+No native date or time input survives under records, catalog, recurring,
+templates or today. `InlineDate` is the date twin of `InlineText`, so the
+autosave and the Saved indicator behave the same.
+
+The deal page, contact page and company page read every figure from
+`src/db/repos/money.ts`. Nothing re-derives money from lines or documents. A
+contact's strip is that person's own money, not their company's: two contacts
+at one company must not each appear to be worth the company's whole history.
+
+The timeline is the record's history now. `tasks.create`, `tasks.complete` and
+`attachments.create` write their system entry in the same transaction as the
+change, so a task cannot exist without the line saying it was added. Three
+suites counted every activity on a record and started seeing those entries;
+each was narrowed to the entry it was actually about rather than loosened.
+
+### Closing a deal
+
+Winning or losing is a dated, confirmed event: the stage picker and a board
+drag both open `StageMoveDialog`, which asks when it happened and why when it
+is lost, and writes nothing until Confirm. Moving between open stages still
+applies immediately — that is a working gesture, not a decision. "Expected
+date" became "Expected close"; a closed deal shows "Won on" / "Lost on" from
+`closed_at` instead, since that date is set by the move and should not be
+editable in two places.
+
+### Picked up from another owner
+
+`documents.syncCustomerFromDeal` now has its caller in `deals.update`, after
+the write commits. Its own test used to prove the sync by calling it after a
+`deals.update`; that now returns 0 because the update already did it, so the
+test arranges the drift directly — a row written before the deal_id rule, or
+restored from a backup — which is the only way it can still happen.
+
+### For the kit owner
+
+The Create contact dialog's spacing is fixed in the three record dialogs by
+stepping the gap above the footer one size past the gap between two fields, and
+an e2e assertion measures it rather than trusting the token. The rule belongs
+in `DialogFooter` so every dialog in the product gets it, not only these three.
