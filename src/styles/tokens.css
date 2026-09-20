@@ -291,6 +291,18 @@
   --color-text-muted: #5C6368;
   --color-text-faint: #646B71;
 
+  /* Ink for paper, and the one token the dark theme deliberately does not
+     redefine.
+
+     Every other ink above flips to near-white under [data-theme="dark"], and
+     the print stylesheet has no theme reset — so an owner printing his round
+     sheet while the app is in dark mode would get white text on white paper.
+     globals.css used a literal `color: black` to dodge that, which was the
+     only colour value left outside this file (CPO finding F-LC-17). This is
+     that value, named, and it stays this value in both themes because paper
+     is white in both. */
+  --color-print-ink:  #141414;
+
   /* The one grey that carries no information: a disabled glyph, a scrollbar
      thumb, a placeholder. Never text the owner has to read.
      #8B9196 on #FFFFFF ............ 3.19:1  (non-text only)                  */

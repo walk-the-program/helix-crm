@@ -571,7 +571,11 @@ td:focus-visible,
   html, body {
     min-width: 0;
     background: none;
-    color: black;
+    /* Not var(--color-text): that flips to near-white in the dark theme and
+       this block has no theme reset, so printing from a dark window would
+       give white on white. --color-print-ink is the one ink the dark theme
+       deliberately leaves alone (tokens.css). */
+    color: var(--color-print-ink);
   }
 
   [data-print-hide],
