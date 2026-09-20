@@ -35,6 +35,8 @@ export function statusLabel(status: string): string {
       return "Draft";
     case "sent":
       return "Sent";
+    case "partial":
+      return "Partially paid";
     case "paid":
       return "Paid";
     case "void":
@@ -52,7 +54,9 @@ export function statusLabel(status: string): string {
  * The tint a status pill wears. Only two states carry a semantic colour -
  * paid (success) and declined (danger) - because those are the two the owner
  * reads as an outcome. Everything else is neutral: a sent invoice is the
- * normal state of an invoice, not an alarm.
+ * normal state of an invoice, not an alarm, and neither is a partly paid one -
+ * it is still owed, which is exactly what "sent" already means (DESIGN.md §5:
+ * only an outcome carries a colour).
  */
 export function statusTone(status: string): BadgeTone {
   if (status === "paid" || status === "accepted") return "success";
@@ -69,11 +73,20 @@ export function daysOverdue(dueOn: string | null, reference: string = todayLocal
   return Math.round((now.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
 }
 
+/**
+ * A `partial` invoice is owed exactly the way a `sent` one is - a deposit
+ * does not make the balance any less overdue - so it takes the same test.
+ */
 export function isOverdue(
   document: { status: string; kind: string; dueOn: string | null },
   reference: string = todayLocal(),
 ): boolean {
-  if (document.kind !== "invoice" || document.status !== "sent") return false;
+  if (
+    document.kind !== "invoice" ||
+    (document.status !== "sent" && document.status !== "partial")
+  ) {
+    return false;
+  }
   return daysOverdue(document.dueOn, reference) > 0;
 }
 
@@ -94,13 +107,17 @@ export function intervalLabel(kind: string, interval: string | null): string {
 }
 
 export type OutstandingSummary = {
-  /** Invoices that are sent and not yet paid. */
+  /** Invoices that are sent and not yet paid - `sent` and `partial` both. */
   sentCount: number;
+  /** The balance left on those invoices, not their totals - a deposit already
+   *  landed is not still outstanding (LR-PX-A addition 9). */
   outstandingCents: number;
   overdueCount: number;
   /** The worst one, for the sentence. */
   worstOverdueDays: number;
   draftCount: number;
+  /** How many of `sentCount` are only partly paid. */
+  partialCount: number;
 };
 
 /**
@@ -120,6 +137,11 @@ export function summarySentence(
   if (summary.sentCount > 0) {
     parts.push(`${summary.sentCount} unpaid`);
     parts.push(`${formatMoney(summary.outstandingCents, currency, locale)} outstanding`);
+  }
+  if (summary.partialCount === 1) {
+    parts.push("1 part paid");
+  } else if (summary.partialCount > 1) {
+    parts.push(`${summary.partialCount} part paid`);
   }
   if (summary.overdueCount === 1 && summary.worstOverdueDays > 0) {
     parts.push(
@@ -222,6 +244,79 @@ export function agingCsv(
       ["Total owed", aging.totalCount, centsToDecimalString(aging.totalCents)],
     ],
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* LR-PX-A / W2: payments                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "$500.00 of $1,200.00" - the raw fraction, with no verb of its own, so one
+ * function produces it wherever a screen needs to say "Paid $X of $Y" or
+ * "Collected $X of $Y". The verb belongs to the caller: a label already sitting
+ * above the figure (`MoneyStrip`'s "Collected") or a word at the front of a
+ * sentence (`PaymentsCard`'s "Paid ...").
+ */
+export function paidOfLabel(
+  paidCents: number,
+  totalCents: number,
+  currency?: string,
+  locale?: string,
+): string {
+  return `${formatMoney(paidCents, currency, locale)} of ${formatMoney(totalCents, currency, locale)}`;
+}
+
+/** "$700.00 still owed", or "Paid in full" once nothing is left. */
+export function balanceLabel(balanceCents: number, currency?: string, locale?: string): string {
+  if (balanceCents <= 0) return "Paid in full";
+  return `${formatMoney(balanceCents, currency, locale)} still owed`;
+}
+
+/**
+ * Why a document cannot take a NEW payment right now, or null when it can.
+ * Spells out the same two rules `payments.assertTakesPayments` enforces
+ * (draft, void), in the words a screen shows instead of the error a repository
+ * throws, so a draft or void invoice can say why in one sentence rather than
+ * offering a button that will be refused.
+ */
+export function paymentsBlockedReason(document: {
+  kind: string;
+  status: string;
+  number: string;
+}): string | null {
+  if (document.kind !== "invoice") return `${document.number} is a quote, not an invoice.`;
+  if (document.status === "draft") {
+    return `${document.number} is still a draft. Send it before recording a payment.`;
+  }
+  if (document.status === "void") {
+    return `${document.number} is void, so there is nothing to pay.`;
+  }
+  return null;
+}
+
+/**
+ * The "Has a balance" filter's own rule (task 4): an invoice with something
+ * still owed. A quote never has one - a quote is not a bill - and neither
+ * does an invoice this page has not read a balance for yet, which reads as
+ * "nothing owed" rather than crashing the filter.
+ */
+export function hasBalance(kind: string, balanceCents: number | undefined | null): boolean {
+  if (kind !== "invoice") return false;
+  return (balanceCents ?? 0) > 0;
+}
+
+/**
+ * The running balance after each payment, oldest first - what the Payments
+ * card's own column shows. Pure so the arithmetic is unit tested without a
+ * database: `total` less the sum of every payment up to and including this
+ * one.
+ */
+export function paymentsRunningBalance(totalCents: number, amountsCents: number[]): number[] {
+  let paid = 0;
+  return amountsCents.map((amount) => {
+    paid += amount;
+    return totalCents - paid;
+  });
 }
 
 /**

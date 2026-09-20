@@ -23,6 +23,7 @@
  * dropdown.
  */
 import { canTransition } from "@/db/repos/documents";
+import { ValidationError } from "@/db/errors";
 import { statusLabel } from "@/features/invoices/lib/format";
 
 /** Every separately-spinnable thing the document page does. */
@@ -75,4 +76,18 @@ export function statusChoices(kind: string, status: string): StatusChoice[] {
 /** A settled document has nowhere left to go by hand. */
 export function statusIsFixed(kind: string, status: string): boolean {
   return statusChoices(kind, status).length <= 1;
+}
+
+/**
+ * The message a `ValidationError` from `payments.create` / `payments.update`
+ * carries for one field, so a dialog can put the repository's own words on
+ * the control that is actually wrong - "put the per-field message on the
+ * field" (LR-PX-A packet, task 3) - rather than one generic sentence at the
+ * top of the form. `DealInvoicesPanel.resolveErrorMessage` is the sibling of
+ * this for a single top-level message; this is the per-field half of the same
+ * pattern.
+ */
+export function fieldIssue(err: unknown, path: string): string | undefined {
+  if (!(err instanceof ValidationError)) return undefined;
+  return err.issues.find((issue) => issue.path === path)?.message;
 }

@@ -25,6 +25,7 @@ import { Plus } from "@/ui/icons";
 import {
   Badge,
   Button,
+  Checkbox,
   EmptyState,
   Input,
   PageHeader,
@@ -44,11 +45,16 @@ import type { Document } from "@/db/repos/documents";
 import { useFormats } from "@/app/formats";
 import { useVocabulary } from "@/app/vocabulary";
 import { HelpLink } from "@/features/help";
-import { useDocuments, useOutstandingSummary } from "@/features/invoices/lib/hooks";
+import {
+  useDocuments,
+  useInvoiceBalances,
+  useOutstandingSummary,
+} from "@/features/invoices/lib/hooks";
 import {
   customerLabel,
   dueLabel,
   hasAnyDocuments as computeHasAnyDocuments,
+  hasBalance,
   isOverdue,
   statusLabel,
   statusTone,
@@ -64,12 +70,14 @@ const EMPTY_SUMMARY = {
   overdueCount: 0,
   worstOverdueDays: 0,
   draftCount: 0,
+  partialCount: 0,
 };
 
 export function InvoicesScreen() {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<TabId>("unpaid");
   const [search, setSearch] = useState("");
+  const [hasBalanceOnly, setHasBalanceOnly] = useState(false);
 
   const formats = useFormats();
   const vocabulary = useVocabulary();
@@ -85,7 +93,27 @@ export function InvoicesScreen() {
   const byTab: Record<TabId, ReturnType<typeof useDocuments>> = { unpaid, paid, quotes, all };
   const active = byTab[tab];
   const rows = useMemo(() => sortDocuments(active.data?.rows ?? []), [active.data]);
-  const filtered = Boolean(searchFilter);
+
+  // One query for the page of rows, not one per row (packet, task 4).
+  const invoiceIds = useMemo(
+    () => rows.filter((row) => row.kind === "invoice").map((row) => row.id),
+    [rows],
+  );
+  const { data: balances } = useInvoiceBalances(invoiceIds);
+
+  // "Has a balance": a sent or partly paid invoice with something still owed.
+  // A draft has no balance worth the name (it has not been billed yet) and a
+  // paid or void one is zero, so both fall out of this filter on their own.
+  const visibleRows = useMemo(() => {
+    if (!hasBalanceOnly) return rows;
+    return rows.filter((row) => hasBalance(row.kind, balances?.get(row.id)?.balanceCents));
+  }, [rows, hasBalanceOnly, balances]);
+
+  const filtered = Boolean(searchFilter) || hasBalanceOnly;
+  const clearFilters = () => {
+    setSearch("");
+    setHasBalanceOnly(false);
+  };
 
   // Every kind and every status counts here - a draft, a quote and a voided
   // invoice all mean "this workspace has raised a document before" just as
@@ -138,30 +166,41 @@ export function InvoicesScreen() {
           <TabsTrigger value="all">{tabLabel("All", all.data?.total)}</TabsTrigger>
         </TabsList>
 
-        <div className="max-w-[360px] py-[var(--space-4)]">
-          <label htmlFor="invoice-search" className="sr-only">
-            Search invoices
+        <div className="flex flex-wrap items-center gap-[var(--space-4)] py-[var(--space-4)]">
+          <div className="max-w-[360px] flex-1">
+            <label htmlFor="invoice-search" className="sr-only">
+              Search invoices
+            </label>
+            <Input
+              id="invoice-search"
+              search
+              value={search}
+              placeholder="Number, customer or company"
+              aria-label="Search invoices"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <label className="inline-flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            <Checkbox
+              checked={hasBalanceOnly}
+              onCheckedChange={setHasBalanceOnly}
+              aria-label="Has a balance"
+            />
+            Has a balance
           </label>
-          <Input
-            id="invoice-search"
-            search
-            value={search}
-            placeholder="Number, customer or company"
-            aria-label="Search invoices"
-            onChange={(event) => setSearch(event.target.value)}
-          />
         </div>
 
         <TabsContent value="unpaid">
           <DocumentTable
-            rows={rows}
+            rows={visibleRows}
+            balances={balances}
             // Waits on the unfiltered document count too, so this tab never
             // shows "nothing outstanding" (true only once invoices exist)
             // before it has actually confirmed whether any do.
             isLoading={unpaid.isLoading || totalDocuments === undefined}
             summable
             filtered={filtered}
-            onClearSearch={() => setSearch("")}
+            onClearSearch={clearFilters}
             empty={
               <EmptyState
                 {...unpaidEmptyCopy(hasAnyDocuments, vocabulary.lower)}
@@ -179,11 +218,12 @@ export function InvoicesScreen() {
 
         <TabsContent value="paid">
           <DocumentTable
-            rows={rows}
+            rows={visibleRows}
+            balances={balances}
             isLoading={paid.isLoading}
             summable
             filtered={filtered}
-            onClearSearch={() => setSearch("")}
+            onClearSearch={clearFilters}
             empty={
               <EmptyState
                 title="No paid invoices yet"
@@ -200,11 +240,12 @@ export function InvoicesScreen() {
 
         <TabsContent value="quotes">
           <DocumentTable
-            rows={rows}
+            rows={visibleRows}
+            balances={balances}
             isLoading={quotes.isLoading}
             summable
             filtered={filtered}
-            onClearSearch={() => setSearch("")}
+            onClearSearch={clearFilters}
             empty={
               <EmptyState
                 title="No quotes yet"
@@ -226,11 +267,12 @@ export function InvoicesScreen() {
 
         <TabsContent value="all">
           <DocumentTable
-            rows={rows}
+            rows={visibleRows}
+            balances={balances}
             isLoading={all.isLoading}
             summable={false}
             filtered={filtered}
-            onClearSearch={() => setSearch("")}
+            onClearSearch={clearFilters}
             empty={
               <EmptyState
                 title="No invoices yet"
@@ -280,6 +322,9 @@ function sortDocuments(rows: Document[]): Document[] {
 
 function DocumentTable(props: {
   rows: Document[];
+  /** One query's worth of balances for these rows (packet, task 4) - a quote
+   *  row has none and shows a dash. */
+  balances?: Map<string, { balanceCents: number }>;
   isLoading: boolean;
   filtered: boolean;
   onClearSearch: () => void;
@@ -294,7 +339,7 @@ function DocumentTable(props: {
    */
   summable: boolean;
 }) {
-  const { rows, isLoading, filtered, onClearSearch, empty, summable } = props;
+  const { rows, balances, isLoading, filtered, onClearSearch, empty, summable } = props;
   const formats = useFormats();
 
   if (isLoading) {
@@ -309,11 +354,11 @@ function DocumentTable(props: {
     if (filtered) {
       return (
         <EmptyState
-          title="Nothing matches that search"
-          description="Clear the search to see this list again."
+          title="Nothing matches those filters"
+          description="Clear the search and the balance filter to see this list again."
           action={
             <Button variant="secondary" onClick={onClearSearch}>
-              Clear search
+              Clear filters
             </Button>
           }
         />
@@ -323,6 +368,9 @@ function DocumentTable(props: {
   }
 
   const totalCents = rows.reduce((sum, row) => sum + row.totalCents, 0);
+  const balanceOf = (row: Document): number | null =>
+    row.kind === "invoice" ? (balances?.get(row.id)?.balanceCents ?? row.totalCents) : null;
+  const balanceTotalCents = rows.reduce((sum, row) => sum + (balanceOf(row) ?? 0), 0);
 
   return (
     <Table>
@@ -333,17 +381,19 @@ function DocumentTable(props: {
               table (rule 1). Status gives up the width it does not need -
               a badge word ("Sent", "Paid") never needed 12% - and Number
               takes it. */}
-          <TH className="w-[22%] min-w-[132px]">Number</TH>
-          <TH className="w-[26%]">Customer</TH>
-          <TH className="w-[9%]">Status</TH>
-          <TH className="w-[11%]">Issued</TH>
-          <TH className="w-[16%]">Due</TH>
-          <TH className="w-[16%]" align="right">Amount</TH>
+          <TH className="w-[20%] min-w-[132px]">Number</TH>
+          <TH className="w-[22%]">Customer</TH>
+          <TH className="w-[8%]">Status</TH>
+          <TH className="w-[10%]">Issued</TH>
+          <TH className="w-[14%]">Due</TH>
+          <TH className="w-[13%]" align="right">Amount</TH>
+          <TH className="w-[13%]" align="right">Balance</TH>
         </TR>
       </THead>
       <TBody>
         {rows.map((row) => {
           const overdue = isOverdue(row);
+          const balanceCents = balanceOf(row);
           return (
             <TR key={row.id}>
               <TD primary>
@@ -373,6 +423,9 @@ function DocumentTable(props: {
               <TD align="right" className="money">
                 {formats.money(row.totalCents)}
               </TD>
+              <TD align="right" dashZero={balanceCents === null || balanceCents === 0} className="money">
+                {balanceCents === null ? "—" : formats.moneyOrDash(balanceCents)}
+              </TD>
             </TR>
           );
         })}
@@ -386,6 +439,9 @@ function DocumentTable(props: {
           </TD>
           <TD align="right" className="money">
             {summable ? formats.money(totalCents) : null}
+          </TD>
+          <TD align="right" className="money" dashZero={!summable || balanceTotalCents === 0}>
+            {summable ? formats.moneyOrDash(balanceTotalCents) : null}
           </TD>
         </TR>
       </TFoot>

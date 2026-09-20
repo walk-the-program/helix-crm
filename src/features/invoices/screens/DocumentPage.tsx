@@ -35,7 +35,7 @@ import {
   toast,
 } from "@/ui";
 import { canTransition, get as getDocument } from "@/db/repos/documents";
-import { normalizeMethod } from "@/db/repos/payments";
+import { methodLabel as paymentMethodLabel } from "@/db/repos/payments";
 import { useFormats } from "@/app/formats";
 import {
   customerLabel,
@@ -70,19 +70,7 @@ import {
   statusIsFixed,
   type BusyState,
 } from "@/features/invoices/lib/documentActions";
-import { MarkPaidDialog, PAYMENT_METHODS } from "@/features/invoices/components/MarkPaidDialog";
-
-/**
- * The words the owner picked, not the value the row stores.
- *
- * "Paid Sep 20, 2026 · bank" is the database talking. He chose "Bank
- * transfer" from a list of five and that is what the page should read back to
- * him. An unknown value (an import, an older build) prints as it is rather
- * than disappearing.
- */
-function paymentMethodLabel(value: string): string {
-  return PAYMENT_METHODS.find((method) => method.value === value)?.label ?? value;
-}
+import { PaymentsCard } from "@/features/invoices/components/PaymentsCard";
 
 /**
  * A label/value row. `CardRow` is a bare flex row with a hairline under it, so
@@ -121,7 +109,6 @@ export function DocumentPage() {
     setNotes(null);
   }, [id]);
 
-  const [paying, setPaying] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -230,6 +217,27 @@ export function DocumentPage() {
     }
   }
 
+  /**
+   * "Mark paid": record a payment for whatever is left, dated today, one
+   * click and no dialog (LR-PX-A packet, task 3). The dialog that used to sit
+   * behind this button (`MarkPaidDialog`) is gone - a payment now records
+   * itself with a real date and method through Payments' own "Record
+   * payment", and the one-click action is for the nine times out of ten the
+   * owner is just settling the balance right now.
+   */
+  async function onMarkPaid() {
+    if (!document) return;
+    setBusy("pay");
+    try {
+      await markPaid.mutateAsync({ id });
+      toast.success(`Marked ${document.number} paid.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "That did not save.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onAccept() {
     setBusy("accept");
     try {
@@ -260,7 +268,7 @@ export function DocumentPage() {
   async function onStatusPicked(next: string) {
     if (!document || next === document.status) return;
     if (next === "paid") {
-      setPaying(true);
+      await onMarkPaid();
       return;
     }
     if (next === "declined") {
@@ -273,10 +281,12 @@ export function DocumentPage() {
     }
     if (next !== "sent") return;
 
-    // Going back to "sent" from "paid" is an undo, not a send: it clears the
-    // payment rather than stamping a new sent date, and it is worth one
-    // confirmation because it moves money off the reports.
-    if (document.status === "paid") {
+    // Going back to "sent" from "paid" or "partial" is an undo, not a send:
+    // it clears every payment rather than stamping a new sent date, and it is
+    // worth one confirmation because it moves money off the reports. Without
+    // this a partly paid invoice offered "Sent" as a plain re-send, which
+    // would have called `send()` on a document that was never a draft.
+    if (document.status === "paid" || document.status === "partial") {
       setUnpaying(true);
       return;
     }
@@ -372,7 +382,12 @@ export function DocumentPage() {
               </>
             ) : null}
             {canPay ? (
-              <Button variant="secondary" disabled={anyBusy(busy)} onClick={() => setPaying(true)}>
+              <Button
+                variant="secondary"
+                loading={isBusy(busy, "pay")}
+                disabled={anyBusy(busy)}
+                onClick={() => void onMarkPaid()}
+              >
                 Mark paid
               </Button>
             ) : null}
@@ -519,6 +534,8 @@ export function DocumentPage() {
               </p>
             )}
           </div>
+
+          {!isQuote ? <PaymentsCard document={document} /> : null}
         </div>
 
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
@@ -591,24 +608,6 @@ export function DocumentPage() {
         </div>
       </div>
 
-      <MarkPaidDialog
-        open={paying}
-        onOpenChange={setPaying}
-        number={document.number}
-        totalCents={document.totalCents}
-        currency={formats.currency}
-        locale={formats.locale}
-        onConfirm={async (values) => {
-          await markPaid.mutateAsync({
-            id,
-            paidOn: values.paidOn,
-            method: normalizeMethod(values.method),
-            note: values.note,
-          });
-          toast.success(`Marked ${document.number} paid.`);
-        }}
-      />
-
       <ConfirmDialog
         open={voiding}
         onOpenChange={setVoiding}
@@ -648,7 +647,7 @@ export function DocumentPage() {
         open={unpaying}
         onOpenChange={setUnpaying}
         title={`Mark ${document.number} unpaid?`}
-        description="The payment comes off, and the invoice is owed again. It goes back on Receivables and out of what you have collected."
+        description="Every payment on it comes off, and the invoice is owed again in full. It goes back on Receivables and out of what you have collected. Remove one payment instead, in Payments below, to keep the rest."
         confirmLabel="Mark unpaid"
         destructive
         onConfirm={async () => {

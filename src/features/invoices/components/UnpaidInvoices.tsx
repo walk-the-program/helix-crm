@@ -37,7 +37,7 @@ import {
   useUnpaidInvoices,
   type UnpaidRow,
 } from "@/features/invoices/lib/hooks";
-import { customerLabel, dueLabel } from "@/features/invoices/lib/format";
+import { customerLabel, dueLabel, statusLabel } from "@/features/invoices/lib/format";
 
 function RowActions({ row }: { row: UnpaidRow }) {
   const [, navigate] = useLocation();
@@ -141,13 +141,22 @@ export function UnpaidInvoicesSection() {
             <Row
               key={row.document.id}
               badge={
-                <Badge tone="neutral">{dueLabel(row.document.dueOn)}</Badge>
+                <div className="flex items-center gap-[var(--space-1)]">
+                  <Badge tone="neutral">{dueLabel(row.document.dueOn)}</Badge>
+                  {/* A part-paid invoice still carries its balance as the
+                      row's money, so the neutral badge that already labels
+                      every other status here says which balance it is
+                      (LR-PX-A addition 9). */}
+                  {row.document.status === "partial" ? (
+                    <Badge tone="neutral">{statusLabel("partial")}</Badge>
+                  ) : null}
+                </div>
               }
               title={name}
               titleText={name}
               subtitle={subtitle}
               subtitleText={subtitle}
-              money={formats.money(row.document.totalCents)}
+              money={formats.money(row.balanceCents)}
               actions={<RowActions row={row} />}
             />
           );

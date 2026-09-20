@@ -15,7 +15,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/app/queryClient";
 import * as documents from "@/db/repos/documents";
 import * as payments from "@/db/repos/payments";
-import type { PaymentMethod } from "@/db/repos/payments";
+import type { PaymentMethod, PaymentPatch } from "@/db/repos/payments";
+// LR-PX-A contract: money.invoiceBalances(ids) / invoiceBalanceCents(id) land
+// with worker W1. Built against the exact signatures the packet specifies;
+// see this feature's return for status.
+import * as money from "@/db/repos/money";
 import * as deals from "@/db/repos/deals";
 import * as dealItems from "@/db/repos/dealItems";
 import * as pipelines from "@/db/repos/pipelines";
@@ -38,6 +42,8 @@ export const iqk = {
   customerDeals: (contactId: string | null, companyId: string | null) =>
     ["invoices", "customer-deals", contactId, companyId] as const,
   aging: () => ["invoices", "aging"] as const,
+  payments: (documentId: string) => ["invoices", "payments", documentId] as const,
+  balances: (documentIds: readonly string[]) => ["invoices", "balances", documentIds] as const,
 } as const;
 
 export function useInvalidateInvoices() {
@@ -104,30 +110,40 @@ export type UnpaidRow = {
   document: documents.Document;
   overdueDays: number;
   overdue: boolean;
+  /** The balance, not the total - a deposit already in does not count twice. */
+  balanceCents: number;
 };
 
 /**
- * What Today shows: sent invoices, overdue first and oldest first inside that,
- * then the ones due within the next seven days.
+ * What Today shows: sent (and partly paid) invoices, overdue first and oldest
+ * first inside that, then the ones due within the next seven days.
  *
  * A draft is deliberately not here. Today is what needs the owner now, and an
  * invoice he has not sent is not money anyone owes him yet - it is a job he
  * has not finished. It shows on /invoices under Unpaid, with the word "Draft"
  * on it, which is where that belongs.
+ *
+ * A partly paid invoice is exactly as much Today's business as a fully unpaid
+ * one - the balance is still owed - so this reads `unpaidOnly` (draft, sent,
+ * partial) and drops the draft rather than asking for `status: "sent"` alone,
+ * which used to leave a deposited invoice off Today entirely.
  */
 export function useUnpaidInvoices(dueWithinDays = 7) {
   return useQuery({
     queryKey: [...iqk.unpaid(), dueWithinDays] as const,
     queryFn: async (): Promise<UnpaidRow[]> => {
       const reference = todayLocal();
-      const { rows } = await documents.list(
-        { kind: "invoice", status: "sent" },
+      const { rows: allRows } = await documents.list(
+        { kind: "invoice", unpaidOnly: true },
         { limit: 200 },
       );
+      const rows = allRows.filter((row) => row.status !== "draft");
+      const balances = await money.invoiceBalances(rows.map((row) => row.id));
       return rows
         .map((document) => {
           const overdueDays = daysOverdue(document.dueOn, reference);
-          return { document, overdueDays, overdue: overdueDays > 0 };
+          const balanceCents = balances.get(document.id)?.balanceCents ?? document.totalCents;
+          return { document, overdueDays, overdue: overdueDays > 0, balanceCents };
         })
         .filter((row) => row.overdue || row.overdueDays >= -dueWithinDays)
         .sort((a, b) => {
@@ -138,7 +154,13 @@ export function useUnpaidInvoices(dueWithinDays = 7) {
   });
 }
 
-/** The one sentence at the top of the list and of Today's section. */
+/**
+ * The one sentence at the top of the list and of Today's section.
+ *
+ * `outstandingCents` is the sum of BALANCES, not totals (LR-PX-A packet
+ * addition 9): a $1,200 invoice with $500 against it leaves $700 outstanding,
+ * not $1,200. One query for the whole page of rows, not one per row.
+ */
 export function useOutstandingSummary() {
   return useQuery({
     queryKey: iqk.summary(),
@@ -148,19 +170,20 @@ export function useOutstandingSummary() {
         { kind: "invoice", unpaidOnly: true },
         { limit: 1000 },
       );
+      const billed = rows.filter((row) => row.status !== "draft");
+      const draftCount = rows.length - billed.length;
+      const balances = await money.invoiceBalances(billed.map((row) => row.id));
+
       let sentCount = 0;
       let outstandingCents = 0;
       let overdueCount = 0;
       let worstOverdueDays = 0;
-      let draftCount = 0;
+      let partialCount = 0;
 
-      for (const row of rows) {
-        if (row.status === "draft") {
-          draftCount += 1;
-          continue;
-        }
+      for (const row of billed) {
         sentCount += 1;
-        outstandingCents += row.totalCents;
+        if (row.status === "partial") partialCount += 1;
+        outstandingCents += balances.get(row.id)?.balanceCents ?? row.totalCents;
         const days = daysOverdue(row.dueOn, reference);
         if (days > 0) {
           overdueCount += 1;
@@ -168,8 +191,25 @@ export function useOutstandingSummary() {
         }
       }
 
-      return { sentCount, outstandingCents, overdueCount, worstOverdueDays, draftCount };
+      return {
+        sentCount,
+        outstandingCents,
+        overdueCount,
+        worstOverdueDays,
+        draftCount,
+        partialCount,
+      };
     },
+  });
+}
+
+/** The balances for a page of invoice rows, one query - for a list's Balance
+ *  column and its "Has a balance" filter. */
+export function useInvoiceBalances(documentIds: string[]) {
+  return useQuery({
+    queryKey: iqk.balances(documentIds),
+    queryFn: () => money.invoiceBalances(documentIds),
+    enabled: documentIds.length > 0,
   });
 }
 
@@ -493,6 +533,81 @@ export function useMarkPaid() {
         reference: input.reference ?? null,
         note: input.note ?? null,
       }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Oldest first, the way the Payments card reads them. */
+export function usePaymentsForDocument(documentId: string) {
+  return useQuery({
+    queryKey: iqk.payments(documentId),
+    queryFn: () => payments.listForDocument(documentId),
+    enabled: documentId.length > 0,
+  });
+}
+
+/**
+ * Every payment mutation invalidates the whole `["invoices"]` namespace
+ * (`useInvalidateInvoices`, which also covers Today and the deal panel) and
+ * the `["money"]` namespace too - the deal and customer money strips
+ * (`src/features/records/components/MoneyStrip.tsx`) read Collected and
+ * Outstanding from `src/db/repos/money.ts`'s own query keys, which sit outside
+ * the "invoices" prefix, and a payment is exactly the write that moves those
+ * two figures.
+ */
+function usePaymentInvalidation() {
+  const invalidate = useInvalidateInvoices();
+  const client = useQueryClient();
+  return () => {
+    invalidate();
+    void client.invalidateQueries({ queryKey: ["money"] });
+  };
+}
+
+/** Record a deposit or any other partial or full payment against an invoice. */
+export function useRecordPayment() {
+  const invalidate = usePaymentInvalidation();
+  return useMutation({
+    mutationFn: (input: {
+      documentId: string;
+      amountCents: number;
+      paidOn: string;
+      method: PaymentMethod;
+      reference: string | null;
+      note: string | null;
+    }) => payments.create(input),
+    onSuccess: invalidate,
+  });
+}
+
+/** Correct a payment already on the books: its amount, date, method or note. */
+export function useUpdatePayment() {
+  const invalidate = usePaymentInvalidation();
+  return useMutation({
+    mutationFn: (input: { id: string; patch: PaymentPatch }) =>
+      payments.update(input.id, input.patch),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Remove one payment (soft - the row is what the undo toast puts back with
+ * `useRestorePayment`, never `changeLog.undoBatch`: only the payments
+ * repository's own `restore` recomputes the invoice's status, LR-PX-A's
+ * decision for this feature).
+ */
+export function useRemovePayment() {
+  const invalidate = usePaymentInvalidation();
+  return useMutation({
+    mutationFn: (id: string) => payments.remove(id),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRestorePayment() {
+  const invalidate = usePaymentInvalidation();
+  return useMutation({
+    mutationFn: (id: string) => payments.restore(id),
     onSuccess: invalidate,
   });
 }

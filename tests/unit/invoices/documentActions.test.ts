@@ -10,11 +10,13 @@
 import { describe, expect, it } from "vitest";
 import {
   anyBusy,
+  fieldIssue,
   isBusy,
   statusChoices,
   statusIsFixed,
   type BusyState,
 } from "../../../src/features/invoices/lib/documentActions";
+import { ValidationError } from "../../../src/db/errors";
 
 describe("busy state", () => {
   it("is true only for the action that is running", () => {
@@ -86,5 +88,30 @@ describe("status choices", () => {
   it("does not call a movable document fixed", () => {
     expect(statusIsFixed("invoice", "draft")).toBe(false);
     expect(statusIsFixed("quote", "sent")).toBe(false);
+  });
+});
+
+describe("fieldIssue", () => {
+  it("finds the message for one field on a ValidationError - the overpayment refusal names the balance", () => {
+    const err = new ValidationError("$700.00 is left on INV-1, so $800.00 is more than the balance.", [
+      { path: "amountCents", message: "Record $700.00 or less, or split it across the invoices it covers." },
+    ]);
+    expect(fieldIssue(err, "amountCents")).toBe(
+      "Record $700.00 or less, or split it across the invoices it covers.",
+    );
+  });
+
+  it("is undefined when that field has no issue", () => {
+    const err = new ValidationError("Some of those details need fixing.", [
+      { path: "paidOn", message: "A payment cannot be dated in the future." },
+    ]);
+    expect(fieldIssue(err, "amountCents")).toBeUndefined();
+    expect(fieldIssue(err, "paidOn")).toBe("A payment cannot be dated in the future.");
+  });
+
+  it("is undefined for anything that is not a ValidationError", () => {
+    expect(fieldIssue(new Error("boom"), "amountCents")).toBeUndefined();
+    expect(fieldIssue("boom", "amountCents")).toBeUndefined();
+    expect(fieldIssue(null, "amountCents")).toBeUndefined();
   });
 });
