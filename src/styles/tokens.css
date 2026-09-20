@@ -15,7 +15,9 @@
      "Flat fills only. Tints are the primary mixed into the neutral at 8% or
       less."
      "Anything under 4.5:1 is reserved for large type and graphic shapes."
-     Headings Zilla Slab, body Poppins.
+     Headings Zilla Slab, body Lato (the guide's original body face was
+     overridden on 2026-09-20 at Walker's request; see docs/DESIGN.md
+     "Superseded" and CHANGELOG.md).
      Marks: hard edges with an offset sticker shadow in the accent colour.
      Radius 0 for controls, cards, panels and full-bleed blocks.
 
@@ -57,7 +59,7 @@
   --shadow-sticker: 4px 4px 0 var(--brand-accent);
 
   /* --- Type ---------------------------------------------------------------
-     Headings in Zilla Slab, body in Poppins, both self-hosted as woff2 in
+     Headings in Zilla Slab, body in Lato, both self-hosted as woff2 in
      public/fonts and declared in globals.css. The app is offline; there is no
      CDN and no network font.
 
@@ -65,11 +67,11 @@
      humanist sans would change the page's voice rather than just its shape.  */
   --font-heading: "Zilla Slab", Georgia, "Times New Roman", "Noto Serif", serif;
   --font-body:
-    "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Lato", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
     "Segoe UI", system-ui, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
 
   /* --font-sans is the contract name the whole kit already reaches for; it is
-     the body face. Nothing in src/ui needs to change to pick up Poppins.     */
+     the body face. Nothing in src/ui needs to change to pick up Lato.        */
   --font-sans: var(--font-body);
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,

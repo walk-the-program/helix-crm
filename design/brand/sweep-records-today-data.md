@@ -37,7 +37,7 @@ face and the heading ink.
 
 **Captions.** The two list column strips (contacts, companies), the stage
 manager's column header row and the search dialog's group label now use the
-`.section-label` class from `globals.css`: Poppins, the 11px caption step,
+`.section-label` class from `globals.css`: Lato, the 11px caption step,
 tracked out, uppercase. They used to hand-roll `--text-label`.
 
 **Voice.** Three passes over every string in the three features. The copy was
@@ -150,5 +150,5 @@ name without restructuring the save path.
 - `npm test` — 799 tests, 64 files, green.
 - `records.e2e.ts`, `today.e2e.ts`, `data.e2e.ts` on port 4194 — 26 passed.
 - `npx vite build --outDir dist-brand-a` succeeds.
-- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|rounded-|font-family|Poppins|Zilla"`
+- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|rounded-|font-family|Lato|Zilla"`
   over the three features returns only `font-[family-name:var(...)]` utilities.

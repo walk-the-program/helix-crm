@@ -235,7 +235,7 @@ Components in `src/ui/` use only tokens; feature code uses only `src/ui/` compon
 `tokens.css`.
 
 Minimum window width 1024 px, design target 1280. Body text 15 px comfortable / 13 px
-compact. Two self-hosted webfonts, and no third: Zilla Slab for headings, Poppins for body
+compact. Two self-hosted webfonts, and no third: Zilla Slab for headings, Lato for body
 (`public/fonts/*.woff2`, latin subset, OFL 1.1, declared in `globals.css`, no CDN because
 the app is offline). Tabular numbers on money and counts.
 
@@ -303,7 +303,7 @@ and `--shadow-sticker`. Nothing was renamed. What the mapping now means:
 - **`--shadow-md` / `--shadow-lg` are a hairline with no blur.** `--shadow-sticker` is not
   part of that ramp: it belongs to the `Brand` lockup and at most one hero element per
   screen.
-- **`--font-sans` is `--font-body`**, so every existing component picks up Poppins with no
+- **`--font-sans` is `--font-body`**, so every existing component picks up Lato with no
   edit. Headings opt in to `--font-heading`.
 
 Themes: `:root` is light, `[data-theme="dark"]` overrides colours,

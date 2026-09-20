@@ -7,14 +7,19 @@
 @import "./tokens.css";
 
 /* --- Fonts ----------------------------------------------------------------
-   Zilla Slab for headings, Poppins for body: the brand guide's two faces,
-   self-hosted from public/fonts as woff2, latin subset. The app runs offline
-   and ships as a Tauri bundle, so there is no CDN, no Google Fonts link and
-   no network request at first paint - the files sit next to index.html and
-   are served from /fonts/.
+   Zilla Slab for headings, Lato for body: self-hosted from public/fonts as
+   woff2, latin subset. The app runs offline and ships as a Tauri bundle, so
+   there is no CDN, no Google Fonts link and no network request at first
+   paint - the files sit next to index.html and are served from /fonts/.
 
    Both families are SIL Open Font License 1.1; the licence texts live beside
    the files in public/fonts/.
+
+   Lato ships here at 400 and 700 (plus 400 italic), not the five weights
+   Google Fonts offers, so there is no real 500 or 600 face. font-medium and
+   font-semibold utilities are remapped in app.css to the nearest real face
+   (400 and 700) rather than asking the browser to pick a weight with no
+   matching @font-face.
 
    font-display: swap, so a cold start paints in the fallback rather than
    holding the first frame blank. The fallbacks in --font-heading are serifs
@@ -22,7 +27,8 @@
    voice, a slab swapping out of Georgia only changes its shape.
 
    index.html preloads the two faces the first screen actually uses - Zilla
-   Slab 700 and Poppins 400 - and the other three are fetched on demand.     */
+   Slab 700 and Lato 400 - and the other two (Zilla 600, Lato 700) are fetched
+   on demand. Lato 400 italic is fetched only where italic text appears.      */
 
 @font-face {
   font-family: "Zilla Slab";
@@ -47,33 +53,33 @@
 }
 
 @font-face {
-  font-family: "Poppins";
+  font-family: "Lato";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("/fonts/poppins-400.woff2") format("woff2");
+  src: url("/fonts/lato-400.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
     U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
     U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "Poppins";
+  font-family: "Lato";
   font-style: normal;
-  font-weight: 500;
+  font-weight: 700;
   font-display: swap;
-  src: url("/fonts/poppins-500.woff2") format("woff2");
+  src: url("/fonts/lato-700.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
     U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
     U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "Poppins";
-  font-style: normal;
-  font-weight: 600;
+  font-family: "Lato";
+  font-style: italic;
+  font-weight: 400;
   font-display: swap;
-  src: url("/fonts/poppins-600.woff2") format("woff2");
+  src: url("/fonts/lato-400italic.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
     U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
     U+2212, U+2215, U+FEFF, U+FFFD;
@@ -170,13 +176,15 @@ h4, h5, h6 {
 }
 
 /* The only all-caps type in the product: the grouped-list section header and
-   the table column header. The guide's caption step, in Poppins, tracked out.
-   Never longer than three words. */
+   the table column header. The guide's caption step, in Lato, tracked out.
+   Never longer than three words. Lato has no real 600 face here, so this is
+   700 (mapped from the guide's 600) rather than a weight the browser would
+   have to fake. */
 .section-label,
 [data-section-label] {
   font-family: var(--font-body);
   font-size: var(--text-caption);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--leading-caption);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -199,8 +207,10 @@ small {
   font-size: var(--text-sm);
 }
 
+/* 700, not 600: b/strong inherit the Lato body face, and Lato ships here at
+   400 and 700 only (see the Fonts comment above). */
 b, strong {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* A link is the interactive blue and is not underlined until it is hovered:
@@ -276,7 +286,8 @@ table {
 
 th {
   text-align: left;
-  font-weight: 600;
+  /* 700, not 600: see the Fonts comment above - Lato has no real 600 face. */
+  font-weight: 700;
 }
 
 /* --- Numbers --------------------------------------------------------------

@@ -3375,3 +3375,31 @@ The green run drives the whole first-run flow against a real WebView2 — trade
 tile, "Use this setup", "Start empty" — and then asserts the three original smoke
 assertions: 3 passing in 2.8s, with `Helix 0.1.0 starting` in the app's own log.
 This is the first time the setup flow has been proved on Windows.
+
+---
+
+## 2026-09-20 — Body font: Poppins to Lato
+
+Walker changed his mind on the body face. Headings stay Zilla Slab.
+
+- **Fonts.** Replaced the three self-hosted Poppins weights with `lato-400.woff2`,
+  `lato-700.woff2`, and `lato-400italic.woff2` (latin subset, OFL 1.1) in
+  `public/fonts/`; deleted the Poppins woff2 files and `Poppins-OFL.txt`, added
+  `Lato-OFL.txt`. `globals.css`'s `@font-face` blocks and `index.html`'s preload
+  now point at Lato; `tokens.css`'s `--font-body` is `"Lato", …`.
+- **Weight mapping.** Lato ships at 400 and 700 only, not the 400/500/600 Poppins
+  had. `src/styles/app.css` overrides Tailwind's `--font-weight-medium` (500 → 400)
+  and `--font-weight-semibold` (600 → 700), so every existing `font-medium` /
+  `font-semibold` utility renders a real face instead of a browser-synthesised
+  weight. `globals.css`'s literal `font-weight: 600` rules that inherit the body
+  face (`.section-label`, `b`/`strong`, `th`) moved to 700 for the same reason.
+  `font-synthesis-weight: none` still holds.
+- **Docs.** `docs/DESIGN.md` §4 and its Superseded note, `docs/CONTRACTS.md`,
+  `CHANGELOG.md`, `public/fonts/README.md`, and the `design/brand/*.md` sweep
+  records updated to say Lato. `assets/brand/guide/helix-crm-brand-guide.html`
+  is untouched — it is Walker's original brand guide document and still shows
+  Poppins, which is now a historical record rather than the shipped choice.
+- **Verified:** `npm run typecheck` and `npm test` green, `npx vite build`
+  succeeds with no `poppins` string in the output and `lato-400.woff2` preloaded,
+  and the regenerated `design/ui-screens/gallery.css` / `gallery.html` carry Lato,
+  not Poppins.

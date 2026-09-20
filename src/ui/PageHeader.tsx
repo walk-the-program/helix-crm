@@ -8,7 +8,7 @@ import { headingFont } from "@/ui/styles";
  *
  * It truncates with a title attribute rather than wrapping — a 47-character
  * company name is the normal case, not the exception — and the breadcrumb and
- * subtitle stay in Poppins, so the slab is doing one job in one place.
+ * subtitle stay in Lato, so the slab is doing one job in one place.
  *
  * No bottom hairline. The toolbar above it already draws one, and a second
  * rule 24px below the first is the kind of detail that makes a window look

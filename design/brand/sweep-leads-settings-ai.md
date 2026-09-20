@@ -20,7 +20,7 @@ Scope swept: `src/features/leads/**`, `src/features/settings/**`,
    is gone from the three feature folders. Bar caps are square. Tag swatches are
    squares. The accent appears only where the kit puts it.
 3. **The guide's type.** Zilla Slab through `--font-heading` on the one heading
-   this scope sets by hand; Poppins through `--font-body` everywhere else,
+   this scope sets by hand; Lato through `--font-body` everywhere else,
    including inside the SVG charts; captions and table headers at the caption
    step (11px comfortable, 10px compact). Helper text stays at `--text-xs`,
    which is where `docs/DESIGN.md` r3's scale table puts it.
@@ -198,8 +198,9 @@ of the brand guide.
    250ms to land. The leads spec already did this, which is why its captures
    were right and the other two were not. Same bug, same white fields, in the
    pre-brand captures under `.cache/screens/sweep-settings/`.
-3. **"Sonnet 5 (recommended)" truncated in the model pop-up.** Poppins is wider
-   than the old system face, and the label ran past the `w-56` control column.
+3. **"Sonnet 5 (recommended)" truncated in the model pop-up.** The brand body
+   face was wider than the old system face, and the label ran past the `w-56`
+   control column.
    The parenthetical was doing no work — Sonnet is the default value, and the
    footnote under the group already explains the tradeoff — so the label is now
    "Sonnet 5" and the note starts "The default."
@@ -232,7 +233,7 @@ of the brand guide.
   — 30 passed.
 - `npx vite build --outDir dist-brand-b` — succeeded; the folder was deleted
   afterwards.
-- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|rounded-|font-family|Poppins|Zilla" src/features/leads src/features/settings src/features/ai`
+- `grep -rnE "#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(|rounded-|font-family|Lato|Zilla" src/features/leads src/features/settings src/features/ai`
   — no matches. The only font utilities in the three folders are
   `font-[family-name:var(--font-heading)]` and
   `font-[family-name:var(--font-mono)]`.

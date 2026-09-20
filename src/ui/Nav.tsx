@@ -8,21 +8,39 @@ import { focusRing, quietTransition, sectionLabel } from "@/ui/styles";
  * right edge, and nothing else. It never collapses, it never carries a
  * shadow, and it is the only chrome that is not white.
  *
- * The brand slot at the top has room under it for the lockup's accent sticker
+ * The brand slot at the top has room under it for the lockup's offset sticker
  * shadow, which overhangs the mark by 4px and would otherwise be clipped by
  * the first nav group.
+ *
+ * On macOS the window runs an integrated title bar, so the web view starts at
+ * the very top of the window and the traffic lights sit over this slot. The
+ * slot carries `data-titlebar-inset`, and globals.css pays the 38px under
+ * `[data-platform="macos"]` — the lockup lands below the lights, and nothing
+ * on Windows moves. `dragRegion` makes the same slot a place you can pick the
+ * window up by, which is what a native app does with the space beside its
+ * traffic lights.
  */
-export function Sidebar(props: { children: ReactNode; brand?: ReactNode; footer?: ReactNode }) {
+export function Sidebar(props: {
+  children: ReactNode;
+  brand?: ReactNode;
+  footer?: ReactNode;
+  /** macOS: let the window be dragged (and zoomed on a double-click) by the brand slot. */
+  dragRegion?: boolean;
+}) {
   return (
     <aside
       aria-label="Sidebar"
       className={[
-        "flex h-full w-[var(--sidebar-w)] flex-none flex-col",
+        "flex h-full min-h-0 w-[var(--sidebar-w)] flex-none flex-col",
         "border-r border-[var(--color-border)] bg-[var(--color-sidebar)]",
       ].join(" ")}
     >
       {props.brand ? (
-        <div className="flex flex-none items-center px-[var(--space-2)] pb-[var(--space-2)] pt-[var(--space-4)]">
+        <div
+          data-titlebar-inset=""
+          data-tauri-drag-region={props.dragRegion ? "" : undefined}
+          className="flex flex-none items-center px-[var(--space-2)] pb-[var(--space-2)] pt-[var(--space-4)]"
+        >
           {props.brand}
         </div>
       ) : null}
@@ -42,7 +60,7 @@ export function Sidebar(props: { children: ReactNode; brand?: ReactNode; footer?
  * A group of nav rows under an optional label.
  *
  * The label is the section-label style — the guide's 11px caption step in
- * Poppins, uppercase, tracked 0.05em, tertiary ink — which is how a native
+ * Lato, uppercase, tracked 0.05em, tertiary ink — which is how a native
  * sidebar names a group. It is the only place in the product where type is set
  * in capitals, and it is never longer than three words.
  */
@@ -137,10 +155,22 @@ export function NavItem(props: {
  * The toolbar: 48px (44 compact), white, one hairline along the bottom, and it
  * holds three things — where you are, search, and quick add. Nothing else is
  * ever added to it, and nothing in it is coloured.
+ *
+ * With `dragRegion` the bar itself is how you move the window on macOS, and a
+ * double-click on it zooms, which is the platform convention. Tauri only reads
+ * the attribute off the element the pointer actually landed on, so the search
+ * field and the buttons inside stay clickable.
  */
-export function Topbar(props: { children?: ReactNode; left?: ReactNode; right?: ReactNode }) {
+export function Topbar(props: {
+  children?: ReactNode;
+  left?: ReactNode;
+  right?: ReactNode;
+  /** macOS: let the window be dragged (and zoomed on a double-click) by the bar. */
+  dragRegion?: boolean;
+}) {
   return (
     <div
+      data-tauri-drag-region={props.dragRegion ? "" : undefined}
       className={[
         "flex h-[var(--topbar-h)] w-full flex-none items-center justify-between",
         "border-b border-[var(--color-border)] bg-[var(--color-surface)]",

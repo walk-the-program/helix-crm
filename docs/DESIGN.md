@@ -30,7 +30,7 @@ The two things together:
   40px rows, weight and position doing the hierarchy work, no gradient, no
   card shadow, no icon in a coloured circle, no illustration, a real dark
   mode, and a compact density that is a setting rather than the design.
-- **From the brand guide**: Zilla Slab headings against Poppins body, a
+- **From the brand guide**: Zilla Slab headings against Lato body, a
   #FAFAFF canvas, corners at zero, the primary `#97B1C3` used once per view as
   a single confident block, the accent `#EDF0A3` as a detail and never a
   background, and the mark wearing a hard offset sticker shadow.
@@ -115,14 +115,17 @@ not change the job. It gives the tool a face.
 ## 4. Typography
 
 Two faces, both self-hosted, both OFL 1.1: **Zilla Slab** for headings and
-**Poppins** for everything else. They live in `public/fonts` as latin-subset
+**Lato** for everything else. They live in `public/fonts` as latin-subset
 woff2, are declared in `globals.css` with `font-display: swap`, and the two
 faces the first frame needs are preloaded from `index.html`. The app is
 offline; there is no CDN and no network font request, ever.
 
-Zilla Slab ships at 600 and 700 only, and Poppins at 400, 500 and 600, so
-nothing in the product can ask for a weight the browser would have to
-synthesise. `font-synthesis-weight: none` keeps that honest.
+Zilla Slab ships at 600 and 700, and Lato at 400 and 700 (plus 400 italic), so
+neither face has a real 500 or 600. Rather than let the browser synthesise a
+weight it doesn't have, `font-synthesis-weight: none` disables that, and
+`--font-weight-medium` / `--font-weight-semibold` are remapped in `app.css` to
+the nearest real weight — 400 and 700 — so Tailwind's `font-medium` and
+`font-semibold` utilities render an actual face instead of a faked one.
 
 The guide's scale, verbatim:
 
@@ -156,7 +159,7 @@ Rules:
   `DialogTitle`, `EmptyState` title and the `Brand` wordmark are
   `--font-heading` in `--color-heading` (#141414 light, #FAFAFF dark) tracked
   -0.01em. Nothing else is.
-- **Everything else is Poppins.** `--font-sans` resolves to `--font-body`, so
+- **Everything else is Lato.** `--font-sans` resolves to `--font-body`, so
   the whole kit picked it up without an edit.
 - **Two leadings.** Prose — a paragraph, a description, an empty state — takes
   `--leading-body` (1.65), which is what the guide specifies. Rows and
@@ -528,7 +531,7 @@ code comments and alt text.
 - Separate things with a hairline and with space.
 - Spend the primary once per view, and know where you spent it.
 - Put the thing that needs the owner at the top, in full ink.
-- Set every title in the slab and everything else in Poppins.
+- Set every title in the slab and everything else in Lato.
 - Use the caption style for the label above a group, sentence case elsewhere.
 - Keep one size down a column and let weight carry the hierarchy.
 - Wrap every bare glyph in a `--control-h-sm` hit target.
@@ -557,6 +560,11 @@ code comments and alt text.
 - No hard-coded px height or font size in a component: it breaks compact.
 
 ## 13. Superseded
+
+Body font changed from Poppins (brand guide) to Lato on 2026-09-20 at
+Walker's request. Everything the brand guide and revision 3 say about
+Poppins below is what shipped at the time; the current body face is Lato,
+declared exactly where Poppins was — see §4 above and `src/styles/tokens.css`.
 
 **Revision 2 (superseded, 2026-09-19).** Revision 2 was the Apple-like native
 direction: a warm `#FBFBFA` canvas, the platform's own system font stack with

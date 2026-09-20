@@ -90,7 +90,7 @@ copy — and `--leading-normal` (1.5) stays on rows and controls.
 - Floating layers (dialog, menu, popover, tooltip, palette) are lifted by a
   second hairline with no blur, so nothing casts a grey haze over the content
   it covers.
-- The table header is the caption step in Poppins; the selected table row is
+- The table header is the caption step in Lato; the selected table row is
   the quiet tint, not the block.
 
 ## Evidence
@@ -110,12 +110,12 @@ Raw output: `contrast-light-comfortable.json`, `contrast-light-compact.json`,
 **Fonts — self-hosted, offline, actually rendering.** Loaded from the *built*
 app (`vite build`, served statically), not just from the gallery:
 
-- Requested: `/fonts/zilla-slab-700.woff2` and `/fonts/poppins-400.woff2` (both
-  preloaded from `index.html`), then `/fonts/poppins-500.woff2` on demand. No
+- Requested: `/fonts/zilla-slab-700.woff2` and `/fonts/lato-400.woff2` (both
+  preloaded from `index.html`), then `/fonts/lato-700.woff2` on demand. No
   request to any host.
 - `document.fonts.check('700 32px "Zilla Slab"')` returns `true` — the slab is
   rendering, not silently falling back to Georgia.
-- Computed `font-family` on `body` is `Poppins, …`; on a heading it is
+- Computed `font-family` on `body` is `Lato, …`; on a heading it is
   `"Zilla Slab", Georgia, …`.
 - Computed `background-color` on `body` is `rgb(250, 250, 255)` — the brand's
   neutral light.

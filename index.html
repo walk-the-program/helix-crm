@@ -5,10 +5,11 @@
     <link rel="icon" type="image/png" href="/helix-logo.png" />
     <!--
       The two faces the first frame actually sets: the Zilla Slab the lockup
-      and the page title are in, and the Poppins regular everything else is in.
+      and the page title are in, and the Lato regular everything else is in.
       Self-hosted in public/fonts; the app is offline, so there is no CDN and
-      these are the only font requests the window ever makes. The other three
-      weights (Zilla 600, Poppins 500/600) load on demand.
+      these are the only font requests the window ever makes. The other two
+      weights (Zilla 600, Lato 700) load on demand, and Lato 400 italic loads
+      only where italic text appears.
     -->
     <link
       rel="preload"
@@ -19,7 +20,7 @@
     />
     <link
       rel="preload"
-      href="/fonts/poppins-400.woff2"
+      href="/fonts/lato-400.woff2"
       as="font"
       type="font/woff2"
       crossorigin

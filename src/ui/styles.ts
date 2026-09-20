@@ -37,7 +37,7 @@ export const pressScale =
   "active:scale-[var(--press-scale)] motion-reduce:active:scale-100";
 
 /** The one uppercase type in the product: the brand guide's caption step
- *  (11px / 1.4) in Poppins, tracked out, in tertiary ink. It labels a group of
+ *  (11px / 1.4) in Lato, tracked out, in tertiary ink. It labels a group of
  *  rows or a table column, never a paragraph (docs/DESIGN.md section 4). */
 export const sectionLabel = [
   "font-[family-name:var(--font-body)]",

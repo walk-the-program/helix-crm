@@ -16,6 +16,22 @@
 @import "./globals.css" layer(base);
 
 /* ---------------------------------------------------------------------------
+ * Font-weight remap: Lato ships in public/fonts at 400 and 700 only (see
+ * globals.css's Fonts comment and docs/DESIGN.md §4) — there is no real 500
+ * or 600 face. Tailwind's default theme still points `font-medium` at 500
+ * and `font-semibold` at 600, which src/ui and every feature reach for
+ * throughout the kit, so overriding the two theme variables here (rather
+ * than hunting down every `font-medium`/`font-semibold` call site) makes
+ * both utilities render an actual shipped face — 400 and 700 — instead of
+ * asking the browser to fake a weight with no matching @font-face.
+ * ------------------------------------------------------------------------ */
+
+@theme {
+  --font-weight-medium: 400;
+  --font-weight-semibold: 700;
+}
+
+/* ---------------------------------------------------------------------------
  * Token aliases.
  *
  * Tailwind 4's colour namespace is `--color-*`, which is exactly what
