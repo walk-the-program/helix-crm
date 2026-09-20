@@ -15,7 +15,10 @@
 //!   plaintext_is_detected_and_migrated  rows, FTS and the set-aside copy
 //!   the_migration_keeps_fts_working     FTS5 survives sqlcipher_export
 //!   a_backup_is_encrypted_and_opens     VACUUM INTO writes ciphertext
+//!   no_file_in_the_workspace_folder_...  the WAL too, searched for a name
+//!   reopening_removes_the_plaintext_copy the set-aside original does not stay
 //!   the_wrong_key_is_refused_clearly    DB_OPEN_FAILED, in plain words
+//!   a_lost_keychain_entry_is_reported   and no replacement key is minted
 //!   ten_thousand_inserts_in_one_batch   the cost of the cipher, measured
 //! ```
 
@@ -408,6 +411,61 @@ fn the_migration_keeps_fts_working() {
 // ---------------------------------------------------------------------------
 // 4. backups are encrypted too
 // ---------------------------------------------------------------------------
+
+/// Every file the workspace folder holds while the app is running, searched for
+/// a customer's name in the clear.
+///
+/// The main file being ciphertext is the claim the product makes; it is not the
+/// whole claim. Between a write and a checkpoint the rows live in `helix.db-wal`,
+/// and a query that needs to sort can spill to a scratch file. The README tells
+/// an owner their customers' details are encrypted on disk, so the honest test
+/// is not "is the database encrypted" but "is the name anywhere on the disk in
+/// the clear", and the way to answer it is to go and look at the bytes.
+#[test]
+fn no_file_in_the_workspace_folder_holds_a_name_in_the_clear() {
+    let (_dir, path) = temp_workspace("018f-wal-plaintext");
+    let db = Db::new();
+    db.open(&path).expect("open");
+    db.execute(
+        "CREATE TABLE contacts (id INTEGER PRIMARY KEY, name TEXT, note TEXT)",
+        &[],
+    )
+    .expect("create");
+
+    // A name nothing else in the process would produce, so a hit is a real hit.
+    const NEEDLE: &str = "Wilhelmina Quatrefoil";
+    db.execute(
+        "INSERT INTO contacts (name, note) VALUES (?1, ?2)",
+        &[json!(NEEDLE), json!("owes us for the June job")],
+    )
+    .expect("insert");
+
+    // Deliberately NOT closed: close truncates the WAL, and the WAL is the
+    // point. This is the state a machine is in when the lid comes down.
+    let folder = path.parent().expect("the db has a parent");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(folder).expect("read the workspace folder").flatten() {
+        let file = entry.path();
+        if !file.is_file() {
+            continue;
+        }
+        let bytes = std::fs::read(&file).expect("read the file back");
+        assert!(
+            !bytes
+                .windows(NEEDLE.len())
+                .any(|w| w == NEEDLE.as_bytes()),
+            "{} holds the contact's name in the clear",
+            file.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 2,
+        "expected at least helix.db and helix.db-wal to be on disk, saw {checked}"
+    );
+
+    db.close().expect("close");
+}
 
 /// Contract: `VACUUM INTO` from a keyed connection writes an encrypted copy, and
 /// because the key belongs to the workspace rather than to a file, that copy
