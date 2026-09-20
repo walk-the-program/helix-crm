@@ -514,6 +514,208 @@ test.describe("polling", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* B2. the CPO-LB-IMPL-W1 audited findings                                    */
+/* -------------------------------------------------------------------------- */
+
+test.describe("audited findings (F-LB-1, F-LB-6, F-LB-8, F-LB-16, F-LB-17)", () => {
+  test("F-LB-1: a malformed page (leads not an array) is a failure, not a success", async ({
+    page,
+    helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await connectSite(page);
+    // connectSite's own boot tick already ran once against the fixture's
+    // empty default stub, so lead_sync's cursor is null here - the baseline
+    // this test proves the malformed page's cursor never overwrites.
+
+    // The fixture's leads_fetch stub returns `state.leads` verbatim
+    // (fixtures.ts), so this reaches the poller exactly as a broken site's
+    // JSON would.
+    await page.evaluate(() => {
+      (window as unknown as { __helixE2E: any }).__helixE2E.leads = {
+        leads: "not-an-array",
+        nextCursor: "cursor-the-site-sent",
+      };
+    });
+
+    await page.getByRole("button", { name: "Poll now" }).click();
+
+    // Never the success toasts: this is a rejected page, not zero new leads.
+    await expect(page.getByText("Checked your website. Nothing new.")).toHaveCount(0);
+    await expect(page.getByText(/new leads? came in/)).toHaveCount(0);
+    await expect(page.getByText(/has not been able to reach your website/i)).toBeVisible();
+
+    expect(Number(helix.bridge.query("SELECT count(*) FROM deals", [])[0][0])).toBe(0);
+    const sync = helix.bridge.query(
+      "SELECT cursor, last_error FROM lead_sync WHERE site_origin = ?",
+      [SITE_ORIGIN],
+    );
+    expect(sync).toHaveLength(1);
+    // The rejected page's cursor never landed: still null, not what the
+    // malformed page's nextCursor said.
+    expect(sync[0][0]).toBeNull();
+    expect(sync[0][1]).toBeTruthy();
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
+  test("F-LB-6: a rejected {code, message} object shows its real text, never [object Object]", async ({
+    page,
+    helix,
+  }) => {
+    await installLeadsErrorHook(page);
+    await connectSite(page);
+    await page.evaluate(() => {
+      (window as unknown as { __helixE2E: any }).__helixE2E.leadsError = {
+        code: "HTTP_STATUS",
+        message: "The website answered HTTP 401.",
+      };
+    });
+
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect(page.getByTestId("lead-poll-banner")).toBeVisible();
+
+    // "Last result" reads back the raw text `lead_sync.last_error` holds, the
+    // same way it would after the app restarted - re-navigate in-app (never
+    // page.goto, which would wipe the harness's keychain stub) to force that
+    // re-read through hydrateFromLeadSync.
+    await page.getByTestId("sidebar-nav").getByRole("link", { name: "Today" }).click();
+    await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
+    await page.getByTestId("sidebar-nav").getByRole("link", { name: "Settings" }).click();
+    await page.getByRole("link", { name: "Website connection" }).click();
+    await expect(page.getByRole("heading", { name: "Website", exact: true, level: 1 })).toBeVisible();
+
+    const lastResultRow = page.getByText("Last result", { exact: true }).locator("..");
+    await expect(lastResultRow).not.toContainText("[object Object]");
+    await expect(lastResultRow).toContainText(/HTTP 401/);
+
+    const lastError = String(
+      helix.bridge.query(
+        "SELECT last_error FROM lead_sync ORDER BY updated_at DESC LIMIT 1",
+        [],
+      )[0][0],
+    );
+    expect(lastError).toMatch(/^LeadPollAuthError/);
+    expect(lastError).not.toContain("[object Object]");
+    expect(lastError).toContain("The website answered HTTP 401.");
+  });
+
+  test("F-LB-8: two leads in one page sharing a real id create exactly one deal", async ({
+    page,
+    helix,
+  }) => {
+    await connectSite(page);
+    const sharedId = "shared-external-id";
+    await setLeadsStub(page, [
+      { ...LEAD_1, id: sharedId },
+      { ...LEAD_2, id: sharedId },
+    ]);
+
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect(page.getByText("1 new lead came in.")).toBeVisible();
+
+    const dealRows = helix.bridge.query(
+      "SELECT external_id FROM deals WHERE external_id = ?",
+      [`${SITE_ORIGIN}:${sharedId}`],
+    );
+    expect(dealRows).toHaveLength(1);
+    expect(Number(helix.bridge.query("SELECT count(*) FROM deals", [])[0][0])).toBe(1);
+  });
+
+  test("F-LB-16: a dedupe merge adds a new phone as secondary, never touching the one on file", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, first_name, last_name, company_id, address_json, source_id, notes, created_at, updated_at, deleted_at)
+       VALUES ('brand-b-existing', 'Priya', 'Existing', NULL, NULL, NULL, NULL, ?, ?, NULL)`,
+      [now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO contact_emails (id, contact_id, email_lower, label, is_primary, created_at, updated_at, deleted_at)
+       VALUES ('brand-b-email', 'brand-b-existing', 'priya@example.com', 'work', 1, ?, ?, NULL)`,
+      [now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO contact_phones (id, contact_id, raw, e164, label, is_primary, created_at, updated_at, deleted_at)
+       VALUES ('brand-b-phone', 'brand-b-existing', '801-555-9999', '+18015559999', 'mobile', 1, ?, ?, NULL)`,
+      [now, now],
+    );
+
+    await connectSite(page);
+    await setLeadsStub(page, [
+      { ...LEAD_1, id: "dedupe-lead", email: "priya@example.com", phone: "+18015551234" },
+    ]);
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect(page.getByText("1 new lead came in.")).toBeVisible();
+
+    const phones = helix.bridge
+      .query(
+        "SELECT raw, is_primary FROM contact_phones WHERE contact_id = 'brand-b-existing' AND deleted_at IS NULL ORDER BY is_primary DESC",
+        [],
+      )
+      .map((r) => ({ raw: String(r[0]), isPrimary: Number(r[1]) === 1 }));
+    expect(phones).toEqual([
+      { raw: "801-555-9999", isPrimary: true },
+      { raw: "+18015551234", isPrimary: false },
+    ]);
+  });
+
+  test("F-LB-17: a re-poll with corrected values writes one activity, then goes quiet again", async ({
+    page,
+    helix,
+  }) => {
+    await connectSite(page);
+    await setLeadsStub(page, [LEAD_1]);
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect(page.getByText("1 new lead came in.")).toBeVisible();
+
+    const dealId = String(
+      helix.bridge.query("SELECT id FROM deals WHERE external_id = ?", [
+        `${SITE_ORIGIN}:${LEAD_1.id}`,
+      ])[0][0],
+    );
+    const titleBefore = String(
+      helix.bridge.query("SELECT title FROM deals WHERE id = ?", [dealId])[0][0],
+    );
+
+    // Same external id, corrected service/message.
+    await setLeadsStub(page, [
+      { ...LEAD_1, service: "Full sprinkler replacement", message: "Every zone, not just one." },
+    ]);
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect(page.getByText("Checked your website. Nothing new.")).toBeVisible();
+
+    const titleAfter = String(
+      helix.bridge.query("SELECT title FROM deals WHERE id = ?", [dealId])[0][0],
+    );
+    expect(titleAfter).toBe(titleBefore); // the deal itself is untouched
+
+    const systemActivities = helix.bridge.query(
+      "SELECT body FROM activities WHERE deal_id = ? AND is_system = 1 ORDER BY occurred_at ASC",
+      [dealId],
+    );
+    expect(systemActivities).toHaveLength(2);
+    expect(String(systemActivities[1][0])).toContain("Your website sent an update to this lead.");
+    expect(String(systemActivities[1][0])).toContain("Full sprinkler replacement");
+
+    // Re-polling the SAME corrected values again writes nothing further.
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect(page.getByText("Checked your website. Nothing new.")).toBeVisible();
+    const afterSecondPoll = helix.bridge.query(
+      "SELECT count(*) FROM activities WHERE deal_id = ? AND is_system = 1",
+      [dealId],
+    );
+    expect(Number(afterSecondPoll[0][0])).toBe(2);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* C. reports                                                                 */
 /* -------------------------------------------------------------------------- */
 

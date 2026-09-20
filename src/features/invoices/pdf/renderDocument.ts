@@ -29,6 +29,7 @@ import {
   COLOR_NEUTRAL_LIGHT,
   COLOR_ON_PRIMARY,
   COLOR_PRIMARY,
+  CONTENT_BOTTOM_LIMIT,
   CONTENT_WIDTH,
   FOOTER_BASELINE_Y,
   HAIRLINE_THICKNESS,
@@ -40,11 +41,8 @@ import {
   ROW_HEIGHT,
   TABLE_HEADER_HEIGHT,
 } from "./brand";
-import { LINES_PER_PAGE } from "./brand";
 import { loadAssets } from "./assets";
 import type { DocumentAssets } from "./assets";
-
-export { LINES_PER_PAGE } from "./brand";
 
 export type RenderLine = {
   name: string;
@@ -73,11 +71,6 @@ export type RenderInput = {
   notes: string | null;
   paymentInstructions: string | null;
 };
-
-/** Number of pages a document with this many line items breaks across. Pure, for tests. */
-export function pageCountFor(lineCount: number): number {
-  return Math.max(1, Math.ceil(lineCount / LINES_PER_PAGE));
-}
 
 // ---------------------------------------------------------------------------
 // Text measurement helpers.
@@ -509,6 +502,23 @@ function drawTableHeader(page: PDFPage, fonts: FontSet, startY: number, cols: Co
   return bottom - HAIRLINE_THICKNESS - 8;
 }
 
+/**
+ * The vertical space `drawLineRow` will consume for `line`, without drawing
+ * anything. This is the single source of truth for a row's height: the page
+ * planner below calls it to decide where a page breaks, and `drawLineRow`
+ * calls it too, so the two can never drift apart.
+ *
+ * A description reserves a fixed extra band (ROW_DESCRIPTION_EXTRA) sized
+ * for wrapAndClip's two-line cap, regardless of whether the actual text
+ * wraps to one line or two -- `drawLineRow` positions its description text
+ * within that same fixed band, so the row's total height never varies with
+ * the wrap count itself, only with whether a description is present.
+ */
+function measureRowHeight(line: RenderLine): number {
+  const hasDescription = Boolean(line.description && line.description.trim() !== "");
+  return hasDescription ? ROW_HEIGHT + ROW_DESCRIPTION_EXTRA : ROW_HEIGHT;
+}
+
 function drawLineRow(
   page: PDFPage,
   fonts: FontSet,
@@ -585,10 +595,9 @@ function drawLineRow(
         color: COLOR_MUTED,
       });
     }
-    return startY - (ROW_HEIGHT + ROW_DESCRIPTION_EXTRA);
   }
 
-  return startY - ROW_HEIGHT;
+  return startY - measureRowHeight(line);
 }
 
 function drawTotals(
@@ -687,17 +696,135 @@ function drawFooter(page: PDFPage, fonts: FontSet, documentNumber: string, pageN
 }
 
 // ---------------------------------------------------------------------------
-// Entry point.
+// Page planning: measured, not counted (F-LB-21).
+//
+// A row's real drawn height depends on whether it has a description
+// (measureRowHeight, above). Page one also spends a variable amount of
+// space on the header, the bill-to block, and two hairlines -- driven
+// entirely by the business/customer strings in this particular document, so
+// there is no constant that predicts it. Rather than guess, this measures
+// those blocks once by actually drawing them onto a throwaway page (appended
+// to `doc`, then removed before any real page is drawn) and reads back the
+// resulting y. That is the same layout code page one itself will run, so the
+// measured start can never drift from the drawn one.
 // ---------------------------------------------------------------------------
 
-export async function renderDocument(input: RenderInput, assets?: DocumentAssets): Promise<Uint8Array> {
+/** Runs `fn` against a page appended to `doc` for measurement only, then removes that page. */
+function measureOnScratchPage<T>(doc: PDFDocument, fn: (page: PDFPage) => T): T {
+  const scratch = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+  const result = fn(scratch);
+  doc.removePage(doc.getPages().indexOf(scratch));
+  return result;
+}
+
+type PageStartYs = {
+  /** y at which the first table row begins on page one, after the header, bill-to block, and table header. */
+  firstPage: number;
+  /** y at which the first table row begins on any later page, after just the repeated table header. */
+  continuation: number;
+};
+
+function measurePageStartYs(
+  doc: PDFDocument,
+  fonts: FontSet,
+  logoImage: PDFImage | null,
+  input: RenderInput,
+  title: string,
+  billToLabel: string,
+  cols: ColumnLayout,
+): PageStartYs {
+  const firstPage = measureOnScratchPage(doc, (page) => {
+    let y = PAGE_HEIGHT - PAGE_MARGIN;
+    y = drawHeader(page, fonts, logoImage, input, title, y);
+    y = drawHairline(page, y);
+    y = drawCustomerBlock(page, fonts, input, billToLabel, y);
+    y = drawHairline(page, y);
+    return drawTableHeader(page, fonts, y, cols);
+  });
+
+  const continuation = measureOnScratchPage(doc, (page) =>
+    drawTableHeader(page, fonts, PAGE_HEIGHT - PAGE_MARGIN, cols),
+  );
+
+  return { firstPage, continuation };
+}
+
+/** The vertical space `drawTotals` + `drawNotesAndPayment` will consume, including the 14pt gap the render loop puts before them. */
+function measureFooterBlockHeight(
+  doc: PDFDocument,
+  fonts: FontSet,
+  input: RenderInput,
+  contentRight: number,
+  taxSummary: TaxLineSummary,
+): number {
+  const reference = PAGE_HEIGHT;
+  return measureOnScratchPage(doc, (page) => {
+    let y = reference - 14;
+    y = drawTotals(page, fonts, input, y, contentRight, taxSummary);
+    y = drawNotesAndPayment(page, fonts, input, y);
+    return reference - y;
+  });
+}
+
+/**
+ * Assigns lines to pages by measured row height instead of a fixed count per
+ * page, breaking to a new page whenever the next row would cross
+ * CONTENT_BOTTOM_LIMIT (which already leaves room for the footer). A page
+ * that has not yet taken a row always accepts the next one regardless of
+ * fit -- so a single row taller than an entire empty page still gets drawn,
+ * on its own page, rather than looping forever trying to place it.
+ *
+ * If the page holding the last rows would leave no room above the footer
+ * for the totals block and the notes/payment block, one further page (with
+ * no rows of its own) is appended for them. The normal per-page render loop
+ * still draws that page's table header first, exactly as it does for any
+ * other continuation page.
+ */
+function planPages(input: RenderInput, startYs: PageStartYs, footerBlockHeight: number): RenderLine[][] {
+  const pages: RenderLine[][] = [];
+  let current: RenderLine[] = [];
+  let cursorY = startYs.firstPage;
+
+  for (const line of input.lines) {
+    const height = measureRowHeight(line);
+    if (current.length > 0 && cursorY - height < CONTENT_BOTTOM_LIMIT) {
+      pages.push(current);
+      current = [];
+      cursorY = startYs.continuation;
+    }
+    current.push(line);
+    cursorY -= height;
+  }
+  pages.push(current);
+
+  if (cursorY - footerBlockHeight < CONTENT_BOTTOM_LIMIT) {
+    pages.push([]);
+  }
+
+  return pages;
+}
+
+// ---------------------------------------------------------------------------
+// Shared setup between renderDocument() and the page-layout diagnostic below.
+// ---------------------------------------------------------------------------
+
+type RenderContext = {
+  doc: PDFDocument;
+  title: string;
+  fonts: FontSet;
+  logoImage: PDFImage | null;
+  billToLabel: string;
+  contentRight: number;
+  cols: ColumnLayout;
+  taxSummary: TaxLineSummary;
+  mixedTax: boolean;
+};
+
+async function prepareRenderContext(input: RenderInput, assets?: DocumentAssets): Promise<RenderContext> {
   const resolvedAssets = assets ?? (await loadAssets());
   const doc = await PDFDocument.create();
 
   const title = input.kind === "invoice" ? "Invoice" : "Quote";
-  doc.setTitle(`${title} ${input.number}`);
-  doc.setProducer("Helix CRM");
-
   const fonts = await loadFontSet(doc, resolvedAssets);
 
   let logoImage: PDFImage | null = null;
@@ -709,7 +836,6 @@ export async function renderDocument(input: RenderInput, assets?: DocumentAssets
     }
   }
 
-  const pageCount = pageCountFor(input.lines.length);
   const billToLabel = input.kind === "invoice" ? "Bill to" : "Prepared for";
   const contentRight = PAGE_WIDTH - PAGE_MARGIN;
   const cols = buildColumnLayout(contentRight);
@@ -721,6 +847,70 @@ export async function renderDocument(input: RenderInput, assets?: DocumentAssets
     })),
   );
   const mixedTax = hasMixedTaxability(taxSummary);
+
+  return { doc, title, fonts, logoImage, billToLabel, contentRight, cols, taxSummary, mixedTax };
+}
+
+// ---------------------------------------------------------------------------
+// Test diagnostic: the same page plan renderDocument() draws, without
+// drawing any real page.
+//
+// pdf-lib cannot read drawn coordinates back out of a saved PDF (see the
+// note at the bottom of pdfLayout.test.ts), so a test cannot ask a rendered
+// document "was anything drawn below the footer". This exposes the actual
+// measured plan instead -- the same startYs, the same footerBlockHeight, and
+// the same measureRowHeight this file uses to draw -- so a test can assert
+// directly that no page's content bottom ever crosses CONTENT_BOTTOM_LIMIT,
+// rather than checking the result by eye.
+// ---------------------------------------------------------------------------
+
+export type PageLayoutPlan = {
+  pageCount: number;
+  /** Number of line rows placed on each page, in order. A trailing 0 means that page holds only totals/notes/payment. */
+  rowsPerPage: number[];
+  /** The y-coordinate after the last thing drawn on each page (the last row, or on the last page, the totals + notes/payment block). Must stay >= CONTENT_BOTTOM_LIMIT. */
+  contentBottomYPerPage: number[];
+};
+
+export async function planPageLayout(input: RenderInput, assets?: DocumentAssets): Promise<PageLayoutPlan> {
+  const { doc, title, fonts, logoImage, billToLabel, contentRight, cols, taxSummary } = await prepareRenderContext(
+    input,
+    assets,
+  );
+
+  const startYs = measurePageStartYs(doc, fonts, logoImage, input, title, billToLabel, cols);
+  const footerBlockHeight = measureFooterBlockHeight(doc, fonts, input, contentRight, taxSummary);
+  const pages = planPages(input, startYs, footerBlockHeight);
+
+  const contentBottomYPerPage = pages.map((rows, index) => {
+    const startY = index === 0 ? startYs.firstPage : startYs.continuation;
+    const afterRows = rows.reduce((y, line) => y - measureRowHeight(line), startY);
+    const isLastPage = index === pages.length - 1;
+    return isLastPage ? afterRows - footerBlockHeight : afterRows;
+  });
+
+  return {
+    pageCount: pages.length,
+    rowsPerPage: pages.map((rows) => rows.length),
+    contentBottomYPerPage,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Entry point.
+// ---------------------------------------------------------------------------
+
+export async function renderDocument(input: RenderInput, assets?: DocumentAssets): Promise<Uint8Array> {
+  const { doc, title, fonts, logoImage, billToLabel, contentRight, cols, taxSummary, mixedTax } =
+    await prepareRenderContext(input, assets);
+
+  doc.setTitle(`${title} ${input.number}`);
+  doc.setProducer("Helix CRM");
+
+  const startYs = measurePageStartYs(doc, fonts, logoImage, input, title, billToLabel, cols);
+  const footerBlockHeight = measureFooterBlockHeight(doc, fonts, input, contentRight, taxSummary);
+  const pages = planPages(input, startYs, footerBlockHeight);
+  const pageCount = pages.length;
 
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
     const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
@@ -738,8 +928,7 @@ export async function renderDocument(input: RenderInput, assets?: DocumentAssets
 
     cursorY = drawTableHeader(page, fonts, cursorY, cols);
 
-    const pageLines = input.lines.slice(pageIndex * LINES_PER_PAGE, (pageIndex + 1) * LINES_PER_PAGE);
-    for (const line of pageLines) {
+    for (const line of pages[pageIndex]) {
       cursorY = drawLineRow(page, fonts, line, input.currency, cursorY, cols, mixedTax && line.taxable);
     }
 

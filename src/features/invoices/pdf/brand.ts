@@ -59,9 +59,6 @@ export const PAGE_MARGIN = 54;
 
 export const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
 
-/** Maximum table line rows before a page break. */
-export const LINES_PER_PAGE = 18;
-
 /** Height of one table row with a single line of text, in points. */
 export const ROW_HEIGHT = 20;
 
@@ -79,6 +76,18 @@ export const CUSTOMER_BLOCK_HEIGHT = 90;
 
 /** Baseline y-position of the footer text, measured from the page bottom. */
 export const FOOTER_BASELINE_Y = 28;
+
+/**
+ * Clearance kept above the footer's own baseline: room for the footer text's
+ * height plus a visual gap, so the last row, the totals box, or the notes/
+ * payment block never sits flush against (or on top of) the footer. Chosen
+ * to land close to PAGE_MARGIN, so the bottom of the content area reads with
+ * roughly the same weight as the top.
+ */
+export const FOOTER_CLEARANCE = 24;
+
+/** The lowest y-coordinate any row, the totals box, or notes/payment content may reach on a page. */
+export const CONTENT_BOTTOM_LIMIT = FOOTER_BASELINE_Y + FOOTER_CLEARANCE;
 
 /** Size, in points, of the small logo mark in the header. */
 export const LOGO_SIZE = 34;
