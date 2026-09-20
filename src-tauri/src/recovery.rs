@@ -78,9 +78,14 @@ const GROUP: usize = 4;
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecoveryKey {
     /// The formatted key: `HLX1-1A2B-...`, sixteen groups of four.
     pub key: String,
+    /// The whole text of the file the owner saves, built here so the words the
+    /// owner reads on paper and the words on the screen cannot drift apart in
+    /// two languages.
+    pub file_text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -373,12 +378,21 @@ fn open_workspace_id(db: &Db) -> AppResult<String> {
 ///
 /// Deliberately not "for any workspace id the frontend names": the only key the
 /// owner can be shown is the one for the file they are looking at.
+/// `workspace_name` and `written_at` are display strings for the saved file and
+/// nothing else; the key itself comes from the keychain, not from the caller.
 #[tauri::command(async)]
-pub fn recovery_key_reveal(db: State<'_, Db>) -> AppResult<RecoveryKey> {
+pub fn recovery_key_reveal(
+    db: State<'_, Db>,
+    workspace_name: String,
+    written_at: String,
+) -> AppResult<RecoveryKey> {
     let workspace_id = open_workspace_id(&db)?;
     let key = secrets::db_key(&workspace_id)?;
+    let formatted = format_recovery_key(&key.expose_for_recovery());
+    let file_text = recovery_key_file_contents(&workspace_name, &formatted, &written_at);
     Ok(RecoveryKey {
-        key: format_recovery_key(&key.expose_for_recovery()),
+        key: formatted,
+        file_text,
     })
 }
 

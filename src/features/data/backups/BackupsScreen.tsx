@@ -16,8 +16,13 @@ import {
   Badge,
   Button,
   Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
   ConfirmDialog,
   EmptyState,
+  Field,
+  Input,
   PageHeader,
   Spinner,
   Table,
@@ -28,6 +33,15 @@ import {
   TR,
   toast,
 } from "@/ui";
+import { switchWorkspace } from "@/app/boot";
+import {
+  adoptBackup,
+  pickBackupFile,
+  revealRecoveryKey,
+  saveRecoveryKeyFile,
+  suggestedName,
+  type RevealedKey,
+} from "@/features/data/backups/recovery";
 import { todayLocal } from "@/lib/dates";
 import { dqk } from "@/features/data/lib/queries";
 import {
@@ -53,6 +67,266 @@ function useBackupsDir(): string | null {
     };
   }, []);
   return dir;
+}
+
+/**
+ * Tauri rejects a command with a plain `{ code, message }` object rather than
+ * an Error, so `String(err)` on the shape this screen sees most often gives
+ * "[object Object]" (the same trap the lead poller fell into, F-LB-6).
+ */
+function messageFrom(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return fallback;
+}
+
+/**
+ * The recovery key panel.
+ *
+ * The key is fetched on a button press and dropped when the panel is closed:
+ * nothing holds it across a navigation, and nothing renders it until the owner
+ * has asked for it, so it cannot be read over a shoulder or caught in a
+ * screen-share that happened to be on this screen.
+ */
+export function RecoveryKeyPanel() {
+  const [revealed, setRevealed] = useState<RevealedKey | null>(null);
+  const [savedTo, setSavedTo] = useState<string | null>(null);
+
+  const reveal = useMutation({
+    mutationFn: () => revealRecoveryKey(),
+    onSuccess: (key) => setRevealed(key),
+    onError: (err: unknown) =>
+      toast.error(
+        messageFrom(err, "Helix could not read this workspace's recovery key."),
+      ),
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!revealed) return null;
+      return saveRecoveryKeyFile(revealed);
+    },
+    onSuccess: (path) => {
+      if (path === null) return; // the owner closed the dialog
+      setSavedTo(path);
+      toast.success("Recovery key saved.");
+    },
+    onError: (err: unknown) =>
+      toast.error(messageFrom(err, "Helix could not save the recovery key.")),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recovery key</CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-[var(--space-3)]">
+        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          Your backups are encrypted with a key that is kept on this computer and
+          nowhere else. If this computer is lost, stolen or replaced, that key is
+          what lets you open a backup on the new one. Write it down now, while you
+          still can.
+        </p>
+
+        {revealed === null ? (
+          <div>
+            <Button
+              variant="secondary"
+              onClick={() => reveal.mutate()}
+              loading={reveal.isPending}
+              loadingLabel="Reading the key…"
+            >
+              Show recovery key
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-[var(--space-3)]">
+            <code
+              data-testid="recovery-key"
+              className={[
+                "block select-all break-all",
+                "border border-[var(--color-border-strong)]",
+                "bg-[var(--color-bg)] px-[var(--space-3)] py-[var(--space-3)]",
+                "font-[family-name:var(--font-mono)] text-[length:var(--text-sm)]",
+                "leading-[var(--leading-normal)] tabular-nums text-[var(--color-text)]",
+              ].join(" ")}
+            >
+              {revealed.key}
+            </code>
+            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+              Keep it away from this computer and away from your backups. Anyone
+              who has both can read everything in your CRM.
+            </p>
+            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+              <Button
+                variant="secondary"
+                onClick={() => save.mutate()}
+                loading={save.isPending}
+                loadingLabel="Saving…"
+              >
+                Save to a file
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setRevealed(null);
+                  setSavedTo(null);
+                }}
+              >
+                Hide
+              </Button>
+            </div>
+            {savedTo ? (
+              <p
+                title={savedTo}
+                className="truncate text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
+              >
+                Saved to {savedTo}
+              </p>
+            ) : null}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * Opening a backup that came from somewhere else.
+ *
+ * This is the other half of the recovery key and the reason it exists: a
+ * machine with an empty keychain, a backup file, and the key off a piece of
+ * paper. Rust does the whole risky half and leaves nothing behind if the key is
+ * wrong (`src-tauri/src/recovery.rs`).
+ */
+export function OpenFromAnotherMachinePanel() {
+  const [sourcePath, setSourcePath] = useState<string | null>(null);
+  const [key, setKey] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = useMutation({
+    mutationFn: () => pickBackupFile(),
+    onSuccess: (path) => {
+      if (path === null) return;
+      setSourcePath(path);
+      setError(null);
+      if (name.trim().length === 0) setName(suggestedName(path));
+    },
+    onError: (err: unknown) =>
+      setError(messageFrom(err, "Helix could not open the file chooser.")),
+  });
+
+  const open = useMutation({
+    mutationFn: async () => {
+      if (!sourcePath) throw new Error("Choose a backup file first.");
+      const entry = await adoptBackup(sourcePath, key, name);
+      await switchWorkspace(entry);
+      return entry;
+    },
+    onSuccess: (entry) => {
+      setSourcePath(null);
+      setKey("");
+      setName("");
+      setError(null);
+      toast.success(`Opened ${entry.name}.`);
+    },
+    onError: (err: unknown) =>
+      setError(
+        messageFrom(err, "Helix could not open that backup with that key."),
+      ),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Open a backup from another machine</CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-[var(--space-4)]">
+        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          Moving to a new computer, or recovering from one you have lost. Choose a
+          backup file and type the recovery key from the old computer. Helix adds
+          it as a second workspace and leaves everything here as it is.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-[var(--space-3)]">
+          <Button
+            variant="secondary"
+            onClick={() => choose.mutate()}
+            disabled={open.isPending}
+          >
+            Choose a backup file
+          </Button>
+          {sourcePath ? (
+            <span
+              title={sourcePath}
+              className="min-w-0 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+            >
+              {sourcePath}
+            </span>
+          ) : null}
+        </div>
+
+        <Field
+          label="Recovery key"
+          hint="The key from the computer this backup came from. Dashes and spaces do not matter."
+        >
+          <Input
+            value={key}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="HLX1-0000-0000-0000-0000-0000-0000-0000-0000"
+            onChange={(e) => setKey(e.target.value)}
+            disabled={open.isPending}
+          />
+        </Field>
+
+        <Field label="Name this workspace">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Restored workspace"
+            disabled={open.isPending}
+          />
+        </Field>
+
+        {error ? (
+          <div
+            role="alert"
+            className={[
+              "flex items-start gap-[var(--space-3)]",
+              "border border-[var(--color-border)]",
+              "bg-[var(--color-danger-soft)] px-[var(--space-4)] py-[var(--space-3)]",
+              "text-[length:var(--text-sm)] text-[var(--color-danger-ink)]",
+            ].join(" ")}
+          >
+            <Warning
+              size={18}
+              weight="regular"
+              className="mt-[var(--space-1)] flex-none"
+              aria-hidden="true"
+            />
+            <div className="min-w-0">{error}</div>
+          </div>
+        ) : null}
+
+        <div>
+          <Button
+            variant="secondary"
+            disabled={sourcePath === null || key.trim().length === 0}
+            loading={open.isPending}
+            loadingLabel="Opening…"
+            onClick={() => open.mutate()}
+          >
+            Open this backup
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  );
 }
 
 export function BackupsScreen() {
@@ -223,6 +497,9 @@ export function BackupsScreen() {
             </p>
           </div>
         )}
+
+        <RecoveryKeyPanel />
+        <OpenFromAnotherMachinePanel />
       </div>
 
       <ConfirmDialog
