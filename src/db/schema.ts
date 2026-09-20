@@ -259,6 +259,20 @@ export const deals = sqliteTable(
     index("idx_deals_stage_position").on(t.stageId, t.position),
     index("idx_deals_recurring_started_on").on(t.recurringStartedOn),
     index("idx_deals_recurring_ended_on").on(t.recurringEndedOn),
+    /**
+     * Idempotency for the lead poller (F-SEC-28, LR-OPS-W2). Without this the
+     * "already have this one" check in applyLeads.ts is read-then-write,
+     * correct only because the app's single write lock happens to serialise
+     * every writer that could race it. A live deal can still have a NULL
+     * external_id (every hand-entered deal does), so the partial index only
+     * constrains the rows that actually carry one, and only the live ones -
+     * `deals.softDelete` must not be blocked from ever putting a second
+     * deal at the same external_id in the Trash. drizzle/0005_lead_dedup.sql
+     * de-duplicates any pre-existing violation before this index is created.
+     */
+    uniqueIndex("idx_deals_external_id_unique")
+      .on(t.externalId)
+      .where(sql`${t.externalId} is not null and ${t.deletedAt} is null`),
   ],
 );
 
