@@ -138,10 +138,13 @@ export async function openWorkspace(
 }
 
 /**
- * Run the whole sequence. Throws DbOpenError, Fts5MissingError or
- * MigrationError for the three failures the error map names, and whatever it
- * was handed for anything else — a cause we cannot name is shown as a cause we
- * cannot name, not dressed up as one we can (F-LC-10).
+ * Run the whole sequence. Throws DbOpenError, Fts5MissingError, MigrationError
+ * or NewerSchemaError for the named failures, and whatever it was handed for
+ * anything else — a cause we cannot name is shown as a cause we cannot name,
+ * not dressed up as one we can (F-LC-10). NewerSchemaError comes out of
+ * `migrate()` exactly as thrown: it is not a database-open failure and must
+ * not be wrapped into one, and it is not a MigrationError either, so it reaches
+ * BootScreens.tsx as itself and gets its own screen.
  */
 export async function boot(): Promise<BootResult> {
   installDriver();

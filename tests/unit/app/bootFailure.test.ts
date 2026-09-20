@@ -13,7 +13,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
 import { DbError, DbOpenError, Fts5MissingError } from "@/db/client";
-import { MigrationError } from "@/db/migrator";
+import { MigrationError, NewerSchemaError, newerSchemaMessage } from "@/db/migrator";
 import { renderBootFailure } from "./bootFailure.fixtures";
 
 afterEach(() => {
@@ -78,5 +78,33 @@ describe("BootFailure", () => {
     renderBootFailure({ error: new DbError("IO_ERROR", "disk went away") });
     expect(screen.getByRole("heading").textContent).toContain("Helix could not start");
     expect(document.body.textContent).toContain("disk went away");
+  });
+
+  it("gives a newer-than-this-build workspace its own screen, distinct from a failed migration (LR-OPS-W1 A1/A2)", () => {
+    const error = new NewerSchemaError(["0099_future"], newerSchemaMessage());
+    renderBootFailure({ error });
+
+    // Its own heading, not the migration-failure one.
+    expect(screen.getByRole("heading").textContent).toContain("newer Helix");
+    expect(screen.getByRole("heading").textContent).not.toContain("update");
+
+    // The exact message string, word for word.
+    expect(document.body.textContent).toContain(newerSchemaMessage());
+
+    // Never offers to downgrade, delete or repair, and never invents a
+    // "Try again" that would just fail the same way a second time.
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(document.body.textContent?.toLowerCase()).not.toContain("delete");
+    expect(document.body.textContent?.toLowerCase()).not.toContain("repair");
+    expect(document.body.textContent?.toLowerCase()).not.toContain("downgrade");
+
+    cleanup();
+
+    // And a real failed migration still renders as itself, not this screen.
+    renderBootFailure({
+      error: new MigrationError("0003_money", "no such column", null, null),
+    });
+    expect(screen.getByRole("heading").textContent).toContain("update");
+    expect(screen.getByRole("heading").textContent).not.toContain("newer Helix");
   });
 });

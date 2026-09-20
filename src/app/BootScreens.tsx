@@ -1,13 +1,19 @@
 /**
  * The full-screen states from docs/PLAN.md's error map: the database would not
- * open, this build has no FTS5, a migration failed, and the top-level error
- * boundary. Each one names the problem in plain words, shows the path, and
- * never swallows the detail.
+ * open, this build has no FTS5, a migration failed, this build is older than
+ * the workspace it opened, and the top-level error boundary. Each one names
+ * the problem in plain words, shows the path, and never swallows the detail.
  */
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
-import { AlertTriangle, CaretRight, DatabaseZap, HardDriveDownload } from "@/ui/icons";
+import {
+  AlertTriangle,
+  CaretRight,
+  DatabaseZap,
+  DownloadSimple,
+  HardDriveDownload,
+} from "@/ui/icons";
 import { cn } from "@/ui/cn";
-import { MigrationError } from "@/db/migrator";
+import { MigrationError, NewerSchemaError } from "@/db/migrator";
 import { DbOpenError, Fts5MissingError } from "@/db/client";
 import { Brand, Button, Card, CardBody, Spinner } from "@/ui";
 
@@ -242,6 +248,25 @@ export function MigrationErrorScreen({ error }: { error: MigrationError }) {
   );
 }
 
+/**
+ * The workspace was migrated by a newer Helix. Distinct from
+ * `MigrationErrorScreen` on purpose: nothing was attempted and nothing was
+ * rolled back, so there is no "install the previous version" line and no
+ * backup path to show - the one thing this build can tell the owner is which
+ * version he needs, and that his data was never touched.
+ */
+export function NewerSchemaErrorScreen({ error }: { error: NewerSchemaError }) {
+  return (
+    <FullScreen
+      icon={<DownloadSimple size={28} weight="regular" />}
+      title="This workspace needs a newer Helix"
+    >
+      <p className="m-0">{error.message}</p>
+      <Detail>{error.unknownVersions.join(", ")}</Detail>
+    </FullScreen>
+  );
+}
+
 /** Whatever else went wrong at boot. */
 export function BootErrorScreen({
   error,
@@ -275,6 +300,7 @@ export function BootFailure({
   if (error instanceof Fts5MissingError) return <Fts5MissingScreen error={error} />;
   if (error instanceof DbOpenError)
     return <DbOpenErrorScreen error={error} path={path} onRetry={onRetry} />;
+  if (error instanceof NewerSchemaError) return <NewerSchemaErrorScreen error={error} />;
   if (error instanceof MigrationError) return <MigrationErrorScreen error={error} />;
   return <BootErrorScreen error={error} path={path} onRetry={onRetry} />;
 }

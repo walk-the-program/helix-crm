@@ -4,14 +4,19 @@
  * whatever path the registry hands it, because the point here is the order of
  * the steps and not the filesystem.
  */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { raw, setDriver } from "../../src/db/client";
 import { boot, openWorkspace } from "../../src/app/boot";
+import { NewerSchemaError } from "../../src/db/migrator";
 import {
   readRegistry,
   resetRegistryCache,
   writeRegistry,
   EMPTY_REGISTRY,
+  type WorkspaceEntry,
 } from "../../src/app/appSettings";
 import { __resetWriteLockForTests } from "../../src/db/writeLock";
 import { createTestDriver, type TestDriver } from "./driver";
@@ -114,5 +119,57 @@ describe("boot", () => {
     await boot();
     const info = await raw.info();
     expect(info.fts5).toBe(true);
+  });
+});
+
+describe("openWorkspace: newer-schema guard (LR-OPS-W1 A1)", () => {
+  /**
+   * A real file-backed driver rather than the shared in-memory one above:
+   * that driver hands back a FRESH empty database on every open() (by
+   * design, so the other tests in this file can reopen idempotently), which
+   * would erase the future-version row this test injects before the second
+   * open ever ran. A real workspace file persists across an open/close/open,
+   * and this is the situation the guard exists for.
+   */
+  it("openWorkspace refuses as NewerSchemaError, not as a DbOpenError, once the file names a version this build does not know", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "helix-boot-newer-schema-"));
+    const dbPath = join(dir, "helix.db");
+    const fileDriver = createTestDriver(dbPath);
+    setDriver(fileDriver);
+
+    const workspace: WorkspaceEntry = {
+      id: "w1",
+      name: "Test workspace",
+      path: dbPath,
+      lastPolledAt: null,
+      lastBackupAt: null,
+      archived: false,
+    };
+
+    try {
+      const opened = await openWorkspace(workspace, { label: null });
+      expect(opened.migration.applied.length).toBeGreaterThan(0);
+
+      // What a newer Helix leaves behind: a schema_migrations row this
+      // build's own journal has never heard of.
+      await raw.execute(
+        `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
+        ["9999_from_the_future", new Date().toISOString()],
+      );
+
+      let caught: unknown;
+      try {
+        await openWorkspace(workspace, { label: null });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(NewerSchemaError);
+      expect((caught as NewerSchemaError).unknownVersions).toEqual([
+        "9999_from_the_future",
+      ]);
+    } finally {
+      fileDriver.dispose();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
