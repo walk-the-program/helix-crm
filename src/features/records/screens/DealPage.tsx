@@ -33,6 +33,7 @@ import {
   deleteWithUndo,
   invalidateRecords,
   reportError,
+  writeWithUndo,
 } from "@/features/records/lib/mutations";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { InlineText } from "@/features/records/components/InlineEdit";
@@ -97,8 +98,16 @@ export function DealPage() {
     );
   }
 
+  const dealTitle = deal.title;
+
+  // Inline edits autosave with no toast, so the undo stack is the only thing
+  // standing between the owner and a field they overwrote by accident. Each
+  // save is its own batch (design/apple-hig-review.md, finding 3).
   async function patch(values: dealsRepo.DealPatch) {
-    await dealsRepo.update(id, values);
+    await writeWithUndo({
+      label: `edited ${dealTitle}`,
+      write: (batchId) => dealsRepo.update(id, values, { batchId }).then(() => undefined),
+    });
     await invalidateRecords();
   }
 
@@ -109,7 +118,12 @@ export function DealPage() {
       return;
     }
     try {
-      await dealsRepo.moveToStage(id, stageId);
+      // Same batch-and-push as a drag on the board: the stage picker and the
+      // card are two ways to do one thing, so Cmd+Z has to reverse both.
+      await writeWithUndo({
+        label: `moved ${dealTitle} to ${target?.name ?? "another stage"}`,
+        write: (batchId) => dealsRepo.moveToStage(id, stageId, { batchId }).then(() => undefined),
+      });
       // Winning a deal that has recurring lines starts its clock, and the
       // recompute is what decides that (D20). It is a second transaction
       // rather than part of the move, because the move belongs to the deals
