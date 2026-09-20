@@ -55,9 +55,26 @@ to end."
 - [ ] **Windows: SmartScreen warns.** Click "More info," then "Run
       anyway"; the app launches.
 - [ ] On first launch, a workspace is created automatically and the app
-      opens straight to an empty Today screen with three starter cards
-      (import a CSV, add a contact, connect a website), no setup wizard,
-      no login.
+      opens straight into the three-screen setup flow (no login): business
+      name and trade, then the trade's pipeline/sources/fields, then how
+      customers come in (import a spreadsheet, connect a website, load a
+      week of example data, or start empty). "Skip for now" is on every
+      screen and never traps you - it lands on Today the same as finishing
+      screen 3 does. This replaces an earlier, incorrect version of this
+      line that said first launch shows an empty Today screen with no
+      wizard (F-REV-13); the wizard is what first launch actually shows,
+      and always has (`src/features/onboarding/gate.ts`,
+      `OnboardingFlow.tsx`, README "First run").
+- [ ] **Verify with the lead before release:** whichever way setup ends
+      (a choice on screen 3, or Skip), Today's first content is the
+      recovery-key card - one primary block, un-dismissable - until you
+      reveal the key and confirm you copied, saved or printed it. Only
+      after that does Today show its regular sections, with the three
+      ways to start (import a CSV, add a contact, connect a website) as
+      README describes them. This line depends on LR-CS-W1's work
+      (`src/features/today/sections/RecoveryKeyCard.tsx`), landed in this
+      checkout but not yet confirmed accepted at the time this checklist
+      was written.
 - [ ] `helix.json` exists in the app data folder (macOS:
       `~/Library/Application Support/com.clearpathdigital.helix/`; Windows:
       `%APPDATA%\com.clearpathdigital.helix\`) and lists the new workspace.
