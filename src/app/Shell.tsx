@@ -276,7 +276,7 @@ const FALLBACK_VIEW_TITLES: Record<string, string> = {
   trash: "Trash",
   deals: "Deal",
   export: "Export",
-  duplicates: "Review duplicates",
+  duplicates: "Duplicates",
   setup: "Set up Helix",
 };
 

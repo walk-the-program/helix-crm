@@ -64,8 +64,14 @@ export function OverviewScreen() {
                         {hint}
                       </span>
                     ) : null}
+                    {/* A disclosure caret is an indicator beside text, not a
+                        row's identifying glyph: 14, like every other caret and
+                        check in the product (the canon in src/ui/icons.ts).
+                        At ICON_SIZE it was 18 and read heavier than the row
+                        icon it pointed away from. */}
                     <CaretRight
-                      size={ICON_SIZE}
+                      size={14}
+                      weight="bold"
                       className="flex-none text-[var(--color-text-faint)]"
                       aria-hidden
                     />

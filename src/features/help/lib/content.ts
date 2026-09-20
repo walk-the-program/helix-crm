@@ -57,7 +57,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: "backups",
     title: "Backups and where your data lives",
     paragraphs: [
-      "Helix runs on your computer and does not need the internet to work; nothing you type is sent anywhere, ever. Your data lives in one file on your own machine, and Diagnostics, under Settings, shows exactly where it is and how big it has gotten. Helix backs itself up automatically after it opens and every six hours after that, keeping every backup from the last day and then one a day for thirty days.",
+      "Helix runs on your computer and does not need the internet to work; nothing you type is sent anywhere, ever. Your data lives in one file on your own machine, and Diagnostics, under Settings, shows exactly where it is and how big it has gotten. Helix backs itself up automatically after it opens, unless one has run in the last hour, and every six hours after that, keeping every backup from the last day and then one a day for thirty days.",
       "Go to Settings, then Backups, to see the list, force one with Back up now, or restore an older one if something went wrong; restoring backs up today's data first, so that can be undone too. Attachments, the files you have added to a customer or job, are stored beside the database and are not part of the backup. If you ever want everything out of Helix, use Export to save a CSV of any list, or all of it at once.",
     ],
   },
