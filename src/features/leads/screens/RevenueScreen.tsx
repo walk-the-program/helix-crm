@@ -12,20 +12,33 @@
  * money and one-time deal values do not. ARR sits one step down beside it,
  * because it is the same fact restated over a year, not a second fact.
  *
+ * Beside that sits the period's own money: Quoted, Won, Invoiced, Collected
+ * and what is still owed on what it billed, from src/db/repos/money.ts, with
+ * the same four columns deal by deal. Those five move with the period picker;
+ * MRR does not, and the card says so.
+ *
+ * The page wears `ReportsFrame`, which is the fix for the dead end Walker hit:
+ * this screen used to render a title and nothing else, so the only way off it
+ * was the sidebar. Now it carries the same tab strip as every other report and
+ * the period control changes state rather than the URL.
+ *
  * There is no primary button here. A report is something the owner reads,
  * matching the rest of Reports (docs/DESIGN.md's "one primary block per
  * view" - this screen spends none).
  */
-import type { Key } from "react";
+import { useState, type Key } from "react";
 import { Line, LabelList, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "wouter";
-import { Card, CardBody, CardHeader, CardTitle, EmptyState, PageHeader, Spinner } from "@/ui";
+import { Card, CardBody, CardHeader, CardTitle, EmptyState, Spinner } from "@/ui";
 import { AgingBlock } from "@/features/invoices";
 import { formatDateDisplay } from "@/lib/dates";
-import { formatBucket } from "@/lib/periods";
+import { formatBucket, periodFor } from "@/lib/periods";
+import type { Period } from "@/lib/periods";
 import { formatMoney } from "@/lib/money";
-import { useRevenue } from "@/features/leads/lib/reportKeys";
-import type { RevenueBundle } from "@/db/repos/reports";
+import { useRevenue, useRevenueMoney } from "@/features/leads/lib/reportKeys";
+import type { RevenueBundle, RevenueMoney } from "@/db/repos/reports";
+import type { PerDealMoneyRow } from "@/db/repos/money";
+import { ReportsFrame } from "@/features/leads/components/ReportsFrame";
 import { DataTable } from "@/features/leads/components/DataTable";
 import type { DataTableColumn } from "@/features/leads/components/DataTable";
 import {
@@ -43,14 +56,20 @@ import {
 type RecurringDealRow = RevenueBundle["active"][number];
 
 export function RevenueScreen() {
+  // MRR is read as of today whatever range is chosen, so the picker moves only
+  // the four money numbers and the table under them. The page says so in words
+  // rather than making the owner work it out from which figures move.
+  const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const query = useRevenue();
+  const moneyQuery = useRevenueMoney(period);
 
   return (
-    <div className="flex flex-col">
-      <PageHeader
-        title="Revenue"
-        subtitle="What repeats every month, and what came in up front."
-      />
+    <ReportsFrame
+      active="revenue"
+      title="Revenue"
+      subtitle="What repeats every month, and what the period quoted, won, invoiced and collected."
+      period={{ value: period, onChange: setPeriod }}
+    >
       {query.isPending ? (
         <div className="flex justify-center py-[var(--space-10)]">
           <Spinner label="Loading revenue" />
@@ -65,9 +84,117 @@ export function RevenueScreen() {
           }
         />
       ) : query.data ? (
-        <RevenueContent data={query.data} />
+        <RevenueContent data={query.data} money={moneyQuery.data ?? null} period={period} />
       ) : null}
-    </div>
+    </ReportsFrame>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* The four money numbers                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Quoted, Won, Invoiced, Collected - and what is still owed on what this
+ * period billed.
+ *
+ * The four are on four different clocks by design (src/db/repos/money.ts says
+ * which), so Collected can be larger than Invoiced in a month where last
+ * month's invoices were paid. The caption says that out loud rather than
+ * leaving the owner to think the page is broken.
+ */
+function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
+  const { money, period } = props;
+  const { totals } = money;
+
+  const columns: DataTableColumn<PerDealMoneyRow>[] = [
+    {
+      key: "deal",
+      header: "Deal",
+      render: (row) => (
+        <Link
+          href={`/deals/${row.dealId}`}
+          title={row.title}
+          className="block truncate text-[var(--color-link)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+        >
+          {row.title}
+        </Link>
+      ),
+    },
+    { key: "customer", header: "Customer", render: (row) => row.customerName ?? "—" },
+    {
+      key: "quoted",
+      header: "Quoted",
+      numeric: true,
+      render: (row) => formatMoney(row.quotedCents),
+    },
+    { key: "won", header: "Won", numeric: true, render: (row) => formatMoney(row.wonCents) },
+    {
+      key: "invoiced",
+      header: "Invoiced",
+      numeric: true,
+      render: (row) => formatMoney(row.invoicedCents),
+    },
+    {
+      key: "collected",
+      header: "Collected",
+      numeric: true,
+      render: (row) => formatMoney(row.collectedCents),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
+        <div className="flex min-w-0 flex-col gap-[var(--space-1)]">
+          <CardTitle>{period.label}</CardTitle>
+          <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            Quoted and invoiced fall on the day the document was issued; collected falls on
+            the day the money arrived, so a month can collect more than it billed.
+          </p>
+        </div>
+      </CardHeader>
+      <CardBody className="p-[var(--space-5)]">
+        <div className="flex flex-wrap gap-[var(--space-10)]">
+          <HeadlineFigure
+            label="Quoted"
+            value={formatMoney(totals.quotedCents)}
+            sizeClass="text-[length:var(--text-xl)]"
+          />
+          <HeadlineFigure
+            label="Won"
+            value={formatMoney(totals.wonCents)}
+            sizeClass="text-[length:var(--text-xl)]"
+          />
+          <HeadlineFigure
+            label="Invoiced"
+            value={formatMoney(totals.invoicedCents)}
+            sizeClass="text-[length:var(--text-xl)]"
+          />
+          <HeadlineFigure
+            label="Collected"
+            value={formatMoney(totals.collectedCents)}
+            sizeClass="text-[length:var(--text-xl)]"
+          />
+          <HeadlineFigure
+            label="Still owed on it"
+            value={formatMoney(totals.outstandingCents)}
+            sizeClass="text-[length:var(--text-xl)]"
+            muted
+          />
+        </div>
+      </CardBody>
+      {money.perDeal.length === 0 ? (
+        <CardBody className="p-[var(--space-5)] pt-0">
+          <p className="text-[length:var(--text-base)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
+            No deal moved money in this period. Pick a wider range and the ones that did
+            show up here.
+          </p>
+        </CardBody>
+      ) : (
+        <DataTable columns={columns} rows={money.perDeal} getRowKey={(row) => row.dealId} />
+      )}
+    </Card>
   );
 }
 
@@ -224,8 +351,12 @@ function customerName(row: RecurringDealRow): string {
 /* Page                                                                        */
 /* -------------------------------------------------------------------------- */
 
-function RevenueContent(props: { data: RevenueBundle }) {
-  const { data } = props;
+function RevenueContent(props: {
+  data: RevenueBundle;
+  money: RevenueMoney | null;
+  period: Period;
+}) {
+  const { data, money, period } = props;
   // The whole page stands down only when there is no money of either kind to
   // show. Upfront revenue with nothing recurring is a real state - a trade
   // that has not sold a plan yet - and hiding this quarter's won work behind
@@ -236,7 +367,14 @@ function RevenueContent(props: { data: RevenueBundle }) {
     data.upfrontQuarterCents === 0 &&
     data.upfrontYearCents === 0;
 
-  if (noRecurring && noUpfront) {
+  const noMoney =
+    money === null ||
+    (money.totals.quotedCents === 0 &&
+      money.totals.wonCents === 0 &&
+      money.totals.invoicedCents === 0 &&
+      money.totals.collectedCents === 0);
+
+  if (noRecurring && noUpfront && noMoney) {
     return (
       <EmptyState
         title="No revenue yet"
@@ -282,6 +420,8 @@ function RevenueContent(props: { data: RevenueBundle }) {
           muted
         />
       </div>
+
+      {money ? <MoneyBlock money={money} period={period} /> : null}
 
       {noRecurring ? null : (
         <Card>

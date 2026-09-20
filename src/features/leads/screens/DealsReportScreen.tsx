@@ -1,11 +1,19 @@
 /**
- * Reports (/reports).
+ * The Deals report (/reports/deals).
  *
- * Five report cards over one period: pipeline value by stage, won and lost,
- * leads by source, conversion between stages, and average days in stage. One
- * `useReports` call loads all five at once (`loadReports` already runs the
- * five queries in parallel), and the period picker in the page header scopes
- * every card at the same time so the numbers always agree with each other.
+ * Everything about the work itself: what came in, what closed, how often a
+ * deal is won, what a win is worth and how long one takes - and under that the
+ * five cards that used to be the whole of /reports, because all five are about
+ * deals and splitting them across the new tabs would only hide them.
+ *
+ * Two clocks run on this page and they are deliberately different. The
+ * headline figures and the five cards answer "in the period you picked". The
+ * "New deals" trend answers "over the last twelve weeks, or the last twelve
+ * months", because a trend over "this month" is one bar, which is a number
+ * rather than a line (the dataviz rule the Won and lost card already follows).
+ *
+ * `useDealsReport` loads the lot in one round trip, so every figure on the
+ * page was read at the same instant and they always agree with each other.
  *
  * Colour comes from `components/charts.tsx`, which owns every fill and every
  * axis style on this screen. Two rules decide what a bar looks like:
@@ -24,7 +32,6 @@
  * figure at the end of it, which is exact where a gridline is a guess.
  */
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
 import {
   Bar,
   BarChart,
@@ -35,16 +42,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  Button,
-  CardGroupLabel,
-  EmptyState,
-  PageHeader,
-  Spinner,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/ui";
+import { CardGroupLabel, EmptyState, Spinner, Tabs, TabsList, TabsTrigger } from "@/ui";
 import { centsToDecimalString, formatMoney } from "@/lib/money";
 import {
   defaultGranularity,
@@ -52,15 +50,18 @@ import {
   periodFor,
 } from "@/lib/periods";
 import type { Granularity, Period } from "@/lib/periods";
-import { toCsv, useReports } from "@/features/leads/lib/reportKeys";
+import { toCsv, useDealsReport } from "@/features/leads/lib/reportKeys";
 import type {
   ConversionRow,
+  DealBucketRow,
+  DealsSummary,
   DwellRow,
   PipelineStageRow,
   SourceRow,
+  TrendGrain,
   WonLostRow,
 } from "@/db/repos/reports";
-import { PeriodPicker } from "@/features/leads/components/PeriodPicker";
+import { ReportsFrame } from "@/features/leads/components/ReportsFrame";
 import { ReportCard } from "@/features/leads/components/ReportCard";
 import { DataTable } from "@/features/leads/components/DataTable";
 import type { DataTableColumn } from "@/features/leads/components/DataTable";
@@ -99,10 +100,33 @@ function barChartHeight(rows: number, floor = 76): number {
   return Math.max(floor, rows * 40 + 16);
 }
 
-export function ReportsScreen() {
-  const [, navigate] = useLocation();
+/**
+ * Days, to one decimal, or an em dash when there is nothing to average.
+ */
+function formatDaysValue(value: number | null): string {
+  return value === null ? "—" : `${value.toFixed(1)}`;
+}
+
+function formatMoneyOrDash(cents: number | null): string {
+  return cents === null ? "—" : formatMoney(cents);
+}
+
+/** "Mon 3 Mar" for a week bucket, "Mar 2026" for a month one. */
+function formatTrendBucket(bucket: string, grain: TrendGrain): string {
+  if (grain === "month") return formatBucket(bucket);
+  const date = new Date(`${bucket}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return bucket;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+export function DealsReportScreen() {
   const [period, setPeriod] = useState<Period>(() => periodFor("month"));
   const [granularity, setGranularity] = useState<Granularity>(() => defaultGranularity(period));
+  const [grain, setGrain] = useState<TrendGrain>("week");
 
   // The picker sets the RANGE; the bucket size only has a sensible default
   // for that range, so a new range re-defaults it. The owner can still pick
@@ -111,50 +135,200 @@ export function ReportsScreen() {
     setGranularity(defaultGranularity(period));
   }, [period]);
 
-  const query = useReports(period, granularity);
+  const query = useDealsReport(period, grain, granularity);
 
   return (
-    <div className="flex flex-col">
-      <PageHeader
-        title="Reports"
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => navigate("/reports/revenue")}>
-              Revenue
-            </Button>
-            <PeriodPicker value={period} onChange={setPeriod} />
-          </>
-        }
-      />
-      <div className="flex flex-col gap-[var(--space-6)]">
-        {query.isPending ? (
-          <div className="flex justify-center py-[var(--space-10)]">
-            <Spinner label="Loading reports" />
-          </div>
-        ) : query.isError ? (
-          <EmptyState
-            title="Reports could not load"
-            description={
-              query.error instanceof Error
-                ? query.error.message
-                : "The database gave no reason. Try picking the period again."
-            }
+    <ReportsFrame
+      active="deals"
+      title="Deals"
+      subtitle="What came in, what closed, and how long a win takes."
+      period={{ value: period, onChange: setPeriod }}
+    >
+      {query.isPending ? (
+        <div className="flex justify-center py-[var(--space-10)]">
+          <Spinner label="Loading the deals report" />
+        </div>
+      ) : query.isError ? (
+        <EmptyState
+          title="The deals report could not load"
+          description={
+            query.error instanceof Error
+              ? query.error.message
+              : "The database gave no reason. Try picking the period again."
+          }
+        />
+      ) : query.data ? (
+        <>
+          <SummaryTiles summary={query.data.summary} />
+          <TrendCard rows={query.data.trend} grain={grain} onGrainChange={setGrain} />
+          <PipelineCard rows={query.data.openByStage} />
+          <WonLostCard
+            rows={query.data.wonLost}
+            granularity={granularity}
+            onGranularityChange={setGranularity}
           />
-        ) : query.data ? (
-          <>
-            <PipelineCard rows={query.data.pipeline} />
-            <WonLostCard
-              rows={query.data.wonLost}
-              granularity={granularity}
-              onGranularityChange={setGranularity}
-            />
-            <SourcesCard rows={query.data.sources} />
-            <ConversionCard rows={query.data.conversion} />
-            <DwellCard rows={query.data.dwell} />
-          </>
-        ) : null}
-      </div>
+          <SourcesCard rows={query.data.sources} />
+          <ConversionCard rows={query.data.conversion} />
+          <DwellCard rows={query.data.dwell} />
+        </>
+      ) : null}
+    </ReportsFrame>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* The headline: what came in, how often it lands, and how long it takes       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Four figures, and every one of them can honestly be "nothing yet".
+ *
+ * A won rate needs something to have closed; an average win needs a win; a
+ * median time to win needs the same. None of those is zero when it is missing,
+ * so none of them prints a zero - an em dash says "no answer" and a "0.0%"
+ * says "you lose everything", which is a different and untrue sentence.
+ */
+function SummaryTiles(props: { summary: DealsSummary }) {
+  const { summary } = props;
+  return (
+    <div className="flex flex-wrap gap-[var(--space-10)]">
+      <StatTile
+        label="New deals"
+        value={String(summary.newCount)}
+        count={formatMoney(summary.newValueCents)}
+      />
+      <StatTile
+        label="Won rate"
+        value={formatPercent(summary.wonRate)}
+        count={`${summary.wonCount} of ${summary.closedCount} closed`}
+      />
+      <StatTile
+        label="Average won"
+        value={formatMoneyOrDash(summary.averageWonCents)}
+        count={`${summary.wonCount} won${
+          summary.wonValueCents > 0 ? `, ${formatMoney(summary.wonValueCents)} in total` : ""
+        }`}
+      />
+      <StatTile
+        label="Days to win"
+        value={formatDaysValue(summary.medianDaysToWin)}
+        count="Median, creation to won"
+      />
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* New deals over a trailing window                                            */
+/* -------------------------------------------------------------------------- */
+
+function GrainControl(props: { value: TrendGrain; onChange: (value: TrendGrain) => void }) {
+  const { value, onChange } = props;
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => {
+        if (next === "week" || next === "month") onChange(next);
+      }}
+    >
+      <TabsList className="border-b-0">
+        <TabsTrigger value="week">12 weeks</TabsTrigger>
+        <TabsTrigger value="month">12 months</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
+
+function TrendCard(props: {
+  rows: DealBucketRow[];
+  grain: TrendGrain;
+  onGrainChange: (grain: TrendGrain) => void;
+}) {
+  const { rows, grain, onGrainChange } = props;
+  const empty = rows.every((row) => row.count === 0);
+
+  const data = rows.map((row) => ({
+    bucket: formatTrendBucket(row.bucket, grain),
+    count: row.count,
+  }));
+
+  const ariaLabel = `New deals per ${grain}: ${rows
+    .map(
+      (row) =>
+        `${formatTrendBucket(row.bucket, grain)} ${row.count} deal${row.count === 1 ? "" : "s"}`,
+    )
+    .join(", ")}`;
+
+  const columns: DataTableColumn<DealBucketRow>[] = [
+    {
+      key: "bucket",
+      header: grain === "week" ? "Week of" : "Month",
+      render: (row) => formatTrendBucket(row.bucket, grain),
+    },
+    { key: "count", header: "New deals", numeric: true, render: (row) => row.count },
+    {
+      key: "value",
+      header: "Value",
+      numeric: true,
+      render: (row) => formatMoney(row.valueCents),
+    },
+  ];
+
+  function csv() {
+    return toCsv(
+      [grain === "week" ? "Week of" : "Month", "New deals", "Value"],
+      rows.map((row) => [row.bucket, row.count, centsToDecimalString(row.valueCents)]),
+    );
+  }
+
+  return (
+    <ReportCard
+      title="New deals"
+      description={
+        grain === "week"
+          ? "Deals created in each of the last twelve weeks."
+          : "Deals created in each of the last twelve months."
+      }
+      empty={empty}
+      emptyTitle="No deals yet"
+      emptyDescription="Deals show up here the week they come in."
+      headerExtra={<GrainControl value={grain} onChange={onGrainChange} />}
+      csv={csv}
+      chart={
+        <ChartFigure ariaLabel={ariaLabel} height={220}>
+          <BarChart data={data} margin={{ top: 24, right: 0, bottom: 0, left: 0 }}>
+            <XAxis
+              dataKey="bucket"
+              tick={CHART_TICK_STYLE}
+              axisLine={CHART_AXIS_LINE}
+              tickLine={CHART_TICK_LINE}
+              interval="preserveStartEnd"
+            />
+            <YAxis type="number" allowDecimals={false} hide />
+            <Tooltip
+              cursor={CHART_CURSOR_FILL}
+              content={(tooltipProps) => (
+                <ChartTooltipContent
+                  {...tooltipProps}
+                  formatValue={(value) => `${value} deal${value === 1 ? "" : "s"}`}
+                />
+              )}
+            />
+            <Bar
+              dataKey="count"
+              name="New deals"
+              fill={CHART_BAR_PRIMARY}
+              maxBarSize={MAX_BAR_SIZE}
+              radius={VERTICAL_BAR_RADIUS}
+              isAnimationActive={CHART_ANIMATION_ACTIVE}
+            >
+              <LabelList dataKey="count" position="top" style={CHART_LABEL_STYLE} />
+            </Bar>
+          </BarChart>
+        </ChartFigure>
+      }
+      table={<DataTable columns={columns} rows={rows} getRowKey={(row) => row.bucket} />}
+    />
   );
 }
 
@@ -784,4 +958,4 @@ function DwellCard(props: { rows: DwellRow[] }) {
   );
 }
 
-export default ReportsScreen;
+export default DealsReportScreen;

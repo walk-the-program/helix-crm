@@ -699,13 +699,24 @@ export async function dealsSummary(period: Period): Promise<DealsSummary> {
   };
 }
 
+/**
+ * Everything the Deals page draws, in one round trip.
+ *
+ * It is a superset of the old `ReportBundle`: the five cards that used to be
+ * the whole of /reports are all about deals, so they moved here whole rather
+ * than being split across the new tabs, and the page's own summary and trend
+ * are loaded beside them so every figure on the page is read at one instant.
+ */
 export type DealsReport = {
   summary: DealsSummary;
   trend: DealBucketRow[];
   grain: TrendGrain;
-  /** Open deals by stage, right now: the same rows the overview draws. */
+  /** Open deals by stage, right now. */
   openByStage: PipelineStageRow[];
   wonLost: WonLostRow[];
+  sources: SourceRow[];
+  conversion: ConversionRow[];
+  dwell: DwellRow[];
 };
 
 export async function loadDealsReport(
@@ -714,13 +725,16 @@ export async function loadDealsReport(
   granularity: Granularity,
   today: string = todayLocal(),
 ): Promise<DealsReport> {
-  const [summary, trend, openByStage, won] = await Promise.all([
+  const [summary, trend, openByStage, won, sources, conversion, dwell] = await Promise.all([
     dealsSummary(period),
     newDealsTrend(grain, today),
     pipelineByStage(),
     wonLost(period, granularity),
+    leadsBySource(period),
+    stageConversion(period),
+    daysInStage(period),
   ]);
-  return { summary, trend, grain, openByStage, wonLost: won };
+  return { summary, trend, grain, openByStage, wonLost: won, sources, conversion, dwell };
 }
 
 /* -------------------------------------------------------------------------- */
