@@ -11,9 +11,10 @@
  * to mount at "/settings/backups"; the screen, the scheduler and the retention
  * policy still live in this folder, which is the feature that owns them.
  *
- * onBoot starts the two background timers this feature owns - the backup
- * schedule and the 24-hour duplicate scan - after the first paint. Both
- * respect `pauseTimers()`, so an import or a restore never competes with them.
+ * onBoot starts the three background timers this feature owns - the backup
+ * schedule, the 24-hour duplicate scan and the 30-day trash sweep - after the
+ * first paint. All three respect `pauseTimers()`, so an import or a restore
+ * never competes with them, and none of them can throw out of `onBoot`.
  */
 import { navigate } from "wouter/use-browser-location";
 import { Upload } from "@/ui/icons";
@@ -24,6 +25,7 @@ import { ExportScreen } from "@/features/data/export/ExportScreen";
 import { DuplicatesScreen } from "@/features/data/duplicates/DuplicatesScreen";
 import { startBackupScheduler } from "@/features/data/backups/scheduler";
 import { startDuplicateScanner } from "@/features/data/duplicates/scanner";
+import { startPurgeSweep } from "@/features/data/trash/purgeSweep";
 
 export const feature: FeatureModule = {
   id: "data",
@@ -50,7 +52,11 @@ export const feature: FeatureModule = {
     },
   ],
   async onBoot() {
-    await Promise.allSettled([startBackupScheduler(), startDuplicateScanner()]);
+    await Promise.allSettled([
+      startBackupScheduler(),
+      startDuplicateScanner(),
+      startPurgeSweep(),
+    ]);
   },
 };
 
