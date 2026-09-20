@@ -12,6 +12,7 @@
  * this is a second door onto the same catalog, not a fork of it.
  */
 import { useState } from "react";
+import { useVocabulary } from "@/app/vocabulary";
 import { Button, ConfirmDialog, EmptyState, PageHeader, toast } from "@/ui";
 import {
   useDealCounts,
@@ -29,6 +30,7 @@ import { ServiceDialog } from "@/features/catalog/components/ServiceDialog";
 import type { Product } from "@/db/repos/products";
 
 export function ServicesPage() {
+  const vocabulary = useVocabulary();
   const servicesQuery = useServices();
   const dealCountsQuery = useDealCounts();
   const services = servicesQuery.data ?? [];
@@ -96,7 +98,7 @@ export function ServicesPage() {
     <div className="flex flex-col gap-[var(--space-6)]" data-testid="services-page">
       <PageHeader
         title="Services"
-        subtitle="What you sell, the price you usually charge, and how many deals use it."
+        subtitle={`What you sell, the price you usually charge, and how many ${vocabulary.lowerMany} use it.`}
         actions={empty ? undefined : addServiceButton}
       />
 
@@ -107,7 +109,7 @@ export function ServicesPage() {
       ) : empty ? (
         <EmptyState
           title="No services yet"
-          description="Add the things you sell so a deal can be priced in two clicks."
+          description={`Add the things you sell so a ${vocabulary.lower} can be priced in two clicks.`}
           action={addServiceButton}
         />
       ) : (

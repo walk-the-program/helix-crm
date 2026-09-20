@@ -22,6 +22,7 @@
  */
 import { useState } from "react";
 import type { ReactElement } from "react";
+import { useVocabulary, type Vocabulary } from "@/app/vocabulary";
 import {
   Badge,
   Button,
@@ -82,12 +83,17 @@ export function priceLabel(service: Product): string {
 /* Row                                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** "3 deals", "1 deal", "No deals" - always shown so the count is legible even
- * at zero, which is the number that tells the owner a service is safe to
- * delete outright rather than only deactivate. */
-function dealCountLabel(count: number): string {
-  if (count === 0) return "No deals";
-  return count === 1 ? "1 deal" : `${count} deals`;
+/**
+ * "3 jobs", "1 job", "No jobs" - in the workspace's own word, which is the
+ * whole point of the vocabulary setting: a landscaping setup says jobs
+ * everywhere else and this row was the last place still saying deals.
+ *
+ * Always shown, even at zero, because zero is the number that tells the owner
+ * a service is safe to delete outright rather than only deactivate.
+ */
+function dealCountLabel(count: number, vocabulary: Vocabulary): string {
+  if (count === 0) return `No ${vocabulary.lowerMany}`;
+  return count === 1 ? `1 ${vocabulary.lower}` : `${count} ${vocabulary.lowerMany}`;
 }
 
 export function ServiceRow(props: {
@@ -114,6 +120,7 @@ export function ServiceRow(props: {
     onToggleActive,
     onDelete,
   } = props;
+  const vocabulary = useVocabulary();
   const quiet = !service.active;
 
   return (
@@ -152,7 +159,7 @@ export function ServiceRow(props: {
           data-testid="service-deal-count"
           className="money flex-none whitespace-nowrap text-[length:var(--text-sm)] text-[var(--color-text-faint)]"
         >
-          {dealCountLabel(dealCount)}
+          {dealCountLabel(dealCount, vocabulary)}
         </span>
       ) : null}
 
@@ -238,6 +245,7 @@ export function ServiceGroup(props: {
 /* -------------------------------------------------------------------------- */
 
 export function ServicesScreen() {
+  const vocabulary = useVocabulary();
   const servicesQuery = useServices();
   const services = servicesQuery.data ?? [];
   const oneTimeServices = sortForDisplay(services.filter((s) => groupOf(s) === "one_time"));
@@ -312,7 +320,7 @@ export function ServicesScreen() {
       ) : empty ? (
         <EmptyState
           title="No services yet"
-          description="Add the things you sell so a deal can be priced in two clicks."
+          description={`Add the things you sell so a ${vocabulary.lower} can be priced in two clicks.`}
           action={addServiceButton}
         />
       ) : (
