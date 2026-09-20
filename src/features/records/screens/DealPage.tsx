@@ -23,12 +23,18 @@ import { contactName } from "@/db/repos/contacts";
 import { useVocabulary } from "@/app/vocabulary";
 import {
   centsToDecimalString,
-  formatBreakdown,
   formatMoneyTrim,
   parseMoneyToCents,
 } from "@/lib/money";
 import { formatDateDisplay, formatRelative } from "@/lib/dates";
-import { useContact, useDeal, useStages, usePipeline, useTasks } from "@/features/records/lib/hooks";
+import {
+  useContact,
+  useDeal,
+  useDealMoney,
+  useStages,
+  usePipeline,
+  useTasks,
+} from "@/features/records/lib/hooks";
 import {
   deleteWithUndo,
   invalidateRecords,
@@ -40,6 +46,7 @@ import { InlineText } from "@/features/records/components/InlineEdit";
 import {
   CompanyPicker,
   ContactPicker,
+  companyAfterContactPick,
   SourcePicker,
   StagePicker,
 } from "@/features/records/components/Pickers";
@@ -49,6 +56,7 @@ import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
+import { DealMoneyStrip } from "@/features/records/components/MoneyStrip";
 import { DealServicesPanel } from "@/features/catalog/components/DealServicesPanel";
 import { useDealItems } from "@/features/catalog/lib/dealItemHooks";
 import * as dealItemsRepo from "@/db/repos/dealItems";
@@ -67,6 +75,7 @@ export function DealPage() {
   // Shared with the Services panel below through the query cache, so this is
   // the same read rather than a second one.
   const { data: dealItems } = useDealItems(id);
+  const { data: money } = useDealMoney(id);
   const [pendingLostStage, setPendingLostStage] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -181,27 +190,17 @@ export function DealPage() {
       />
 
       <div className="flex flex-col gap-[var(--space-2)]">
+        {/* The four figures, all from src/db/repos/money.ts. Quoted carries
+            this screen's single primary block - a flat brand-primary fill,
+            no sticker shadow (round 3, criterion 19). */}
+        <DealMoneyStrip
+          money={money}
+          oneTimeCents={deal.oneTimeCents}
+          recurringMonthlyCents={deal.recurringMonthlyCents}
+          currency={deal.currency}
+        />
+
         <div className="flex flex-wrap items-center gap-[var(--space-3)]">
-          {/* The one primary block on this screen: the money, flat-filled,
-              with the offset sticker outline as its single detail. Everything
-              else on the deal page is a neutral or a hairline. */}
-          <span
-            data-testid="deal-value"
-            className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]"
-          >
-            {formatMoneyTrim(deal.valueCents, deal.currency)}
-          </span>
-          {deal.recurringMonthlyCents > 0 ? (
-            <span
-              data-testid="deal-breakdown"
-              className="money text-[length:var(--text-base)] text-[var(--color-text-muted)]"
-            >
-              {formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
-                currency: deal.currency,
-                upfrontLabel: true,
-              })}
-            </span>
-          ) : null}
           <Badge dotColor={(stages ?? []).find((s) => s.id === deal.stageId)?.color}>
             {deal.stageName}
           </Badge>
@@ -382,8 +381,16 @@ export function DealPage() {
                     id="deal-contact"
                     label="Contact"
                     value={deal.contactId}
-                    onChange={(contactId) => {
-                      void patch({ contactId }).catch((err: unknown) =>
+                    onChange={(contactId, picked) => {
+                      // Picking the person sets the company too, in one write,
+                      // so the pair is never briefly inconsistent and one undo
+                      // puts both back.
+                      const companyId = companyAfterContactPick(picked, deal.companyId);
+                      void patch(
+                        companyId === deal.companyId
+                          ? { contactId }
+                          : { contactId, companyId },
+                      ).catch((err: unknown) =>
                         reportError(err, "That change did not save."),
                       );
                     }}

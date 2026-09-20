@@ -10,8 +10,9 @@
  */
 import { z } from "zod";
 import { raw } from "@/db/client";
-import { withWrite } from "@/db/writeLock";
+import { withWrite, withTransaction } from "@/db/writeLock";
 import { NotFoundError } from "@/db/errors";
+import { systemStatement } from "@/db/repos/activities";
 import {
   addDaysToDateString,
   nowIso,
@@ -189,12 +190,39 @@ export async function today(
   };
 }
 
+/**
+ * The timeline entry a task write leaves behind.
+ *
+ * Round 3, criterion 26: the timeline is the record's full history, and every
+ * repository write that changes one of those things writes its system entry in
+ * the SAME transaction - so a task can never exist without its "Task added"
+ * line, and a crash between the two is not a state the database can reach.
+ *
+ * A task linked to nothing has no timeline to appear on, so it writes nothing
+ * rather than an orphan entry.
+ */
+async function writeTimelineEntry(
+  link: { contactId: string | null; companyId: string | null; dealId: string | null },
+  body: string,
+  occurredAt?: string,
+): Promise<void> {
+  if (!link.contactId && !link.companyId && !link.dealId) return;
+  const entry = systemStatement({
+    body,
+    contactId: link.contactId,
+    companyId: link.companyId,
+    dealId: link.dealId,
+    ...(occurredAt ? { occurredAt } : {}),
+  });
+  await raw.execute(entry.sql, entry.params);
+}
+
 export async function create(
   input: NewTask,
   options: { batchId?: string } = {},
 ): Promise<Task> {
   const parsed = parseOrThrow(newTaskSchema, input);
-  return withWrite(async () => {
+  return withTransaction(async () => {
     const due = normalizeDue(parsed);
     const stamps = stampNew();
     const row = {
@@ -210,6 +238,7 @@ export async function create(
     };
     const stmt = insertStatement("tasks", row);
     await raw.execute(stmt.sql, stmt.params);
+    await writeTimelineEntry(row, `Task added: ${row.title}`);
     await logWrite("task", stamps.id, "create", null, row, options.batchId);
     return getOrThrow(stamps.id);
   }, "Saving a task");
@@ -249,11 +278,12 @@ export async function complete(
   id: string,
   options: { batchId?: string; at?: string } = {},
 ): Promise<Task> {
-  return withWrite(async () => {
+  return withTransaction(async () => {
     const before = await getOrThrow(id);
     const at = options.at ?? nowIso();
     const stmt = updateStatement("tasks", id, { doneAt: at, updatedAt: at });
     await raw.execute(stmt.sql, stmt.params);
+    await writeTimelineEntry(before, `Task done: ${before.title}`, at);
     await logWrite(
       "task",
       id,

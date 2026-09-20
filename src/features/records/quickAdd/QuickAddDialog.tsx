@@ -47,6 +47,7 @@ import {
 import {
   ContactPicker,
   CompanyPicker,
+  companyAfterContactPick,
   StagePicker,
 } from "@/features/records/components/Pickers";
 import { DuplicateNotice } from "@/features/records/components/NewContactDialog";
@@ -460,7 +461,10 @@ export function QuickAddDialog() {
                     id="quick-add-contact"
                     label="Contact"
                     value={contactId}
-                    onChange={setContactId}
+                    onChange={(id, contact) => {
+                      setContactId(id);
+                      setCompanyId((current) => companyAfterContactPick(contact, current));
+                    }}
                   />
                 </div>
                 <div>

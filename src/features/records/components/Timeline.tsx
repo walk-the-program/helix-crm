@@ -48,6 +48,28 @@ const KIND_LABEL: Record<ActivityKind, string> = {
   system: "Helix",
 };
 
+/**
+ * The timeline now carries the record's whole history - stage moves, tasks,
+ * files and documents alongside what the owner typed (round 3, criterion 26).
+ * That is a lot of rows on a busy deal, so a chip narrows it to the half you
+ * came for. "Changes" is everything the app recorded; "Notes and calls" is
+ * everything a person wrote.
+ */
+export const TIMELINE_FILTERS = ["all", "human", "system"] as const;
+export type TimelineFilter = (typeof TIMELINE_FILTERS)[number];
+
+const FILTER_LABEL: Record<TimelineFilter, string> = {
+  all: "All",
+  human: "Notes and calls",
+  system: "Changes",
+};
+
+export function matchesTimelineFilter(kind: ActivityKind, filter: TimelineFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "system") return kind === "system";
+  return kind !== "system";
+}
+
 export type TimelineProps = {
   contactId?: string;
   companyId?: string;
@@ -90,7 +112,9 @@ export function Timeline(props: TimelineProps) {
     ? { mergedForCompanyId }
     : { contactId, companyId, dealId };
   const query = useActivities(filter);
-  const entries = query.data?.rows ?? [];
+  const [shown, setShown] = useState<TimelineFilter>("all");
+  const allEntries = query.data?.rows ?? [];
+  const entries = allEntries.filter((entry) => matchesTimelineFilter(entry.kind, shown));
 
   async function addEntry() {
     if (!composing) return;
@@ -152,6 +176,33 @@ export function Timeline(props: TimelineProps) {
         </div>
       </CardHeader>
 
+      {/* One row of chips, not a select: three options the owner switches
+          between constantly belong in sight, not behind a click. */}
+      <div
+        role="group"
+        aria-label="Show"
+        data-testid="timeline-filter"
+        className="flex flex-wrap items-center gap-[var(--space-1)] border-b border-[var(--color-border)] px-[var(--space-4)] pb-[var(--space-3)]"
+      >
+        {TIMELINE_FILTERS.map((option) => (
+          <Button
+            key={option}
+            size="sm"
+            variant="ghost"
+            data-testid={`timeline-filter-${option}`}
+            className={
+              shown === option
+                ? "bg-[var(--color-selected)] text-[var(--color-text)]"
+                : undefined
+            }
+            aria-pressed={shown === option}
+            onClick={() => setShown(option)}
+          >
+            {FILTER_LABEL[option]}
+          </Button>
+        ))}
+      </div>
+
       <CardBody
         className={[
           "flex flex-col gap-[var(--space-4)]",
@@ -209,7 +260,23 @@ export function Timeline(props: TimelineProps) {
           </div>
         ) : null}
 
-        {entries.length === 0 && !query.isLoading ? (
+        {entries.length === 0 && allEntries.length > 0 && !query.isLoading ? (
+          <EmptyState
+            title={shown === "system" ? "No changes yet" : "Nothing written yet"}
+            description={
+              shown === "system"
+                ? "Stage moves, tasks and files show up here as they happen."
+                : "Notes, calls, emails and texts you log show up here."
+            }
+            action={
+              <Button variant="secondary" onClick={() => setShown("all")}>
+                Show everything
+              </Button>
+            }
+          />
+        ) : null}
+
+        {allEntries.length === 0 && !query.isLoading ? (
           <EmptyState
             title="Nothing logged yet"
             description="Every call, text and note you record here shows up in date order, newest first."

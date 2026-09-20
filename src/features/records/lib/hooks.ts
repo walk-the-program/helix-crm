@@ -18,6 +18,7 @@ import * as companiesRepo from "@/db/repos/companies";
 import * as dealsRepo from "@/db/repos/deals";
 import * as tasksRepo from "@/db/repos/tasks";
 import * as activitiesRepo from "@/db/repos/activities";
+import * as moneyRepo from "@/db/repos/money";
 
 /* -------------------------------------------------------------------------- */
 /* small generic hooks                                                        */
@@ -264,5 +265,33 @@ export function useActivities(filter: activitiesRepo.ActivityFilter, limit = 200
   return useQuery({
     queryKey: qk.activities({ ...filter, limit }),
     queryFn: () => activitiesRepo.list(filter, { limit }),
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* money                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The four figures for one deal. `src/db/repos/money.ts` is the single place
+ * these are defined (docs/rounds/2026-09-20-round-3.md, "Money model") - no
+ * screen re-derives them from lines or documents.
+ */
+export function useDealMoney(dealId: string) {
+  return useQuery({
+    queryKey: ["money", "deal", dealId],
+    queryFn: () => moneyRepo.dealMoney(dealId),
+    enabled: dealId.length > 0,
+  });
+}
+
+/** Lifetime figures for a customer: a contact, a company, or a person at one. */
+export function useCustomerMoney(ref: moneyRepo.CustomerRef) {
+  const contactId = ref.contactId ?? null;
+  const companyId = ref.companyId ?? null;
+  return useQuery({
+    queryKey: ["money", "customer", contactId, companyId],
+    queryFn: () => moneyRepo.customerMoney({ contactId, companyId }),
+    enabled: contactId !== null || companyId !== null,
   });
 }

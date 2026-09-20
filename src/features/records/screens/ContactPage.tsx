@@ -42,7 +42,7 @@ import * as contactsRepo from "@/db/repos/contacts";
 import type { ActivityKind } from "@/db/repos/activities";
 import { formatPhone } from "@/lib/phone";
 import { SummarizeButton } from "@/features/ai";
-import { useContact, useTasks } from "@/features/records/lib/hooks";
+import { useContact, useCustomerMoney, useTasks } from "@/features/records/lib/hooks";
 import {
   deleteWithUndo,
   invalidateRecords,
@@ -54,6 +54,7 @@ import { dueLabel } from "@/features/records/lib/taskGroups";
 import { todayLocal } from "@/lib/dates";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { CompanyPicker, SourcePicker } from "@/features/records/components/Pickers";
+import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
 import { PhoneList, EmailList } from "@/features/records/components/ContactMethods";
 import { AddressPanel } from "@/features/records/components/AddressPanel";
 import { TagEditor } from "@/features/records/components/TagEditor";
@@ -82,6 +83,9 @@ export function ContactPage() {
   const { id = "" } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { data: contact, isLoading } = useContact(id);
+  // This person's own money, not their company's: two contacts at the same
+  // company must not each appear to be worth the company's whole history.
+  const { data: money } = useCustomerMoney({ contactId: id });
   const { data: openTasks } = useTasks({ contactId: id, openOnly: true }, 20);
   const [composing, setComposing] = useState<ActivityKind | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -268,6 +272,10 @@ export function ContactPage() {
             <span className="text-[var(--color-text-faint)]">none yet</span>
           )}
         </p>
+
+        {/* Lifetime money, from src/db/repos/money.ts - the one definition of
+            these figures (round 3, "Money model"). */}
+        <CustomerMoneyStrip money={money} />
       </header>
 
       <div className="grid grid-cols-1 gap-[var(--space-6)] xl:grid-cols-[minmax(0,1fr)_380px]">

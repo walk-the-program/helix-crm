@@ -8,8 +8,9 @@
  */
 import { z } from "zod";
 import { raw } from "@/db/client";
-import { withWrite } from "@/db/writeLock";
+import { withWrite, withTransaction } from "@/db/writeLock";
 import { NotFoundError } from "@/db/errors";
+import { systemStatement } from "@/db/repos/activities";
 import {
   insertStatement,
   logWrite,
@@ -99,6 +100,20 @@ export async function list(entityType: string, entityId: string): Promise<Attach
   return mapRows(ATTACHMENT_COLS, rows);
 }
 
+/**
+ * Which record's timeline an attachment belongs on, or null when it hangs off
+ * something with no timeline (a document, say).
+ */
+function timelineLinkFor(
+  entityType: string,
+  entityId: string,
+): { contactId?: string; companyId?: string; dealId?: string } | null {
+  if (entityType === "contact") return { contactId: entityId };
+  if (entityType === "company") return { companyId: entityId };
+  if (entityType === "deal") return { dealId: entityId };
+  return null;
+}
+
 export async function create(
   input: NewAttachment,
   options: { batchId?: string } = {},
@@ -107,7 +122,7 @@ export async function create(
   if (parsed.bytes > MAX_ATTACHMENT_BYTES) {
     throw new AttachmentTooLargeError(parsed.bytes);
   }
-  return withWrite(async () => {
+  return withTransaction(async () => {
     const stamps = stampNew();
     const row = {
       ...stamps,
@@ -121,6 +136,15 @@ export async function create(
     };
     const stmt = insertStatement("attachments", row);
     await raw.execute(stmt.sql, stmt.params);
+    // Round 3, criterion 26: a file landing on a record is part of that
+    // record's history, written in the same transaction as the file row.
+    // Attachments hang off a polymorphic (entity_type, entity_id) pair, so
+    // only the three types the timeline actually renders get an entry.
+    const link = timelineLinkFor(row.entityType, row.entityId);
+    if (link) {
+      const entry = systemStatement({ body: `File added: ${row.fileName}`, ...link });
+      await raw.execute(entry.sql, entry.params);
+    }
     await logWrite("attachment", stamps.id, "create", null, row, options.batchId);
     return getOrThrow(stamps.id);
   }, "Saving an attachment");

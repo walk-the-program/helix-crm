@@ -27,6 +27,7 @@ import { useVocabulary } from "@/app/vocabulary";
 import {
   useCompany,
   useCompanyCounts,
+  useCustomerMoney,
   useContacts,
   useDeals,
 } from "@/features/records/lib/hooks";
@@ -39,6 +40,7 @@ import {
 import { oneTap } from "@/lib/actions";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { SourcePicker } from "@/features/records/components/Pickers";
+import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
 import { AddressPanel } from "@/features/records/components/AddressPanel";
 import { TagEditor } from "@/features/records/components/TagEditor";
 import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPanel";
@@ -53,6 +55,7 @@ export function CompanyPage() {
   const [, navigate] = useLocation();
   const vocabulary = useVocabulary();
   const { data: company, isLoading } = useCompany(id);
+  const { data: money } = useCustomerMoney({ companyId: id });
   const { data: counts } = useCompanyCounts(id);
   const { data: contacts } = useContacts({ companyId: id }, 500);
   const { data: openDeals } = useDeals({ companyId: id, openOnly: true }, 200);
@@ -184,6 +187,10 @@ export function CompanyPage() {
             and that sentence needs a line it can wrap onto. */}
         <SummarizeButton entityType="company" entityId={id} />
       </div>
+
+      {/* Lifetime money, from src/db/repos/money.ts - the one definition of
+          these figures (round 3, "Money model"). */}
+      <CustomerMoneyStrip money={money} />
 
       <div className="grid grid-cols-1 gap-[var(--space-5)] xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">

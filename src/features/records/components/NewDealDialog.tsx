@@ -21,6 +21,7 @@ import { useVocabulary } from "@/app/vocabulary";
 import {
   CompanyPicker,
   ContactPicker,
+  companyAfterContactPick,
   SourcePicker,
   StagePicker,
 } from "@/features/records/components/Pickers";
@@ -166,7 +167,10 @@ export function NewDealDialog(props: {
                 id="new-deal-contact"
                 label="Contact"
                 value={contactId}
-                onChange={setContactId}
+                onChange={(id, contact) => {
+                  setContactId(id);
+                  setCompanyId((current) => companyAfterContactPick(contact, current));
+                }}
               />
             </div>
             <div>
