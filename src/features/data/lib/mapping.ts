@@ -144,12 +144,13 @@ const RULES: Rule[] = [
   {
     field: "fullName",
     test: (h) =>
-      /^(name|full name|contact name|person name|display name|contact)$/.test(h) ||
-      /(^| )(full name|person name|contact name|display name)( |$)/.test(h),
+      /^(name|full name|contact name|person name|display name|contact|customer name)$/.test(h) ||
+      /(^| )(full name|person name|contact name|display name|customer name)( |$)/.test(h),
   },
   {
     field: "company",
     test: (h) =>
+      h === "co" ||
       /(^| )(company|company name|organi[sz]ation|organi[sz]ation name|account name|business|employer|org)( |$)/.test(
         h,
       ),
@@ -281,6 +282,8 @@ export type MappedPhone = { raw: string; e164: string | null; label: string };
 
 export type RowFlag = {
   level: "error" | "warning";
+  /** Groups the flag on the result screen: "email", "phone", "name", "required". */
+  kind: string;
   message: string;
   column?: string;
 };
@@ -391,6 +394,7 @@ export function applyMapping(
         if (!valid) {
           row.flags.push({
             level: "warning",
+            kind: "email",
             message: `"${value}" does not look like an email address. It will be saved as typed.`,
             column: column.header,
           });
@@ -409,6 +413,7 @@ export function applyMapping(
         if (normalized.e164 === null) {
           row.flags.push({
             level: "warning",
+            kind: "phone",
             message: `"${value}" is not a phone number Helix can dial. It will be saved exactly as typed.`,
             column: column.header,
           });
@@ -473,11 +478,14 @@ export function applyMapping(
     row.importable = false;
     row.flags.push({
       level: "error",
-      message: "Nothing to file this row under: no name, company, email or phone.",
+      kind: "required",
+      message:
+        "Nothing to file this row under: no name, company, email or phone. Add one of these in your spreadsheet, then import this row again.",
     });
   } else if (!hasName) {
     row.flags.push({
       level: "warning",
+      kind: "name",
       message: "No name on this row. Helix will file it under the company or the email.",
     });
   }
