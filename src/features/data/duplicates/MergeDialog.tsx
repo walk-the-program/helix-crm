@@ -169,7 +169,10 @@ export function MergeDialog(props: {
                     <CardRow key={field.column}>
                       <fieldset className="m-0 grid w-full grid-cols-[9rem_1fr_1fr] items-center gap-[var(--space-3)] border-0 p-0">
                         <legend className="sr-only">{field.label}</legend>
-                        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                        <span
+                          title={field.label}
+                          className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                        >
                           {field.label}
                         </span>
                         {(["a", "b"] as Side[]).map((side) => (
@@ -220,8 +223,9 @@ export function MergeDialog(props: {
             loadingLabel="Merging…"
             onClick={() => void confirm()}
             iconLeft={<ArrowsLeftRight size={16} weight="bold" aria-hidden="true" />}
+            title={`Merge into ${survivorSide.label}`}
           >
-            Merge into {survivorSide.label}
+            <span className="max-w-[16rem] truncate">Merge into {survivorSide.label}</span>
           </Button>
         </DialogFooter>
       </DialogContent>
