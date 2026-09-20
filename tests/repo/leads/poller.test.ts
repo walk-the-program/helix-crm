@@ -175,9 +175,13 @@ describe("tick() - reading a rejected invoke's message (F-LB-6)", () => {
     expect(outcome.error?.kind).toBe("auth");
 
     const sync = await leadSync.get(syncKeyFor(ORIGIN));
-    expect(sync!.lastError).toBe(
-      "LeadPollAuthError: HTTP 401 - The website answered HTTP 401.",
-    );
+    // On a 401/403 the site's own answer is deliberately NOT carried through
+    // (F-SEC-6): a rejection body commonly echoes the credential it rejected,
+    // and lead_sync.last_error is read back onto the Settings screen. The
+    // status is what the owner acts on. The original point of this test - that
+    // a plain `{code, message}` rejection is not stringified to
+    // "[object Object]" - is still what the last two assertions check.
+    expect(sync!.lastError).toBe("LeadPollAuthError: HTTP 401");
     expect(sync!.lastError).not.toContain("[object Object]");
     // The existing e2e assertion this must keep passing.
     expect(sync!.lastError).toMatch(/^LeadPollAuthError/);
