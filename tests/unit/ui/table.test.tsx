@@ -5,7 +5,6 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { createElement as h } from "react";
 import { Table, THead, TBody, TFoot, TR, TH, TD, TableScroll } from "@/ui";
 
 afterEach(() => {
@@ -14,23 +13,32 @@ afterEach(() => {
 
 function renderTable() {
   return render(
-    h(
-      Table,
-      null,
-      h(THead, null, h(TR, null, h(TH, null, "Name"), h(TH, { align: "right" }, "Value"))),
-      h(
-        TBody,
-        null,
-        h(TR, { "data-testid": "row-1" }, h(TD, { primary: true }, "Ana"), h(TD, { align: "right" }, "$40.00")),
-        h(
-          TR,
-          { "data-testid": "row-2" },
-          h(TD, { primary: true }, "Bo"),
-          h(TD, { align: "right", dashZero: true, "data-testid": "zero" }, "—"),
-        ),
-      ),
-      h(TFoot, null, h(TR, null, h(TD, null, "Total"), h(TD, { align: "right" }, "$40.00"))),
-    ),
+    <Table>
+      <THead>
+        <TR>
+          <TH>Name</TH>
+          <TH align="right">Value</TH>
+        </TR>
+      </THead>
+      <TBody>
+        <TR>
+          <TD primary>Ana</TD>
+          <TD align="right">$40.00</TD>
+        </TR>
+        <TR>
+          <TD primary>Bo</TD>
+          <TD align="right" dashZero data-testid="zero">
+            —
+          </TD>
+        </TR>
+      </TBody>
+      <TFoot>
+        <TR>
+          <TD>Total</TD>
+          <TD align="right">$40.00</TD>
+        </TR>
+      </TFoot>
+    </Table>,
   );
 }
 
@@ -49,7 +57,13 @@ describe("Table", () => {
 
   it("keeps a caller's own tbody class alongside the last-row rule", () => {
     const { container } = render(
-      h(Table, null, h(TBody, { className: "text-left" }, h(TR, null, h(TD, null, "x")))),
+      <Table>
+        <TBody className="text-left">
+          <TR>
+            <TD>x</TD>
+          </TR>
+        </TBody>
+      </Table>,
     );
     const tbody = container.querySelector("tbody");
     expect(tbody?.className).toContain("[&>tr:last-child]:border-b-0");
@@ -86,10 +100,12 @@ describe("Table", () => {
 
   /** The sticky header needs a scrollport; TableScroll is it. */
   it("gives the sticky header a bounded scroll region", () => {
-    const { container } = render(
-      h(TableScroll, { maxHeight: "calc(100vh - 20rem)", "data-testid": "scroll" }, h(Table, null)),
+    render(
+      <TableScroll maxHeight="calc(100vh - 20rem)" data-testid="scroll">
+        <Table />
+      </TableScroll>,
     );
-    const scroll = container.querySelector('[data-testid="scroll"]') as HTMLElement;
+    const scroll = screen.getByTestId("scroll");
     expect(scroll.className).toContain("overflow-y-auto");
     expect(scroll.className).toContain("min-h-0");
     expect(scroll.style.maxHeight).toBe("calc(100vh - 20rem)");

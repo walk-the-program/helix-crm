@@ -7,7 +7,6 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { createElement as h } from "react";
 import { EmptyState } from "@/ui";
 
 afterEach(() => {
@@ -17,11 +16,11 @@ afterEach(() => {
 describe("EmptyState", () => {
   it("centres a title, one sentence and one action by default", () => {
     const { container } = render(
-      h(EmptyState, {
-        title: "No backups yet",
-        description: "Helix writes one every time you close the app.",
-        action: h("button", { type: "button" }, "Back up now"),
-      }),
+      <EmptyState
+        title="No backups yet"
+        description="Helix writes one every time you close the app."
+        action={<button type="button">Back up now</button>}
+      />,
     );
     expect(screen.getByRole("heading", { name: "No backups yet" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Back up now" })).toBeTruthy();
@@ -35,11 +34,11 @@ describe("EmptyState", () => {
    */
   it("renders one muted, left-aligned sentence in the quiet variant", () => {
     const { container } = render(
-      h(EmptyState, {
-        variant: "quiet",
-        title: "No services yet",
-        description: "Add a service and its price shows up here.",
-      }),
+      <EmptyState
+        variant="quiet"
+        title="No services yet"
+        description="Add a service and its price shows up here."
+      />,
     );
     const root = container.firstElementChild as HTMLElement;
     expect(root.className).not.toContain("text-center");
@@ -51,24 +50,24 @@ describe("EmptyState", () => {
 
   /** So a caller can switch forms without rewriting its copy. */
   it("falls back to the title as the sentence when quiet has no description", () => {
-    render(h(EmptyState, { variant: "quiet", title: "Nothing due this week." }));
+    render(<EmptyState variant="quiet" title="Nothing due this week." />);
     expect(screen.getByText("Nothing due this week.")).toBeTruthy();
   });
 
   it("still allows exactly one action in the quiet variant", () => {
     render(
-      h(EmptyState, {
-        variant: "quiet",
-        title: "No tags yet.",
-        action: h("button", { type: "button" }, "Add a tag"),
-      }),
+      <EmptyState
+        variant="quiet"
+        title="No tags yet."
+        action={<button type="button">Add a tag</button>}
+      />,
     );
     expect(screen.getByRole("button", { name: "Add a tag" })).toBeTruthy();
   });
 
   /** Density is a token: neither form hard-codes a height. */
   it("sizes the quiet row from --row-h", () => {
-    const { container } = render(h(EmptyState, { variant: "quiet", title: "Nothing here." }));
+    const { container } = render(<EmptyState variant="quiet" title="Nothing here." />);
     const root = container.firstElementChild as HTMLElement;
     expect(root.className).toContain("min-h-[var(--row-h)]");
     expect(root.className).not.toMatch(/h-\[\d+px\]/);
