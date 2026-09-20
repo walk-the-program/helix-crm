@@ -243,8 +243,8 @@ Rules:
 | `--color-surface` | `#FFFFFF` | `#1E1E1E` |
 | `--color-surface-raised` | `#FFFFFF` | `#282828` |
 | `--color-sidebar` | `#F2F4FA` | `#191919` |
-| `--color-hover` | `#EAEDF3` | `#242424` |
-| `--color-selected` | `#EEF1F8` | `#2A2D2E` |
+| `--color-hover` | `#EAEDF3` | `#383838` |
+| `--color-selected` | `#EEF1F8` | `#373D41` |
 | `--color-border` | `rgba(78,85,90,0.14)` | `rgba(250,250,255,0.12)` |
 | `--color-border-strong` | `rgba(78,85,90,0.30)` | `rgba(250,250,255,0.24)` |
 | `--color-heading` | `#141414` | `#FAFAFF` |

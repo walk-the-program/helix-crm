@@ -651,6 +651,19 @@ function installShim(seed: {
   w.__TAURI_INVOKE__ = invoke;
   w.__TAURI_OS_PLUGIN_INTERNALS__ = { os_type: "macos" };
 
+  // The event plugin's own internals, which `@tauri-apps/api`'s `unlisten`
+  // reaches for directly rather than through `invoke`. Without it, tearing
+  // down a subscription threw "Cannot read properties of undefined (reading
+  // 'unregisterListener')" — and the menu bridge (src/app/menu.ts) subscribes
+  // on every mount and unsubscribes on every unmount, so React's development
+  // double-mount made that one error per page load. The `plugin:event|listen`
+  // stub above is the other half of this.
+  w.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+    unregisterListener() {
+      // Nothing to forget: the listen stub never registered anything.
+    },
+  };
+
   // Tells the app it is under the e2e harness, alongside VITE_E2E at build time.
   w.__HELIX_E2E__ = true;
 

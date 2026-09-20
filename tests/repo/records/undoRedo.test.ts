@@ -37,6 +37,7 @@ afterEach(() => {
 
 async function firstStages(): Promise<{ from: string; to: string }> {
   const pipeline = await pipelines.getDefault();
+  if (!pipeline) throw new Error("The seeded workspace has no default pipeline.");
   const stages = await stagesRepo.list(pipeline.id);
   return { from: stages[0].id, to: stages[1].id };
 }
