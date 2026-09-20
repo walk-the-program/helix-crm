@@ -423,10 +423,10 @@ export function TimePicker(props: {
                   disabledState,
                 )}
               >
-                <X size={12} weight="bold" aria-hidden="true" />
+                <X size={14} weight="bold" aria-hidden="true" />
               </button>
             ) : null}
-            <Clock size={14} weight="bold" aria-hidden="true" className="flex-none text-[var(--color-text-muted)]" />
+            <Clock size={16} weight="bold" aria-hidden="true" className="flex-none text-[var(--color-text-muted)]" />
           </div>
         </div>
       </RadixPopover.Anchor>

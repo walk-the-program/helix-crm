@@ -519,7 +519,7 @@ export function DatePicker(props: {
           <div className="flex items-center justify-between gap-[var(--space-2)]">
             <IconButton
               label="Previous month"
-              icon={<CaretLeft size={14} weight="bold" aria-hidden="true" />}
+              icon={<CaretLeft size={16} weight="bold" aria-hidden="true" />}
               variant="ghost"
               size="sm"
               disabled={prevDisabled}
@@ -530,7 +530,7 @@ export function DatePicker(props: {
             </span>
             <IconButton
               label="Next month"
-              icon={<CaretRight size={14} weight="bold" aria-hidden="true" />}
+              icon={<CaretRight size={16} weight="bold" aria-hidden="true" />}
               variant="ghost"
               size="sm"
               disabled={nextDisabled}

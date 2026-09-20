@@ -5,9 +5,27 @@
  * 2px strokes look like a web app; Phosphor's regular weight sits at the same
  * optical weight as the glyphs in a native macOS toolbar.
  *
- * Rules the whole product follows:
- *   - `weight="regular"` at 18px in lists, nav rows, timelines and empty
- *     states; `weight="bold"` at 16px inside a button or an icon button.
+ * ICON SIZE CANON. Exactly one size per context, and nothing else:
+ *
+ *   10, weight "bold"    the sort caret in a column header, and nothing else.
+ *   14, weight "bold"    an indicator that sits beside text: a caret, a
+ *                        check mark, a clear/remove X, an inline error glyph.
+ *   16, weight "bold"    a glyph inside a control the user presses or types
+ *                        into: button and icon-button glyphs, a dialog's
+ *                        close, a field affix (including a search
+ *                        magnifier in a field).
+ *   18, weight "regular" a glyph that identifies a row or an item: a
+ *                        sidebar nav row, a list row's leading icon, and the
+ *                        search field of a full-window overlay.
+ *   28, weight "regular" the single hero glyph on a full-window boot or
+ *                        error screen. Named here for completeness only —
+ *                        that screen lives outside src/ui and is not
+ *                        governed by this file.
+ *
+ * `Spinner`'s numeric `size` prop is a spinner diameter, not an icon size,
+ * and sits outside this canon entirely.
+ *
+ * Other rules the whole product follows:
  *   - never two weights in one cluster, and never two sizes in one row;
  *   - an icon never appears without a label unless it is an `IconButton`,
  *     which carries `aria-label` and `title`;
@@ -118,10 +136,12 @@ import {
 /* sizes and weights: the two numbers and the two weights, named              */
 /* -------------------------------------------------------------------------- */
 
-/** 18px regular: lists, nav rows, timelines, empty states, page headers. */
+/** 18px regular: the row-identifying icon in the canon above (lists, nav
+ *  rows, timelines, empty states, page headers). */
 export const ICON_SIZE = 18;
 
-/** 16px bold: inside a button, an icon button or a menu item. */
+/** 16px bold: the control-glyph size in the canon above (inside a button, an
+ *  icon button, a dialog close or a field affix). */
 export const ICON_SIZE_SM = 16;
 
 /** The list weight. */

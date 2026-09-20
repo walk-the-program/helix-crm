@@ -21,7 +21,7 @@ type FieldControlProps = {
  * Label above the field, always visible, --text-sm, --color-text-muted.
  * Required is marked with the word "Required", not an asterisk.
  * Helper text sits under the field at --text-xs --color-text-faint; an error
- * replaces it, in --color-danger-ink, with a 16px alert-circle beside it.
+ * replaces it, in --color-danger-ink, with a 14px alert-circle beside it.
  * (docs/DESIGN.md section 9, "Inputs".)
  *
  * Both the hint and the error are wired to the control through
@@ -87,7 +87,7 @@ export function Field(props: {
             "text-[length:var(--text-xs)] text-[var(--color-danger-ink)]",
           )}
         >
-          <WarningCircle size={14} className="flex-none translate-y-[1px]" aria-hidden="true" />
+          <WarningCircle size={14} weight="bold" className="flex-none translate-y-[1px]" aria-hidden="true" />
           <span>{error}</span>
         </p>
       ) : null}

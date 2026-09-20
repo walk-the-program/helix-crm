@@ -84,7 +84,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
     {...props}
   >
     <RadixDropdownMenu.ItemIndicator className="absolute left-[var(--space-2)] inline-flex items-center text-[var(--color-text-muted)]">
-      <Check size={16} weight="bold" aria-hidden="true" />
+      <Check size={14} weight="bold" aria-hidden="true" />
     </RadixDropdownMenu.ItemIndicator>
     {children}
   </RadixDropdownMenu.CheckboxItem>
