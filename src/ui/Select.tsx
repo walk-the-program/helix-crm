@@ -89,8 +89,11 @@ export function Select(props: {
             "min-w-[var(--radix-select-trigger-width)]",
           )}
         >
+          {/* A caret, not a control glyph: the same 14 as the trigger's own
+              caret two dozen lines up. Two caret sizes inside one component is
+              precisely the inconsistency this pass exists to remove. */}
           <RadixSelect.ScrollUpButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
-            <CaretUp size={16} weight="bold" aria-hidden="true" />
+            <CaretUp size={14} weight="bold" aria-hidden="true" />
           </RadixSelect.ScrollUpButton>
           <RadixSelect.Viewport className="p-[var(--space-1)]">
             {options.map((option) => (
@@ -114,7 +117,7 @@ export function Select(props: {
             ))}
           </RadixSelect.Viewport>
           <RadixSelect.ScrollDownButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
-            <CaretDown size={16} weight="bold" aria-hidden="true" />
+            <CaretDown size={14} weight="bold" aria-hidden="true" />
           </RadixSelect.ScrollDownButton>
         </RadixSelect.Content>
       </RadixSelect.Portal>
