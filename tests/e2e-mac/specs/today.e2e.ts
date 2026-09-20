@@ -630,3 +630,70 @@ test.describe("today: CPO regressions", () => {
     await expect(page.getByText(/No open .* yet\./)).toBeVisible();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* CDQO-LA-W2 design/quality pass regressions (2026-09-20)                     */
+/* -------------------------------------------------------------------------- */
+
+test.describe("today: LA-W2 design regressions", () => {
+  /**
+   * F-W2-D1. A Today row used to put its tag (the "Overdue N days" badge, a
+   * source badge, a stage badge) in a fixed-width column ahead of the name,
+   * which the owner scans for first. The coordinator's direction rule 1 is
+   * explicit: name, how to reach or find them, money, tags last. The tag now
+   * renders after the money, immediately before the row's actions.
+   */
+  test("a Due now row's tag sits to the right of the task title, not ahead of it", async ({
+    page,
+    helix,
+  }) => {
+    const seeded = await bootTodayWithData(page, helix);
+    const dueNow = section(page, "due-now");
+    const row = dueNow.locator("li", { hasText: seeded.overdueTaskTitle });
+
+    const titleBox = await row.getByText(seeded.overdueTaskTitle).boundingBox();
+    const tagBox = await row.getByText(/Overdue \d+ days/).boundingBox();
+    expect(titleBox).not.toBeNull();
+    expect(tagBox).not.toBeNull();
+    expect(titleBox!.x).toBeLessThan(tagBox!.x);
+  });
+
+  /**
+   * F-W2-D3. Quick add's type switcher is a real ARIA tablist: only the
+   * selected tab is a tab stop, and the arrow keys move both the selection and
+   * focus, so a keyboard user never has to reach for the mouse to change
+   * record types.
+   */
+  test("quick add's type tabs are keyboard-navigable with a roving tabindex", async ({
+    page,
+    helix,
+  }) => {
+    await bootTodayWithData(page, helix);
+    await page.keyboard.press("Meta+n");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+
+    // The Name field takes focus on open (autoFocus); Shift+Tab is how a
+    // keyboard user reaches the tablist's one tab stop from there.
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("tab", { name: "Contact" })).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Contact" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Company" })).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Company" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // The tab that lost the selection is out of the sequential tab order.
+    await expect(page.getByRole("tab", { name: "Contact" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+
+    await page.keyboard.press("Escape");
+  });
+});
