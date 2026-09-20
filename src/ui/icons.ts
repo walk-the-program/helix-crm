@@ -93,6 +93,7 @@ import {
   PushPin,
   PushPinSlash,
   Scroll,
+  SidebarSimple,
   SlidersHorizontal,
   Sparkle,
   Stack,
@@ -152,6 +153,7 @@ export {
   SlidersHorizontal,
   MagnifyingGlass,
   Funnel,
+  SidebarSimple,
   /* contact methods */
   Phone,
   PhoneCall,

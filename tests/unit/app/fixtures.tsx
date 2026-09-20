@@ -53,6 +53,7 @@ const DEFAULT_REGISTRY: HelixRegistry = {
   lastOpened: null,
   theme: "auto",
   density: "comfortable",
+  sidebar: { width: 240, collapsed: false },
 };
 
 const DEFAULT_WORKSPACE: WorkspaceEntry = {

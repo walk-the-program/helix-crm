@@ -118,7 +118,17 @@ export type FeatureModule = {
   onBoot?: () => Promise<void>;
 };
 
-/** Sidebar orders the contract fixes, so features agree without talking. */
+/**
+ * Sidebar orders the contract fixes, so features agree without talking.
+ *
+ * ROUND 3 (criteria 21 and 23) regrouped these. Eleven rows in one column,
+ * ordered by when each feature happened to be built, made the sidebar a list
+ * to read rather than a shape to recognise. The order now puts related things
+ * together, and `NAV_GROUPS` below draws a hairline between each run:
+ *
+ *   Today · Contacts, Companies · Deals, Services, Invoices, Reports ·
+ *   Tasks, Reminders · Import · Trash · Settings, Help
+ */
 export const NAV_ORDER = {
   today: 10,
   /** The dynamic "Views" group: pinned saved views, between Today and Contacts. */
@@ -126,8 +136,49 @@ export const NAV_ORDER = {
   contacts: 20,
   companies: 30,
   pipeline: 40,
-  tasks: 50,
-  reports: 60,
+  /** The services catalogue, between Deals and Invoices (round 3, criterion 23). */
+  services: 45,
+  invoices: 48,
+  reports: 50,
+  tasks: 60,
+  reminders: 65,
   import: 70,
+  trash: 80,
   settings: 90,
+  help: 95,
 } as const;
+
+/**
+ * The sidebar's groups, in order, each one a list of nav `to` paths in the
+ * order they should appear inside it.
+ *
+ * WHY BY PATH AND NOT BY NUMBER. Three features spell their order as a literal
+ * rather than reading `NAV_ORDER` (Invoices, Reminders, Trash, Help), and they
+ * are owned by other agents this round. Grouping on the route means the shape
+ * of the sidebar is decided in one place and cannot be knocked out of shape by
+ * a feature picking a number — which is the failure `NAV_ORDER` alone has had
+ * twice now. `NAV_ORDER` stays as the contract name features import, and the
+ * two agree.
+ *
+ * A nav item whose `to` is not listed here — a pinned saved view, a feature
+ * added after this file was last touched — is not dropped: the shell puts it
+ * in its own group, positioned by its numeric `order`.
+ */
+export const NAV_GROUPS: readonly (readonly string[])[] = [
+  ["/"],
+  ["/contacts", "/companies"],
+  ["/pipeline", "/services", "/invoices", "/reports"],
+  ["/tasks", "/recurring"],
+  ["/import"],
+  ["/trash"],
+  ["/settings", "/help"],
+];
+
+/** Where a known `to` sits: which group, and where inside it. */
+export function navGroupPosition(to: string): { group: number; index: number } | null {
+  for (let group = 0; group < NAV_GROUPS.length; group += 1) {
+    const index = NAV_GROUPS[group].indexOf(to);
+    if (index !== -1) return { group, index };
+  }
+  return null;
+}

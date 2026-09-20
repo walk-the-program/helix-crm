@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 /**
- * The toolbar's appearance button (HIG review finding 5, top-ten item 3):
- * its accessible name has to say what pressing it will DO — the next stop
- * in `nextTheme`'s Auto -> Light -> Dark -> Auto cycle — and its tooltip has
- * to say what the appearance IS right now, resolved against the OS when
- * Helix is on Auto, without the two repeating each other.
+ * The toolbar's appearance button.
+ *
+ * ROUND 3, criterion 6: it is a TOGGLE, Light <-> Dark, one press each way.
+ * It used to cycle Auto -> Light -> Dark -> Auto, which meant that from a Mac
+ * on dark with Helix on Auto, going light took two presses. Auto now lives in
+ * Settings > Appearance only.
+ *
+ * Its accessible name says what pressing it will DO; its tooltip says what the
+ * appearance IS right now, resolved against the OS when Helix is on Auto, and
+ * the two never repeat each other.
  *
  * `themeButtonLabels` is the pure function Shell.tsx renders the toolbar
  * button from; this exercises it directly rather than through Radix's hover
@@ -32,40 +37,48 @@ import { themeButtonLabels } from "@/app/Shell";
 import type { Theme } from "@/app/appSettings";
 
 describe("themeButtonLabels", () => {
-  it("Auto: names Light as the destination and states Auto plus the resolved appearance", () => {
-    const { actionLabel, stateLabel, resolved } = themeButtonLabels("auto");
-    expect(resolved).toBe("light"); // jsdom has no matchMedia, so "auto" resolves to "light".
-    expect(actionLabel).toBe("Switch to light");
+  it("Auto: the first press goes to the opposite of what is on screen", () => {
+    // jsdom has no matchMedia, so "auto" resolves to "light" here — and the
+    // button therefore offers dark, which is the whole point of the change:
+    // from Auto the press does what the eye expects, not what the enum says.
+    const { actionLabel, stateLabel, resolved, target } = themeButtonLabels("auto");
+    expect(resolved).toBe("light");
+    expect(target).toBe("dark");
+    expect(actionLabel).toBe("Switch to dark");
     expect(stateLabel).toBe("Auto (light)");
   });
 
   it("Light: names Dark as the destination and states Light", () => {
-    const { actionLabel, stateLabel, resolved } = themeButtonLabels("light");
+    const { actionLabel, stateLabel, resolved, target } = themeButtonLabels("light");
     expect(resolved).toBe("light");
+    expect(target).toBe("dark");
     expect(actionLabel).toBe("Switch to dark");
     expect(stateLabel).toBe("Light");
   });
 
-  it("Dark: names Auto as the destination and states Dark", () => {
-    const { actionLabel, stateLabel, resolved } = themeButtonLabels("dark");
+  it("Dark: names Light as the destination and states Dark", () => {
+    const { actionLabel, stateLabel, resolved, target } = themeButtonLabels("dark");
     expect(resolved).toBe("dark");
-    expect(actionLabel).toBe("Switch to auto");
+    expect(target).toBe("light");
+    expect(actionLabel).toBe("Switch to light");
     expect(stateLabel).toBe("Dark");
   });
 
-  it("cycles Auto -> Light -> Dark -> Auto, ending back at Auto, one press at a time", () => {
+  it("never offers Auto: pressing it repeatedly flips Light <-> Dark and nothing else", () => {
     let theme: Theme = "auto";
-    const seen: Theme[] = [theme];
-    for (let i = 0; i < 3; i++) {
-      const { actionLabel } = themeButtonLabels(theme);
-      theme =
-        actionLabel === "Switch to light" ? "light" : actionLabel === "Switch to dark" ? "dark" : "auto";
-      seen.push(theme);
+    const pressed: Theme[] = [];
+    for (let i = 0; i < 4; i++) {
+      theme = themeButtonLabels(theme).target;
+      pressed.push(theme);
     }
-    expect(seen).toEqual<Theme[]>(["auto", "light", "dark", "auto"]);
+    // From Auto (resolving light) the first press is dark, and from then on it
+    // is a plain two-state flip. Auto never comes back round: it is a setting,
+    // not a stop on a carousel.
+    expect(pressed).toEqual<Theme[]>(["dark", "light", "dark", "light"]);
+    expect(pressed).not.toContain("auto");
   });
 
-  it("never states the same thing it names as the action, at any point in the cycle", () => {
+  it("never states the same thing it names as the action, in any state", () => {
     for (const theme of ["auto", "light", "dark"] as const) {
       const { actionLabel, stateLabel } = themeButtonLabels(theme);
       expect(actionLabel).not.toBe(stateLabel);

@@ -58,14 +58,19 @@ afterEach(() => {
 });
 
 describe("Shell sidebar footer", () => {
-  it("is a button named for the workspace, titled 'Switch workspace', and runs the command once when clicked", async () => {
+  it("is a button named for the workspace and runs the command once per click", async () => {
     const run = vi.fn();
     registryState.findCommandImpl = (id) => (id === "switch-workspace" ? switchWorkspaceCommand(run) : null);
 
     await renderShell({ workspace: WORKSPACE });
 
     const button = screen.getByRole("button", { name: "Acme Co" });
-    expect(button.getAttribute("title")).toBe("Switch workspace");
+    // Round 3: the "Switch workspace" hint moved from a native `title` to the
+    // kit's Tooltip, which also carries the live workspace name — the same
+    // rule the toolbar's appearance button follows, so a hover never shows two
+    // tooltips saying different things. Radix wires it as aria-describedby.
+    expect(button.getAttribute("title")).toBeNull();
+    expect(button.getAttribute("data-testid")).toBe("workspace-footer");
 
     fireEvent.click(button);
     fireEvent.click(button);

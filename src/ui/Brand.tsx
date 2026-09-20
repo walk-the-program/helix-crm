@@ -1,29 +1,23 @@
 import { cn } from "@/ui/cn";
 
 /**
- * The Helix lockup: the mark in a hard-edged square with the brand's offset
- * "sticker" shadow behind it, and the word "Helix" beside it in the heading
- * face.
+ * The Helix lockup: the mark and the word "Helix" beside it in the heading
+ * face. Nothing else.
  *
- * This is the one place --shadow-sticker is guaranteed to appear. The brand
- * guide calls it out by name — "hard edges with an offset sticker shadow" —
- * and it is the loudest thing the brand owns, so it stops being a signature
- * the moment a second element wears it. A screen may add it to at most one
- * hero element; nothing else.
- *
- * The shadow is an outline, not a slab: a thin ring offset down and right with
- * the surface showing through the gap. tokens.css explains how the two layered
- * box-shadows draw it, and --sticker-gap is why it has to be told what it is
- * standing on.
+ * ROUND 3: the sticker is gone. The lockup used to sit in a hard-edged square
+ * with an offset outline behind it — the brand guide's signature. Walker saw
+ * it in the running app and called it sloppy, and he was right about the small
+ * size: at 26px in the sidebar a 1.5px ring offset 4px reads as a printing
+ * misregistration, not as a sticker. It is retired product-wide
+ * (`--shadow-sticker` is now `none`, see src/styles/tokens.css), so the mark
+ * is drawn plain, with no square, no hairline and no outline. The brand's one
+ * loud element is the flat primary block on the selected nav row.
  *
  * Two sizes and no more:
  *   sm  the sidebar header. A 26px mark and the word at --text-lg.
  *   lg  a boot screen. A 56px mark and the word at --text-heading.
  *
- * The mark is a transparent PNG, so it needs a surface behind it for the
- * sticker shadow to read as an offset card rather than as a smear behind the
- * glyphs. That surface is --color-surface with a hairline, which is also what
- * the brand guide draws around it on its "Marks & Surfaces" page.
+ * The word takes --color-heading — plain ink, never a tint.
  */
 export function Brand({
   size = "sm",
@@ -34,12 +28,14 @@ export function Brand({
   size?: "sm" | "lg";
   /** Draw the word "Helix" beside the mark. */
   wordmark?: boolean;
-  /** The offset sticker outline. On by default; off where the lockup sits on a
-   *  surface that already carries one. */
+  /** @deprecated Retired in round 3. Accepted and ignored. */
   sticker?: boolean;
   className?: string;
 }) {
   const large = size === "lg";
+  // `sticker` is accepted and ignored: the treatment is retired product-wide
+  // and the prop stays only so no call site has to change on the same commit.
+  void sticker;
 
   return (
     <span
@@ -52,9 +48,7 @@ export function Brand({
       <span
         className={cn(
           "inline-flex flex-none items-center justify-center",
-          "border border-[var(--color-border-strong)] bg-[var(--color-surface)]",
-          large ? "h-[56px] w-[56px] p-[var(--space-2)]" : "h-[26px] w-[26px] p-[3px]",
-          sticker && "shadow-[var(--shadow-sticker)]",
+          large ? "h-[56px] w-[56px]" : "h-[26px] w-[26px]",
         )}
       >
         <img

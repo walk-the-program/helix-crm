@@ -27,10 +27,11 @@
  *    is where a dialog that has to exist on every screen belongs — instead of a
  *    second React root on `<body>` with the providers rebuilt around it.
  */
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Route, Router, Switch, useLocation } from "wouter";
+import { cn } from "@/ui/cn";
 import { Toaster } from "sonner";
-import { MagnifyingGlass, MoonStars, Sun } from "@/ui/icons";
+import { MagnifyingGlass, MoonStars, SidebarSimple, Sun } from "@/ui/icons";
 import {
   allCommands,
   allNavItems,
@@ -44,13 +45,21 @@ import {
   OPEN_PALETTE_EVENT,
   PALETTE_SHORTCUT,
 } from "@/app/CommandPalette";
-import type { FeatureNavItem, FeatureNavSection, FeatureRoute } from "@/app/feature";
+import { TOGGLE_SIDEBAR_EVENT, TOGGLE_SIDEBAR_SHORTCUT } from "@/app/sidebarCommand";
+import {
+  navGroupPosition,
+  type FeatureNavItem,
+  type FeatureNavSection,
+  type FeatureRoute,
+} from "@/app/feature";
 import { useAppearance, useShortcut, useWriteState } from "@/app/hooks";
 import { useCommandShortcuts } from "@/app/shortcuts";
 import {
   isMacOS,
   nextTheme,
   resolveTheme,
+  setSidebar,
+  subscribeToRegistry,
   type HelixRegistry,
   type Theme,
   type WorkspaceEntry,
@@ -64,6 +73,8 @@ import {
   NavItem,
   Sidebar,
   SidebarSection,
+  SidebarSeparator,
+  SIDEBAR_DEFAULT_W,
   Topbar,
   Tooltip,
   TooltipProvider,
@@ -133,41 +144,123 @@ function useDynamicNavSections(): FeatureNavSection[] {
  * than commands: mod+k runs whichever feature owns search and falls back to the
  * palette, and the palette is not a feature at all.
  */
-const SHELL_OWN_SHORTCUTS = ["mod+k", PALETTE_SHORTCUT] as const;
+const SHELL_OWN_SHORTCUTS = ["mod+k", PALETTE_SHORTCUT, TOGGLE_SIDEBAR_SHORTCUT] as const;
 
 /**
- * The toolbar's appearance button (HIG review finding 5).
+ * The toolbar's appearance button (round 3, criterion 6).
  *
- * Before this, the icon and label read the raw `theme`, not the *resolved*
- * one: on a Mac set to dark with Helix on Auto, the app was already dark
- * while the button said "Switch to dark" and showed a moon, and pressing it
- * pinned the app to dark with no way back to Auto except through Settings.
+ * IT IS A TOGGLE NOW, not a cycle. It used to run Auto -> Light -> Dark ->
+ * Auto, which was defensible on paper — Auto is always one press away — and
+ * wrong in the hand: Walker's Mac is on dark, Helix was on Auto and therefore
+ * dark, and turning the app light took two presses (Auto -> Light was the
+ * first, but from Dark it was Dark -> Auto -> Light). A toolbar button that
+ * sometimes needs one press and sometimes two is a broken button.
  *
- * The two strings this returns are deliberately not the same sentence:
+ * So the button flips between Light and Dark and nothing else. From Auto, the
+ * first press goes to the OPPOSITE of what is on screen, which is the only
+ * reading of "toggle" that does what the eye expects. Auto did not disappear;
+ * it moved to the one place a preference belongs, Settings > Appearance, where
+ * it is a named choice rather than a stop on a carousel.
+ *
+ * The two strings are deliberately not the same sentence:
  * - `actionLabel` becomes `IconButton`'s `label` — the accessible name — and
- *   says what pressing the button will DO: the next stop in `nextTheme`'s
- *   Auto -> Light -> Dark -> Auto cycle, so Auto is always one press away.
- * - `stateLabel` is the visible `Tooltip` content and says what the
- *   appearance IS right now — qualified with the resolved appearance when
- *   Helix is on Auto ("Auto (dark)"), since "Auto" alone does not tell a Mac
- *   owner what they are actually looking at.
+ *   says what pressing it will DO.
+ * - `stateLabel` is the visible `Tooltip` and says what the appearance IS,
+ *   qualified when Helix is on Auto ("Auto (dark)"), since "Auto" alone does
+ *   not tell a Mac owner what they are looking at.
  *
- * Keeping the wording apart matters for VoiceOver: Radix's tooltip wires
- * `aria-describedby` to its content, so a screen reader announces the
- * accessible name and then the tooltip as a description. If the two said the
- * same thing, that announcement would repeat itself.
+ * Keeping them apart matters for VoiceOver: Radix wires the tooltip as
+ * `aria-describedby`, so a screen reader reads the name and then the
+ * description. Identical strings would stutter.
  */
 export function themeButtonLabels(theme: Theme): {
   actionLabel: string;
   stateLabel: string;
+  target: "light" | "dark";
   resolved: "light" | "dark";
 } {
   const resolved = resolveTheme(theme);
-  const next = nextTheme(theme);
-  const actionLabel =
-    next === "light" ? "Switch to light" : next === "dark" ? "Switch to dark" : "Switch to auto";
+  // One function decides this, so the toolbar button, the View menu's "Toggle
+  // theme" and the palette can never move in different directions.
+  const target = nextTheme(theme) as "light" | "dark";
+  const actionLabel = target === "light" ? "Switch to light" : "Switch to dark";
   const stateLabel = theme === "auto" ? `Auto (${resolved})` : theme === "light" ? "Light" : "Dark";
-  return { actionLabel, stateLabel, resolved };
+  return { actionLabel, stateLabel, target, resolved };
+}
+
+/**
+ * The sidebar, assembled into groups (round 3, criterion 21).
+ *
+ * Every nav item the product has, static or from a `navProvider`, lands in one
+ * of `NAV_GROUPS`' runs by its route. What is left over — a pinned saved view,
+ * a feature added since that list was written — gets a group of its own,
+ * placed by its numeric `order`, so nothing is ever dropped for not being on
+ * the list. A labelled dynamic section stays its own group with its caption.
+ *
+ * The result is a list of groups; the shell draws one hairline between each
+ * pair. Exported for its unit test, which is the only way to check the shape
+ * without rendering the whole registry.
+ */
+export type NavBlock =
+  | { kind: "items"; key: string; items: FeatureNavItem[] }
+  | { kind: "section"; key: string; label: string; items: FeatureNavItem[] };
+
+export function buildNavBlocks(
+  navItems: readonly FeatureNavItem[],
+  navSections: readonly FeatureNavSection[],
+): NavBlock[] {
+  type Bucket = {
+    key: string;
+    /** Where the whole group sits against every other group. */
+    rank: number;
+    label?: string;
+    entries: { item: FeatureNavItem; position: number }[];
+  };
+  const buckets = new Map<string, Bucket>();
+
+  const bucket = (key: string, rank: number, label?: string): Bucket => {
+    const existing = buckets.get(key);
+    if (existing) return existing;
+    const created: Bucket = { key, rank, label, entries: [] };
+    buckets.set(key, created);
+    return created;
+  };
+
+  const place = (item: FeatureNavItem) => {
+    const known = navGroupPosition(item.to);
+    if (known) {
+      // A known route: the group's rank is the group's index, scaled so an
+      // unknown item's `order` can still slot between two groups.
+      bucket(`g${known.group}`, known.group * 1000).entries.push({
+        item,
+        position: known.index,
+      });
+      return;
+    }
+    bucket(`u${item.order}`, item.order).entries.push({ item, position: item.order });
+  };
+
+  for (const item of navItems) place(item);
+  for (const section of navSections) {
+    if (section.items.length === 0) continue;
+    if (section.label) {
+      const b = bucket(`s${section.label}-${section.order}`, section.order, section.label);
+      section.items.forEach((item, index) => b.entries.push({ item, position: index }));
+      continue;
+    }
+    for (const item of section.items) place(item);
+  }
+
+  return [...buckets.values()]
+    .sort((a, b) => a.rank - b.rank)
+    .map((b) => {
+      const items = b.entries
+        .sort((x, y) => x.position - y.position)
+        .map((entry) => entry.item);
+      return b.label
+        ? ({ kind: "section", key: b.key, label: b.label, items } as const)
+        : ({ kind: "items", key: b.key, items } as const);
+    });
 }
 
 /**
@@ -253,6 +346,45 @@ export function Shell({ registry, workspace }: ShellProps) {
   const commands = useMemo(() => allCommands(), []);
   const overlays = useMemo(() => allOverlays(), []);
   const appearance = useAppearance(registry);
+
+  /**
+   * The sidebar's width and collapsed state (round 3, criterion 7).
+   *
+   * Held in React so a drag repaints at 60fps, written to helix.json only when
+   * the drag ends or the toggle is pressed — 200 file writes while an owner
+   * drags an edge is not a thing to do to a spinning disk.
+   */
+  const [sidebarWidth, setSidebarWidth] = useState(
+    registry.sidebar?.width ?? SIDEBAR_DEFAULT_W,
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    registry.sidebar?.collapsed ?? false,
+  );
+
+  /**
+   * The workspace's live name (round 3, criterion 8).
+   *
+   * `workspace` is the boot result: captured once, at launch. Renaming the
+   * workspace in Settings wrote helix.json and left the footer saying the old
+   * name until the next relaunch. `subscribeToRegistry` fires on every write
+   * to that file, so the footer is right the moment the rename lands.
+   */
+  const [liveWorkspace, setLiveWorkspace] = useState<WorkspaceEntry>(workspace);
+  const workspaceIdRef = useRef(workspace.id);
+  workspaceIdRef.current = workspace.id;
+
+  useEffect(() => {
+    setLiveWorkspace(workspace);
+  }, [workspace]);
+
+  useEffect(
+    () =>
+      subscribeToRegistry((next) => {
+        const found = next.workspaces.find((w) => w.id === workspaceIdRef.current);
+        if (found) setLiveWorkspace(found);
+      }),
+    [],
+  );
 
   /**
    * `useAppearance` (src/app/hooks.ts) already watches the OS preference for
@@ -349,6 +481,7 @@ export function Shell({ registry, workspace }: ShellProps) {
         icon={item.icon ? <item.icon size={18} aria-hidden /> : undefined}
         active={isActive(item.to)}
         href={item.to}
+        collapsed={sidebarCollapsed}
         onClick={(e) => {
           e.preventDefault();
           navigate(item.to);
@@ -356,61 +489,60 @@ export function Shell({ registry, workspace }: ShellProps) {
         badge={item.badge}
       />
     ),
-    [isActive, navigate],
+    [isActive, navigate, sidebarCollapsed],
   );
 
   /**
-   * The static items, with each dynamic group spliced in at its own order, so
-   * "Views" (15) lands between Today (10) and Contacts (20).
-   *
-   * A LABELLED group is a visual group: it gets its own `SidebarSection`, with
-   * the caption heading above it and the section's own padding around it.
-   *
-   * An UNLABELLED group is not. Its rows join the run of static rows around
-   * them, in their own order, and no extra gap appears — which is the whole
-   * point of it: a feature whose row has to be read from the database (the
-   * pipeline row, whose label is Deals, Jobs or Quotes) can contribute it
-   * through `navProvider` without cutting the sidebar in two at that row.
+   * The sidebar's groups, with a hairline between each pair (criterion 21).
+   * `buildNavBlocks` above decides the shape; this only renders it. Collapsed,
+   * a group's caption is dropped — four letters of a truncated word is noise —
+   * and the hairlines carry the grouping alone.
    */
   const sidebar = useMemo(() => {
-    const blocks: ReactNode[] = [];
-    let run: FeatureNavItem[] = [];
-    let runKey = "static-0";
-    let cursor = 0;
-
-    const flushRun = () => {
-      if (run.length === 0) return;
-      blocks.push(<SidebarSection key={runKey}>{run.map(renderItem)}</SidebarSection>);
-      run = [];
-    };
-
-    navSections.forEach((section, index) => {
-      while (cursor < navItems.length && navItems[cursor].order <= section.order) {
-        run.push(navItems[cursor++]);
-      }
-      if (section.items.length === 0) return;
-      if (section.label) {
-        flushRun();
-        blocks.push(
-          <SidebarSection key={`section-${section.label}-${index}`} label={section.label}>
-            {section.items.map(renderItem)}
-          </SidebarSection>,
-        );
-        runKey = `static-${index + 1}`;
-        return;
-      }
-      run.push(...section.items);
-    });
-
-    run.push(...navItems.slice(cursor));
-    flushRun();
-    // An application with no sidebar items at all still draws the empty group,
-    // so the nav element is never childless.
+    const blocks = buildNavBlocks(navItems, navSections);
     if (blocks.length === 0) {
-      blocks.push(<SidebarSection key="static-empty">{null}</SidebarSection>);
+      return [<SidebarSection key="static-empty">{null}</SidebarSection>];
     }
-    return blocks;
-  }, [navItems, navSections, renderItem]);
+    return blocks.flatMap((block, index) => {
+      const rendered =
+        block.kind === "section" ? (
+          <SidebarSection key={block.key} label={block.label} collapsed={sidebarCollapsed}>
+            {block.items.map(renderItem)}
+          </SidebarSection>
+        ) : (
+          <SidebarSection key={block.key} collapsed={sidebarCollapsed}>
+            {block.items.map(renderItem)}
+          </SidebarSection>
+        );
+      if (index === 0) return [rendered];
+      return [<SidebarSeparator key={`${block.key}-rule`} />, rendered];
+    });
+  }, [navItems, navSections, renderItem, sidebarCollapsed]);
+
+  /**
+   * Collapse and expand. The width is left alone on collapse, so expanding
+   * brings back the width the owner chose rather than the default.
+   */
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      void setSidebar({ collapsed: next });
+      return next;
+    });
+  }, []);
+
+  useShortcut(TOGGLE_SIDEBAR_SHORTCUT, toggleSidebar);
+
+  // The palette's "Hide or show the sidebar" comes through here: the command
+  // is built before anything renders and cannot reach this component's state.
+  useEffect(() => {
+    window.addEventListener(TOGGLE_SIDEBAR_EVENT, toggleSidebar);
+    return () => window.removeEventListener(TOGGLE_SIDEBAR_EVENT, toggleSidebar);
+  }, [toggleSidebar]);
+
+  const onSidebarResizeEnd = useCallback((width: number) => {
+    void setSidebar({ width });
+  }, []);
 
   const hasWorkspaceSwitcher = findCommand("switch-workspace") !== null;
 
@@ -422,36 +554,78 @@ export function Shell({ registry, workspace }: ShellProps) {
 
   return (
     <TooltipProvider>
-      {/* The shell owns the whole window. html, body and #root are all 100%
-          (globals.css), so `h-full` here is a definite viewport height rather
-          than "as tall as the content" — which is what used to leave the
-          sidebar and the canvas stopping short and the bare window showing
-          through underneath. The main column scrolls inside that height; the
-          body never scrolls. */}
-      <div className="flex h-full min-h-screen min-w-[1024px] overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
+      {/* The shell owns the whole window and is the only thing that does.
+          html and body are `overflow: hidden` and #root is fixed to the
+          viewport (globals.css), so `h-full` here is a definite viewport
+          height and NOTHING outside this element can scroll. That is round 3
+          criterion 27: a tall deal page used to scroll the body, which put a
+          second scrollbar down the right, stopped the sidebar at the content's
+          height, and slid the nav rows up under the macOS traffic lights.
+          There is now exactly one scroller in the content column (<main>) and
+          one in the sidebar's nav area. Note `min-h-screen` is GONE: it was
+          the thing that let this element grow past the window. */}
+      <div className="flex h-full min-w-[1024px] overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
         <Sidebar
           dragRegion={macOS}
+          width={sidebarWidth}
+          collapsed={sidebarCollapsed}
+          onResize={setSidebarWidth}
+          onResizeEnd={onSidebarResizeEnd}
           brand={
-            /* The lockup: the mark with its offset sticker outline and the
-               word in the heading face. The one place in the running
-               application that always wears --shadow-sticker. */
-            <div className="flex min-h-[var(--control-h)] w-full items-center px-[var(--space-3)]">
-              <Brand size="sm" />
+            /* The lockup: the plain mark and the word, no sticker and no
+               outline (criterion 1). Collapsed, the word goes and the mark
+               stands alone in the 48px rail. */
+            <div
+              className={
+                sidebarCollapsed
+                  ? "flex min-h-[var(--control-h)] w-full items-center justify-center"
+                  : "flex min-h-[var(--control-h)] w-full items-center px-[var(--space-3)]"
+              }
+            >
+              <Brand size="sm" wordmark={!sidebarCollapsed} />
             </div>
           }
           footer={
+            /* The live workspace name (criterion 8). Collapsed, the footer
+               becomes the workspace's initial with the full name in a
+               tooltip — the row still has to say which business is open. */
             hasWorkspaceSwitcher ? (
-              <button
-                type="button"
-                onClick={switchWorkspace}
-                title="Switch workspace"
-                className="flex min-h-[var(--control-h-sm)] w-full items-center px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] hover:text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
-              >
-                <span className="truncate">{workspace.name}</span>
-              </button>
+              <Tooltip content={`${liveWorkspace.name} — switch workspace`} side="right">
+                <button
+                  type="button"
+                  data-testid="workspace-footer"
+                  onClick={switchWorkspace}
+                  className={cn(
+                    "flex min-h-[var(--control-h-sm)] w-full items-center text-[length:var(--text-sm)]",
+                    "text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)]",
+                    "ease-[var(--ease-out)] motion-reduce:transition-none",
+                    "hover:bg-[var(--color-hover)] hover:text-[var(--color-text-muted)]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
+                    sidebarCollapsed ? "justify-center px-0" : "px-[var(--space-3)] text-left",
+                  )}
+                >
+                  <span className="truncate">
+                    {sidebarCollapsed
+                      ? (liveWorkspace.name.trim()[0] ?? "?").toUpperCase()
+                      : liveWorkspace.name}
+                  </span>
+                </button>
+              </Tooltip>
             ) : (
-              <div className="flex min-h-[var(--control-h-sm)] items-center px-[var(--space-3)] text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
-                {workspace.name}
+              <div
+                data-testid="workspace-footer"
+                title={liveWorkspace.name}
+                className={cn(
+                  "flex min-h-[var(--control-h-sm)] items-center text-[length:var(--text-sm)]",
+                  "text-[var(--color-text-faint)]",
+                  sidebarCollapsed ? "justify-center px-0" : "px-[var(--space-3)]",
+                )}
+              >
+                <span className="truncate">
+                  {sidebarCollapsed
+                    ? (liveWorkspace.name.trim()[0] ?? "?").toUpperCase()
+                    : liveWorkspace.name}
+                </span>
               </div>
             )
           }
@@ -463,19 +637,34 @@ export function Shell({ registry, workspace }: ShellProps) {
           <Topbar
             dragRegion={macOS}
             left={
-              /* The view title (HIG review finding 9): the leading edge is
-                 for the sidebar toggle and the window title, not the search
-                 field, and with `hiddenTitle: true` this is the only title
-                 that ever appears. Plain ink, the body face — this is toolbar
-                 chrome, not a heading, so it is not `PageHeader` and it does
-                 not spend the brand's one confident block. Non-interactive:
-                 it stays part of the drag region a click on the bar starts. */
-              <span
-                className="max-w-[280px] truncate text-[length:var(--text-sm)] font-medium text-[var(--color-text)]"
-                title={viewTitle}
-              >
-                {viewTitle}
-              </span>
+              <>
+                {/* The sidebar toggle, at the leading edge where every macOS
+                    app puts it. It carries no drag-region attribute, so it
+                    stays clickable inside the bar's drag region. */}
+                <Tooltip content={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
+                  <IconButton
+                    label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+                    title={undefined}
+                    data-testid="toggle-sidebar"
+                    onClick={toggleSidebar}
+                    icon={<SidebarSimple size={16} weight="bold" aria-hidden />}
+                  />
+                </Tooltip>
+                {/* The view title (HIG review finding 9): the leading edge
+                    is for the sidebar toggle and the window title, not the
+                    search field, and with `hiddenTitle: true` this is the
+                    only title that ever appears. Plain ink, the body face —
+                    toolbar chrome, not a heading, so it is not `PageHeader`
+                    and it does not spend the brand's one confident block.
+                    Non-interactive: it stays part of the drag region a click
+                    on the bar starts. */}
+                <span
+                  className="max-w-[280px] truncate text-[length:var(--text-sm)] font-medium text-[var(--color-text)]"
+                  title={viewTitle}
+                >
+                  {viewTitle}
+                </span>
+              </>
             }
             right={
               <div className="flex items-center gap-[var(--space-2)]">
@@ -489,7 +678,7 @@ export function Shell({ registry, workspace }: ShellProps) {
                     // action instead and read as two disagreeing tooltips
                     // stacked on top of each other.
                     title={undefined}
-                    onClick={() => void appearance.setTheme(nextTheme(appearance.theme))}
+                    onClick={() => void appearance.setTheme(themeButton.target)}
                     icon={
                       themeButton.resolved === "dark" ? (
                         <MoonStars size={16} weight="bold" aria-hidden />

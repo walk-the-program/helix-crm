@@ -81,8 +81,12 @@ describe("component gallery", () => {
   it("renders the brand lockup with the mark and the wordmark", () => {
     expect(html).toContain('data-specimen-id="brand.lg"');
     expect(html).toContain('src="/helix-logo.png"');
-    // The sticker shadow is the guide's signature and must actually be on the
-    // default lockup, not just available as a prop.
-    expect(html).toMatch(/shadow-\[var\(--shadow-sticker\)\]/);
+  });
+
+  it("carries no sticker shadow anywhere (round 3, criterion 19)", () => {
+    // The offset outline is retired: --shadow-sticker resolves to none and no
+    // component in the kit asks for it any more. A gallery that still printed
+    // the class would mean a component had been missed.
+    expect(html).not.toMatch(/shadow-\[var\(--shadow-sticker\)\]/);
   });
 });

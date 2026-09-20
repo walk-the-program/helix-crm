@@ -27,6 +27,7 @@ import { feature as help } from "@/features/help";
 import { feature as catalog } from "@/features/catalog";
 import { feature as invoices } from "@/features/invoices";
 import { undoCommands } from "@/app/undo";
+import { sidebarCommands } from "@/app/sidebarCommand";
 
 export const registry: FeatureModule[] = [
   today,
@@ -75,7 +76,7 @@ export function allNavProviders(): (() => FeatureNavSection[])[] {
  * They are listed first so a feature cannot shadow "undo" by accident —
  * registry order breaks a tie (docs/CONTRACTS.md, "The keys the shell binds").
  */
-const appCommands: FeatureCommand[] = undoCommands;
+const appCommands: FeatureCommand[] = [...undoCommands, ...sidebarCommands];
 
 /** Everything the command palette offers, and everything the shell binds. */
 export function allCommands(): FeatureCommand[] {

@@ -143,6 +143,8 @@ beforeEach(async () => {
     lastOpened: WORKSPACE_ID,
     theme: "light",
     density: "comfortable",
+    // Added by R3-L1 with the sidebar width/collapsed keys (round 3, criterion 7).
+    sidebar: { width: 240, collapsed: false },
   });
 
   const memory = memorySecretStore();

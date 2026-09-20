@@ -30,21 +30,41 @@
    and change them with it.                                                  */
 
 /* --- The window -----------------------------------------------------------
-   The shell owns the whole window, always.
+   The shell owns the whole window, always, and NOTHING outside it scrolls.
 
-   html, body and #root are all full height, so the shell's `h-full` is a
-   definite viewport height rather than "as tall as whatever is on screen".
-   Without that, a short screen left the sidebar and the content canvas ending
-   at the content's own height with the bare window showing underneath - which
-   is exactly what dark mode made obvious - and a long screen scrolled the
-   BODY, which dragged the sidebar and the toolbar up off the top with it.
-   Now the main column scrolls inside a fixed frame (`overflow-y: auto` on
-   <main>, src/app/Shell.tsx) and the chrome stays put.                       */
+   Round 3, criterion 27. Walker scrolled a tall deal page and got three
+   symptoms of one cause: two scrollbars down the right, a sidebar that stopped
+   at the content's height with the bare window under it, and nav labels
+   sliding up under the macOS traffic lights. The cause was that the BODY was
+   still scrollable - `height: 100%` bounds an element against its parent, but
+   it does not stop a taller child from overflowing and the body from scrolling
+   to reveal it, and the shell's own `min-height: 100vh` guaranteed a child
+   that was at least as tall as the window.
+
+   So the frame is nailed down here instead of being asked nicely:
+
+     html, body   overflow: hidden. The document itself cannot scroll, ever.
+     #root        position: fixed, inset 0. It IS the viewport, so `h-full`
+                  inside it is the window's height rather than a chain of
+                  percentages that any descendant can break.
+
+   Everything that scrolls does so inside that frame and says so: the content
+   column (`overflow-y: auto` on <main>, src/app/Shell.tsx), the sidebar's nav
+   area between its pinned header and footer (src/ui/Nav.tsx), and a dialog's
+   own body (src/ui/Dialog.tsx). There are never two scrollbars because there
+   is never more than one scroller in a column.                               */
 
 html,
-body,
-#root {
+body {
   height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* --- The macOS title bar ---------------------------------------------------
@@ -96,7 +116,6 @@ html {
 
 body {
   min-width: 1024px;
-  min-height: 100vh;
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
@@ -234,16 +253,26 @@ b, strong {
   font-weight: 700;
 }
 
-/* A link is the interactive blue and is not underlined until it is hovered:
-   the same treatment a native app gives an inline link. */
+/* A link is INK WITH AN UNDERLINE (round 3, criterion 2).
+
+   It used to be a purple that only underlined on hover. Two things were wrong
+   with that. The colour made the app read like a web page — Walker's first
+   note on the shipped build was the purple — and a link that is only a colour
+   until you touch it is a link only a sighted mouse user can find. So the
+   underline is permanent and carries the whole job, and hover thickens it
+   rather than adding it.
+
+   A nav row, a tab and a card that happen to be anchors opt out with
+   `no-underline`; the kit already spells that on every one of them. */
 a {
   color: var(--color-link);
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
 a:hover {
-  text-decoration: underline;
+  text-decoration-thickness: 2px;
   text-decoration-color: currentColor;
 }
 

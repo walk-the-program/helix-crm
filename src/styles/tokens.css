@@ -18,7 +18,8 @@
      Headings Zilla Slab, body Lato (the guide's original body face was
      overridden on 2026-09-20 at Walker's request; see docs/DESIGN.md
      "Superseded" and CHANGELOG.md).
-     Marks: hard edges with an offset sticker shadow in the accent colour.
+     Marks: hard edges. (The guide's offset sticker shadow was retired in
+     round 3 at Walker's request; see --shadow-sticker below.)
      Radius 0 for controls, cards, panels and full-bleed blocks.
 
    What the guide is silent about is kept from revision 2: generous air,
@@ -31,8 +32,9 @@
    stated below with its measured WCAG 2.1 ratio (sRGB relative luminance).
    Two of the brand's five colours cannot legally carry small text on a light
    surface - #97B1C3 measures 2.24:1 on white and #8B85C2 measures 3.37:1 - so
-   both appear as fills and rings rather than as ink, and link text uses a
-   darkened cousin of the secondary. That is the guide's own rule, applied.
+   both appear as fills and rings rather than as ink. Round 3 went further: no
+   text in the product is tinted at all. Links are ink with an underline, and
+   the secondary appears only as the focus ring.
    ========================================================================= */
 
 :root {
@@ -75,34 +77,17 @@
      not a translucency that changes with whatever is behind it.             */
   --brand-primary-tint: #F2F4FA;
 
-  /* The mark's offset "sticker" shadow. Hard edge, no blur.
-     Reserved for the logo lockup and at most one hero element per screen -
-     it is the loudest thing the brand owns and it stops being a signature
-     the moment a second element wears it.
+  /* The mark's offset "sticker" shadow. RETIRED (round 3).
 
-     It used to be a solid 4px slab of the accent yellow. It is now an
-     OUTLINE: the element throws a hard-edged rectangle 4px down and right,
-     and only the outer 1.5px of that rectangle is drawn, so what you see is a
-     thin ring floating off the corner with the canvas showing through the gap
-     between it and the element. Two layered box-shadows do it - the first is
-     listed first and so paints on top:
-
-       4px 4px 0 -1.5px  the canvas, inset 1.5px on every side, which covers
-                         the middle of the offset rectangle
-       4px 4px 0  0      the outline, the full offset rectangle underneath
-
-     --sticker-outline is the brand neutral opposite the canvas: neutral light
-     on the near-black dark theme, neutral dark on the light one. White on a
-     white canvas is invisible, which is why it is not simply white.
-
-     --sticker-gap is whatever surface the element is standing on, because
-     that is what has to show through. It defaults to the content canvas; the
-     sidebar sets its own (src/ui/Nav.tsx), since the lockup lives there.     */
-  --sticker-outline: #4E555A;
-  --sticker-gap: var(--color-bg);
-  --shadow-sticker:
-    4px 4px 0 -1.5px var(--sticker-gap),
-    4px 4px 0 0 var(--sticker-outline);
+     Walker looked at the shipped app and called the offset outline sloppy: at
+     26px in the sidebar the ring reads as a printing
+     misregistration rather than as a sticker, and every screen that borrowed
+     it for a hero button turned the page into a collage. The token stays,
+     resolving to `none`, so a call site that still carries
+     `shadow-[var(--shadow-sticker)]` renders flat while the feature leads
+     remove the class from their own screens. The brand's one loud element is
+     now the flat primary block and nothing else.                             */
+  --shadow-sticker: none;
 
   /* --- Type ---------------------------------------------------------------
      The two faces themselves are chosen at the top of this file, under FONT
@@ -190,13 +175,17 @@
      Flat fills only, so there is no blurred shadow anywhere. A floating layer
      is lifted by a second hairline drawn outside its border - crisp, no blur,
      no grey haze over the content it covers. --shadow-sm is nothing at all.
-     --shadow-sticker (above) is the brand's one hard offset and is NOT part
-     of this ramp: it belongs to the mark, not to the elevation system.       */
+     --shadow-sticker (above) is retired and resolves to none, so the whole
+     product is flat: the only lift anywhere is a hairline.                   */
   --shadow-sm: none;
   --shadow-md: 0 0 0 1px rgba(78, 85, 90, 0.16);
   --shadow-lg: 0 0 0 1px rgba(78, 85, 90, 0.16);
 
   /* --- Layout ------------------------------------------------------------- */
+  /* The sidebar's STARTING width. Since round 3 the owner drags it between 200
+     and 360px and the chosen width is kept in helix.json, so the live value is
+     an inline style on the <aside> (src/ui/Nav.tsx) and this is the default a
+     fresh install opens at. SIDEBAR_DEFAULT_W in Nav.tsx must match it.       */
   --sidebar-w:  240px;
   --topbar-h:   48px;
   /* macOS runs an integrated title bar (titleBarStyle: "Overlay"), so the web
@@ -314,16 +303,24 @@
                                       kbd, code block. Not an accent - the
                                       absence of one.                         */
 
-  /* Interactive text. The secondary at full strength measures 3.37:1 on white
-     and cannot carry 15px text, so links are the same hue darkened until they
-     clear AA on every surface a link can land on. The pure secondary survives
-     as the focus ring, where 3:1 is the bar.
-     #5F58A6 on #FFFFFF ............ 6.12:1  AAA
-     #5F58A6 on #FAFAFF ............ 5.88:1  AAA
-     #5F58A6 on #F2F4FA ............ 5.56:1  AAA
-     #5F58A6 on #EEF1F8 ............ 5.42:1  AAA                              */
-  --color-accent-ink:   #5F58A6;
-  --color-link:         #5F58A6;
+  /* Interactive text. NO COLOUR (round 3, criterion 2).
+
+     Links used to be the brand secondary darkened to #5F58A6. It cleared AAA
+     and it still looked wrong: Walker's word for the running app was that the
+     purple text made it read like a web page. A desktop app does not tint its
+     text. So a link is the heading ink with a permanent underline — the
+     underline is now the whole affordance, which is also the accessible
+     answer, since colour was never allowed to be the only signal.
+
+     The purple survives in exactly one place, --color-focus below: a ring is
+     not text, it is transient, and it is the one thing on screen that has to
+     be unmistakably not-content.
+     #141414 on #FFFFFF ........... 18.10:1  AAA
+     #141414 on #FAFAFF ........... 17.62:1  AAA
+     #141414 on #F2F4FA ........... 16.65:1  AAA
+     #141414 on #EEF1F8 ........... 16.24:1  AAA                              */
+  --color-accent-ink:   #141414;
+  --color-link:         #141414;
 
   /* Focus: the brand secondary, one ring, one job. Non-text, so 3:1 is the
      bar, and it is measured against everything the ring can be drawn over.
@@ -530,13 +527,14 @@
   --color-accent-text:  #141414;
   --color-accent-soft:  #282A2B;   /* the primary at 8% over the surface      */
 
-  /* Link text lightens: the pure secondary measures 4.38:1 on the raised
-     surface and would fail inside a dialog.
-     #A39CD2 on #141414 ............ 7.23:1  AAA
-     #A39CD2 on #1E1E1E ............ 6.54:1  AAA
-     #A39CD2 on #282828 ............ 5.79:1  AAA                              */
-  --color-accent-ink:   #A39CD2;
-  --color-link:         #A39CD2;
+  /* Link text, dark: the same rule as light. Ink plus an underline, never a
+     tint. This is where the purple was most obvious — a dark screen full of
+     lilac dates and names — and it is gone.
+     #FAFAFF on #141414 ........... 17.62:1  AAA
+     #FAFAFF on #1E1E1E ........... 15.71:1  AAA
+     #FAFAFF on #282828 ........... 13.10:1  AAA                              */
+  --color-accent-ink:   #FAFAFF;
+  --color-link:         #FAFAFF;
 
   /* The ring stays the pure brand secondary; it clears 3:1 everywhere.
      #8B85C2 on #141414 ............ 5.47:1  (the guide's own figure)
@@ -676,9 +674,6 @@
   --leading-normal: 1.45;
   --leading-body:   1.55;
 
-  /* The sticker offset comes down with the type it sits behind. The ring stays
-     1.5px, so the gap the canvas shows through narrows from 2.5px to 1.5px.  */
-  --shadow-sticker:
-    3px 3px 0 -1.5px var(--sticker-gap),
-    3px 3px 0 0 var(--sticker-outline);
+  /* The sticker is retired in both densities (see the light theme above). */
+  --shadow-sticker: none;
 }

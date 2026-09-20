@@ -20,7 +20,7 @@ describe("Dialog", () => {
    * component gallery, whose harness forces `position: static` on overlay
    * content to render it inline. So it is asserted here.
    */
-  it("caps its own height and scrolls internally, with the header and footer pinned", async () => {
+  it("caps its own height, scrolls internally, pins the header and hoists the footer", async () => {
     const user = userEvent.setup();
     renderDialogFixture();
     await user.click(screen.getByRole("button", { name: "Open dialog" }));
@@ -48,11 +48,21 @@ describe("Dialog", () => {
     expect(header?.className).toContain("sticky");
     expect(header?.className).toContain("top-0");
 
+    // The body keeps --space-6 under its last child, which is the round-3
+    // dialog spacing rule (criterion 10): the last field can never touch the
+    // action bar, scrolled or not.
+    expect(scroller?.className).toContain("pb-[var(--space-6)]");
+
     cleanup();
     renderConfirmDialogFixture({ destructive: true });
     const footer = screen.getByRole("button", { name: "Delete" }).parentElement;
-    expect(footer?.className).toContain("sticky");
-    expect(footer?.className).toContain("bottom-0");
+    // Round 3: the footer is hoisted OUT of the scroll box and rendered as a
+    // flex sibling below it, so it no longer needs to pin itself and content
+    // no longer passes behind it. It says which case it is in.
+    expect(footer?.getAttribute("data-hoisted")).toBe("true");
+    expect(footer?.className).not.toContain("sticky");
+    const body = document.querySelector("[data-testid='dialog-body']");
+    expect(body?.contains(footer as Node)).toBe(false);
   });
 
 

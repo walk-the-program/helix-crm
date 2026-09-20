@@ -13,9 +13,9 @@ function renderBrand(props: ComponentProps<typeof Brand> = {}) {
   return render(React.createElement(Brand, props));
 }
 
-/** The square the mark sits in — the element that wears the sticker shadow.
- *  Found through the image rather than by span index, so a wrapper added
- *  later does not silently point these assertions at the wrong element. */
+/** The box the mark sits in. Found through the image rather than by span
+ *  index, so a wrapper added later does not silently point these assertions
+ *  at the wrong element. */
 function markBox(container: HTMLElement): HTMLElement {
   const img = container.querySelector("img");
   expect(img).not.toBeNull();
@@ -30,15 +30,20 @@ describe("Brand", () => {
     expect(img?.getAttribute("src")).toBe("/helix-logo.png");
   });
 
-  it("carries the sticker shadow by default, and drops it when sticker={false}", () => {
-    // This is the brand guide's signature ("hard edges with an offset sticker
-    // shadow in the accent color") and must be on unless a caller opts out.
-    const { container: withSticker } = renderBrand();
-    expect(markBox(withSticker).className).toContain("shadow-[var(--shadow-sticker)]");
-    cleanup();
-
-    const { container: withoutSticker } = renderBrand({ sticker: false });
-    expect(markBox(withoutSticker).className).not.toContain("shadow-[var(--shadow-sticker)]");
+  it("is a plain lockup: no sticker shadow, no square, no outline (round 3, criterion 1)", () => {
+    // Walker's note on the shipped app: the offset outline behind the 26px
+    // sidebar mark reads as a printing misregistration, not as a signature.
+    // The treatment is retired product-wide, so the lockup must carry no
+    // shadow, no border and no surface of its own — and passing the
+    // now-deprecated `sticker` prop must not bring any of it back.
+    for (const props of [{}, { sticker: true }, { sticker: false }] as const) {
+      const { container } = renderBrand(props);
+      const box = markBox(container).className;
+      expect(box).not.toContain("shadow-");
+      expect(box).not.toContain("border");
+      expect(box).not.toContain("bg-[");
+      cleanup();
+    }
   });
 
   it("renders the wordmark by default in the heading face", () => {

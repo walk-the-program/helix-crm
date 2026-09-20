@@ -27,11 +27,34 @@ export const densitySchema = z.enum(["comfortable", "compact"]);
 export type Theme = z.infer<typeof themeSchema>;
 export type Density = z.infer<typeof densitySchema>;
 
+/**
+ * The sidebar's width and collapsed state (round 3, criterion 7).
+ *
+ * APP-LEVEL, not workspace-level, and that is a decision rather than an
+ * accident: how wide the nav should be is a fact about this screen and this
+ * pair of eyes, not about the business whose file happens to be open. An owner
+ * who switches between "My business" and a second workspace does not want the
+ * furniture to move.
+ *
+ * The width is clamped on the way in as well as on the way out, so a
+ * hand-edited helix.json cannot produce a 4px sidebar that nothing can grab.
+ */
+export const sidebarSchema = z.object({
+  width: z.number().min(200).max(360).catch(240).default(240),
+  collapsed: z.boolean().catch(false).default(false),
+});
+
+export type SidebarSettings = z.infer<typeof sidebarSchema>;
+
 export const registrySchema = z.object({
   workspaces: z.array(workspaceEntrySchema).default([]),
   lastOpened: z.string().nullable().default(null),
   theme: themeSchema.default("auto"),
   density: densitySchema.default("comfortable"),
+  sidebar: sidebarSchema.catch({ width: 240, collapsed: false }).default({
+    width: 240,
+    collapsed: false,
+  }),
 });
 
 export type HelixRegistry = z.infer<typeof registrySchema>;
@@ -43,6 +66,7 @@ export const EMPTY_REGISTRY: HelixRegistry = {
   lastOpened: null,
   theme: "auto",
   density: "comfortable",
+  sidebar: { width: 240, collapsed: false },
 };
 
 /** True when the app is running inside Tauri rather than a plain browser. */
@@ -110,6 +134,7 @@ export async function readRegistry(): Promise<HelixRegistry> {
 
 export async function writeRegistry(next: HelixRegistry): Promise<void> {
   cached = next;
+  publishRegistry(next);
   const text = JSON.stringify(next, null, 2);
   if (!isTauri()) {
     memoryStore.json = text;
@@ -217,20 +242,27 @@ export function resolveTheme(theme: Theme): "light" | "dark" {
 }
 
 /**
- * The next theme in the cycle: Auto → Light → Dark → Auto.
+ * What the theme toggle does next: the opposite of what is on screen.
  *
- * One function so the toolbar button, the View menu's "Toggle theme" and the
- * palette all move the same way. The old two-state flip was the defect the HIG
- * review named (finding 5): from Auto it pinned the app to light or dark and
- * there was no way back to Auto except through Settings, which most owners will
- * never connect to the button they pressed. `dark-mode.md` asks for an app to
- * follow the system unless the owner deliberately overrides it, so Auto has to
- * be one press away at all times.
+ * ROUND 3, criterion 6. This used to cycle Auto → Light → Dark → Auto, which
+ * was defensible on paper — Auto stays one press away — and wrong in the hand.
+ * Walker's Mac is on dark; Helix was on Auto and therefore dark; making the
+ * app light took two presses, because Auto's "next" was Light and Dark's was
+ * Auto. A control that sometimes needs one press and sometimes two is broken.
+ *
+ * So it is a toggle. From Light it goes Dark, from Dark it goes Light, and
+ * from Auto it goes to the opposite of the RESOLVED appearance — which is the
+ * only reading of "toggle" that matches what the eye expects to happen.
+ *
+ * Auto has not gone anywhere; it moved to the one place a preference belongs,
+ * Settings > Appearance, where it is a named choice rather than a stop on a
+ * carousel nobody can see.
+ *
+ * One function, so the toolbar button, the View menu's "Toggle theme" and the
+ * palette cannot disagree.
  */
 export function nextTheme(current: Theme): Theme {
-  if (current === "auto") return "light";
-  if (current === "light") return "dark";
-  return "auto";
+  return resolveTheme(current) === "dark" ? "light" : "dark";
 }
 
 /** The shell sets both attributes on <html> from these values. */
@@ -302,4 +334,59 @@ export async function setDensity(density: Density): Promise<HelixRegistry> {
   const next = await updateRegistry((current) => ({ ...current, density }));
   applyAppearance(next.theme, next.density);
   return next;
+}
+
+/* -------------------------------------------------------------------------- */
+/* the sidebar                                                                */
+/* -------------------------------------------------------------------------- */
+
+/** Write one or both sidebar values. Called on drag-end, not on every frame. */
+export async function setSidebar(
+  patch: Partial<SidebarSettings>,
+): Promise<HelixRegistry> {
+  return updateRegistry((current) => ({
+    ...current,
+    sidebar: sidebarSchema.parse({ ...current.sidebar, ...patch }),
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* live registry updates                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Anything that wants to know when helix.json changes (round 3, criterion 8).
+ *
+ * The sidebar footer used to print the workspace name from the boot result — a
+ * value captured once, at launch, and never looked at again. Renaming the
+ * workspace in Settings wrote the file, redrew the settings screen, and left
+ * the footer saying the old name until the next relaunch. Walker found that in
+ * about a minute.
+ *
+ * Rather than thread a setter from App.tsx down through the shell, every write
+ * that goes through `writeRegistry` publishes the new registry here and anyone
+ * can subscribe. It is a two-line event bus on purpose: TanStack Query owns
+ * the workspace database, and helix.json is not that — it is one small file
+ * this module already serialises every access to.
+ */
+type RegistryListener = (registry: HelixRegistry) => void;
+
+const registryListeners = new Set<RegistryListener>();
+
+export function subscribeToRegistry(listener: RegistryListener): () => void {
+  registryListeners.add(listener);
+  return () => {
+    registryListeners.delete(listener);
+  };
+}
+
+function publishRegistry(next: HelixRegistry): void {
+  for (const listener of [...registryListeners]) {
+    try {
+      listener(next);
+    } catch (err) {
+      // A listener that throws must never break the write that told it.
+      console.error("[helix] a registry listener failed", err);
+    }
+  }
 }

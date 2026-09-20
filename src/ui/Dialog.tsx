@@ -1,4 +1,4 @@
-import { forwardRef, useState } from "react";
+import { Children, createContext, forwardRef, isValidElement, useContext, useState } from "react";
 import type { ComponentPropsWithoutRef, ElementRef, HTMLAttributes, ReactNode } from "react";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { X } from "@/ui/icons";
@@ -21,18 +21,51 @@ const sizeClasses = {
 } as const;
 
 /**
+ * True for the one `DialogFooter` that `DialogContent` hoisted out of the
+ * scroll box. Any other footer — nested inside a feature's own wrapper, so it
+ * could not be found — reads false and keeps pinning itself.
+ */
+const HoistedFooterContext = createContext(false);
+
+/** Split the single top-level `DialogFooter` (if there is one) off the rest. */
+function splitFooter(children: ReactNode): { body: ReactNode[]; footer: ReactNode | null } {
+  const kids = Children.toArray(children);
+  const index = kids.findIndex((child) => isValidElement(child) && child.type === DialogFooter);
+  if (index === -1) return { body: kids, footer: null };
+  return {
+    body: [...kids.slice(0, index), ...kids.slice(index + 1)],
+    footer: kids[index],
+  };
+}
+
+/**
  * A floating panel: raised surface, one hairline, --radius-lg, the single
  * ultra-diffuse shadow, over a light scrim. Nothing else is elevated in this
  * product.
  *
  * **It is height-bound.** The content column is capped at
- * `100vh - 2 * --space-9` and scrolls internally, and `DialogHeader` and
- * `DialogFooter` stick to the top and bottom of that scroll box. Without the
- * cap, a form taller than the window ran its footer off-screen and the Save
- * button was unreachable — the settings e2e caught exactly that on the paste
- * dialog. Every call site gets the fix without changing a line, because the
- * pinning is done by the header and footer components rather than by a new
- * wrapper the features would have to adopt.
+ * `100vh - 2 * --space-9`, the body scrolls internally, `DialogHeader` sticks
+ * to the top of that scroll box and the footer sits below it. Without the cap,
+ * a form taller than the window ran its footer off-screen and the Save button
+ * was unreachable — the settings e2e caught exactly that on the paste dialog.
+ * Every call site gets the fix without changing a line.
+ *
+ * **The footer is hoisted out of the scroll box** (round 3, criterion 10).
+ * It used to be `position: sticky` INSIDE the scroller, which looked right at
+ * rest and was wrong the moment anything scrolled: a field passing under the
+ * pinned bar sat behind it with nothing between them, and at the bottom of a
+ * Create contact form the email field read as touching the buttons. Sticky
+ * cannot fix that, because a sticky element still occupies its flow position
+ * and overlays whatever passes it.
+ *
+ * So `DialogContent` pulls the `DialogFooter` out of `children` and renders it
+ * as a flex sibling BELOW the scroll box, which is what a native sheet does.
+ * The scroll box then owns a real `pb-[var(--space-6)]`, and because nothing
+ * cancels it any more, there is at least 24px between the last field and the
+ * footer in every state — scrolled, unscrolled, and mid-scroll. A footer that
+ * is nested inside something else (so it cannot be hoisted) keeps the old
+ * sticky behaviour rather than losing its pinning; `DialogFooter` reads which
+ * case it is in from a context this component sets.
  *
  * **It is also width-bound.** `w-[calc(100%-var(--space-6))]` sizes off the
  * viewport (this is a `fixed` element, so "100%" is the window, not a parent),
@@ -48,7 +81,9 @@ const sizeClasses = {
 export const DialogContent = forwardRef<
   ElementRef<typeof RadixDialog.Content>,
   ComponentPropsWithoutRef<typeof RadixDialog.Content> & { size?: keyof typeof sizeClasses }
->(({ className, size = "md", children, ...props }, ref) => (
+>(({ className, size = "md", children, ...props }, ref) => {
+  const { body, footer } = splitFooter(children);
+  return (
   <RadixDialog.Portal>
     {/* The scrim is its own token: a light dim, not a black wash. */}
     <RadixDialog.Overlay className="fixed inset-0 z-50 bg-[var(--color-overlay)]" />
@@ -65,9 +100,23 @@ export const DialogContent = forwardRef<
       )}
       {...props}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[var(--space-6)] py-[var(--space-5)]">
-        {children}
+      {/* The one scroller. `pb-[var(--space-6)]` is the kit's dialog-spacing
+          rule made structural: the last field always keeps 24px off the
+          footer. `scroll-pb` repeats it for `scrollIntoView`, so tabbing to
+          the last field never parks it half under the bar. */}
+      <div
+        data-testid="dialog-body"
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto overflow-x-hidden",
+          "px-[var(--space-6)] pt-[var(--space-5)] pb-[var(--space-6)]",
+          "scroll-pb-[var(--space-6)]",
+        )}
+      >
+        <HoistedFooterContext.Provider value={false}>{body}</HoistedFooterContext.Provider>
       </div>
+      {footer ? (
+        <HoistedFooterContext.Provider value={true}>{footer}</HoistedFooterContext.Provider>
+      ) : null}
       <RadixDialog.Close asChild>
         <button
           type="button"
@@ -87,7 +136,8 @@ export const DialogContent = forwardRef<
       </RadixDialog.Close>
     </RadixDialog.Content>
   </RadixDialog.Portal>
-));
+  );
+});
 DialogContent.displayName = "DialogContent";
 
 /** Pinned to the top of the dialog's scroll box; the body scrolls under it. */
@@ -136,18 +186,30 @@ export const DialogDescription = forwardRef<
 DialogDescription.displayName = "DialogDescription";
 
 /**
- * Pinned to the bottom of the dialog's scroll box, so the confirm button is
- * reachable however tall the form is. A hairline above it appears only when
- * there is something scrolled underneath.
+ * The action bar. Always visible, however tall the form is.
+ *
+ * Two shapes, chosen for it rather than by it. HOISTED (the normal case):
+ * `DialogContent` found it and rendered it outside the scroll box, so it is a
+ * plain flex-none bar and the 24px of air above it is the scroller's own
+ * bottom padding. NESTED (a feature wrapped it in something, so it could not
+ * be hoisted): it falls back to the old `position: sticky` treatment, which
+ * keeps it on screen at the cost of content passing behind it.
  */
 export function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  const hoisted = useContext(HoistedFooterContext);
   return (
     <div
+      data-testid="dialog-footer"
+      data-hoisted={hoisted ? "true" : "false"}
       className={cn(
-        "sticky bottom-0 z-[1] -mx-[var(--space-6)] -mb-[var(--space-5)]",
-        "mt-[var(--space-6)] px-[var(--space-6)] pb-[var(--space-5)] pt-[var(--space-3)]",
-        "bg-[var(--color-surface-raised)] border-t border-[var(--color-border)]",
         "flex flex-wrap items-center justify-end gap-[var(--space-2)]",
+        "bg-[var(--color-surface-raised)] border-t border-[var(--color-border)]",
+        hoisted
+          ? "flex-none px-[var(--space-6)] pb-[var(--space-5)] pt-[var(--space-4)]"
+          : [
+              "sticky bottom-0 z-[1] -mx-[var(--space-6)] -mb-[var(--space-6)]",
+              "mt-[var(--space-6)] px-[var(--space-6)] pb-[var(--space-5)] pt-[var(--space-3)]",
+            ].join(" "),
         className,
       )}
       {...props}
