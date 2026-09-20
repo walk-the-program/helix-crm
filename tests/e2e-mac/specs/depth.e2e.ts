@@ -734,3 +734,103 @@ test.describe("help", () => {
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* CDQO-LA-W1 design/quality pass                                             */
+/* -------------------------------------------------------------------------- */
+
+test.describe("recurring: reminders usability (CDQO-LA-W1)", () => {
+  /**
+   * At 1024px - the app's own documented minimum width - the Reminders
+   * table's six columns used to push Edit/Pause/Resume/Delete past the right
+   * edge of the window with no way back to them: the table grew wider than
+   * its container and nothing scrolled. It now scrolls horizontally, so this
+   * clicks Edit at that width instead of merely asserting the button exists.
+   */
+  test("a rule's actions stay reachable at 1024px", async ({ page, helix }) => {
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Today", exact: true, level: 1 }),
+    ).toBeVisible();
+
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name)
+       VALUES ('c-rem-w1', ?, ?, 'Odell', 'Fenwick')`,
+      [now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO recurring_rules (id, contact_id, title, every_n, unit, next_due_on, active, created_at, updated_at)
+       VALUES ('r-rem-w1', 'c-rem-w1', 'Gutter clean', 1, 'year', ?, 1, ?, ?)`,
+      [dateOnly(30 * DAY), now, now],
+    );
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto("/recurring");
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Reminders", level: 1 })).toBeVisible();
+
+    const editButton = page.getByRole("button", { name: "Edit" }).first();
+    await editButton.scrollIntoViewIfNeeded();
+    await editButton.click();
+    await expect(page.getByTestId("rule-dialog")).toBeVisible();
+  });
+
+  /**
+   * The "What is it" field showed its red error sentence without ever
+   * turning its own border red, unlike every other required field in the
+   * product (DESIGN.md §9, Inputs: "An invalid field turns its border
+   * danger"). Bound to a failed save attempt, the same way the sentence
+   * below it is, not to every keystroke.
+   */
+  test("the rule dialog marks the name field invalid, not just the sentence below it", async ({
+    page,
+    helix,
+  }) => {
+    void helix;
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Today", exact: true, level: 1 }),
+    ).toBeVisible();
+    await page.goto("/recurring");
+    await page.getByRole("button", { name: "New reminder" }).click();
+
+    const dialog = page.getByTestId("rule-dialog");
+    const nameInput = dialog.getByLabel("What is it");
+    await expect(nameInput).not.toHaveAttribute("aria-invalid", "true");
+
+    await dialog.getByRole("button", { name: "Add reminder" }).click();
+    await expect(dialog.getByText(/Give the reminder a name/)).toBeVisible();
+    await expect(nameInput).toHaveAttribute("aria-invalid", "true");
+  });
+});
+
+test.describe("templates: no permanent glossary (CDQO-LA-W1)", () => {
+  /**
+   * The Emails group used to carry every merge field's name and meaning
+   * concatenated into one permanent paragraph under the list - standing
+   * instructions DESIGN.md §2 reserves for a tooltip, a placeholder or Help.
+   * The same information is still one hover away on each field button inside
+   * the editor; the main screen should not repeat it as running text.
+   */
+  test("the templates list carries no standing merge-field glossary", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Today", exact: true, level: 1 }),
+    ).toBeVisible();
+    await page.goto("/settings/templates");
+    await expect(page.getByTestId("templates-screen")).toBeVisible();
+
+    await expect(page.getByText(/Merge fields:/)).toHaveCount(0);
+    await expect(page.getByText(/The customer's first name/)).toHaveCount(0);
+
+    // The information is not lost - it is a tooltip away inside the editor.
+    await page.getByTestId("template-new").click();
+    const editor = page.getByTestId("template-editor");
+    await expect(editor.getByRole("button", { name: "{{first_name}}" })).toBeVisible();
+    void helix;
+  });
+});
