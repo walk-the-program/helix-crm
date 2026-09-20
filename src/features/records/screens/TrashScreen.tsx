@@ -118,20 +118,29 @@ export function TrashScreen(): ReactElement {
           />
         ) : totalCount === null ? null : (
           <Tabs value={activeType} onValueChange={(value) => setActiveType(value as TrashEntityType)}>
-            <TabsList>
-              {TYPES.map((type) => {
-                const label = type === "deal" ? vocabulary.many : TYPE_LABELS[type];
-                const count = counts?.[type] ?? 0;
-                return (
-                  <TabsTrigger key={type} value={type}>
-                    {label}
-                    <span className="ml-[var(--space-1)] tabular-nums text-[var(--color-text-muted)]">
-                      {count}
-                    </span>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
+            {/* Thirteen types is more than any width in DESIGN.md's 1024-1440
+                range holds on one line. A plain flex row would run the later
+                tabs (Templates, Services, Custom fields, Invoices and quotes)
+                off the edge of the window with no way back to them, so this
+                scrolls horizontally instead - keyboard arrow navigation still
+                reaches every tab, because moving focus onto an off-screen
+                trigger scrolls it into view the same way any focus does. */}
+            <div className="overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-var(--space-6)),transparent)]">
+              <TabsList className="flex-nowrap">
+                {TYPES.map((type) => {
+                  const label = type === "deal" ? vocabulary.many : TYPE_LABELS[type];
+                  const count = counts?.[type] ?? 0;
+                  return (
+                    <TabsTrigger key={type} value={type} className="shrink-0">
+                      {label}
+                      <span className="ml-[var(--space-1)] tabular-nums text-[var(--color-text-muted)]">
+                        {count}
+                      </span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </div>
             {TYPES.map((type) => (
               <TabsContent key={type} value={type}>
                 <TrashTypeTable
@@ -276,7 +285,10 @@ function TrashTypeTable(props: {
                       loose from the work it was raised for. Say which one, so
                       the owner knows what to do about it (ruling R6b). */}
                   {item.blockedBy ? (
-                    <div className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+                    <div
+                      id={`blocked-by-${item.entityId}`}
+                      className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]"
+                    >
                       Kept: {item.blockedBy} refers to it
                     </div>
                   ) : null}
@@ -323,6 +335,13 @@ function TrashTypeTable(props: {
                       loading={preparingDeleteId === item.entityId}
                       className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                       onClick={() => void openDeleteDialog(item)}
+                      // A dimmed button is not an explanation - a screen reader
+                      // (and a sighted owner without time to guess) needs the
+                      // same "Kept: INV-... refers to it" the row already
+                      // prints, not just "this button does nothing" (rule 6:
+                      // an error/blocked state says what happened).
+                      title={item.blockedBy ? `Kept: ${item.blockedBy} refers to it` : undefined}
+                      aria-describedby={item.blockedBy ? `blocked-by-${item.entityId}` : undefined}
                     >
                       Delete forever
                     </Button>
