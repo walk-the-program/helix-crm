@@ -21,6 +21,8 @@ import { MagnifyingGlass } from "@/ui/icons";
 import { Button, Kbd, PageHeader } from "@/ui";
 import { allCommands } from "@/app/registry";
 import { DueNowSection } from "@/features/today/sections/DueNow";
+import { ComingUpSection } from "@/features/today/sections/ComingUp";
+import { WeekSummaryLine } from "@/features/today/sections/WeekSummary";
 import { NewLeadsSection } from "@/features/today/sections/NewLeads";
 import { GoneQuietSection } from "@/features/today/sections/GoneQuiet";
 import { RecentActivitySection } from "@/features/today/sections/RecentActivity";
@@ -56,14 +58,19 @@ function todayLabel(): string {
 }
 
 /**
- * The four-panel screen. `--space-8` between sections rather than a tighter
- * gap: air is what separates a native pane from a web page, and a section
- * heading needs room above it to read as a heading.
+ * The panels. `--space-8` between sections rather than a tighter gap: air is
+ * what separates a native pane from a web page, and a section heading needs
+ * room above it to read as a heading.
+ *
+ * Coming up sits second, directly under Due now: the two of them are the
+ * promises the owner has made, one this week and one this season. Everything
+ * below them is information rather than an obligation.
  */
 function TodayPanels() {
   return (
     <div className="flex flex-col gap-[var(--space-8)]">
       <DueNowSection />
+      <ComingUpSection />
       <NewLeadsSection />
       <GoneQuietSection />
       <RecentActivitySection />
@@ -174,7 +181,12 @@ export function TodayScreen() {
     <div className="flex flex-col">
       <PageHeader
         title="Today"
-        subtitle={todayLabel()}
+        subtitle={
+          <>
+            {todayLabel()}
+            {isEmpty ? null : <WeekSummaryLine />}
+          </>
+        }
         actions={
           <Button
             type="button"

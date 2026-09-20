@@ -23,6 +23,7 @@ import {
   Archive,
   ArrowLeft,
   Buildings,
+  ChatText,
   Envelope,
   PhoneCall,
   Trash,
@@ -49,6 +50,7 @@ import {
 } from "@/features/records/lib/mutations";
 import { oneTap } from "@/lib/actions";
 import { dueLabel } from "@/features/records/lib/taskGroups";
+import { todayLocal } from "@/lib/dates";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { CompanyPicker, SourcePicker } from "@/features/records/components/Pickers";
 import { PhoneList, EmailList } from "@/features/records/components/ContactMethods";
@@ -58,6 +60,8 @@ import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPan
 import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
+import { RecurringPanel } from "@/features/recurring";
+import { SendSplitButton } from "@/features/templates/components/SendSplitButton";
 
 /** One labelled group of fields: the small-capitals label, then the panel. */
 function Group(props: { label: string; children: ReactNode }) {
@@ -203,14 +207,29 @@ export function ContactPage() {
             </span>
           )}
 
+          {/* Text and Email are split buttons: the left half does what it
+              always did, and the caret picks a saved template, renders it for
+              this customer and opens the message with the words in it. */}
+          {primaryPhone && phoneLabel ? (
+            <SendSplitButton
+              kind="text"
+              to={primaryPhone.e164 ?? primaryPhone.raw}
+              target={{ contactId: id }}
+              contactId={id}
+              label="Text"
+              icon={<ChatText size={16} weight="bold" aria-hidden="true" />}
+            />
+          ) : null}
+
           {primaryEmail ? (
-            <Button
-              variant="secondary"
-              iconLeft={<Envelope size={16} weight="bold" aria-hidden="true" />}
-              onClick={() => void oneTap("email", primaryEmail.emailLower, { contactId: id })}
-            >
-              Email
-            </Button>
+            <SendSplitButton
+              kind="email"
+              to={primaryEmail.emailLower}
+              target={{ contactId: id }}
+              contactId={id}
+              label="Email"
+              icon={<Envelope size={16} weight="bold" aria-hidden="true" />}
+            />
           ) : null}
 
           <Button
@@ -258,6 +277,11 @@ export function ContactPage() {
 
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
           <TaskRail contactId={id} />
+
+          <div>
+            <CardGroupLabel>Reminders</CardGroupLabel>
+            <RecurringPanel contactId={id} aboutLabel={name} reference={todayLocal()} />
+          </div>
 
           <Group label="Details">
             <CardBody className="flex flex-col gap-[var(--space-4)]">

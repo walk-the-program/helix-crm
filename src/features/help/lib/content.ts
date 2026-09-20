@@ -1,0 +1,77 @@
+/**
+ * The Help screen's copy, as data.
+ *
+ * Kept out of the screen so it can be read and unit-tested on its own
+ * (tests/unit/help/content.test.ts) and so HelpScreen.tsx stays layout only.
+ * Every fact below comes from the real feature code: src/features/data
+ * (import, export, backups, attachments, duplicates), src/features/today
+ * (the four Today sections), src/features/records (contacts, companies,
+ * pipeline, tasks, trash) and src/features/leads (the website connection and
+ * reports). Route paths and button labels match those files exactly.
+ *
+ * Voice: plain words, short sentences, second person, no hype. See
+ * docs/DESIGN.md section 11.
+ */
+
+export type HelpSection = { id: string; title: string; paragraphs: string[] };
+
+export const HELP_SECTIONS: HelpSection[] = [
+  {
+    id: "customers-in",
+    title: "Getting your customers in",
+    paragraphs: [
+      "Bring your customers in from a spreadsheet, or add them one at a time. Click Import in the sidebar, choose the file, and match your columns to Helix's own list; a name is the only thing you truly need. You will see the first rows of your own file before anything is saved, so you know Helix is reading it right.",
+      "Pick how Helix should handle a customer you already have before you start the import, and it writes everything in one step, so if something goes wrong nothing is left half-added. For one customer at a time, press Add a contact on the Today screen, or open Quick add from anywhere.",
+    ],
+  },
+  {
+    id: "lead-to-won",
+    title: "Working a job from lead to won",
+    paragraphs: [
+      "A job moves through stages on the Pipeline screen, from a new lead to won or lost. Open a job's page from a board card to see the customer, the price, the next step and everything said so far, all in one place. Drag it to a new stage as the work moves along, or use the stage menu on the job itself.",
+      "Moving a job to a lost stage asks you for a reason first, so you remember why later without having to guess. The Text and Email buttons on a customer each have a small arrow beside them: that picks one of your saved templates, fills in the name, the job and the price, and opens the message ready for you to read and send. If job is not the word you use, open Settings and go to Vocabulary to call these deals, jobs or quotes instead; the change is instant and only relabels the screen, nothing about your data moves.",
+    ],
+  },
+  {
+    id: "today",
+    title: "Today and follow-ups",
+    paragraphs: [
+      "Today is the first screen you see, and it is built around two questions: what needs you, and who have you not called back. Due now lists every follow-up that is overdue or due today, with a Call button when there is a phone number, plus Done and Snooze. New leads shows anyone who reached out in the last seven days that nobody has called yet; quote requests from your website land here on their own.",
+      "Coming up is the work that repeats: set a reminder on a customer, like a spring cleanup every year or a filter change every three months, and it turns up here a week before it is due, with Done and Skip this one beside it. Gone quiet catches open jobs that have gone silent longer than they should, so nothing falls through only because it went cold. Recent activity is the last twenty things logged across every customer and job, so you can answer what you did yesterday without opening a single record.",
+    ],
+  },
+  {
+    id: "website-leads",
+    title: "Your website's leads",
+    paragraphs: [
+      "If ClearPath built your website, connect it under Settings, then Website, and quote requests start landing in Helix on their own, each with the message the customer typed. Paste your site's address and the token from its admin page; the token is stored in your Mac Keychain or Windows Credential Manager, never in a Helix file you could lose. Helix checks for new leads every few minutes while it is open, and once when it starts.",
+      "Press Poll now if you do not want to wait, or Test connection to check the address and token work before you count on them. The Reports screen shows which sources are actually bringing in the work, so you can see it in numbers instead of guessing.",
+    ],
+  },
+  {
+    id: "backups",
+    title: "Backups and where your data lives",
+    paragraphs: [
+      "Helix runs on your computer and does not need the internet to work; nothing you type is sent anywhere, ever. Your data lives in one file on your own machine, and Diagnostics, under Settings, shows exactly where it is and how big it has gotten. Helix backs itself up automatically after it opens and every six hours after that, keeping every backup from the last day and then one a day for thirty days.",
+      "Go to Settings, then Backups, to see the list, force one with Back up now, or restore an older one if something went wrong; restoring backs up today's data first, so that can be undone too. Attachments, the files you have added to a customer or job, are stored beside the database and are not part of the backup. If you ever want everything out of Helix, use Export to save a CSV of any list, or all of it at once.",
+    ],
+  },
+  {
+    id: "shortcuts",
+    title: "Keyboard shortcuts",
+    paragraphs: [
+      "Helix answers to a handful of keys so you do not have to reach for the mouse for the things you do most. Press the question mark key anywhere to open the full list, or press Cmd/Ctrl+K to search for a customer, a company or a job by name, phone number or note.",
+      "Cmd/Ctrl+N opens Quick add so you can drop in a new contact, job or task without leaving the screen you are on. The button below opens the same list that key does, if you would rather click than remember a shortcut.",
+    ],
+  },
+];
+
+export const HELP_TROUBLE: HelpSection = {
+  id: "trouble",
+  title: "Something's wrong?",
+  paragraphs: [
+    "Start with Diagnostics, under Settings; it shows where your data lives, how big the file is, and the log of what Helix last did, along with a button to copy that log. If something is actually broken, report it on GitHub at https://github.com/walk-the-program/helix-crm/issues, and include what you were doing right before it happened, plus the copied log. Helix has no support team watching in the background, so this page and that log are how a problem actually gets fixed.",
+  ],
+};
+
+export const ISSUES_URL = "https://github.com/walk-the-program/helix-crm/issues";

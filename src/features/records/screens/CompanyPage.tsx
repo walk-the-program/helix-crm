@@ -22,6 +22,7 @@ import * as companiesRepo from "@/db/repos/companies";
 import { contactName } from "@/db/repos/contacts";
 import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
+import { todayLocal } from "@/lib/dates";
 import { useVocabulary } from "@/app/vocabulary";
 import {
   useCompany,
@@ -43,6 +44,7 @@ import { CustomFieldsPanel } from "@/features/records/components/CustomFieldsPan
 import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
+import { RecurringPanel } from "@/features/recurring";
 import { SummarizeButton } from "@/features/ai";
 
 export function CompanyPage() {
@@ -234,6 +236,15 @@ export function CompanyPage() {
 
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
           <TaskRail companyId={id} />
+
+          <div>
+            <CardGroupLabel>Reminders</CardGroupLabel>
+            <RecurringPanel
+              companyId={id}
+              aboutLabel={company.name}
+              reference={todayLocal()}
+            />
+          </div>
 
           <div>
             <CardGroupLabel>Identity</CardGroupLabel>

@@ -29,6 +29,7 @@ import {
   reportError,
 } from "@/features/records/lib/mutations";
 import { formatDateTimeDisplay, formatRelative } from "@/lib/dates";
+import { AddToCalendarButton } from "@/features/records/components/AddToCalendarButton";
 
 const USER_KINDS: { kind: ActivityKind; label: string }[] = [
   { kind: "note", label: "Note" },
@@ -290,6 +291,13 @@ function placeholderFor(kind: ActivityKind): string {
   }
 }
 
+/** The first line of an entry, for a calendar event's title. */
+function meetingSummary(entry: Activity): string {
+  const firstLine = entry.body.split("\n")[0]?.trim() ?? "";
+  if (firstLine.length === 0) return "Meeting";
+  return firstLine.length > 70 ? `${firstLine.slice(0, 67)}...` : firstLine;
+}
+
 function TimelineRow(props: {
   entry: Activity;
   onEdit: () => void;
@@ -362,6 +370,23 @@ function TimelineRow(props: {
               "transition-opacity duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
             ].join(" ")}
           >
+            {/* Only a meeting. A note or a call is something that already
+                happened; a meeting is the one kind of entry that is also an
+                appointment, which is the only thing a calendar wants. */}
+            {entry.kind === "meeting" ? (
+              <AddToCalendarButton
+                size="sm"
+                subject={{
+                  kind: "meeting",
+                  id: entry.id,
+                  summary: meetingSummary(entry),
+                  startAt: entry.occurredAt,
+                  description: entry.body,
+                  contactId: entry.contactId,
+                  companyId: entry.companyId,
+                }}
+              />
+            ) : null}
             <IconButton
               label="Edit entry"
               size="sm"

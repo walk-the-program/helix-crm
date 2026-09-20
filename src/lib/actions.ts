@@ -48,18 +48,41 @@ export function telHref(value: string): string {
   return `tel:${value.replace(/[^\d+]/g, "")}`;
 }
 
-export function smsHref(value: string): string {
-  return `sms:${value.replace(/[^\d+]/g, "")}`;
+/**
+ * `sms:` with an optional prefilled message.
+ *
+ * The two platforms disagree about the separator: iOS and macOS Messages read
+ * `sms:<number>&body=...`, Android reads `sms:<number>?body=...`. `?&body=`
+ * satisfies both - Android sees a query string whose first parameter is empty,
+ * and Messages sees the `&body=` it wants - and it is the form every
+ * cross-platform SMS link has used since iOS 8. Nothing else works on both, so
+ * do not "tidy" it to `?body=`.
+ */
+export function smsHref(value: string, options: { body?: string } = {}): string {
+  const number = value.replace(/[^\d+]/g, "");
+  const body = options.body?.trim();
+  return body ? `sms:${number}?&body=${encodeQueryValue(body)}` : `sms:${number}`;
+}
+
+/**
+ * Percent-encoding for a `mailto:` or `sms:` parameter.
+ *
+ * Not `URLSearchParams`: that encodes a space as `+`, which a mail client shows
+ * to the customer as a literal plus sign in every gap of the message. RFC 6068
+ * wants percent-encoding, and `encodeURIComponent` gives `%20`.
+ */
+function encodeQueryValue(value: string): string {
+  return encodeURIComponent(value);
 }
 
 export function mailtoHref(
   value: string,
   options: { subject?: string; body?: string } = {},
 ): string {
-  const params = new URLSearchParams();
-  if (options.subject) params.set("subject", options.subject);
-  if (options.body) params.set("body", options.body);
-  const query = params.toString();
+  const params: string[] = [];
+  if (options.subject) params.push(`subject=${encodeQueryValue(options.subject)}`);
+  if (options.body) params.push(`body=${encodeQueryValue(options.body)}`);
+  const query = params.join("&");
   return `mailto:${encodeURIComponent(value.trim())}${query ? `?${query}` : ""}`;
 }
 
@@ -247,12 +270,20 @@ export async function openTel(
   return openAndOffer("call", phone, telHref(phone), target);
 }
 
-/** Text a number. Offers "Log this text". */
+/**
+ * Text a number, optionally with the message already written. Offers "Log this
+ * text".
+ *
+ * The body is what a template renders to; the opener hands it to Messages and
+ * the owner still presses send himself, which is the only place that decision
+ * belongs.
+ */
 export async function openSms(
   phone: string,
   target: ActionTarget = {},
+  options: { body?: string } = {},
 ): Promise<OneTapResult> {
-  return openAndOffer("text", phone, smsHref(phone), target);
+  return openAndOffer("text", phone, smsHref(phone, options), target);
 }
 
 /** Compose an email in the owner's mail app. Offers "Log this email". */

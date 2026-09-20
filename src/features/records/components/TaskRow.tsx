@@ -22,6 +22,10 @@ import { isOverdue } from "@/lib/dates";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { deleteWithUndo, invalidateRecords, reportError } from "@/features/records/lib/mutations";
 import { RecordChip, type RecordChipTarget } from "@/features/records/components/RecordChip";
+import {
+  AddToCalendarButton,
+  calendarDescription,
+} from "@/features/records/components/AddToCalendarButton";
 
 export function TaskRow(props: {
   task: Task;
@@ -83,6 +87,8 @@ export function TaskRow(props: {
 
   return (
     <div
+      data-testid="task-row"
+      data-task-title={task.title}
       className={cn(
         "group/task-row flex w-full items-center gap-[var(--space-3)]",
         "min-h-[var(--row-h)]",
@@ -140,6 +146,28 @@ export function TaskRow(props: {
           "transition-opacity duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
         )}
       >
+        {/* Only a task with a date can be a calendar event, and a finished one
+            has nothing to put in a calendar. */}
+        {!done && task.dueOn ? (
+          <AddToCalendarButton
+            subject={{
+              kind: "task",
+              id: task.id,
+              summary: task.title,
+              dateOnly: task.dueAt ? null : task.dueOn,
+              startAt: task.dueAt,
+              description: calendarDescription({
+                chips,
+                contactId: task.contactId,
+                companyId: task.companyId,
+                dealId: task.dealId,
+              }),
+              contactId: task.contactId,
+              companyId: task.companyId,
+            }}
+          />
+        ) : null}
+
         {!done ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

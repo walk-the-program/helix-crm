@@ -432,6 +432,82 @@ export const savedViews = sqliteTable(
 );
 
 /* -------------------------------------------------------------------------- */
+/* recurring service reminders                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "Remind me every spring" as a row rather than a timer.
+ *
+ * `next_due_on` is the only state that matters: Today reads the rules whose
+ * next date is inside the next seven days, and marking one done advances that
+ * date by the interval and stamps `last_completed_on`. Nothing runs in the
+ * background, so a workspace that was closed for a year is still correct the
+ * moment it opens - the query is evaluated against today, not against a clock
+ * that was not ticking.
+ *
+ * `every_n` + `unit` rather than an RRULE string: an owner setting "every 3
+ * months" does not need RFC 5545, and a column pair can be read in SQL.
+ */
+export const recurringRules = sqliteTable(
+  "recurring_rules",
+  {
+    id: id(),
+    contactId: text("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    companyId: text("company_id").references(() => companies.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    everyN: integer("every_n").notNull().default(1),
+    /** 'week' | 'month' | 'year'. */
+    unit: text("unit").notNull().default("year"),
+    nextDueOn: text("next_due_on").notNull(),
+    lastCompletedOn: text("last_completed_on"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    ...stamps(),
+  },
+  (t) => [
+    index("idx_recurring_rules_contact_id").on(t.contactId),
+    index("idx_recurring_rules_company_id").on(t.companyId),
+    index("idx_recurring_rules_next_due_on").on(t.nextDueOn),
+    index("idx_recurring_rules_active").on(t.active),
+    index("idx_recurring_rules_deleted_at").on(t.deletedAt),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
+/* message templates                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The four or five things the owner types every week, kept once.
+ *
+ * `kind` is 'text' or 'email'; a text template has no subject. `body` holds
+ * merge fields in double braces ({{first_name}}), rendered at send time - the
+ * stored row is never rendered, so a template can be edited after it has been
+ * used and nothing that was already sent changes.
+ */
+export const templates = sqliteTable(
+  "templates",
+  {
+    id: id(),
+    /** 'text' | 'email'. */
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull().default(""),
+    position: real("position").notNull().default(0),
+    ...stamps(),
+  },
+  (t) => [
+    index("idx_templates_kind").on(t.kind),
+    index("idx_templates_position").on(t.position),
+    index("idx_templates_deleted_at").on(t.deletedAt),
+  ],
+);
+
+/* -------------------------------------------------------------------------- */
 /* workspace-level key/value, sync and bookkeeping                            */
 /* -------------------------------------------------------------------------- */
 
@@ -518,6 +594,10 @@ export type CustomValue = typeof customValues.$inferSelect;
 export type Attachment = typeof attachments.$inferSelect;
 export type Source = typeof sources.$inferSelect;
 export type SavedView = typeof savedViews.$inferSelect;
+export type RecurringRuleRow = typeof recurringRules.$inferSelect;
+export type NewRecurringRuleRow = typeof recurringRules.$inferInsert;
+export type TemplateRow = typeof templates.$inferSelect;
+export type NewTemplateRow = typeof templates.$inferInsert;
 export type SettingRow = typeof settings.$inferSelect;
 export type LeadSyncRow = typeof leadSync.$inferSelect;
 export type ChangeLogRow = typeof changeLog.$inferSelect;
