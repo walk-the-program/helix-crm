@@ -40,6 +40,10 @@ backups, logs, and the site-lead ingestion path (untrusted input from a public f
 Format: `F-<role>-<n>` | class (Blocker / Required / Follow-up) | finding | why that class | fix commit(s) | evidence.
 Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
+### REV (accepted by Fable; full table in `launch-returns/rev.md`)
+
+Model confirmed: Helix is free; the site token is the only link to a paying client; nothing billing-related built. 1 Blocker (F-REV-2: a 400 from the site re-sent the same unreadable cursor forever with a misleading "cannot reach your website"), 7 Required (404 blamed the connection; Test connection tested the saved token during rotation; raw `LeadPollAuthError: HTTP 401` shown to the owner; a site gone for good never suggested disconnecting; keychain refusal blamed the website; pasted `CRM_API_TOKEN=`/quotes/placeholder 401'd silently; changing the site address duplicated the pipeline because lead identity carries the origin). Nine lifecycle states each with a pinned string, a test, and a Walker procedure (OPERATIONS.md "Commercial lifecycle" CL-1..CL-7). Proven: no ClearPath action can lose client data. Blank roster template at docs/CLIENT-ROSTER-TEMPLATE.md. Effort per client: install day 45–75 min; each release 10–15 min per client plus a 60–120 min release run. Six decisions for Walker (D-1..D-6 in rev.md §4). Follow-ups: F-REV-12 (external_id re-keying on address change), F-REV-13 (stale RELEASE-CHECKLIST first-launch lines → CS), F-REV-14 (= LR-6 → CS).
+
 ### OPS (accepted by Fable; full table in `launch-returns/ops.md`)
 
 1 Blocker (F-OPS-1: no recovery key, so a dead laptop made every encrypted backup unreadable; now a recovery key the owner can show/save/print plus "Open a backup from another machine"), 10 Required: second backup copy to a folder the owner chooses; pre-import backup; keychain-denial boot screen with the right cause; older-app-on-newer-schema refusal; UNIQUE index on deals.external_id (migration 0005); purge-sweep overlap guard; prune could delete the file a restore was copying; restore ordering tested; npm + cargo audit in CI; and F-OPS-12 (the write-lock nesting shortcut let a concurrent writer join an import's transaction and lose its work on rollback), escalated by the lead and fixed by Fable with a mutation-checked repo test. docs/OPERATIONS.md holds ten incident procedures (7 tested, 1 inspected only, 1 needs Walker's machine, 1 mixed) and the founder-task inventory. Scale pass 20k/5k/10k: worst query 32 ms. Decisions: LR-4, LR-5, LR-6 below.
@@ -65,8 +69,8 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 | --- | --- | --- | --- | --- | --- | --- |
 | LR-SEC | CSPO | Opus lead | accepted 13:xx (24 commits, 552177f..7652ee9) | ≤3 Sonnet | see packet | `launch-returns/sec.md` |
 | LR-OPS | CROO | Opus lead | accepted 14:xx (23 commits 44d72d8..38835f8 + Fable's F-OPS-12 fix) | ≤3 | | `launch-returns/ops.md` |
-| LR-REV | CRevOps | Opus lead | running (packet rev 1) | ≤2 | | `launch-returns/rev.md` |
-| LR-CS | CCSO | Opus lead | planned (after REV) | ≤3 | | `launch-returns/cs.md` |
+| LR-REV | CRevOps | Opus lead | accepted 15:xx (6 commits d376382..5c358a6) | ≤2 | | `launch-returns/rev.md` |
+| LR-CS | CCSO | Opus lead | running (packet rev 1) | ≤3 | | `launch-returns/cs.md` |
 | LR-PX | CPEO | up to 3 Opus leads | planned (after CS) | ≤9 total | | `launch-returns/px-*.md` |
 | LR-LA | CLAO | Opus lead (fresh) | planned (after PX) | ≤3 | | `launch-returns/la.md` |
 
@@ -74,6 +78,7 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
 | when | what | result |
 | --- | --- | --- |
+| 15:xx | REV gate (Fable, 5c358a6): typecheck clean; vitest 180 files / 2325 passed / 3 skipped; cargo 123; build clean; tree clean | REV accepted |
 | 14:xx | OPS gate (Fable, after F-OPS-12 fix): typecheck clean; vitest 177 files / 2285 passed / 3 skipped; cargo 123 passed; vite build clean; new concurrent-writer test fails on the old code, passes on the fix | OPS accepted |
 | 13:xx | SEC gate (Fable, 7652ee9): typecheck clean; vitest 170 files / 2221 passed / 3 skipped; cargo 102 passed; vite build clean; tree clean | SEC accepted |
 | 12:0x | baseline `e8e7650`: typecheck clean; vitest 2102 passed / 3 skipped; CI + e2e-win green on GitHub; release app built and installed locally | baseline |
