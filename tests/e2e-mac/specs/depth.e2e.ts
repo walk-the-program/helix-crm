@@ -719,9 +719,15 @@ test.describe("help", () => {
       await expect(help.getByRole("heading", { name: title, level: 2 })).toBeVisible();
     }
 
-    await expect(
-      help.getByText("https://github.com/walk-the-program/helix-crm/issues", { exact: true }),
-    ).toBeVisible();
+    // The raw URL left the page in the CPO/CDQO pass (nobody types a GitHub
+    // issues URL by hand); the way out is a named button that opens it, and
+    // the address survives as the button's title.
+    const issues = help.getByRole("button", { name: "Report an issue on GitHub" });
+    await expect(issues).toBeVisible();
+    await expect(issues).toHaveAttribute(
+      "title",
+      "https://github.com/walk-the-program/helix-crm/issues",
+    );
     await expect(help.getByRole("button", { name: "Open Diagnostics" })).toBeVisible();
 
     await shoot(page, "help");
