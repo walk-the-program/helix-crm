@@ -89,7 +89,7 @@ export function NavItem(props: {
 
   const className = cn(
     "flex min-h-[var(--control-h)] w-full items-center gap-[var(--space-2)]",
-    "rounded-[var(--radius-md)] px-[var(--space-3)] no-underline",
+    "px-[var(--space-3)] no-underline",
     "text-[length:var(--text-base)] text-[var(--color-text-muted)]",
     "hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]",
     "hover:no-underline",

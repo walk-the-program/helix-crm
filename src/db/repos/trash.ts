@@ -21,7 +21,9 @@ export type TrashEntityType =
   | "task"
   | "tag"
   | "saved_view"
-  | "attachment";
+  | "attachment"
+  | "recurring_rule"
+  | "template";
 
 const TABLES: Record<TrashEntityType, string> = {
   contact: "contacts",
@@ -32,6 +34,8 @@ const TABLES: Record<TrashEntityType, string> = {
   tag: "tags",
   saved_view: "saved_views",
   attachment: "attachments",
+  recurring_rule: "recurring_rules",
+  template: "templates",
 };
 
 /** How the row is labelled in the trash list, per type. */
@@ -44,6 +48,8 @@ const LABELS: Record<TrashEntityType, string> = {
   tag: "name",
   saved_view: "name",
   attachment: "file_name",
+  recurring_rule: "title",
+  template: "name",
 };
 
 export type TrashItem = {

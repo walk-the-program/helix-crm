@@ -3128,3 +3128,228 @@ feature code rather than invented.
   than with a date filter on `ActivityFilter`; past that ceiling the line reads
   "1000+". A `from`/`to` on the activities filter would be the honest fix and
   belongs to whoever owns that repository.
+
+---
+
+## 2026-09-19 — Final integration before 0.1.0
+
+The seams every parallel agent left, then a full verification. Three Sonnet
+agents ran under this one (the e2e theme waits plus the Windows smoke spec; the
+forbidden-pattern sweep over `src/ui` and `src/app`; Trash for reminders and
+templates), and a fourth pass by the same agents for voice. Everything below was
+reviewed here.
+
+### Settings, Today and the two mounts
+
+- **Three rows added to `src/features/settings/lib/sections.ts`.** Templates
+  (general, `Article`, `/settings/templates`) closes the depth agent's contract
+  item 1 — the templates screen was drawing the section list with nothing
+  highlighted. Reminders (records group, linked to `/recurring`). "Run setup
+  again" (general, linked to `/setup`). The setup row wanted to read "Set up your
+  business again", which is what the command says, and it does not fit: the
+  section list beside every settings screen is 240px and truncated it to "Set up
+  your busines…". The description carries the rest. `OverviewScreen`'s
+  `EXTERNAL_HINTS` gained "Opens reminders" and "Opens setup".
+- **`<RemoveSampleDataButton />` is mounted twice**, as the onboarding agent
+  asked. In Settings it is a third group on the Workspace screen, drawn only when
+  the example is actually loaded — the button renders nothing on its own, and a
+  group label over nothing is an empty box, so the onboarding feature now also
+  exports `useHasSampleData()`. On Today it is a footer under the content column,
+  deliberately **outside** the empty/not-empty branch: loading the example fills
+  the workspace, so the first-run screen is gone by the time the owner wants the
+  example gone, and a button reachable only by emptying the workspace first is no
+  button at all.
+
+### Diagnostics: the two encryption readings
+
+A fifth group, "Encryption", with the two lines the encryption agent specified.
+
+- **Workspace file.** `db_info().encrypted` and `.cipherVersion` are optional, so
+  the screen renders "Unknown" when they are absent — never "Not encrypted",
+  which under the e2e harness and the unit driver (plain better-sqlite3) would be
+  a lie about the owner's data. The sentence is "Your workspace file is encrypted
+  on this computer." plus the cipher version in muted ink. It says *workspace
+  file*, not *data*: SQLCipher covers the database, and attachments sit beside it
+  on disk relying on the OS.
+- **Disk encryption.** A new reader, `readDiskEncryption()`, invokes
+  `disk_encryption_status` and answers null on any refusal. `encrypted: null` is
+  "Could not check" with the command's own `detail` under it, never "off"; when it
+  is genuinely off the row names the switch (FileVault or BitLocker) and gives one
+  sentence saying where to turn it on. `tests/e2e-mac/fixtures.ts` gained the stub
+  `{ platform: "e2e", encrypted: null, detail: "" }`, so the harness exercises the
+  degraded path rather than the default rejection.
+
+### The Pipeline row follows the vocabulary
+
+`FeatureModule.nav` is a static array the shell flattens once, before the
+database is open, so it could never carry a label read from `settings.vocabulary`
+— which is why the sidebar said "Pipeline" on a landscaping workspace whose
+pipeline screen said "Jobs". The records feature contributes the row through
+`navProvider` now, which the shell calls on every render and which may therefore
+use `useVocabulary()`. The route is unchanged.
+
+That needed one change in the shell. `Shell.tsx` used to give every dynamic
+section its own `SidebarSection`, which would have cut the sidebar into three
+blocks to make one row dynamic. An **unlabelled** section now merges into the run
+of static rows around it, in order; a labelled one ("Views") still gets its own
+group. An unlabelled group is by definition not a visual group, so this is the
+behaviour the slot should always have had.
+
+### Promotions
+
+- `src/features/onboarding/lib/settings.ts`'s nine keys are in the typed registry
+  in `src/db/repos/settings.ts`, the same way the AI keys were, plus
+  `templates.seededAt`. `settingStatement` moved with them and is re-exported from
+  the feature so its call sites read as before.
+
+### Trash, and the templates seed guard
+
+`TrashEntityType` covers `recurring_rule` and `template`, with the screen's two
+new tabs. That could not land until the templates seed guard moved off "count
+every row, soft-deleted included" — the moment Trash can purge a starter, a row
+count says "never seeded" and the four come back. The guard is the settings key
+`templates.seededAt` now, written inside the same `withWrite` and `raw.batch` as
+the inserts. A workspace that seeded before the key existed is handled once: a
+non-empty table with no key is prior evidence of a seed, so the key is written and
+nothing is inserted, and every later call answers from the key alone. Eight repo
+tests, including the regression that purging all four starters does not bring
+them back.
+
+### One React tree
+
+Four features mounted their own React roots on `<body>` from `onBoot`, each
+rebuilding the providers by hand, because the shell had no slot: quick add, the
+search dialog, the settings host (shortcuts sheet + workspace picker) and the AI
+paste sheet. All four are `FeatureModule.overlays` now and the two mounting
+modules are gone — `src/features/records/quickAdd/host.tsx` deleted,
+`src/features/settings/lib/overlayHost.tsx` reduced to `createOpener` and renamed
+`opener.ts`, `src/features/today/search/overlay.tsx` reduced to the component.
+Their keydown bindings went with them: the shell binds every registered command's
+shortcut centrally, so `mod+n`, `mod+,`, `mod+shift+v` and the bare `?` are one
+handler now instead of four. The only key a feature still binds for itself is
+`mod+/`, search's alias, which is not a `FeatureCommand.shortcut` — and it is a
+binding inside the shell's tree rather than a second root, which is the point.
+Every one of those shortcuts is exercised by the e2e suite and green.
+
+### The stage ramp, re-derived from the brand
+
+Sweep B left this open: a stage-coloured bar on Reports was visibly more
+saturated than a brand-primary bar two cards above it, so the screen read as two
+kinds of bar. The ramp now sits under the brand instead of beside it. One OKLCh
+chroma for all eight (0.062, and 0.020 for the neutral), which is under the
+loudest brand bar — the secondary measures 0.0903 — where revision 2 ran 0.045 to
+0.148 with four entries above it. Hues come from the brand where the brand has
+one: the neutral dark's hue at near-zero chroma, the primary's, the secondary's,
+and one beside the accent; teal, green, red and clay are the four a five-colour
+brand cannot supply.
+
+With chroma fixed, lightness carries the separation, and it is solved rather than
+chosen: a hill climb maximising the smallest pairwise ΔE2000 across normal vision
+and the three dichromat simulations (Viénot, Brettel & Mollon 1999, in linear
+light — the method `design/review.md` used for the first ramp), subject to every
+contrast bar. It is better on the axis that matters:
+
+```
+smallest pairwise ΔE2000      normal  protan  deutan  tritan
+  revision 2, light             10.2     2.1     2.0     1.9
+  this ramp,  light              8.8     5.7     5.5     5.6
+  revision 2, dark              11.2     4.8     0.7     1.5
+  this ramp,  dark               9.1     5.0     4.9     5.0
+```
+
+Revision 2's dark ramp had a green and a red a deuteranope could not separate at
+all (ΔE 0.7), which nobody had measured since the ramp was written. The lightness
+band is deliberately narrow (0.450–0.530 light, tighter than revision 2's
+0.437–0.542): a wider band buys more separation — 0.41–0.53 reaches 6.9 — and it
+is not worth it, because these are bar fills as well as inks and the wide band
+puts a near-black bar beside a mid one, so the chart reads as five weights rather
+than five categories. Every contrast bar DESIGN.md sets still passes, worst case
+4.75:1. The numbers and the method are in the comment blocks in `tokens.css`;
+`docs/DESIGN.md` §5 is updated and no longer says "Unchanged". The tag colour
+names in `TagsScreen` were two revisions stale — "Mauve" sat on a red, "Moss" on
+a yellow — and are now the current eight.
+
+Verified with `design/contrast-audit.js` over the regenerated gallery: **439
+elements checked, 0 failures** in all four theme × density combinations, same as
+the brand foundation's baseline. `design/ui-screens/gallery.css` was rebuilt from
+a real vite build and the four gallery captures recaptured.
+
+### The sweeps
+
+- **Screenshot theme waits.** `depth`, `onboarding`, `today` and `records` flip
+  `data-theme` and capture, and did it in the same tick, which is how sweep B's
+  dark captures photographed light controls. All four wait for the canvas colour
+  to change plus 250ms now. `data` and `leads` already waited for the colour and
+  gained the 250ms.
+- **Windows smoke.** `tests/e2e-win/specs/smoke.e2e.ts` failed on main because
+  onboarding (106aafc) shows on a fresh workspace and the spec waited for Today.
+  It detects which screen came up and, when it is setup, drives the flow with
+  defaults and "Start empty" before asserting Today — so the run proves the
+  first-run flow on a real WebView2 rather than skipping it. Roles and text, no
+  ids. It cannot be run from this Mac; the GitHub job is the proof.
+- **Forbidden patterns.** 32 `rounded-[var(--radius-*)]` utilities removed from 21
+  files in `src/ui` and `src/app` (the feature sweeps had cleared `src/features`;
+  the kit and the shell still carried them). Every `--radius-*` is 0, so this is a
+  text change with no visual change. `lucide-react` removed from `package.json`
+  and the lockfile — nothing imported it. `font-[var(--font-*)]`,
+  `shadow-[var(--shadow-sm)]` and colour literals outside `tokens.css`: no hits.
+  The six remaining hex strings in `src/ui` are all inside comments documenting a
+  token's measured value.
+- **Voice.** Three strings, all real: the one remaining bare "That did not
+  finish." on the onboarding apply now names setup; the Diagnostics sentence was
+  narrowed from "Your data" to "Your workspace file" because SQLCipher does not
+  cover the attachments beside it; and a grammar slip in a starter template.
+
+### What the screenshots caught
+
+Two defects, both fixed:
+
+1. **Today painted overdue yellow.** `DueNow` drew a late task with
+   `<Badge tone="warning">` and an alarm glyph. DESIGN.md §5 "What has no colour"
+   names the word "overdue" explicitly, and `TaskRow` already followed it — this
+   section was the last place in the product putting an attention colour on a
+   screen §5 says has none. Neutral now; the words and the section's own count do
+   the work.
+2. **The setup row truncated** in the settings section list, as above.
+
+### Verified
+
+```
+npm run typecheck                                        clean
+npm test                                    77 files / 1173 tests
+npx vite build --outDir dist-final                    succeeds (deleted)
+E2E_PORT=4199 E2E_OUT=dist-final-e2e playwright test    73 passed
+design/contrast-audit.js over the gallery   439 checked / 0 failures × 4
+```
+
+The e2e run was one sequential pass over every spec on port 4199. 73 includes a
+temporary `final-screens.e2e.ts` that captured the release screens and was then
+deleted; the repo's own nine specs are the other 71. Two failures on the first
+pass were this pass's own doing — the sidebar row is named "Deals" now, not
+"Pipeline" — and `records.e2e.ts` was corrected. No flakes.
+
+Release screens at 1280 in light and dark in
+`tests/e2e-mac/.cache/screens/final/` (18 images, gitignored): Today empty and
+populated, a contact page, the pipeline board, the Settings index, the Workspace
+screen, Diagnostics, onboarding screen 1 and Reports. Read against
+`assets/brand/guide/helix-crm-brand-guide.html`: one primary block per view
+(the selected sidebar row, plus the one primary button where the screen has a
+primary action), `--shadow-sticker` only on the lockup, no radius anywhere, the
+accent never a background, dark mode with no light controls left in it.
+
+### Left open
+
+- **`gh run list` on this push is the only proof for Windows.** The e2e-win job
+  runs on GitHub and cannot be reproduced from a Mac.
+- **Three large empty panels stack up on a populated Today** — Coming up, New
+  leads and Gone quiet each draw a full-height empty state on a workspace that has
+  plenty in it. Each one is correct on its own and each is asserted by a spec;
+  together they are most of the screen. Worth a look before 0.2.0, not worth
+  changing under a release.
+- **The pipeline board clips its seventh column at 1280.** DESIGN.md's target is
+  six columns at 1440; a seven-stage trade preset scrolls horizontally. Expected,
+  recorded here because the landscaping preset makes it the default experience.
+- **`--stage-7` is the one bar that still reads heavier than its neighbours**
+  (L* 0.451 against 0.530 for its two neighbours). The solver spends lightness
+  where it must to keep the dichromat separation; narrowing further costs more
+  than it buys.

@@ -6,10 +6,10 @@
  *
  * Two seams wave 3 closed, both now in docs/CONTRACTS.md:
  *
- * 1. `commands[].shortcut` is still a label rather than a binding, but the
- *    shell binds Cmd/Ctrl+K to whatever command is registered with the id
- *    "search" — this one. The palette moved to Cmd/Ctrl+Shift+K. The overlay
- *    keeps Cmd/Ctrl+/ as an alias.
+ * 1. The shell binds Cmd/Ctrl+K to whatever command is registered with the id
+ *    "search" — this one — and binds every other command's shortcut generically.
+ *    The palette moved to Cmd/Ctrl+Shift+K. The overlay keeps Cmd/Ctrl+/ as an
+ *    alias, which is the one key a feature still binds for itself.
  * 2. `navProvider` lets a feature contribute sidebar items that only exist
  *    after a database read, so pinned saved views are a real "Views" group in
  *    the sidebar (order 15) instead of a strip on Today.
@@ -20,8 +20,8 @@ import { NAV_ORDER } from "@/app/feature";
 import { Sun } from "@/ui/icons";
 import { TodayScreen } from "@/features/today/TodayScreen";
 import {
-  mountSearchOverlay,
   openSearch,
+  SearchOverlay,
   SEARCH_SHORTCUT,
 } from "@/features/today/search/overlay";
 import { usePinnedViewsNav } from "@/features/today/views/pinnedNav";
@@ -45,10 +45,12 @@ export const feature: FeatureModule = {
       run: openSearch,
     },
   ],
-  /** Mounts the search overlay. Idempotent, as the contract requires. */
-  onBoot: async () => {
-    mountSearchOverlay();
-  },
+  /**
+   * The search dialog, on every screen. It used to be a second React root
+   * started from `onBoot`; the shell's `overlays` slot renders it inside the
+   * app's own providers now, which is the seam wave 3 could not close.
+   */
+  overlays: () => <SearchOverlay />,
 };
 
 export default feature;

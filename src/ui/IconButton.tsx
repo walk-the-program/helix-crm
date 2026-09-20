@@ -16,7 +16,6 @@ const iconButtonVariants = cva(
   [
     "inline-flex items-center justify-center",
     noShrink,
-    "rounded-[var(--radius-md)]",
     quietTransition,
     pressScale,
     disabledState,

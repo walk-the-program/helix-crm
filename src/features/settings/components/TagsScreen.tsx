@@ -46,15 +46,25 @@ import { settingsKeys, useTagCounts, useTags } from "@/features/settings/lib/que
 import * as tagsRepo from "@/db/repos/tags";
 import type { Tag as TagRecord } from "@/db/repos/tags";
 
+/**
+ * The eight stage-ramp colours, named as the owner sees them.
+ *
+ * The names are what a screen reader reads out and what the row says beside the
+ * swatch, so they have to match the colour the token actually paints. They did
+ * not: the ramp was re-derived from the brand family in the final integration
+ * pass (see the comment block in src/styles/tokens.css) and these names were
+ * left behind from a ramp two revisions ago - "Mauve" sat on a red and "Moss"
+ * on a yellow. They are the current eight.
+ */
 const TAG_COLORS: { token: string; name: string }[] = [
-  { token: "var(--stage-1)", name: "Sage" },
-  { token: "var(--stage-2)", name: "Cyan" },
-  { token: "var(--stage-3)", name: "Indigo" },
-  { token: "var(--stage-4)", name: "Deep teal" },
+  { token: "var(--stage-1)", name: "Slate" },
+  { token: "var(--stage-2)", name: "Blue" },
+  { token: "var(--stage-3)", name: "Lavender" },
+  { token: "var(--stage-4)", name: "Teal" },
   { token: "var(--stage-5)", name: "Green" },
-  { token: "var(--stage-6)", name: "Mauve" },
-  { token: "var(--stage-7)", name: "Orchid" },
-  { token: "var(--stage-8)", name: "Moss" },
+  { token: "var(--stage-6)", name: "Brick" },
+  { token: "var(--stage-7)", name: "Tan" },
+  { token: "var(--stage-8)", name: "Olive" },
   { token: "var(--color-border-strong)", name: "Neutral" },
 ];
 const DEFAULT_COLOR = TAG_COLORS[0].token;

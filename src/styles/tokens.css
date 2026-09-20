@@ -332,37 +332,76 @@
   --color-info-ink:     #2C5670;
 
   /* --- Pipeline stage ramp -------------------------------------------------
-     Unchanged from revision 2. The guide is silent on the stage ramp, and a
-     pipeline needs eight separable hues that a five-colour brand cannot
-     supply. They are held in the same washed-out family so they sit under the
-     brand rather than fighting it, every ink clears 4.5:1 on its own tint and
-     on white, and stage colour is never the only cue - the stage name is
-     spelled out beside it everywhere it appears.
-       1 slate    #41546B on #ECEFF3  6.73  on white 7.76
-       2 blue     #1F6C9F on #E1F3FE  4.98  on white 5.67
-       3 lavender #4B4397 on #EFEDFB  7.13  on white 8.24
-       4 teal     #1F6B68 on #E3F1F0  5.39  on white 6.25
-       5 green    #346538 on #EDF3EC  6.08  on white 6.85
-       6 red      #9F2F2D on #FDEBEC  6.26  on white 7.20
-       7 clay     #8A5330 on #F6EEE7  5.45  on white 6.25
-       8 yellow   #956400 on #FBF3DB  4.62  on white 5.12                     */
-  --stage-1: #41546B;  /* slate    - default "New lead"                       */
-  --stage-2: #1F6C9F;  /* blue     - default "Contacted"                      */
-  --stage-3: #4B4397;  /* lavender - default "Estimate sent"                  */
-  --stage-4: #1F6B68;  /* teal     - default "Scheduled"                      */
-  --stage-5: #346538;  /* green    - default "Won"                            */
-  --stage-6: #9F2F2D;  /* red      - default "Lost"                           */
-  --stage-7: #8A5330;  /* clay     - spare                                    */
-  --stage-8: #956400;  /* yellow   - spare                                    */
+     Re-derived from the brand family in the final integration pass. Revision 2's
+     ramp was carried into revision 3 untouched, and the brand screenshots caught
+     what that cost: a stage-coloured bar on Reports was visibly more saturated
+     than a brand-primary bar two cards above it, so the screen read as two kinds
+     of bar. The ramp now sits UNDER the brand rather than beside it.
 
-  --stage-1-soft: #ECEFF3;
-  --stage-2-soft: #E1F3FE;
-  --stage-3-soft: #EFEDFB;
-  --stage-4-soft: #E3F1F0;
-  --stage-5-soft: #EDF3EC;
-  --stage-6-soft: #FDEBEC;
-  --stage-7-soft: #F6EEE7;
-  --stage-8-soft: #FBF3DB;
+     How it is built. Every entry is one OKLCh hue at ONE chroma - 0.062, except
+     the neutral at 0.020 - so no stage is louder than any other and none is
+     louder than the loudest brand bar (the secondary #8B85C2 measures 0.0903
+     OKLCh chroma; the primary #97B1C3 measures 0.0387). The previous ramp ran
+     from 0.045 to 0.148 and four of its eight entries were above the secondary.
+     The hues come from the brand wherever the brand has one: 1 is the neutral
+     dark's hue at near-zero chroma, which is what #4E555A is; 2 is the primary's
+     own hue; 3 is the secondary's own hue; 8 sits beside the accent (110). Teal,
+     green, red and clay are the four a five-colour brand cannot supply, and a
+     pipeline needs eight.
+
+     Lightness is what carries the separation, because chroma no longer can. It
+     is solved, not chosen: a hill climb over the eight lightnesses maximising
+     the smallest pairwise DeltaE2000 across normal vision AND the three dichromat
+     simulations (Vienot, Brettel & Mollon 1999, applied in linear light - the
+     method design/review.md used to solve the first ramp), subject to every
+     contrast bar below. The result is better on the axis that actually matters:
+
+       smallest pairwise DeltaE2000   normal  protan  deutan  tritan
+         revision 2 ramp                10.2     2.1     2.0     1.9
+         this ramp                       8.8     5.7     5.5     5.6
+
+     The lightness band is deliberately narrow - 0.450 to 0.530, tighter than
+     revision 2's 0.437 to 0.542 - because these are BAR FILLS as well as inks.
+     A wider band buys more separation (0.41-0.53 reaches 6.9) and it is not
+     worth it: on the Reports "Pipeline value by stage" card the widest band puts
+     a near-black bar next to a mid one and the chart reads as five weights
+     rather than five categories.
+
+     Contrast, measured, worst case across the eight: ink on its own tint 4.75,
+     on the canvas 5.03, on a white panel 5.24; --color-text on a tint 6.85 and
+     --color-text-muted 5.51; and on the 14% color-mix a user-created stage wears,
+     --color-text 6.12 and --color-text-muted 4.93. Every one clears 4.5:1, which
+     is what DESIGN.md requires of the ramp.
+
+     Stage colour is still never the only cue - the stage name is spelled out
+     beside it everywhere it appears.
+
+       n  ink      tint     hue  chroma  on tint  on canvas  on white
+       1  #4C575F  #EFF5F9  239  0.019    6.73     7.12      7.41   slate
+       2  #355E78  #ECF5FB  238  0.063    6.29     6.68      6.95   blue
+       3  #6A668E  #F3F3FC  289  0.062    4.88     5.17      5.38   lavender
+       4  #397472  #EBF7F6  193  0.062    4.90     5.16      5.36   teal
+       5  #45684A  #EEF6EF  148  0.063    5.72     6.06      6.30   green
+       6  #8C5E59  #FCF1EF   26  0.061    4.91     5.23      5.44   brick
+       7  #6F4D31  #FBF2EC   60  0.062    6.84     7.26      7.55   tan
+       8  #746D42  #F5F4EB  100  0.062    4.75     5.03      5.24   olive          */
+  --stage-1: #4C575F;  /* slate    - default "New lead"                       */
+  --stage-2: #355E78;  /* blue     - default "Contacted"                      */
+  --stage-3: #6A668E;  /* lavender - default "Estimate sent"                  */
+  --stage-4: #397472;  /* teal     - default "Scheduled"                      */
+  --stage-5: #45684A;  /* green    - default "Won"                            */
+  --stage-6: #8C5E59;  /* brick    - default "Lost"                           */
+  --stage-7: #6F4D31;  /* tan      - spare                                    */
+  --stage-8: #746D42;  /* olive    - spare                                    */
+
+  --stage-1-soft: #EFF5F9;
+  --stage-2-soft: #ECF5FB;
+  --stage-3-soft: #F3F3FC;
+  --stage-4-soft: #EBF7F6;
+  --stage-5-soft: #EEF6EF;
+  --stage-6-soft: #FCF1EF;
+  --stage-7-soft: #FBF2EC;
+  --stage-8-soft: #F5F4EB;
 }
 
 /* ============================================================================
@@ -472,34 +511,49 @@
   --color-info-soft:    #2D3032;
   --color-info-ink:     #97B1C3;
 
-  /* The stage ramp keeps its identity across themes: same eight hues, lifted
-     to the light side so they read on a dark surface, with the dark tint as
-     the fill.
-       1 slate    #A9B6C6 on #262C33  6.84  on #1E1E1E  6.97
-       2 blue     #8FC6F2 on #1F2E3D  7.60  on #1E1E1E  7.88
-       3 lavender #B7B0EE on #2A2740  7.15  on #1E1E1E  7.15
-       4 teal     #8FCBC7 on #1E302F  7.59  on #1E1E1E  7.88
-       5 green    #9AD2A0 on #22301F  8.01  on #1E1E1E  8.27
-       6 red      #FF9FA4 on #3A2427  7.35  on #1E1E1E  7.35
-       7 clay     #D9A57E on #332821  6.57  on #1E1E1E  6.58
-       8 yellow   #E8C77A on #332B1B  8.58  on #1E1E1E  8.80                  */
-  --stage-1: #A9B6C6;
-  --stage-2: #8FC6F2;
-  --stage-3: #B7B0EE;
-  --stage-4: #8FCBC7;
-  --stage-5: #9AD2A0;
-  --stage-6: #FF9FA4;
-  --stage-7: #D9A57E;
-  --stage-8: #E8C77A;
+  /* The stage ramp keeps its identity across themes: the same eight hues at the
+     same single chroma, lifted to the light side so they read on a dark surface,
+     with the dark tint as the fill. Solved the same way as the light ramp above
+     and against the same bars, on this theme's own canvases.
 
-  --stage-1-soft: #262C33;
-  --stage-2-soft: #1F2E3D;
-  --stage-3-soft: #2A2740;
-  --stage-4-soft: #1E302F;
-  --stage-5-soft: #22301F;
-  --stage-6-soft: #3A2427;
-  --stage-7-soft: #332821;
-  --stage-8-soft: #332B1B;
+       smallest pairwise DeltaE2000   normal  protan  deutan  tritan
+         revision 2 dark ramp           11.2     4.8     0.7     1.5
+         this ramp                       9.1     5.0     4.9     5.0
+
+     Revision 2's dark ramp had two entries a deuteranope could not tell apart at
+     all (green and red, DeltaE 0.7). That is the reading this pass most wanted to
+     fix, and the one the equal-chroma construction fixes for free.
+
+     Worst case across the eight: ink on its own tint 7.07, on the canvas 8.44, on
+     a raised surface 7.64; --color-text on a tint 14.74 and --color-text-muted
+     7.52; on the 14% color-mix, 11.49 and 5.86.
+
+       n  ink      tint     hue  chroma  on tint  on canvas  on #1E1E1E
+       1  #A7B4BD  #1F252A  238  0.019    7.30     8.69      7.86   slate
+       2  #92BEDB  #1C262C  237  0.063    7.78     9.31      8.42   blue
+       3  #CBC8F5  #24232D  288  0.062    9.69    11.51     10.42   lavender
+       4  #9EDBD8  #1A2727  192  0.062    9.96    11.91     10.78   teal
+       5  #A1C7A6  #1F2720  149  0.062    8.21     9.86      8.92   green
+       6  #F4BFB9  #2D2120   26  0.062    9.63    11.40     10.32   brick
+       7  #CFA88A  #2B231C   59  0.062    7.07     8.44      7.64   tan
+       8  #D6CFA0  #26251B  101  0.063    9.75    11.66     10.55   olive          */
+  --stage-1: #A7B4BD;
+  --stage-2: #92BEDB;
+  --stage-3: #CBC8F5;
+  --stage-4: #9EDBD8;
+  --stage-5: #A1C7A6;
+  --stage-6: #F4BFB9;
+  --stage-7: #CFA88A;
+  --stage-8: #D6CFA0;
+
+  --stage-1-soft: #1F252A;
+  --stage-2-soft: #1C262C;
+  --stage-3-soft: #24232D;
+  --stage-4-soft: #1A2727;
+  --stage-5-soft: #1F2720;
+  --stage-6-soft: #2D2120;
+  --stage-7-soft: #2B231C;
+  --stage-8-soft: #26251B;
 
   /* The floating hairline inverts with the rest of the theme. Still no blur.
      --shadow-sticker does not change: the accent is the accent in both. */

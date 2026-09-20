@@ -13,8 +13,8 @@
  *     which carries `aria-label` and `title`;
  *   - decorative icons take `aria-hidden`.
  *
- * Every name a feature already imports from `lucide-react` is exported here
- * under the same spelling, so migrating a file is a one-line change:
+ * Every name a feature used to import from `lucide-react` is exported here
+ * under the same spelling, so migrating a file was a one-line change:
  *
  *     -import { Users, Phone, Trash2 } from "lucide-react";
  *     +import { Users, Phone, Trash2 } from "@/ui/icons";
@@ -235,8 +235,9 @@ export {
 /* -------------------------------------------------------------------------- */
 /* the migration map: every Lucide name the product used, same spelling       */
 /*                                                                            */
-/* A feature changes `from "lucide-react"` to `from "@/ui/icons"` and nothing  */
-/* else. Once src/features is clear of the old names these aliases can go.    */
+/* A feature changed `from "lucide-react"` to `from "@/ui/icons"` and nothing */
+/* else. src/features is now clear of the old names; these aliases stay only  */
+/* in case an old branch or doc still references one.                        */
 /* -------------------------------------------------------------------------- */
 
 export {

@@ -19,7 +19,7 @@ export function Tooltip(props: {
           side={side}
           sideOffset={6}
           className={cn(
-            "z-50 max-w-[280px] rounded-[var(--radius-md)]",
+            "z-50 max-w-[280px]",
             "border border-[var(--color-border)]",
             "bg-[var(--color-surface-raised)] text-[var(--color-text)]",
             "px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)]",

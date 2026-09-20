@@ -294,13 +294,32 @@ where the sentence above it has already explained the red.
 
 ### The stage ramp
 
-Unchanged. Eight muted pastels, `--stage-1` … `--stage-8` (the readable ink)
-paired with `--stage-N-soft` (the fill). A pipeline needs eight separable hues
-and a five-colour brand cannot supply them, so the ramp is held in the same
-washed-out family — it sits under the brand rather than fighting it. Every ink
-clears 4.5:1 on its own tint and on white.
+Eight muted hues, `--stage-1` … `--stage-8` (the readable ink) paired with
+`--stage-N-soft` (the fill). A pipeline needs eight separable hues and a
+five-colour brand cannot supply them, so the ramp is **derived** from the brand
+family rather than sitting beside it: one OKLCh chroma for all eight (0.062, and
+0.020 for the neutral), which is under the loudest brand bar — the secondary
+measures 0.0903 — so no stage bar can be louder than a brand bar. Revision 2's
+ramp ran from 0.045 to 0.148 and four of its eight entries were above the
+secondary, which is what made a stage-coloured bar on Reports read as a
+different kind of bar from the brand-primary one two cards above it.
 
-1 slate · 2 blue · 3 lavender · 4 teal · 5 green · 6 red · 7 clay · 8 yellow.
+Hues come from the brand where the brand has one: 1 is the neutral dark's hue at
+near-zero chroma, 2 is the primary's hue, 3 is the secondary's hue, 8 sits beside
+the accent. Teal, green, red and clay are the four the brand cannot supply.
+
+With chroma fixed, **lightness carries the separation**, and it is solved rather
+than chosen: a hill climb maximising the smallest pairwise ΔE2000 across normal
+vision and the three dichromat simulations (Viénot, Brettel & Mollon 1999, in
+linear light — the method `design/review.md` used for the first ramp), subject to
+every contrast bar. The smallest CVD reading went from 1.9 to 5.5 in light and
+from 0.7 to 4.9 in dark; revision 2's dark ramp had a green and a red a
+deuteranope could not separate at all. Every ink still clears 4.5:1 on its own
+tint, on the canvas and on white, and `--color-text` / `--color-text-muted` still
+clear it on every tint and on the 14% mix a user-created stage wears. The numbers
+are in `src/styles/tokens.css`.
+
+1 slate · 2 blue · 3 lavender · 4 teal · 5 green · 6 brick · 7 tan · 8 olive.
 
 Stage colour is **never the only cue**: the stage name is spelled out in full
 beside it everywhere it appears. A user-created stage mixes its tint at render

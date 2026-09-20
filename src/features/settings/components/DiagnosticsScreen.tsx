@@ -1,13 +1,23 @@
 /**
  * Diagnostics: where the data is, how big it is, and what the app last did.
  *
- * Four grouped inset lists of label/value rows and nothing else — this screen
+ * Five grouped inset lists of label/value rows and nothing else — this screen
  * reads, it never writes. Both buttons are quiet (ghost), so the screen shows
  * no primary at all: a screen earns its one block of brand primary only when
  * it has a single thing the owner came to do, and this one has two equals.
  *
  * Both say plainly when they cannot work rather than failing silently, which is
  * the whole point of the screen.
+ *
+ * The Encryption group is the one place in the product that answers "is my
+ * customer list safe on this laptop". It is two readings and they are different
+ * things: the workspace file is encrypted by Helix (SQLCipher, keyed from the
+ * OS keychain), and the disk under it is encrypted by the OS (FileVault or
+ * BitLocker) or it is not. Neither reading is ever guessed. `db_info()` leaves
+ * both of its fields out when the build cannot tell - which is the case under
+ * the e2e harness and in the unit tests, both plain better-sqlite3 - and that
+ * reads as "Unknown", never as "Not encrypted". The disk check answers
+ * `encrypted: null` when it could not run, which is also not "off".
  */
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardCopy, FolderOpen, ICON_SIZE_SM, ICON_WEIGHT_STRONG } from "@/ui/icons";
@@ -26,6 +36,7 @@ import {
   formatBytes,
   readDiagnostics,
   revealDataFolder,
+  type DiskEncryption,
 } from "@/features/settings/lib/diagnostics";
 
 function Unknown(props: { children?: string }) {
@@ -41,6 +52,91 @@ function Mono(props: { children: string }) {
   return (
     <span className="font-[family-name:var(--font-mono)] text-[length:var(--text-sm)] break-all">
       {props.children}
+    </span>
+  );
+}
+
+/**
+ * Whether Helix encrypted its own file, in one sentence.
+ *
+ * `encrypted` being absent is the normal case outside the desktop build and
+ * means "this build cannot tell". Saying "Not encrypted" there would be a lie
+ * about the owner's data, so it says Unknown.
+ */
+function WorkspaceEncryption(props: {
+  encrypted: boolean | undefined;
+  cipherVersion: string | undefined;
+  unavailable: boolean;
+}) {
+  if (props.unavailable) return <Unknown />;
+  if (props.encrypted === undefined) return <Unknown>Unknown</Unknown>;
+  if (props.encrypted === false) {
+    return (
+      <span className="text-[var(--color-danger-ink)]">
+        This file is not encrypted.
+      </span>
+    );
+  }
+  return (
+    <span>
+      Your workspace file is encrypted on this computer.
+      {props.cipherVersion ? (
+        <span className="text-[var(--color-text-muted)]">
+          {" "}
+          SQLCipher {props.cipherVersion}.
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** What the OS calls its own full-disk encryption, so the row names the switch. */
+function diskEncryptionName(platform: string): string {
+  if (platform === "macos") return "FileVault";
+  if (platform === "windows") return "BitLocker";
+  return "Full-disk encryption";
+}
+
+/** The one sentence that says where to turn it on, per platform. */
+function howToTurnItOn(platform: string): string {
+  if (platform === "macos") {
+    return "Turn it on in System Settings, under Privacy and Security.";
+  }
+  if (platform === "windows") {
+    return "Turn it on in Settings, under Privacy and security, Device encryption.";
+  }
+  return "Turn it on in your operating system's security settings.";
+}
+
+function DiskEncryptionValue(props: { status: DiskEncryption | null }) {
+  const { status } = props;
+  if (!status) return <Unknown>Could not check</Unknown>;
+
+  const name = diskEncryptionName(status.platform);
+
+  if (status.encrypted === true) {
+    return <span>{status.detail || `${name} is on.`}</span>;
+  }
+
+  if (status.encrypted === false) {
+    return (
+      <span className="flex flex-col gap-[var(--space-1)]">
+        <span>{status.detail || `${name} is off.`}</span>
+        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          {howToTurnItOn(status.platform)}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex flex-col gap-[var(--space-1)]">
+      <Unknown>Could not check</Unknown>
+      {status.detail ? (
+        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          {status.detail}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -167,6 +263,22 @@ export function DiagnosticsScreen() {
               ) : (
                 <Unknown>No backup has run yet</Unknown>
               )}
+            </SettingsValueRow>
+          </SettingsGroup>
+
+          <SettingsGroup
+            label="Encryption"
+            footnote="Helix encrypts its own file. Full-disk encryption is the operating system's job, and it covers everything else on the machine."
+          >
+            <SettingsValueRow label="Workspace file">
+              <WorkspaceEncryption
+                encrypted={data.db?.encrypted}
+                cipherVersion={data.db?.cipherVersion}
+                unavailable={data.db === null}
+              />
+            </SettingsValueRow>
+            <SettingsValueRow label="Disk encryption">
+              <DiskEncryptionValue status={data.diskEncryption} />
             </SettingsValueRow>
           </SettingsGroup>
 

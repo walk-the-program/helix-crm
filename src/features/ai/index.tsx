@@ -18,11 +18,7 @@
  */
 import { useSyncExternalStore } from "react";
 import type { FeatureModule } from "@/app/feature";
-import { useShortcut } from "@/app/hooks";
-import {
-  createOpener,
-  mountOverlay,
-} from "@/features/settings/lib/overlayHost";
+import { createOpener } from "@/features/settings/lib/opener";
 import { AiSettingsScreen } from "@/features/ai/components/AiSettingsScreen";
 import { PasteToRecordDialog } from "@/features/ai/components/PasteToRecordDialog";
 
@@ -43,10 +39,8 @@ function AiHost() {
     pasteDialog.isOpen,
   );
 
-  // The shell draws a command's shortcut in the palette but does not bind it,
-  // so the feature that promises the key listens for it here.
-  useShortcut("mod+shift+v", () => pasteDialog.open());
-
+  // mod+shift+v is bound by the shell from the "ai-paste" command below, so
+  // there is nothing to listen for here.
   return <PasteToRecordDialog open={open} onOpenChange={pasteDialog.setOpen} />;
 }
 
@@ -63,9 +57,8 @@ export const feature: FeatureModule = {
       run: () => pasteDialog.open(),
     },
   ],
-  onBoot: async () => {
-    mountOverlay("ai", <AiHost />);
-  },
+  /** The paste sheet, on every screen, through the shell's own providers. */
+  overlays: () => <AiHost />,
 };
 
 export default feature;

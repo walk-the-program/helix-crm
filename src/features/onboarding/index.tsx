@@ -50,7 +50,10 @@ export const feature: FeatureModule = {
 };
 
 export { OnboardingFlow } from "@/features/onboarding/OnboardingFlow";
-export { RemoveSampleDataButton } from "@/features/onboarding/components/RemoveSampleData";
+export {
+  RemoveSampleDataButton,
+  useHasSampleData,
+} from "@/features/onboarding/components/RemoveSampleData";
 export { shouldShowOnboarding } from "@/features/onboarding/gate";
 
 export default feature;

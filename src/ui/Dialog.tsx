@@ -47,7 +47,7 @@ export const DialogContent = forwardRef<
         "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-var(--space-6))]",
         sizeClasses[size],
         "flex max-h-[calc(100vh-var(--space-9)*2)] flex-col overflow-hidden",
-        "rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+        "border border-[var(--color-border)]",
         "bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]",
         "focus-visible:outline-none",
         className,
@@ -64,7 +64,7 @@ export const DialogContent = forwardRef<
           className={cn(
             "absolute right-[var(--space-3)] top-[var(--space-3)] z-[2]",
             "inline-flex flex-none items-center justify-center",
-            "w-[var(--control-h-sm)] h-[var(--control-h-sm)] rounded-[var(--radius-md)]",
+            "w-[var(--control-h-sm)] h-[var(--control-h-sm)]",
             "text-[var(--color-text-muted)]",
             "enabled:hover:bg-[var(--color-hover)] enabled:hover:text-[var(--color-text)]",
             quietTransition,

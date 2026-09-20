@@ -7,13 +7,18 @@
  * under 11px labels, and one detail pane on the right. The groups here are the
  * same four the index draws, in the same order.
  *
- * Two rows still point at screens other features own and are linked, never
- * registered: "/pipeline" (stages, records) and "/trash" (records). Website
- * connection and Backups are mounted under "/settings" by this feature — see
- * the route table in ../index.tsx.
+ * Four rows point at screens other features own and are linked, never
+ * registered here: "/pipeline" (stages, records), "/trash" (records),
+ * "/recurring" (reminders) and "/setup" (onboarding). Two more sit under
+ * "/settings" but belong to another feature, which registers them itself:
+ * "/settings/templates" (templates) and "/settings/ai" (ai). Website connection
+ * and Backups are mounted under "/settings" by this feature — see the route
+ * table in ../index.tsx.
  */
 import type { IconType } from "@/ui/icons";
 import {
+  ArrowsClockwise,
+  Article,
   Buildings,
   ClockCounterClockwise,
   Cpu,
@@ -21,6 +26,7 @@ import {
   Globe,
   Keyboard,
   Layers,
+  MagicWand,
   Palette,
   SlidersHorizontal,
   Stethoscope,
@@ -78,6 +84,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "general",
   },
   {
+    id: "templates",
+    title: "Templates",
+    description: "The text messages and emails you send again and again.",
+    to: "/settings/templates",
+    icon: Article,
+    group: "general",
+  },
+  {
     id: "shortcuts",
     title: "Keyboard shortcuts",
     description: "Every key this app answers to. Also opens with ?.",
@@ -86,11 +100,33 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "general",
   },
   {
+    // "Set up your business again" is the sentence this row wants, and it is
+    // what the command palette says. It does not fit: the section list beside
+    // every settings screen is 240px and truncated it to "Set up your busines…"
+    // on every one of them. The description carries the rest.
+    id: "setup",
+    title: "Run setup again",
+    description: "Walk back through the setup. Nothing already in Helix is thrown away.",
+    to: "/setup",
+    icon: MagicWand,
+    group: "general",
+    external: true,
+  },
+  {
     id: "stages",
     title: "Stages",
     description: "Rename, reorder and recolour the columns on the pipeline.",
     to: "/pipeline",
     icon: Layers,
+    group: "records",
+    external: true,
+  },
+  {
+    id: "reminders",
+    title: "Reminders",
+    description: "Repeat visits and yearly services, and when each is next due.",
+    to: "/recurring",
+    icon: ArrowsClockwise,
     group: "records",
     external: true,
   },

@@ -11,7 +11,7 @@ import { z } from "zod";
 import { raw } from "@/db/client";
 import { withWrite } from "@/db/writeLock";
 import { nowIso } from "@/lib/dates";
-import { logWrite, parseOrThrow } from "@/db/repos/_base";
+import { logWrite, parseOrThrow, type Statement } from "@/db/repos/_base";
 
 const SETTINGS = {
   vocabulary: { schema: z.enum(["deals", "jobs", "quotes"]), default: "deals" },
@@ -35,6 +35,30 @@ const SETTINGS = {
   lastDuplicateScanAt: { schema: z.string().nullable(), default: null },
   lastBackupAt: { schema: z.string().nullable(), default: null },
   connectCardDismissed: { schema: z.boolean(), default: false },
+  // Promoted from src/features/onboarding/lib/settings.ts (docs/STATUS.md,
+  // "2026-09-19 — Onboarding agent", "Two things for other owners" item 1),
+  // the same way the AI keys above were. The onboarding feature still reads and
+  // writes them through its own readString/writeBusinessProfile wrappers, which
+  // call the key-agnostic getRaw/setRaw, so registering them here needs no
+  // change on the feature side - it only means `get`, `getAll` and the
+  // diagnostics screen now know the key exists and what shape it is.
+  //
+  // The dots in the names are part of the stored key. They are quoted here
+  // because that is what the settings table holds, and renaming them would
+  // orphan every row already written.
+  "onboarding.completedAt": { schema: z.string().nullable(), default: null },
+  "onboarding.skippedAt": { schema: z.string().nullable(), default: null },
+  "business.name": { schema: z.string(), default: "" },
+  "business.trade": { schema: z.string().nullable(), default: null },
+  "business.tradeOther": { schema: z.string(), default: "" },
+  "owner.name": { schema: z.string(), default: "" },
+  "owner.email": { schema: z.string(), default: "" },
+  "owner.phone": { schema: z.string(), default: "" },
+  "sample.loadedAt": { schema: z.string().nullable(), default: null },
+  // The templates feature's "has this workspace ever been given the four
+  // starter templates" flag. It is a settings key rather than a row count so
+  // that Trash can purge a deleted starter without the seed putting it back.
+  "templates.seededAt": { schema: z.string().nullable(), default: null },
 };
 
 export type SettingKey = keyof typeof SETTINGS;
@@ -123,4 +147,30 @@ export async function setRaw(
   options: { batchId?: string } = {},
 ): Promise<void> {
   await upsert(key, value, options);
+}
+
+/**
+ * The upsert above as a statement, for a caller that is already inside a
+ * transaction.
+ *
+ * `set`/`setRaw` take the write lock, and the write lock is not reentrant: a
+ * repository write from inside a transaction that already holds it would wait
+ * for itself. Onboarding's "Use this setup" and the sample-data load are each
+ * ONE transaction that has to write a settings row, so the row is built as a
+ * statement and folded into the same batch as everything else.
+ *
+ * Promoted from src/features/onboarding/lib/settings.ts, which is where it was
+ * first written. It is deliberately the same SQL as `upsert` - if one changes,
+ * both change.
+ *
+ * It does NOT log a change_log entry, because a caller inside a batch builds
+ * its own with `changeLogStatement` and knows the batch id. `setRaw` logs;
+ * this does not.
+ */
+export function settingStatement(key: string, value: unknown): Statement {
+  return {
+    sql: `INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+    params: [key, JSON.stringify(value), nowIso()],
+  };
 }

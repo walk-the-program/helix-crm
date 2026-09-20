@@ -265,12 +265,14 @@ test("choosing the Jobs vocabulary updates the preview and is saved to the datab
   await expect(preview).toContainText("Jobs");
   await expect(preview).toContainText("New job");
 
-  // NOTE: the sidebar's own "Pipeline" nav label (src/app/Shell.tsx, fed by
-  // src/app/registry.ts) is owned by the records/pipeline feature and is not
-  // wired to the vocabulary setting yet, so it stays "Pipeline" no matter what
-  // is chosen here. That is a real gap, not something this test should paper
-  // over - asserting the preview block and the persisted setting is the
-  // honest version of "vocabulary changes the label" until that wiring lands.
+  // The sidebar row follows it too. The records feature contributes that row
+  // through `navProvider` rather than through the static `nav` array, which is
+  // what lets it read the setting; the row was "Pipeline" no matter what until
+  // that landed.
+  const sidebar = page.getByRole("navigation", { name: "Main" });
+  await expect(sidebar.getByRole("link", { name: "Jobs" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "Pipeline" })).toHaveCount(0);
+
   await expect.poll(() => {
     const rows = helix.bridge.call("query", [
       "SELECT value_json FROM settings WHERE key = 'vocabulary'",

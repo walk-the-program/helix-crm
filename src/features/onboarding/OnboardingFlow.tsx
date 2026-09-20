@@ -186,7 +186,7 @@ export function OnboardingFlow({
           onFinish();
         } catch (err) {
           const message =
-            err instanceof Error ? err.message : "That did not finish. Nothing changed.";
+            err instanceof Error ? err.message : "Setup did not finish. Nothing changed.";
           setFlowError(message);
           toast.error(message);
           setBusy(false);

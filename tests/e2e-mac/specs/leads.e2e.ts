@@ -601,6 +601,7 @@ test.describe("screenshots", () => {
       (previous) => getComputedStyle(document.body).backgroundColor !== previous,
       before,
     );
+    await page.waitForTimeout(250);
   }
 
   /** The same screen in both themes, left in light afterwards. */

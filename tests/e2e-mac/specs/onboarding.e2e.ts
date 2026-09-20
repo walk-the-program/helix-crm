@@ -32,22 +32,37 @@ const LANDSCAPING_STAGES = [
   "Lost",
 ];
 
+/**
+ * Flip the theme and wait for it to finish arriving.
+ *
+ * Buttons and tiles in src/ui carry `transition-colors`, so the frame right
+ * after `data-theme` changes is the OLD colour: a capture taken in the same
+ * tick photographs the light theme wearing a dark label. Wait for the canvas
+ * to actually change, then give the slowest transition room to land.
+ */
+async function settleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+  await page
+    .waitForFunction(
+      (previous) => getComputedStyle(document.body).backgroundColor !== previous,
+      before,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      // Already on that theme: nothing transitions and nothing is wrong.
+    });
+  await page.waitForTimeout(250);
+}
+
 /** Light and dark, at the width docs/DESIGN.md's review pass asks for. */
 async function shoot(page: Page, name: string): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 900 });
   for (const theme of ["light", "dark"] as const) {
-    await page.evaluate((t) => {
-      document.documentElement.setAttribute("data-theme", t);
-    }, theme);
-    // Buttons and tiles carry `transition-colors`, so a capture taken the
-    // instant the attribute flips catches them mid-fade.
-    await page.waitForTimeout(400);
+    await settleTheme(page, theme);
     await page.screenshot({ path: `${SCREENS}${name}-${theme}.png`, fullPage: true });
   }
-  await page.evaluate(() => {
-    document.documentElement.setAttribute("data-theme", "light");
-  });
-  await page.waitForTimeout(150);
+  await settleTheme(page, "light");
 }
 
 function count(helix: HelixHarness, table: string): number {
@@ -142,8 +157,11 @@ test.describe("first run", () => {
 
     /* -- the product now speaks landscaping ------------------------------ */
 
-    await sidebar.getByRole("link", { name: "Pipeline" }).click();
-    // The pipeline screen takes its title from the vocabulary the preset wrote.
+    // The sidebar row itself now follows the vocabulary the preset wrote: a
+    // landscaping workspace calls the work jobs, in the sidebar and on the
+    // screen. There is no "Pipeline" row left to click.
+    await expect(sidebar.getByRole("link", { name: "Pipeline" })).toHaveCount(0);
+    await sidebar.getByRole("link", { name: "Jobs" }).click();
     await expect(page.getByRole("heading", { name: "Jobs", exact: true, level: 1 })).toBeVisible();
     for (const stage of ["New lead", "Estimate sent", "Paid"]) {
       await expect(page.getByText(stage, { exact: true }).first()).toBeVisible();
@@ -151,9 +169,9 @@ test.describe("first run", () => {
 
     /* -- and the example comes back out ---------------------------------- */
 
-    // Through the command, because the button belongs to Settings' Workspace
-    // section and Today's first-run card, and neither is on screen with a
-    // workspace this full.
+    // Through the command palette. Settings' Workspace section and Today both
+    // carry the button as well, but the command is the one path that works from
+    // any screen, which is what makes it worth asserting here.
     await page.keyboard.press("Meta+Shift+K");
     await page.getByPlaceholder("Search, or type a command").fill("Remove sample data");
     await page.getByRole("option", { name: "Remove sample data" }).first().click();

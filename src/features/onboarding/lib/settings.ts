@@ -1,11 +1,13 @@
 /**
  * The workspace settings onboarding owns.
  *
- * None of these are in the typed registry in `src/db/repos/settings.ts`, so
- * they go through that repository's key-agnostic `getRaw`/`setRaw` escape
- * hatch, the same way the AI feature's keys did before they were promoted.
- * They are listed here in one place so the promotion is a copy rather than an
- * archaeology exercise:
+ * All nine now live in the typed registry in `src/db/repos/settings.ts`,
+ * promoted there in the final integration pass the same way the AI feature's
+ * keys were. This file keeps the `KEYS` map because it is the vocabulary the
+ * feature's own code reads in, and because a dotted key is easier to get wrong
+ * spelled out at every call site than named once here. The reads and writes
+ * still go through the repository's key-agnostic `getRaw`/`setRaw`, which is
+ * why the promotion needed no change on this side.
  *
  *   onboarding.completedAt  string | null   the flow ran to the end
  *   onboarding.skippedAt    string | null   "Skip for now" was taken
@@ -17,17 +19,15 @@
  *   owner.phone             string
  *   sample.loadedAt         string | null   the sample set is in the workspace
  *
- * `settingStatement` exists because the apply and the sample load are each ONE
- * transaction, and `settings.setRaw` takes the write lock, which is not
- * reentrant: a repository write inside a transaction that already holds the
- * lock would wait for itself. So the settings row is built as a statement and
- * folded into the same batch as everything else. It is the repository's own
- * upsert, verbatim.
+ * `settingStatement` used to live here too, for the same reason it still
+ * exists: the apply and the sample load are each ONE transaction, and
+ * `settings.setRaw` takes the write lock, which is not reentrant. It is now
+ * `settings.settingStatement` and is re-exported below, so the callers in this
+ * feature did not have to move.
  */
 import * as settings from "@/db/repos/settings";
 import { readRegistry, updateRegistry } from "@/app/appSettings";
 import { nowIso } from "@/lib/dates";
-import type { Statement } from "@/db/repos/_base";
 
 export const KEYS = {
   completedAt: "onboarding.completedAt",
@@ -48,14 +48,12 @@ async function readString(key: string): Promise<string | null> {
   return null;
 }
 
-/** The repository's upsert, as a statement, for a caller inside a transaction. */
-export function settingStatement(key: string, value: unknown): Statement {
-  return {
-    sql: `INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)
-          ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
-    params: [key, JSON.stringify(value), nowIso()],
-  };
-}
+/**
+ * The repository's upsert as a statement, for a caller inside a transaction.
+ * Promoted to `src/db/repos/settings.ts`; re-exported here so this feature's
+ * call sites read the same as they always did.
+ */
+export const settingStatement = settings.settingStatement;
 
 export type OnboardingState = {
   completedAt: string | null;

@@ -67,7 +67,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     >
       <Command
         label="Command palette"
-        className="w-full max-w-[600px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
+        className="w-full max-w-[600px] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-lg)]"
         onKeyDown={(event) => {
           if (event.key === "Escape") onOpenChange(false);
         }}
@@ -110,7 +110,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 key={item.to}
                 value={`go ${item.label}`}
                 onSelect={() => run(() => navigate(item.to))}
-                className="flex h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] rounded-[var(--radius-md)] px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)] data-[selected=true]:bg-[var(--color-selected)]"
+                className="flex h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)] data-[selected=true]:bg-[var(--color-selected)]"
               >
                 {item.label}
               </Command.Item>
@@ -136,7 +136,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   key={command.id}
                   value={`${command.label} ${(command.keywords ?? []).join(" ")}`}
                   onSelect={() => run(command.run)}
-                  className="flex h-[var(--row-h)] cursor-default items-center justify-between gap-[var(--space-3)] rounded-[var(--radius-md)] px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)] data-[selected=true]:bg-[var(--color-selected)]"
+                  className="flex h-[var(--row-h)] cursor-default items-center justify-between gap-[var(--space-3)] px-[var(--space-3)] text-[length:var(--text-base)] text-[var(--color-text)] data-[selected=true]:bg-[var(--color-selected)]"
                 >
                   <span>{command.label}</span>
                   {command.shortcut ? <Kbd keys={command.shortcut} /> : null}

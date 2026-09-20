@@ -17,7 +17,7 @@ export const DropdownMenuContent = forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-[200px] overflow-hidden rounded-[var(--radius-lg)]",
+        "z-50 min-w-[200px] overflow-hidden",
         "border border-[var(--color-border)] bg-[var(--color-surface-raised)]",
         "shadow-[var(--shadow-md)] p-[var(--space-1)]",
         // A macOS menu that has a tick anywhere indents every row to the same
@@ -54,7 +54,7 @@ export const DropdownMenuItem = forwardRef<
     ref={ref}
     className={cn(
       "flex min-h-[var(--control-h-sm)] cursor-default items-center gap-[var(--space-2)]",
-      "rounded-[var(--radius-md)] px-[var(--space-3)]",
+      "px-[var(--space-3)]",
       "text-[length:var(--text-base)] text-[var(--color-text)]",
       "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",
@@ -75,7 +75,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
     ref={ref}
     className={cn(
       "relative flex min-h-[var(--control-h-sm)] cursor-default items-center gap-[var(--space-2)]",
-      "rounded-[var(--radius-md)] pl-[var(--space-7)] pr-[var(--space-3)]",
+      "pl-[var(--space-7)] pr-[var(--space-3)]",
       "text-[length:var(--text-base)] text-[var(--color-text)]",
       "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
       "data-[disabled]:opacity-50 data-[disabled]:pointer-events-none",

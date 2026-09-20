@@ -1,35 +1,22 @@
 /**
- * Mounting the search dialog somewhere it can be opened from any screen.
+ * The search dialog, mounted so it can be opened from any screen.
  *
- * A FeatureModule can contribute routes, sidebar items, commands and an
- * `onBoot` hook — it cannot contribute an overlay, because the shell has no
- * slot for one and `src/app/Shell.tsx` belongs to the foundations agent. Search
- * has to work on /pipeline and /contacts, not only on Today, so the feature
- * mounts its own React root into a `<div>` appended to `document.body` from
- * `onBoot` (which the shell already runs once, after the first paint).
+ * This used to be a second React root on a `<div>` appended to `document.body`,
+ * started from the feature's `onBoot`, because a FeatureModule had no way to
+ * contribute an overlay and `src/app/Shell.tsx` belonged to another agent. Both
+ * of those are fixed: `FeatureModule.overlays` renders `SearchOverlay` inside
+ * the shell's own providers on every screen, so there is one React tree, one
+ * QueryClientProvider and nothing to keep idempotent.
  *
- * This is the one genuinely awkward thing in the Today feature, and it is
- * awkward on purpose rather than by accident: the alternative was editing the
- * shell. Wave 3 left it alone — the shell now delegates Cmd/Ctrl+K to the
- * "search" command, which opens this dialog, so there is one search in the
- * product without the shell having to own the dialog. An `overlays?:
- * ReactNode[]` slot on FeatureModule would still be tidier.
- *
- * The root gets its own `QueryClientProvider` around the *same* shared
- * `queryClient`, so the cache, the query keys and `resetQueryCache()` on a
- * workspace switch all still apply. Routing uses wouter's standalone
- * `navigate`, which drives the same History API the shell's `<Router>`
- * subscribes to.
+ * Search is opened three ways and they all land here: the shell binds
+ * Cmd/Ctrl+K and runs the registered "search" command, the Today header's
+ * button calls `openSearch()`, and the palette lists the same command. The
+ * event is how a caller with no React context reaches this component.
  */
 
-import { StrictMode, useCallback, useEffect, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "@/app/queryClient";
+import { useCallback, useEffect, useState } from "react";
 import { useShortcut } from "@/app/hooks";
 import { SearchDialog } from "@/features/today/search/SearchDialog";
-
-const OVERLAY_ID = "helix-today-overlay";
 
 /**
  * The shortcut the dialog answers to.
@@ -42,9 +29,13 @@ const OVERLAY_ID = "helix-today-overlay";
 export const SEARCH_SHORTCUT = "mod+k";
 
 /**
- * The key this overlay binds for itself. Cmd/Ctrl+K already reaches the dialog
- * through the shell, so this is only an alias, kept because it shipped and
- * because it still works on a screen where the shell is not mounted.
+ * A second key that also opens search, and the one binding a feature still owns.
+ *
+ * Cmd/Ctrl+K reaches the dialog through the shell, so this is only an alias. It
+ * is not a `FeatureCommand.shortcut` — the palette prints one key per command
+ * and mod+k is the one worth printing — so the shell does not bind it and this
+ * component does. It is a keybinding inside the shell's tree, not a second
+ * React root: that is the difference from what this file used to be.
  */
 export const SEARCH_SHORTCUT_ALIAS = "mod+/";
 
@@ -57,7 +48,8 @@ export function openSearch(): void {
   window.dispatchEvent(new CustomEvent(OPEN_SEARCH_EVENT));
 }
 
-function SearchOverlay() {
+/** Rendered once per app by the shell, through the feature's `overlays` slot. */
+export function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const show = useCallback(() => setOpen(true), []);
 
@@ -70,38 +62,4 @@ function SearchOverlay() {
   }, []);
 
   return <SearchDialog open={open} onOpenChange={setOpen} />;
-}
-
-let root: Root | null = null;
-
-/**
- * Idempotent: `onBoot` must be safe to run again after a workspace switch, and
- * React 19's StrictMode runs effects twice in development.
- */
-export function mountSearchOverlay(): void {
-  if (typeof document === "undefined") return;
-  if (root) return;
-
-  let host = document.getElementById(OVERLAY_ID);
-  if (!host) {
-    host = document.createElement("div");
-    host.id = OVERLAY_ID;
-    document.body.appendChild(host);
-  }
-
-  root = createRoot(host);
-  root.render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <SearchOverlay />
-      </QueryClientProvider>
-    </StrictMode>,
-  );
-}
-
-/** Only used by tests; the app never tears the overlay down. */
-export function unmountSearchOverlay(): void {
-  root?.unmount();
-  root = null;
-  document.getElementById(OVERLAY_ID)?.remove();
 }

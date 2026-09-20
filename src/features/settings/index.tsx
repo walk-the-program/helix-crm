@@ -20,7 +20,6 @@ import { Settings as SettingsIcon } from "@/ui/icons";
 import { navigate } from "wouter/use-browser-location";
 import { SiteConnectionScreen } from "@/features/leads";
 import { BackupsScreen } from "@/features/data";
-import { mountOverlay } from "@/features/settings/lib/overlayHost";
 import { OverviewScreen } from "@/features/settings/components/OverviewScreen";
 import { WorkspaceScreen } from "@/features/settings/components/WorkspaceScreen";
 import { VocabularyScreen } from "@/features/settings/components/VocabularyScreen";
@@ -114,11 +113,13 @@ export const feature: FeatureModule = {
       run: () => shortcutsSheet.open(),
     },
   ],
-  onBoot: async () => {
-    // The shortcuts sheet, the workspace picker and the mod+, binding have to
-    // exist on every screen, and the shell has no slot for them. Idempotent.
-    mountOverlay("settings", <SettingsHost />);
-  },
+  /**
+   * The shortcuts sheet and the workspace picker have to exist on every screen.
+   * They used to reach one through a second React root mounted from `onBoot`;
+   * the shell's `overlays` slot renders them inside the app's own providers
+   * instead, and the shell binds mod+, and "?" from the commands above.
+   */
+  overlays: () => <SettingsHost />,
 };
 
 export default feature;

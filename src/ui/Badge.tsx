@@ -88,7 +88,6 @@ export function Badge(props: {
     <span
       className={cn(
         "inline-flex items-center gap-[var(--space-1)]",
-        "rounded-[var(--radius-full)]",
         "px-[var(--space-2)] py-[1px]",
         "text-[length:var(--text-xs)] font-medium leading-[var(--leading-normal)]",
         "whitespace-nowrap",
@@ -100,7 +99,7 @@ export function Badge(props: {
     >
       {dotColor ? (
         <span
-          className="w-[7px] h-[7px] rounded-[var(--radius-full)] flex-none"
+          className="w-[7px] h-[7px] flex-none"
           style={dotStyle}
           aria-hidden="true"
         />

@@ -28,12 +28,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
-          "w-full h-[var(--control-h)] rounded-[var(--radius-md)]",
+          "w-full h-[var(--control-h)]",
           "text-[var(--color-text)]",
           "px-[var(--space-3)] text-[length:var(--text-base)]",
           "placeholder:text-[var(--color-text-faint)]",
           search
-            ? "border-0 bg-[var(--color-accent-soft)] rounded-[var(--radius-full)]"
+            ? "border-0 bg-[var(--color-accent-soft)]"
             : "border border-[var(--color-border-strong)] bg-[var(--color-surface)]",
           quietTransition,
           focusRing,

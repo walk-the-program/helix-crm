@@ -12,6 +12,13 @@
  * A brand-new workspace gets a different screen entirely. Four empty panels
  * stacked up is not a first impression, it is a failure. That screen shows the
  * three things that fill Today and nothing else, with one primary block on it.
+ *
+ * Under both of those sits the one row that only a workspace which took "Show
+ * me an example" during setup ever sees: the way back out of the sample data.
+ * It is deliberately outside the empty/not-empty branch. Loading the example
+ * fills the workspace, so the first-run screen is gone by the time the owner
+ * wants the example gone, and a button he can only reach by emptying the
+ * workspace first is no button at all.
  */
 
 import type { ReactNode } from "react";
@@ -29,6 +36,7 @@ import { RecentActivitySection } from "@/features/today/sections/RecentActivity"
 import { ConnectSiteCard } from "@/features/today/sections/ConnectSite";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useWorkspaceIsEmpty } from "@/features/today/lib/useToday";
+import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
 
 /**
  * Quick add belongs to the records agent and is registered as a palette
@@ -126,6 +134,24 @@ const secondaryLinkClasses = [
   "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]",
 ].join(" ");
 
+/**
+ * The sample-data footer. Draws nothing at all unless the example set is in
+ * this workspace, which is what makes it safe to sit under every Today.
+ */
+function SampleDataNote() {
+  const hasSampleData = useHasSampleData();
+  if (!hasSampleData) return null;
+  return (
+    <div className="mt-[var(--space-6)] flex flex-wrap items-center gap-[var(--space-3)] border-t border-[var(--color-border)] pt-[var(--space-4)]">
+      <p className="flex-1 text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        Some of what you can see is the example Helix put in so the screens had
+        something on them. Take it out whenever you like; your own records stay.
+      </p>
+      <RemoveSampleDataButton size="sm" />
+    </div>
+  );
+}
+
 /** The first-run screen: the three actions that put something on Today. */
 function FirstRun() {
   return (
@@ -211,6 +237,7 @@ export function TodayScreen() {
         ) : (
           <TodayPanels />
         )}
+        <SampleDataNote />
       </div>
     </div>
   );

@@ -44,7 +44,7 @@ export function Select(props: {
         aria-invalid={invalid || undefined}
         className={cn(
           "flex w-full h-[var(--control-h)] flex-none items-center justify-between gap-[var(--space-2)]",
-          "rounded-[var(--radius-md)] border border-[var(--color-border-strong)]",
+          "border border-[var(--color-border-strong)]",
           "bg-[var(--color-surface)] text-[var(--color-text)]",
           "px-[var(--space-3)] text-[length:var(--text-base)]",
           "enabled:hover:bg-[var(--color-hover)]",
@@ -68,7 +68,7 @@ export function Select(props: {
           position="popper"
           sideOffset={4}
           className={cn(
-            "z-50 overflow-hidden rounded-[var(--radius-lg)]",
+            "z-50 overflow-hidden",
             "border border-[var(--color-border)] bg-[var(--color-surface-raised)]",
             "shadow-[var(--shadow-md)]",
             "min-w-[var(--radix-select-trigger-width)]",
@@ -85,7 +85,7 @@ export function Select(props: {
                 disabled={option.disabled}
                 className={cn(
                   "relative flex min-h-[var(--control-h-sm)] cursor-default items-center",
-                  "rounded-[var(--radius-md)] pl-[var(--space-7)] pr-[var(--space-3)]",
+                  "pl-[var(--space-7)] pr-[var(--space-3)]",
                   "text-[length:var(--text-base)] text-[var(--color-text)]",
                   "data-[highlighted]:bg-[var(--color-selected)] data-[highlighted]:outline-none",
                   "data-[disabled]:opacity-50",

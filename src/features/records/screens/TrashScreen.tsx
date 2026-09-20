@@ -57,6 +57,8 @@ const TYPES: TrashEntityType[] = [
   "tag",
   "saved_view",
   "attachment",
+  "recurring_rule",
+  "template",
 ];
 
 const TYPE_LABELS: Record<TrashEntityType, string> = {
@@ -68,6 +70,8 @@ const TYPE_LABELS: Record<TrashEntityType, string> = {
   tag: "Tags",
   saved_view: "Saved views",
   attachment: "Attachments",
+  recurring_rule: "Reminders",
+  template: "Templates",
 };
 
 const TYPE_LOWER_PLURAL: Record<TrashEntityType, string> = {
@@ -79,6 +83,8 @@ const TYPE_LOWER_PLURAL: Record<TrashEntityType, string> = {
   tag: "tags",
   saved_view: "saved views",
   attachment: "attachments",
+  recurring_rule: "reminders",
+  template: "templates",
 };
 
 export function TrashScreen(): ReactElement {

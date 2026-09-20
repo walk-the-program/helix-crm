@@ -27,7 +27,16 @@ export function openRemoveSampleData(): void {
   window.dispatchEvent(new Event(OPEN_EVENT));
 }
 
-function useSampleLoaded(): boolean {
+/**
+ * True when the example set is in this workspace.
+ *
+ * Exported because a caller sometimes has to know before it draws anything
+ * around the button: Settings' Workspace screen puts the button inside a
+ * grouped list with a label above it, and a label over a button that renders
+ * nothing is an empty box. The button itself still checks for itself, so a
+ * caller that does not care can mount it and forget it.
+ */
+export function useHasSampleData(): boolean {
   const { data } = useQuery({
     queryKey: qk.setting(KEYS.sampleLoadedAt),
     queryFn: () => readSampleLoadedAt(),
@@ -44,7 +53,7 @@ export function RemoveSampleDataButton({
 }: {
   size?: "sm" | "md";
 }) {
-  const loaded = useSampleLoaded();
+  const loaded = useHasSampleData();
   if (!loaded) return null;
   return (
     <Button variant="destructive" size={size} onClick={openRemoveSampleData}>

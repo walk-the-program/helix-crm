@@ -90,6 +90,7 @@ async function switchTheme(page: Page, theme: "light" | "dark"): Promise<void> {
     (previous) => getComputedStyle(document.body).backgroundColor !== previous,
     before,
   );
+  await page.waitForTimeout(250);
 }
 
 /**

@@ -48,9 +48,6 @@ export function Brand({
         className={cn(
           "inline-flex flex-none items-center justify-center",
           "border border-[var(--color-border-strong)] bg-[var(--color-surface)]",
-          // rounded-[var(--radius-sm)] resolves to 0: the guide's corner
-          // language is a hard edge on everything, and the mark most of all.
-          "rounded-[var(--radius-sm)]",
           large ? "h-[56px] w-[56px] p-[var(--space-2)]" : "h-[26px] w-[26px] p-[3px]",
           sticker && "shadow-[var(--shadow-sticker)]",
         )}

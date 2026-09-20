@@ -270,7 +270,10 @@ test.describe("records", () => {
     const [dealId, stageIdBefore] = dealRowBefore[0];
     expect(stageIdBefore).toBe(firstStage[0]);
 
-    await page.getByRole("navigation").getByRole("link", { name: "Pipeline" }).click();
+    // The sidebar row is named from the vocabulary setting, which is "deals" on
+    // a workspace nobody has changed, so it reads "Deals" and matches the
+    // heading on the screen it opens.
+    await page.getByRole("navigation").getByRole("link", { name: "Deals" }).click();
     const card = page.getByTestId("deal-card").filter({ hasText: "Spring Cleanup and Mulch" });
     await expect(card).toBeVisible();
     await card.focus();
@@ -402,10 +405,27 @@ test.describe("records screens", () => {
 
   const OUT = "tests/e2e-mac/.cache/screens/brand-a";
 
-  async function setTheme(page: Page, theme: "light" | "dark"): Promise<void> {
-    await page.evaluate((value) => {
-      document.documentElement.setAttribute("data-theme", value);
-    }, theme);
+  /**
+   * Flip the theme and wait for it to finish arriving.
+   *
+   * Every control in src/ui carries `transition-colors`, so the frame right
+   * after `data-theme` changes is the OLD colour: a capture taken in the same
+   * tick photographs the light theme wearing a dark label. Wait for the
+   * canvas to actually change, then give the slowest transition room to land.
+   */
+  async function settleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+    const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+    await page
+      .waitForFunction(
+        (previous) => getComputedStyle(document.body).backgroundColor !== previous,
+        before,
+        { timeout: 2_000 },
+      )
+      .catch(() => {
+        // Already on that theme: nothing transitions and nothing is wrong.
+      });
+    await page.waitForTimeout(250);
   }
 
   /** Dismiss any live toast so it does not sit over the screen being shot. */
@@ -418,11 +438,11 @@ test.describe("records screens", () => {
 
   async function shoot(page: Page, name: string): Promise<void> {
     for (const theme of ["light", "dark"] as const) {
-      await setTheme(page, theme);
+      await settleTheme(page, theme);
       await settle(page);
       await page.screenshot({ path: `${OUT}/${name}-${theme}.png`, fullPage: true });
     }
-    await setTheme(page, "light");
+    await settleTheme(page, "light");
   }
 
   /**
@@ -451,7 +471,7 @@ test.describe("records screens", () => {
     await expect(page.getByText("No contacts yet")).toBeVisible();
     await shoot(page, "contacts-empty");
 
-    await page.getByRole("navigation").getByRole("link", { name: "Pipeline" }).click();
+    await page.getByRole("navigation").getByRole("link", { name: "Deals" }).click();
     await expect(page.getByRole("heading", { name: "Deals", level: 1 })).toBeVisible();
     await shoot(page, "pipeline-empty");
 

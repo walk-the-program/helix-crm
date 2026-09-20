@@ -7,8 +7,8 @@
  * screen in the feature that does not carry the section list, because it is the
  * section list.
  *
- * The two rows another feature owns say where they land ("Opens the pipeline"),
- * so a jump out of Settings is never a surprise.
+ * The four rows another feature owns say where they land ("Opens the
+ * pipeline"), so a jump out of Settings is never a surprise.
  */
 import { Link } from "wouter";
 import { PageHeader } from "@/ui";
@@ -18,7 +18,9 @@ import { sectionsByGroup } from "@/features/settings/lib/sections";
 
 const EXTERNAL_HINTS: Record<string, string> = {
   stages: "Opens the pipeline",
+  reminders: "Opens reminders",
   trash: "Opens trash",
+  setup: "Opens setup",
 };
 
 export function OverviewScreen() {

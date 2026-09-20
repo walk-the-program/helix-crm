@@ -29,7 +29,7 @@ export function Switch(props: {
       aria-label={ariaLabel}
       className={cn(
         "group relative inline-flex flex-none items-center",
-        "w-[38px] h-[var(--control-h-sm)] rounded-[var(--radius-full)]",
+        "w-[38px] h-[var(--control-h-sm)]",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         focusRing,
         className,
@@ -39,7 +39,7 @@ export function Switch(props: {
         aria-hidden="true"
         className={cn(
           "pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2",
-          "h-[22px] rounded-[var(--radius-full)]",
+          "h-[22px]",
           "bg-[var(--color-border-strong)]",
           "group-data-[state=checked]:bg-[var(--color-text)]",
           quietTransition,
@@ -48,7 +48,7 @@ export function Switch(props: {
       <RadixSwitch.Thumb
         className={cn(
           "pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2",
-          "block w-[18px] h-[18px] rounded-[var(--radius-full)]",
+          "block w-[18px] h-[18px]",
           "bg-[var(--color-surface)] border border-[var(--color-border)]",
           "data-[state=checked]:translate-x-[16px]",
           quietTransform,

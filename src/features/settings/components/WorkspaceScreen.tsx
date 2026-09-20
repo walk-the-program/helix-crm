@@ -10,6 +10,11 @@
  * The name is written twice on purpose: to the workspace's own settings table
  * (what the screens read) and to helix.json (what the workspace list reads
  * while the file is closed). Both are in the plan's item 19.
+ *
+ * A third group appears only on a workspace that took "Show me an example"
+ * during setup: the one button that takes the example back out again. The
+ * onboarding feature owns the button and the confirm behind it; this screen
+ * only decides that here is where the owner will look for it.
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,6 +24,7 @@ import { readRegistry, updateRegistry } from "@/app/appSettings";
 import { formatMoney } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
 import { normalizePhone } from "@/lib/phone";
+import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
 import {
   SettingsGroup,
   SettingsLoading,
@@ -66,6 +72,8 @@ export function WorkspaceScreen() {
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Read before the loading branch below, because it is a hook.
+  const hasSampleData = useHasSampleData();
 
   useEffect(() => {
     if (data) setName(data.workspaceName);
@@ -223,6 +231,21 @@ export function WorkspaceScreen() {
           />
         </SettingsRow>
       </SettingsGroup>
+
+      {hasSampleData ? (
+        <SettingsGroup
+          label="Sample data"
+          footnote="Everything you added yourself stays where it is."
+        >
+          <SettingsRow
+            label="Example customers and jobs"
+            hint="Helix put these in so the screens had something on them."
+            field
+          >
+            <RemoveSampleDataButton size="sm" />
+          </SettingsRow>
+        </SettingsGroup>
+      ) : null}
     </SettingsScreenFrame>
   );
 }

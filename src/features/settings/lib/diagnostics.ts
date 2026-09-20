@@ -5,6 +5,17 @@
  * runtime, on a fresh workspace there is no poll and no backup, and a machine
  * with no keychain answers nothing at all. Each reader therefore returns a
  * value or a reason, never a thrown error, so the screen always renders.
+ *
+ * Two of them are about encryption and read differently from the rest
+ * (docs/CONTRACTS.md "Encryption at rest"):
+ *
+ *   - `db.encrypted` / `db.cipherVersion` come from `db_info()` and are
+ *     OPTIONAL, because the e2e bridge and the unit-test driver are plain
+ *     better-sqlite3 with no cipher. Absent means "this build cannot tell",
+ *     which the screen shows as Unknown - never as "not encrypted".
+ *   - `diskEncryption` is a separate Rust command that asks the OS about
+ *     FileVault or BitLocker. It never throws and its `encrypted` is `null`
+ *     when the check could not run, which is not the same as "off".
  */
 import { version as APP_VERSION } from "../../../../package.json";
 import { raw, type DbInfo } from "@/db/client";
@@ -16,10 +27,19 @@ import { keychainAvailable } from "@/features/ai/lib/secrets";
 
 export { APP_VERSION };
 
+/** What `disk_encryption_status` answers. It never fails, so there is no error. */
+export type DiskEncryption = {
+  platform: string;
+  /** null means the check could not run or could not be read - not "off". */
+  encrypted: boolean | null;
+  detail: string;
+};
+
 export type Diagnostics = {
   appVersion: string;
   db: DbInfo | null;
   dbError: string | null;
+  diskEncryption: DiskEncryption | null;
   appData: string | null;
   workspacesDir: string | null;
   workspaceId: string | null;
@@ -37,6 +57,30 @@ function reason(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * Whether the OS's own full-disk encryption is switched on.
+ *
+ * The Rust side returns the struct directly rather than a Result, so it can
+ * never fail the app - but it is only there in the desktop build, and under the
+ * e2e harness it is a stub. Outside Tauri, and on any refusal, this answers
+ * null and the screen says it could not check.
+ */
+export async function readDiskEncryption(): Promise<DiskEncryption | null> {
+  if (!isTauri()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const status = await invoke<DiskEncryption>("disk_encryption_status");
+    if (!status || typeof status !== "object") return null;
+    return {
+      platform: typeof status.platform === "string" ? status.platform : "",
+      encrypted: typeof status.encrypted === "boolean" ? status.encrypted : null,
+      detail: typeof status.detail === "string" ? status.detail : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** <appData>/logs/helix.log: where src-tauri/src/lib.rs points the log plugin. */
 export async function logFilePath(): Promise<string | null> {
   try {
@@ -52,6 +96,7 @@ export async function readDiagnostics(): Promise<Diagnostics> {
     appVersion: APP_VERSION,
     db: null,
     dbError: null,
+    diskEncryption: null,
     appData: null,
     workspacesDir: null,
     workspaceId: null,
@@ -70,6 +115,8 @@ export async function readDiagnostics(): Promise<Diagnostics> {
   } catch (err) {
     result.dbError = reason(err);
   }
+
+  result.diskEncryption = await readDiskEncryption();
 
   try {
     const paths = await appPaths();

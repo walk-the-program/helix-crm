@@ -1,20 +1,19 @@
 /**
- * The always-mounted half of the settings feature.
+ * The always-mounted half of the settings feature: the two dialogs that open
+ * from anywhere, the shortcuts sheet and the workspace picker.
  *
- * Two jobs the shell cannot do for a feature:
- *   1. bind the keys. The shell binds mod+k and nothing else - a command's
- *      `shortcut` is drawn in the palette but never registered - so a feature
- *      that promises mod+, has to listen for it itself.
- *   2. hold the dialogs that open from anywhere: the shortcuts sheet (on "?")
- *      and the workspace picker (from the palette).
+ * It used to bind keys as well - mod+, for settings and a hand-rolled "?"
+ * listener for the sheet - because a `FeatureCommand.shortcut` was a label the
+ * palette drew and nothing pressed. The shell binds every registered command
+ * centrally now, including a bare key, so both bindings are gone and the two
+ * commands in ../index.tsx are the whole story. See `src/app/shortcuts.ts`.
  *
- * Mounted from the feature's onBoot hook through mountOverlay.
+ * Rendered by the shell through the feature's `overlays` slot, inside the app's
+ * providers, on every screen.
  */
-import { useEffect, useSyncExternalStore } from "react";
-import { navigate } from "wouter/use-browser-location";
-import { useShortcut } from "@/app/hooks";
+import { useSyncExternalStore } from "react";
 import { setTheme, readRegistry } from "@/app/appSettings";
-import { createOpener } from "@/features/settings/lib/overlayHost";
+import { createOpener } from "@/features/settings/lib/opener";
 import { ShortcutsSheet } from "@/features/settings/components/ShortcutsSheet";
 import { WorkspacePicker } from "@/features/settings/components/WorkspacePicker";
 
@@ -43,28 +42,6 @@ function useOpener(opener: ReturnType<typeof createOpener>): boolean {
 export function SettingsHost() {
   const sheetOpen = useOpener(shortcutsSheet);
   const pickerOpen = useOpener(workspacePicker);
-
-  useShortcut("mod+,", () => navigate("/settings"));
-
-  // "?" is shift+/ on a US keyboard and its own key elsewhere, so it is matched
-  // on event.key rather than through the mod+ parser. Never while typing.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key !== "?") return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target;
-      const typing =
-        target instanceof HTMLElement &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable);
-      if (typing) return;
-      event.preventDefault();
-      shortcutsSheet.open();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
 
   return (
     <>

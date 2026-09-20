@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSeededHarness, type Harness } from "../harness";
 import { raw } from "../../../src/db/client";
 import * as templates from "../../../src/db/repos/templates";
+import * as trash from "../../../src/db/repos/trash";
 import {
   MERGE_FIELDS,
   unknownFieldsIn,
@@ -231,6 +232,39 @@ describe("templates: the first-use seed", () => {
     expect(await templates.list()).toHaveLength(0);
   });
 
+  it("does not come back after a starter is purged through Trash (regression)", async () => {
+    h = await createSeededHarness();
+    await templates.ensureStarters();
+    const rows = await templates.list();
+    expect(rows).toHaveLength(4);
+
+    for (const row of rows) {
+      await templates.softDelete(row.id);
+      await trash.purge("template", row.id);
+    }
+    const remaining = await raw.query(`SELECT count(*) AS n FROM templates`);
+    expect(Number(remaining[0][0])).toBe(0);
+
+    // With the old row-count guard this would see an empty table and seed
+    // four more. The templates.seededAt key must stop that.
+    expect(await templates.ensureStarters()).toBe(0);
+    expect(await templates.list()).toHaveLength(0);
+  });
+
+  it("writes exactly one templates.seededAt settings row under concurrent callers", async () => {
+    h = await createSeededHarness();
+    const [first, second] = await Promise.all([
+      templates.ensureStarters(),
+      templates.ensureStarters(),
+    ]);
+    expect(first + second).toBe(4);
+
+    const rows = await raw.query(
+      `SELECT count(*) AS n FROM settings WHERE key = 'templates.seededAt'`,
+    );
+    expect(Number(rows[0][0])).toBe(1);
+  });
+
   it("uses only merge fields the renderer knows", async () => {
     h = await createSeededHarness();
     await templates.ensureStarters();
@@ -280,5 +314,38 @@ describe("templates: purge", () => {
     const template = await templates.create({ kind: "text", name: "Gone", body: "a" });
     await templates.purge(template.id);
     expect(await templates.get(template.id)).toBeNull();
+  });
+});
+
+describe("templates: migrating to the seededAt key", () => {
+  it("treats a workspace that already has templates as already seeded, and records the key", async () => {
+    h = await createSeededHarness();
+    // A legacy workspace: a row exists (as the old row-count guard would have
+    // left it) but the templates.seededAt key was never written, because it
+    // did not exist yet.
+    await templates.create({ kind: "text", name: "Legacy starter", body: "Hi" });
+
+    expect(await templates.ensureStarters()).toBe(0);
+    expect(await templates.list()).toHaveLength(1);
+
+    const settingsRow = await raw.query(
+      `SELECT value_json FROM settings WHERE key = 'templates.seededAt'`,
+    );
+    expect(settingsRow).toHaveLength(1);
+  });
+
+  it("does not reseed a legacy workspace even after its only template is purged", async () => {
+    h = await createSeededHarness();
+    const legacy = await templates.create({ kind: "text", name: "Legacy", body: "Hi" });
+    // First call finds the pre-existing row and marks the workspace seeded
+    // without inserting anything.
+    expect(await templates.ensureStarters()).toBe(0);
+
+    await templates.softDelete(legacy.id);
+    await trash.purge("template", legacy.id);
+    expect(await templates.list()).toHaveLength(0);
+
+    expect(await templates.ensureStarters()).toBe(0);
+    expect(await templates.list()).toHaveLength(0);
   });
 });

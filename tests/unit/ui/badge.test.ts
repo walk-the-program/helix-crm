@@ -38,14 +38,14 @@ describe("Badge", () => {
     expect(badge.className).toContain("text-[var(--color-brand-accent-ink)]");
   });
 
-  it("is square: carries rounded-[var(--radius-full)]", () => {
-    // The class name is historical (a holdover from a pill-shaped badge) but
-    // the token it points at resolves to 0 under the brand guide's corner
-    // language, so every badge renders as a hard-edged rectangle. Do not
-    // "fix" this by swapping in a different radius class.
+  it("is square: carries no rounded- utility", () => {
+    // The brand guide's corner language is a hard edge everywhere, including
+    // on badges and count pills (docs/DESIGN.md §6), so the component never
+    // reaches for a rounded- utility in the first place. Do not "fix" this by
+    // adding one back, even a no-op one pointed at a zero radius token.
     renderBadge({ tone: "neutral", children: "Square" });
 
     const badge = screen.getByText("Square");
-    expect(badge.className).toContain("rounded-[var(--radius-full)]");
+    expect(badge.className).not.toMatch(/rounded-/);
   });
 });

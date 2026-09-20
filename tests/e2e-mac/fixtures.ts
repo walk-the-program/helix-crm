@@ -589,6 +589,14 @@ function installShim(seed: {
       }
       case "app_paths":
         return { appData: state.appData, workspacesDir: state.workspacesDir };
+      case "disk_encryption_status":
+        // Diagnostics asks the OS whether FileVault or BitLocker is on. There
+        // is no OS here, and `encrypted: null` is the command's own honest
+        // answer for "could not check" - so the screen renders its "Could not
+        // check" branch rather than claiming either state. Stubbed rather than
+        // left to the default rejection below so the screen is exercised on the
+        // path a real machine with no answer takes.
+        return { platform: "e2e", encrypted: null, detail: "" };
 
       default:
         // Anything unstubbed is a real gap, not a silent null.

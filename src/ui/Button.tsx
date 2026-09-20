@@ -35,7 +35,7 @@ const buttonVariants = cva(
     "inline-flex items-center justify-center gap-[var(--space-2)]",
     noShrink,
     "whitespace-nowrap no-underline",
-    "rounded-[var(--radius-md)] font-medium",
+    "font-medium",
     "leading-[var(--leading-tight)]",
     quietTransition,
     pressScale,

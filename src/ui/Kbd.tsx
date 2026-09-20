@@ -38,7 +38,7 @@ export function Kbd(props: { keys: string }) {
       className={[
         "inline-flex flex-none items-center justify-center",
         "min-w-[var(--space-5)] px-[var(--space-1)]",
-        "rounded-[var(--radius-sm)] border border-[var(--color-border)]",
+        "border border-[var(--color-border)]",
         "bg-[var(--color-accent-soft)] text-[var(--color-text-faint)]",
         // family-name: is required here — `font-[var(--font-sans)]` is
         // ambiguous to Tailwind and compiles to a font-weight. macOS draws

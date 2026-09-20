@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { Alarm, CheckCircle, Clock, Phone } from "@/ui/icons";
+import { CheckCircle, Clock, Phone } from "@/ui/icons";
 import {
   Badge,
   Button,
@@ -178,15 +178,16 @@ export function DueNowSection() {
       {rows.map((row) => (
         <Row
           key={row.task.id}
-          badge={
-            row.overdue ? (
-              <Badge tone="warning">
-                <Alarm size={14} weight="regular" aria-hidden="true" /> {row.when}
-              </Badge>
-            ) : (
-              <Badge tone="neutral">{row.when}</Badge>
-            )
-          }
+          /*
+           * Neutral either way. DESIGN.md §5 "What has no colour" names the
+           * word "overdue" explicitly, and TaskRow already followed it — this
+           * section was the one place in the product still painting a late task
+           * yellow, which put an attention colour on the screen that §5 says
+           * Today does not have. The words do the work: "Overdue 3 days" is
+           * more specific than any tint, and the section's own count above it
+           * is the emphasis.
+           */
+          badge={<Badge tone="neutral">{row.when}</Badge>}
           title={row.task.title}
           titleText={row.task.title}
           subtitle={

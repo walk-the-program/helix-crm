@@ -15,9 +15,7 @@ export const PopoverContent = forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        // --radius-lg: a popover is an overlay, and overlays carry the large
-        // radius (docs/DESIGN.md section 6).
-        "z-50 rounded-[var(--radius-lg)] border border-[var(--color-border)]",
+        "z-50 border border-[var(--color-border)]",
         "bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]",
         "p-[var(--space-4)]",
         "focus-visible:outline-none",

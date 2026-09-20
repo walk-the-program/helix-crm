@@ -46,7 +46,7 @@ function FullScreen({
 
 function Detail({ children }: { children: ReactNode }) {
   return (
-    <pre className="mt-[var(--space-4)] max-h-[220px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-md)] bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+    <pre className="mt-[var(--space-4)] max-h-[220px] overflow-auto whitespace-pre-wrap bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
       {children}
     </pre>
   );

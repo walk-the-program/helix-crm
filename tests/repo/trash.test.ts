@@ -6,6 +6,8 @@ import * as contacts from "../../src/db/repos/contacts";
 import * as deals from "../../src/db/repos/deals";
 import * as pipelines from "../../src/db/repos/pipelines";
 import * as stages from "../../src/db/repos/stages";
+import * as templates from "../../src/db/repos/templates";
+import * as recurring from "../../src/db/repos/recurring";
 import { newId } from "../../src/lib/ids";
 
 let h: Harness | null = null;
@@ -138,6 +140,105 @@ describe("trash: purge order and FK cascades", () => {
       [contact.id],
     );
     expect(Number(changeLogRows[0][0])).toBeGreaterThan(0);
+  });
+});
+
+describe("trash: recurring_rule and template", () => {
+  it("lists, restores and purges a soft-deleted template", async () => {
+    h = await createSeededHarness();
+    const template = await templates.create({
+      kind: "text",
+      name: "Trashed template",
+      body: "Hi {{first_name}}",
+    });
+    await templates.softDelete(template.id);
+
+    const items = await trash.list("template");
+    const found = items.find((i) => i.entityId === template.id);
+    expect(found).toBeDefined();
+    expect(found?.label).toBe("Trashed template");
+
+    await trash.restore("template", template.id);
+    expect((await templates.get(template.id))?.deletedAt).toBeNull();
+
+    await templates.softDelete(template.id);
+    await trash.purge("template", template.id);
+    expect(await templates.get(template.id)).toBeNull();
+  });
+
+  it("lists, restores and purges a soft-deleted recurring rule", async () => {
+    h = await createSeededHarness();
+    const rule = await recurring.create({
+      title: "Trashed reminder",
+      everyN: 1,
+      unit: "year",
+      nextDueOn: "2027-01-01",
+    });
+    await recurring.softDelete(rule.id);
+
+    const items = await trash.list("recurring_rule");
+    const found = items.find((i) => i.entityId === rule.id);
+    expect(found).toBeDefined();
+    expect(found?.label).toBe("Trashed reminder");
+
+    await trash.restore("recurring_rule", rule.id);
+    expect((await recurring.get(rule.id))?.deletedAt).toBeNull();
+
+    await recurring.softDelete(rule.id);
+    await trash.purge("recurring_rule", rule.id);
+    expect(await recurring.get(rule.id)).toBeNull();
+  });
+
+  it("counts() and listAll() include both new types without special-casing", async () => {
+    h = await createSeededHarness();
+    const template = await templates.create({ kind: "text", name: "Counted", body: "b" });
+    await templates.softDelete(template.id);
+    const rule = await recurring.create({
+      title: "Counted reminder",
+      everyN: 1,
+      unit: "week",
+      nextDueOn: "2027-01-01",
+    });
+    await recurring.softDelete(rule.id);
+
+    const counts = await trash.counts();
+    expect(counts.template).toBeGreaterThanOrEqual(1);
+    expect(counts.recurring_rule).toBeGreaterThanOrEqual(1);
+
+    const all = await trash.listAll();
+    expect(
+      all.some((i) => i.entityType === "template" && i.entityId === template.id),
+    ).toBe(true);
+    expect(
+      all.some((i) => i.entityType === "recurring_rule" && i.entityId === rule.id),
+    ).toBe(true);
+  });
+
+  it("expired() includes both new types past the cutoff", async () => {
+    h = await createSeededHarness();
+    const template = await templates.create({ kind: "text", name: "Old template", body: "b" });
+    await templates.softDelete(template.id);
+    await raw.execute(`UPDATE templates SET deleted_at = ? WHERE id = ?`, [
+      "2024-01-01T00:00:00.000Z",
+      template.id,
+    ]);
+
+    const rule = await recurring.create({
+      title: "Old reminder",
+      everyN: 1,
+      unit: "year",
+      nextDueOn: "2027-01-01",
+    });
+    await recurring.softDelete(rule.id);
+    await raw.execute(`UPDATE recurring_rules SET deleted_at = ? WHERE id = ?`, [
+      "2024-01-01T00:00:00.000Z",
+      rule.id,
+    ]);
+
+    const expired = await trash.expired(30, "2024-02-10");
+    const ids = expired.map((e) => e.entityId);
+    expect(ids).toContain(template.id);
+    expect(ids).toContain(rule.id);
   });
 });
 

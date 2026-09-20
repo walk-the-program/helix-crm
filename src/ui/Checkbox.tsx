@@ -48,7 +48,7 @@ export function Checkbox(props: {
       aria-label={ariaLabel}
       className={cn(
         "group inline-flex flex-none items-center justify-center",
-        "w-[var(--control-h-sm)] h-[var(--control-h-sm)] rounded-[var(--radius-sm)]",
+        "w-[var(--control-h-sm)] h-[var(--control-h-sm)]",
         "bg-transparent",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         focusRing,
@@ -59,7 +59,7 @@ export function Checkbox(props: {
         aria-hidden="true"
         className={cn(
           "inline-flex items-center justify-center",
-          "w-[16px] h-[16px] rounded-[var(--radius-sm)]",
+          "w-[16px] h-[16px]",
           "border border-[var(--color-border-strong)] bg-[var(--color-surface)]",
           "text-[var(--color-surface)]",
           quietTransition,

@@ -26,7 +26,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-lg)] border bg-[var(--color-surface)]",
+        "border bg-[var(--color-surface)]",
         attention ? "border-[var(--color-border-strong)]" : "border-[var(--color-border)]",
         className,
       )}

@@ -175,22 +175,37 @@ async function bootWithData(page: Page, helix: HelixHarness): Promise<Seeded> {
   return seeded;
 }
 
+/**
+ * Flip the theme and wait for it to finish arriving.
+ *
+ * Every control in src/ui carries `transition-colors`, so the frame right
+ * after `data-theme` changes is the OLD colour: a capture taken in the same
+ * tick photographs the light theme wearing a dark label. Wait for the canvas
+ * to actually change, then give the slowest transition room to land.
+ */
+async function settleTheme(page: Page, theme: "light" | "dark"): Promise<void> {
+  const before = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+  await page
+    .waitForFunction(
+      (previous) => getComputedStyle(document.body).backgroundColor !== previous,
+      before,
+      { timeout: 2_000 },
+    )
+    .catch(() => {
+      // Already on that theme: nothing transitions and nothing is wrong.
+    });
+  await page.waitForTimeout(250);
+}
+
 /** Light and dark, at the width the design review asks for. */
 async function shoot(page: Page, name: string): Promise<void> {
   await page.setViewportSize({ width: 1280, height: 900 });
   for (const theme of ["light", "dark"] as const) {
-    await page.evaluate((t) => {
-      document.documentElement.setAttribute("data-theme", t);
-    }, theme);
-    // Controls carry `transition-colors`; a capture taken the instant the
-    // attribute flips catches them mid-fade.
-    await page.waitForTimeout(400);
+    await settleTheme(page, theme);
     await page.screenshot({ path: `${SCREENS}${name}-${theme}.png`, fullPage: true });
   }
-  await page.evaluate(() => {
-    document.documentElement.setAttribute("data-theme", "light");
-  });
-  await page.waitForTimeout(150);
+  await settleTheme(page, "light");
 }
 
 // ---------------------------------------------------------------------------

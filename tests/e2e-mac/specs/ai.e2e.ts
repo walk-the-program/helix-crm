@@ -185,10 +185,10 @@ async function boot(page: import("@playwright/test").Page): Promise<void> {
     page.getByRole("heading", { name: "Today", exact: true, level: 1 }),
   ).toBeVisible();
 
-  // The paste dialog and its mod+shift+v binding live in an overlay host the
-  // AI feature mounts from onBoot, which runs after the first paint. Wait for
-  // it, or a keypress in the first moments after boot lands on nothing.
-  await expect(page.locator('[data-helix-overlay="ai"]')).toHaveCount(1);
+  // The paste dialog now renders in the shell's own tree through the feature's
+  // `overlays` slot, and mod+shift+v is bound by the shell from the "ai-paste"
+  // command — both are up with the shell rather than after it, so there is no
+  // separate host div to wait for. The Today heading above is the signal.
 }
 
 /**

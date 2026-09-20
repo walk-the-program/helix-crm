@@ -9,11 +9,11 @@
  * `kind` is 'text' or 'email'. A text template has no subject, and the
  * repository nulls one out rather than storing a subject nobody can send.
  *
- * Deleting is a soft delete, so it can be undone from the toast. The Trash
- * screen does not list templates yet - `TrashEntityType` in
- * `src/db/repos/trash.ts` belongs to another agent - which also means a deleted
- * template is never purged, and that is what keeps the first-use seed from
- * quietly putting the four starters back after the owner has thrown them away.
+ * Deleting is a soft delete, so it can be undone from the toast. Templates are
+ * now listed in Trash (`TrashEntityType` in `src/db/repos/trash.ts`), so a
+ * deleted template is purged like anything else after 30 days - which is why
+ * the first-use seed's guard below is a settings key rather than a row count:
+ * a purged table looks exactly like a fresh workspace to a `count(*)`.
  */
 import { z } from "zod";
 import { raw } from "@/db/client";
@@ -21,6 +21,7 @@ import { withWrite } from "@/db/writeLock";
 import { NotFoundError } from "@/db/errors";
 import { changeLogStatement } from "@/db/changeLog";
 import { nowIso } from "@/lib/dates";
+import * as settingsRepo from "@/db/repos/settings";
 import {
   countRows,
   insertStatement,
@@ -36,6 +37,7 @@ import {
   trimmedOrNull,
   updateStatement,
   type Col,
+  type Statement,
 } from "@/db/repos/_base";
 
 export const TEMPLATE_KINDS = ["text", "email"] as const;
@@ -276,7 +278,7 @@ export const STARTER_TEMPLATES: readonly NewTemplate[] = [
     body:
       "Hi {{first_name}},\n\n" +
       "Thanks for the work at {{company}}. It was good to meet you, and I am " +
-      "glad with how it turned out.\n\n" +
+      "glad about how it turned out.\n\n" +
       "If anything looks wrong, call me and I will come back out. And if you " +
       "know somebody who needs the same job doing, I would be grateful for the " +
       "introduction.\n\n" +
@@ -285,26 +287,62 @@ export const STARTER_TEMPLATES: readonly NewTemplate[] = [
   },
 ] as const;
 
+/** The workspace-settings key that records "the starter seed has run". */
+const TEMPLATES_SEEDED_KEY = "templates.seededAt";
+
+/**
+ * The settings upsert as a statement, so the key can be written inside the same
+ * `withWrite` as the starter inserts.
+ *
+ * `settings.setRaw` cannot be called from in here: it takes the write lock, and
+ * the write lock does not reenter. `settingStatement` is the repository's own
+ * upsert built as a statement for exactly this, and it is what the onboarding
+ * apply uses too.
+ */
+function templatesSeededStatement(at: string): Statement {
+  return settingsRepo.settingStatement(TEMPLATES_SEEDED_KEY, at);
+}
+
 /**
  * Seed the four starters the first time the workspace needs templates.
  *
- * The test is the whole table, soft-deleted rows included, so this runs exactly
- * once per workspace: an owner who deletes all four gets an empty list on his
- * next visit, not the four back again.
- *
- * The count and the inserts happen inside ONE `withWrite`, in one batch, which
- * is what makes it safe to call from a query function. A contact page mounts
- * two template pickers, text and email, and they load at the same time; with
- * the check outside the lock both would see an empty table and the workspace
- * would start with eight starters. That is also why this does not call
+ * The guard is the `templates.seededAt` setting, not a row count: Trash now
+ * purges templates after 30 days, and once every starter can be purged a
+ * `count(*)` guard would see an empty table and put them all back. The key is
+ * written in the same batch as the starter inserts, which is also what keeps
+ * this safe to call from a query function - a contact page mounts two
+ * template pickers, text and email, that load at the same time, and the read
+ * of the key plus the inserts happen inside ONE `withWrite` so the workspace
+ * cannot end up with eight starters. That is also why this does not call
  * `create()` in a loop - the write lock does not reenter.
+ *
+ * Migration: a workspace that ran the old row-count guard before this key
+ * existed may already have the four starters (or their soft-deleted remains)
+ * with no key to show for it. Naively keying off the setting alone would seed
+ * four MORE for every such workspace, so the honest test is "the key is set,
+ * OR the table has ever held a row" - and the second half of that only needs
+ * to be checked once: the first time this runs with no key present, a
+ * non-empty table is treated as prior evidence of a seed, and the key is
+ * written immediately (with no inserts) so every later call answers from the
+ * key alone, including after the table is fully purged.
  */
 export async function ensureStarters(): Promise<number> {
   return withWrite(async () => {
-    const existing = await countRows(`SELECT count(*) AS total FROM templates`);
-    if (existing > 0) return 0;
+    const seededAt = await settingsRepo.getRaw(TEMPLATES_SEEDED_KEY);
+    if (typeof seededAt === "string" && seededAt.length > 0) return 0;
 
-    const statements: { sql: string; params: unknown[] }[] = [];
+    const at = nowIso();
+    const existing = await countRows(`SELECT count(*) AS total FROM templates`);
+    if (existing > 0) {
+      // A pre-existing workspace from before this key existed. Record the
+      // key so future calls never need to ask the row-count question again,
+      // but seed nothing - the row count already established it.
+      const stmt = templatesSeededStatement(at);
+      await raw.execute(stmt.sql, stmt.params);
+      return 0;
+    }
+
+    const statements: Statement[] = [];
     for (const starter of STARTER_TEMPLATES) {
       const parsed = parseOrThrow(newTemplateSchema, starter);
       const stamps = stampNew();
@@ -327,6 +365,7 @@ export async function ensureStarters(): Promise<number> {
         }),
       );
     }
+    statements.push(templatesSeededStatement(at));
 
     await raw.batch(statements);
     return STARTER_TEMPLATES.length;

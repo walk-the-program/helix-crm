@@ -208,35 +208,52 @@ export function Shell({ registry, workspace }: ShellProps) {
   /**
    * The static items, with each dynamic group spliced in at its own order, so
    * "Views" (15) lands between Today (10) and Contacts (20).
+   *
+   * A LABELLED group is a visual group: it gets its own `SidebarSection`, with
+   * the caption heading above it and the section's own padding around it.
+   *
+   * An UNLABELLED group is not. Its rows join the run of static rows around
+   * them, in their own order, and no extra gap appears — which is the whole
+   * point of it: a feature whose row has to be read from the database (the
+   * pipeline row, whose label is Deals, Jobs or Quotes) can contribute it
+   * through `navProvider` without cutting the sidebar in two at that row.
    */
   const sidebar = useMemo(() => {
     const blocks: ReactNode[] = [];
+    let run: FeatureNavItem[] = [];
+    let runKey = "static-0";
     let cursor = 0;
 
+    const flushRun = () => {
+      if (run.length === 0) return;
+      blocks.push(<SidebarSection key={runKey}>{run.map(renderItem)}</SidebarSection>);
+      run = [];
+    };
+
     navSections.forEach((section, index) => {
-      const before: FeatureNavItem[] = [];
       while (cursor < navItems.length && navItems[cursor].order <= section.order) {
-        before.push(navItems[cursor++]);
+        run.push(navItems[cursor++]);
       }
-      if (before.length > 0) {
+      if (section.items.length === 0) return;
+      if (section.label) {
+        flushRun();
         blocks.push(
-          <SidebarSection key={`static-${index}`}>
-            {before.map(renderItem)}
-          </SidebarSection>,
-        );
-      }
-      if (section.items.length > 0) {
-        blocks.push(
-          <SidebarSection key={`section-${section.label ?? index}`} label={section.label}>
+          <SidebarSection key={`section-${section.label}-${index}`} label={section.label}>
             {section.items.map(renderItem)}
           </SidebarSection>,
         );
+        runKey = `static-${index + 1}`;
+        return;
       }
+      run.push(...section.items);
     });
 
-    const tail = navItems.slice(cursor);
-    if (tail.length > 0 || blocks.length === 0) {
-      blocks.push(<SidebarSection key="static-tail">{tail.map(renderItem)}</SidebarSection>);
+    run.push(...navItems.slice(cursor));
+    flushRun();
+    // An application with no sidebar items at all still draws the empty group,
+    // so the nav element is never childless.
+    if (blocks.length === 0) {
+      blocks.push(<SidebarSection key="static-empty">{null}</SidebarSection>);
     }
     return blocks;
   }, [navItems, navSections, renderItem]);
@@ -261,7 +278,7 @@ export function Shell({ registry, workspace }: ShellProps) {
                 type="button"
                 onClick={switchWorkspace}
                 title="Switch workspace"
-                className="flex min-h-[var(--control-h-sm)] w-full items-center rounded-[var(--radius-md)] px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] hover:text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+                className="flex min-h-[var(--control-h-sm)] w-full items-center px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] hover:text-[var(--color-text-muted)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
               >
                 <span className="truncate">{workspace.name}</span>
               </button>
@@ -278,14 +295,14 @@ export function Shell({ registry, workspace }: ShellProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar
             left={
-              /* The macOS search field: a soft grey rounded field, no border,
-                 the glyph in tertiary ink, the shortcut on the right. It is a
+              /* The macOS search field: a soft grey field, no border, the
+                 glyph in tertiary ink, the shortcut on the right. It is a
                  button rather than an input because pressing it opens the
                  search dialog — the field is the affordance, not the target. */
               <button
                 type="button"
                 onClick={openSearch}
-                className="flex h-[var(--control-h)] min-w-[260px] items-center gap-[var(--space-2)] rounded-[var(--radius-full)] bg-[var(--color-accent-soft)] px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+                className="flex h-[var(--control-h)] min-w-[260px] items-center gap-[var(--space-2)] bg-[var(--color-accent-soft)] px-[var(--space-3)] text-left text-[length:var(--text-sm)] text-[var(--color-text-faint)] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none hover:bg-[var(--color-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
               >
                 <MagnifyingGlass size={16} weight="bold" aria-hidden />
                 <span className="flex-1">Search</span>
