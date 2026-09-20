@@ -283,15 +283,13 @@ export function CompaniesScreen() {
           />
         )
       ) : (
-        // HALF-ADOPTED, deliberately. `<VirtualList fit>` below is in and green.
-        // Its partner change - this panel going `min-h-0 max-h-full` so the
-        // surface caps at the column height instead of filling it, which is what
-        // actually removes the empty slab under a short list (direction rule 1) -
-        // renders ZERO rows here, with or without `flex-1 min-h-0` on the page
-        // column above. Verified both ways against listNav.e2e.ts, which guards
-        // exactly this. Sent back to lead-platform as a kit finding rather than
-        // worked around at the call site; the slab stays until it lands.
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+        // No `flex-1`: the surface ends where the rows end, so a workspace with
+        // four companies does not get a bordered slab of white under them
+        // (direction rule 1). `<VirtualList fit>` below measures its own height
+        // against the nearest bounding ancestor rather than against this panel,
+        // so nothing here is circular and a short list can no longer collapse -
+        // which is what the first version of the prop got wrong.
+        <div className="flex min-h-0 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           {/* The column strip: the one uppercase type in the product, which is
               how a native list view labels a column (DESIGN.md §4). Name is
               the only header that can sort - the only column the "Sort"

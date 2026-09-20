@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/ui/cn";
@@ -33,6 +33,97 @@ export type VirtualListKeyboardNav<T> = {
   activateKeys?: string[];
 };
 
+
+/**
+ * The height available below `el`, measured from something that is not sized
+ * by `el` itself.
+ *
+ * Walks up for the first scrollable ancestor — `<main>` in this app — and
+ * takes the distance from the list's top edge to that ancestor's content
+ * bottom. Anything content-sized in between is skipped precisely because its
+ * height is the thing we are trying to decide. The viewport is the backstop,
+ * so the answer is never zero and never absent.
+ */
+function useAvailableHeight(
+  ref: { current: HTMLElement | null },
+  enabled: boolean,
+  floor: number,
+): number | null {
+  const [available, setAvailable] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setAvailable(null);
+      return;
+    }
+    const el = ref.current;
+    if (!el || typeof window === "undefined") return;
+
+    /**
+     * The nearest ancestor that SCROLLS.
+     *
+     * `overflow: hidden` is deliberately not accepted, and the first version
+     * of this walk accepting it is what made the Contacts list unreachable:
+     * the bordered panel around the list is `overflow-hidden` and is sized by
+     * its content, so "the space available" resolved to the list's own current
+     * height. The list then froze at roughly one viewport of rows, reported no
+     * overflow, and six of sixteen contacts could not be reached at all. A
+     * height may only ever be measured from something whose own height does
+     * not depend on the rows — in this app that is `<main>`, and the viewport
+     * behind it.
+     */
+    function scrollingAncestor(node: HTMLElement): HTMLElement | null {
+      for (let cursor = node.parentElement; cursor; cursor = cursor.parentElement) {
+        const overflowY = getComputedStyle(cursor).overflowY;
+        if (overflowY === "auto" || overflowY === "scroll") {
+          if (cursor.getBoundingClientRect().height > 0) return cursor;
+        }
+      }
+      return null;
+    }
+
+    const bound = scrollingAncestor(el);
+
+    const measure = () => {
+      const top = el.getBoundingClientRect().top;
+      let bottom = window.innerHeight;
+      if (bound) {
+        const rect = bound.getBoundingClientRect();
+        const padding = Number.parseFloat(getComputedStyle(bound).paddingBottom) || 0;
+        bottom = rect.bottom - padding;
+      }
+      // Never taller than the screen, whatever the ancestor says.
+      bottom = Math.min(bottom, window.innerHeight);
+      const next = Math.max(Math.round(bottom - top), floor);
+      // Identical values bail out of the render, so observing a container
+      // whose own height moves with the list cannot become a loop.
+      setAvailable((current) => (current === next ? current : next));
+    };
+
+    measure();
+    // Again once the first layout has settled: on the very first paint the
+    // toolbar above the list may not have its final height yet, which moves
+    // the list's top edge and therefore the space below it.
+    const frame = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(measure);
+      // Only things that are NOT sized by the list: the scrolling ancestor and
+      // the document itself.
+      if (bound) observer.observe(bound);
+      observer.observe(document.documentElement);
+    }
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [ref, enabled, floor]);
+
+  return available;
+}
+
 /**
  * 10 000 rows are virtualised (docs/DESIGN.md section 9). Only the rows in
  * view, plus the overscan, are ever in the DOM.
@@ -44,20 +135,42 @@ export type VirtualListKeyboardNav<T> = {
  * there are four hundred contacts and wrong when there are four: the scroller
  * fills the panel, the sizer inside it is only four rows tall, and the rest is
  * a slab of surface white with a border around it — worst in compact, where
- * the rows are shorter and the slab is taller. Dropping `flex-1` is not the
- * fix either: the parent goes content-height, the scroll element measures
- * zero, and the list renders nothing at all.
+ * the rows are shorter and the slab is taller.
  *
- * With `fit`, the scroller takes the virtualiser's own total size as an
- * explicit height and becomes `flex: 0 1 auto`. Short list: the height is the
- * content and the panel ends at the last row. Long list: the flex parent
- * shrinks it to the space available and it scrolls exactly as before. Either
- * way the height is definite and non-zero on the very first paint, which is
- * the property the virtualiser actually needs.
+ * WHY THIS MEASURES INSTEAD OF ASKING THE PARENT
+ * ----------------------------------------------
+ * The obvious fix — stop growing, take the virtualiser's total size as the
+ * height, let the flex parent shrink you — is circular, and the first version
+ * of this prop shipped that bug. The list's height came from its content; the
+ * panel's height came from the list; and the panel's available space came from
+ * a parent that was now sized by its content. So on the first paint, before
+ * the query resolves, `items` is empty, the total size is zero, the panel
+ * collapses, the virtualiser measures a zero-height viewport and returns no
+ * visible rows — and when the data arrives there is still no viewport to
+ * render into. An empty list, permanently. `listNav.e2e.ts` caught it on
+ * Contacts.
  *
- * The panel around it has to stop stretching too — a `flex-1` surface still
- * paints white under a `fit` list. Give it `min-h-0 max-h-full` in place of
- * `min-h-0 flex-1` and it caps at the column instead of filling it.
+ * So `fit` owns the whole arrangement and never asks the parent for a height
+ * it might not have. It measures the space between the top of the list and the
+ * bottom of the nearest ancestor that genuinely bounds it — the first
+ * ancestor that SCROLLS (`overflow-y: auto` or `scroll`, never `hidden`),
+ * less its own bottom padding, clamped to the viewport, and the viewport
+ * itself if there is no such ancestor — and then:
+ *
+ *   height     min(content, available), or the whole of `available` while
+ *              there is no content yet, so the viewport is never zero and
+ *              every row past the cap is reachable by scrolling;
+ *   max-height available, so a long list scrolls instead of running off;
+ *   flex       0 0 auto, so a parent that has collapsed for any other reason
+ *              cannot squash the list to nothing.
+ *
+ * Nothing in that chain reads a height that depends on the rows, which is what
+ * makes it safe on the first paint and on every resize after it.
+ *
+ * The one thing the call site still does is not fight it: the bordered surface
+ * around the list must not be `flex-1`, or it keeps stretching and paints the
+ * same slab under a list that is now the right height. Dropping `flex-1` is
+ * safe now — the list carries its own height and can no longer collapse.
  *
  * Default is off, so every existing caller behaves exactly as it did.
  */
@@ -134,6 +247,15 @@ export function VirtualList<T>(props: {
 
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
+  const available = useAvailableHeight(parentRef, Boolean(fit), rowHeight);
+  // No content yet (the query has not resolved) means the whole of the space
+  // available, so the virtualiser always has a viewport to render into.
+  const fitHeight =
+    totalSize > 0
+      ? available === null
+        ? totalSize
+        : Math.min(totalSize, available)
+      : (available ?? undefined);
 
   return (
     <div
@@ -143,7 +265,17 @@ export function VirtualList<T>(props: {
       data-fit={fit ? "" : undefined}
       // Inline, so it wins over whatever `flex-1` a caller still has in
       // `className` and the two cannot silently disagree.
-      style={fit ? { flex: "0 1 auto", height: totalSize } : undefined}
+      style={
+        fit
+          ? {
+              // `0 0 auto`: a parent that has collapsed for some other reason
+              // must not be able to squash this to nothing.
+              flex: "0 0 auto",
+              height: fitHeight,
+              maxHeight: available ?? undefined,
+            }
+          : undefined
+      }
       className={cn("relative w-full overflow-auto", className)}
     >
       <div style={{ height: totalSize, width: "100%", position: "relative" }}>

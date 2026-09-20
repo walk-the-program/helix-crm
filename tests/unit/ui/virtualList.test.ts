@@ -232,12 +232,52 @@ describe("VirtualList fit", () => {
     );
     const list = screen.getByRole("list", { name: "Contacts" });
     expect(list.getAttribute("data-fit")).toBe("");
-    expect(list.style.flex).toBe("0 1 auto");
+    expect(list.style.flex).toBe("0 0 auto");
     // The scroller is exactly as tall as the virtualiser's own sizer — the
     // content — so there is nothing left over to paint white.
     const sizer = list.firstElementChild as HTMLElement;
     expect(list.style.height).toBe(sizer.style.height);
     expect(Number.parseFloat(list.style.height)).toBeGreaterThan(0);
+  });
+
+  /**
+   * The bug the first version of this prop shipped: with no rows yet, the
+   * content height is zero, and a list that took its height from its content
+   * collapsed, measured a zero-height viewport, and then had nowhere to render
+   * the rows into when they arrived. An empty list, permanently. So with no
+   * content the height is the whole of the space available instead.
+   */
+  it("still has a viewport before any row exists", () => {
+    render(
+      React.createElement(VirtualList<Row>, {
+        items: [],
+        estimateSize: 40,
+        fit: true,
+        "aria-label": "Empty",
+        renderRow: (item: Row) => React.createElement("div", null, item.label),
+      }),
+    );
+    const list = screen.getByRole("list", { name: "Empty" });
+    expect(Number.parseFloat(list.style.height)).toBeGreaterThan(0);
+    expect(list.style.flex).toBe("0 0 auto");
+  });
+
+  /** A long list is capped and scrolls rather than running off the screen. */
+  it("caps at the space available and keeps scrolling", () => {
+    render(
+      React.createElement(VirtualList<Row>, {
+        items: makeItems(500),
+        estimateSize: 40,
+        fit: true,
+        "aria-label": "Long",
+        renderRow: (item: Row) => React.createElement("div", null, item.label),
+      }),
+    );
+    const list = screen.getByRole("list", { name: "Long" });
+    const max = Number.parseFloat(list.style.maxHeight);
+    expect(max).toBeGreaterThan(0);
+    expect(Number.parseFloat(list.style.height)).toBeLessThanOrEqual(max);
+    expect(list.className).toContain("overflow-auto");
   });
 
   it("keeps a measurable, non-zero height so the rows still render", () => {
@@ -268,5 +308,6 @@ describe("VirtualList fit", () => {
     expect(list.hasAttribute("data-fit")).toBe(false);
     expect(list.style.height).toBe("");
     expect(list.style.flex).toBe("");
+    expect(list.style.maxHeight).toBe("");
   });
 });
