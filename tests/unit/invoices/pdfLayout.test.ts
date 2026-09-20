@@ -13,8 +13,14 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { PDFDocument } from "pdf-lib";
-import { pageCountFor, renderDocument, type RenderInput, type RenderLine } from "@/features/invoices/pdf/renderDocument";
+import {
+  planPageLayout,
+  renderDocument,
+  type RenderInput,
+  type RenderLine,
+} from "@/features/invoices/pdf/renderDocument";
 import type { DocumentAssets, FontBytes } from "@/features/invoices/pdf/assets";
+import { CONTENT_BOTTOM_LIMIT } from "@/features/invoices/pdf/brand";
 
 const PDF_DIR = fileURLToPath(new URL("../../../src/features/invoices/pdf", import.meta.url));
 
@@ -92,20 +98,6 @@ function makeInput(lineCount: number, overrides: Partial<RenderInput> = {}): Ren
   };
 }
 
-describe("pageCountFor", () => {
-  it("is pure and depends only on line count", () => {
-    expect(pageCountFor(1)).toBe(1);
-    expect(pageCountFor(18)).toBe(1);
-    expect(pageCountFor(19)).toBe(2);
-    expect(pageCountFor(36)).toBe(2);
-    expect(pageCountFor(37)).toBe(3);
-  });
-
-  it("treats zero lines as a single page", () => {
-    expect(pageCountFor(0)).toBe(1);
-  });
-});
-
 describe("renderDocument", () => {
   const assets = loadTestAssets();
 
@@ -118,11 +110,10 @@ describe("renderDocument", () => {
     expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
 
     const loaded = await PDFDocument.load(bytes);
-    expect(loaded.getPageCount()).toBe(pageCountFor(input.lines.length));
     expect(loaded.getPageCount()).toBe(1);
   });
 
-  it("renders a well-formed PDF for a 40-line invoice, paginated to 3 pages", async () => {
+  it("renders a well-formed PDF for a 40-line invoice, paginated across multiple pages", async () => {
     const input = makeInput(40);
     const bytes = await renderDocument(input, assets);
 
@@ -131,8 +122,7 @@ describe("renderDocument", () => {
     expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
 
     const loaded = await PDFDocument.load(bytes);
-    expect(loaded.getPageCount()).toBe(pageCountFor(input.lines.length));
-    expect(loaded.getPageCount()).toBe(3);
+    expect(loaded.getPageCount()).toBeGreaterThan(1);
   });
 
   it("renders a quote with 'Valid until' instead of 'Due', without throwing", async () => {
@@ -203,6 +193,116 @@ describe("renderDocument", () => {
       expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
       const loaded = await PDFDocument.load(bytes);
       expect(loaded.getPageCount()).toBe(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // F-LB-21: the page break is measured, not counted. pdf-lib cannot read a
+  // drawn y-coordinate back out of a saved PDF, so what these assert is the
+  // measured plan itself -- planPageLayout() runs the exact same startY,
+  // row-height, and footer-block measurements renderDocument() draws from,
+  // and returns the y left after each page's content instead of pixels on a
+  // page. Asserting that number stays at or above CONTENT_BOTTOM_LIMIT is
+  // the direct version of "nothing was drawn over the footer"; the sample
+  // PDFs (HELIX_PDF_SAMPLE=1) are what a human looks at to confirm it.
+  // ---------------------------------------------------------------------------
+  describe("F-LB-21: measured page breaks", () => {
+    const longDescription =
+      "Includes parts, labour, and disposal of the old fixtures per the estimate we walked through on site. " +
+      "Follow-up inspection is scheduled within thirty days at no extra charge if anything needs adjustment.";
+
+    function describedLine(i: number): RenderLine {
+      return makeLine(i, {
+        name: `Service call with a long line item name to force truncation, unit ${i + 1}`,
+        description: longDescription,
+      });
+    }
+
+    function makeDescribedInput(lineCount: number, overrides: Partial<RenderInput> = {}): RenderInput {
+      return makeInput(lineCount, {
+        lines: Array.from({ length: lineCount }, (_, i) => describedLine(i)),
+        ...overrides,
+      });
+    }
+
+    it("keeps every page's content above the footer for 12 long-described lines", async () => {
+      const input = makeDescribedInput(12);
+      const plan = await planPageLayout(input, assets);
+
+      expect(plan.rowsPerPage.reduce((a, b) => a + b, 0)).toBe(12);
+      for (const bottomY of plan.contentBottomYPerPage) {
+        expect(bottomY).toBeGreaterThanOrEqual(CONTENT_BOTTOM_LIMIT);
+      }
+
+      // Cross-check the diagnostic against the PDF renderDocument() actually produces.
+      const bytes = await renderDocument(input, assets);
+      const loaded = await PDFDocument.load(bytes);
+      expect(loaded.getPageCount()).toBe(plan.pageCount);
+    });
+
+    it("paginates 18 long-described lines across more than one page", async () => {
+      const input = makeDescribedInput(18);
+      const plan = await planPageLayout(input, assets);
+
+      expect(plan.pageCount).toBeGreaterThan(1);
+      expect(plan.rowsPerPage.reduce((a, b) => a + b, 0)).toBe(18);
+      for (const bottomY of plan.contentBottomYPerPage) {
+        expect(bottomY).toBeGreaterThanOrEqual(CONTENT_BOTTOM_LIMIT);
+      }
+
+      const bytes = await renderDocument(input, assets);
+      const loaded = await PDFDocument.load(bytes);
+      expect(loaded.getPageCount()).toBe(plan.pageCount);
+    });
+
+    it("moves totals and payment instructions to a further page when the last page of rows leaves no room", async () => {
+      // Find, by measurement (not a hard-coded guess), the largest number of
+      // plain (no-description) rows that still fits on a single page with
+      // short notes/payment text -- then reuse that same row count with long
+      // notes/payment text, which the rows leave no room for.
+      let fullPageRowCount = 1;
+      for (let n = 1; n <= 40; n += 1) {
+        const probe = makeInput(n, { lines: Array.from({ length: n }, (_, i) => makeLine(i, { description: null })) });
+        const plan = await planPageLayout(probe, assets);
+        if (plan.pageCount > 1) break;
+        fullPageRowCount = n;
+      }
+
+      const longParagraph = Array.from(
+        { length: 12 },
+        () => "This is a long line of notes text meant to consume several wrapped lines of vertical space.",
+      ).join(" ");
+
+      const input = makeInput(fullPageRowCount, {
+        lines: Array.from({ length: fullPageRowCount }, (_, i) => makeLine(i, { description: null })),
+        notes: longParagraph,
+        paymentInstructions: longParagraph,
+      });
+      const plan = await planPageLayout(input, assets);
+
+      // All rows still fit on the first page; the totals/notes/payment block
+      // did not, so it was pushed to a further page with no rows of its own.
+      expect(plan.rowsPerPage[0]).toBe(fullPageRowCount);
+      expect(plan.pageCount).toBeGreaterThan(1);
+      expect(plan.rowsPerPage[plan.rowsPerPage.length - 1]).toBe(0);
+      for (const bottomY of plan.contentBottomYPerPage) {
+        expect(bottomY).toBeGreaterThanOrEqual(CONTENT_BOTTOM_LIMIT);
+      }
+
+      const bytes = await renderDocument(input, assets);
+      const loaded = await PDFDocument.load(bytes);
+      expect(loaded.getPageCount()).toBe(plan.pageCount);
+    });
+
+    it("draws a single row taller than an empty page without looping forever", async () => {
+      // No real row can exceed ROW_HEIGHT + ROW_DESCRIPTION_EXTRA today, but
+      // the planner's own "always accept the first row of a page" rule is
+      // what prevents an infinite loop if one ever could -- this just proves
+      // planning terminates and places every line somewhere.
+      const input = makeDescribedInput(1);
+      const plan = await planPageLayout(input, assets);
+      expect(plan.rowsPerPage.reduce((a, b) => a + b, 0)).toBe(1);
+      expect(plan.pageCount).toBeGreaterThanOrEqual(1);
     });
   });
 

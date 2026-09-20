@@ -132,3 +132,107 @@ it.skipIf(!process.env.HELIX_PDF_SAMPLE)(
     console.log("wrote", join(OUT, "sample-invoice-company-only.pdf"), bytes.length, "bytes");
   },
 );
+
+/**
+ * A long invoice built to stress the page-break math directly: 12 lines,
+ * each with a name around 60 characters and a two-sentence description that
+ * wraps, a customer with a long personal name and a long company name, an
+ * odd tax rate, and both notes and payment instructions.
+ *
+ * This is F-LB-21's reproduction case. Under the counted 18-lines-per-page
+ * break, 12 described rows plus the header/bill-to block on page one push
+ * well past the 490pt or so actually left on the page, so this sample exists
+ * to be looked at, before and after the measured-break fix, to see whether
+ * rows, totals, or payment instructions land on top of the footer or run off
+ * the bottom of the page.
+ *
+ *   HELIX_PDF_SAMPLE=1 npx vitest run tests/unit/invoices/pdfSample.test.ts
+ */
+it.skipIf(!process.env.HELIX_PDF_SAMPLE)(
+  "writes a long-described invoice to look at (F-LB-21 repro)",
+  async () => {
+    const assets: DocumentAssets = {
+      fonts: {
+        heading: read("fonts", "ZillaSlab-SemiBold.ttf"),
+        headingBold: read("fonts", "ZillaSlab-Bold.ttf"),
+        body: read("fonts", "Lato-Regular.ttf"),
+        bodyBold: read("fonts", "Lato-Bold.ttf"),
+      },
+      logoPng: read("helix-logo-square.png"),
+    };
+
+    const longNames = [
+      "Emergency after-hours callout and diagnostic labour, full crew",
+      "Full system pressure test and certification, residential unit",
+      "Copper supply line replacement, kitchen and both bathrooms",
+      "Tankless water heater installation and venting, garage location",
+      "Sump pump replacement with battery backup and alarm module",
+      "Main line camera inspection and written condition report",
+      "Hydro-jet drain clearing, kitchen stack to municipal connection",
+      "Water softener installation and whole-house bypass valve",
+      "Backflow preventer testing and annual compliance filing",
+      "Gas line pressure test and appliance reconnection, full house",
+      "Fixture replacement package, powder room sink and shutoffs",
+      "Annual maintenance plan renewal, priority scheduling included",
+    ];
+
+    const lines = longNames.map((name, i) => ({
+      name,
+      description:
+        "Includes parts, labour, and disposal of the old fixtures per the estimate we walked through on site. " +
+        "Follow-up inspection is scheduled within thirty days at no extra charge if anything needs adjustment.",
+      qty: i % 4 === 0 ? 2 : 1,
+      unitCents: 18500 + i * 725,
+      taxable: i % 3 !== 0,
+      kind: "service",
+      interval: i === 11 ? "month" : null,
+    }));
+
+    const subtotalCents = lines.reduce((sum, line) => sum + Math.round(line.qty * line.unitCents), 0);
+    const taxRateBp = 825;
+    const taxableSubtotal = lines
+      .filter((line) => line.taxable)
+      .reduce((sum, line) => sum + Math.round(line.qty * line.unitCents), 0);
+    const taxCents = Math.round((taxableSubtotal * taxRateBp) / 10000);
+    const totalCents = subtotalCents + taxCents;
+
+    const input: RenderInput = {
+      kind: "invoice",
+      number: "INV-2026-0099",
+      issuedOn: "2026-09-05",
+      dueOn: "2026-09-19",
+      validUntil: null,
+      business: {
+        name: "Rundle & Sons Plumbing",
+        address: "412 Cedar Avenue\nSpringfield, IL 62704",
+        phone: "(217) 555-0142",
+        email: "office@rundleplumbing.com",
+        taxId: "EIN 47-2810934",
+      },
+      customer: {
+        name: "Marguerite Okonkwo-Delacroix-Whitfield the Third",
+        company: "Whitfield Family Holdings and Ridgeway Agricultural Trust LLC",
+        email: "marguerite@whitfieldholdings.example",
+        phone: "(312) 555-0199",
+        address: "88 Lakeshore Drive, Unit 1204\nChicago, IL 60601",
+      },
+      lines,
+      subtotalCents,
+      taxRateBp,
+      taxCents,
+      totalCents,
+      currency: "USD",
+      notes:
+        "Thank you for your continued business over the past several seasons. Please let us know within " +
+        "thirty days if any of the work above needs a follow-up visit, and we will schedule it at no charge.",
+      paymentInstructions:
+        "Pay by check to Rundle & Sons Plumbing, or by card at the link in this email. Balances outstanding " +
+        "past thirty days accrue a 1.5% monthly service charge per the terms on the original estimate.",
+    };
+
+    const bytes = await renderDocument(input, assets);
+    mkdirSync(OUT, { recursive: true });
+    writeFileSync(join(OUT, "sample-invoice-long-lines.pdf"), bytes);
+    console.log("wrote", join(OUT, "sample-invoice-long-lines.pdf"), bytes.length, "bytes");
+  },
+);
