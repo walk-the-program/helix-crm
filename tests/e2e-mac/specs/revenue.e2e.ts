@@ -145,6 +145,21 @@ async function shoot(page: Page, name: string): Promise<void> {
   await settleTheme(page, "light");
 }
 
+/**
+ * CPO-LB-IMPL-W4: the round-4 money findings' own screenshot evidence, at a
+ * fixed 1280x800 (not full-page), prefixed "w4-" into its own folder so it
+ * never collides with another agent's screenshots in this shared tree.
+ */
+async function shootLb(page: Page, name: string): Promise<void> {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  for (const theme of ["light", "dark"] as const) {
+    await settleTheme(page, theme);
+    await settle(page);
+    await page.screenshot({ path: `tests/e2e-mac/.cache/screens/lb/w4-${name}-${theme}.png` });
+  }
+  await settleTheme(page, "light");
+}
+
 /* -------------------------------------------------------------------------- */
 /* Feature-local helpers                                                      */
 /* -------------------------------------------------------------------------- */
@@ -329,5 +344,109 @@ test.describe("revenue", () => {
     await expect(activeRow).toContainText(MRR_TEXT);
 
     await shoot(page, "revenue");
+  });
+});
+
+/**
+ * CPO-LB-IMPL-W4: browser-level regression for F-LB-2/3/15 (commit 4d22ae4's
+ * sibling work in src/db/repos/money.ts), which until now only had repo-level
+ * coverage. Money is asserted against the database where it is seeded and
+ * against the DERIVED figures the screen must agree with - the whole point of
+ * this finding is that the screen and the underlying money used to disagree.
+ */
+test.describe("revenue: audited findings (round 4 pin)", () => {
+  test("F-LB-2/3/15: Quoted is the deal's own value, and a document whose deal is gone still counts, in its own row", async ({
+    page,
+    helix,
+  }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    const [[stageId]] = db.query(
+      "SELECT id FROM stages WHERE deleted_at IS NULL ORDER BY position ASC LIMIT 1",
+      [],
+    ) as [string][];
+    const now = new Date().toISOString();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // A deal priced from its own line items. Before this fix, Quoted summed
+    // the deal's QUOTE DOCUMENTS - and this deal never had one raised against
+    // it, so the old code would have read Quoted $0.00 here no matter what
+    // the deal was actually worth.
+    const dealId = "deal-valdez-patio";
+    db.execute(
+      `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at, position, created_at, updated_at)
+       VALUES (?, ?, ?, 'USD', ?, ?, 0, ?, ?)`,
+      [dealId, "Valdez patio rebuild", 200000, stageId, now, now, now],
+    );
+    db.execute(
+      `INSERT INTO deal_items (id, deal_id, product_id, name, description, kind, interval, qty, suggested_unit_cents, actual_unit_cents, taxable, position)
+       VALUES (?, ?, NULL, ?, NULL, 'one_time', NULL, 1, ?, ?, 0, 0)`,
+      ["item-valdez-patio", dealId, "Patio rebuild", 200000, 200000],
+    );
+
+    // A second deal, billed and paid, then trashed. Before F-LB-2/3's
+    // catch-all row existed, this invoice's money was still in the headline
+    // (`periodMoney` never joins to `deals` at all) but had nowhere to land
+    // in the per-deal table, because `dl.deleted_at IS NULL` drops the
+    // deal's own row - so the table's own columns did not add up to the
+    // figures printed over them.
+    const trashedDealId = "deal-benoit-fence";
+    db.execute(
+      `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at, position, created_at, updated_at)
+       VALUES (?, ?, ?, 'USD', ?, ?, 0, ?, ?)`,
+      [trashedDealId, "Benoit fence job", 50000, stageId, now, now, now],
+    );
+    const orphanDocId = "doc-benoit-fence";
+    db.execute(
+      `INSERT INTO documents (
+         id, kind, number, deal_id, status, issued_on,
+         subtotal_cents, tax_rate_bp, tax_cents, total_cents,
+         sent_at, paid_on, paid_method, created_at, updated_at
+       ) VALUES (?, 'invoice', ?, ?, 'paid', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+      [orphanDocId, "INV-2026-0960", trashedDealId, today, 50000, 50000, now, today, "bank", now, now],
+    );
+    db.execute("UPDATE deals SET deleted_at = ? WHERE id = ?", [now, trashedDealId]);
+
+    await page.goto("/reports/revenue");
+    await expect(page.getByRole("heading", { name: "Revenue", level: 1 })).toBeVisible();
+
+    // The caption now names all four clocks - the old copy only explained
+    // Invoiced and Collected.
+    await expect(
+      page.getByText(
+        "Each number falls on its own day: quoted when you created the job, won when you closed it, invoiced when you billed it, collected when the money arrived.",
+      ),
+    ).toBeVisible();
+
+    const headlineValue = (label: string) =>
+      page.getByText(label, { exact: true }).first().locator("xpath=preceding-sibling::span[1]");
+
+    await expect(headlineValue("Quoted")).toHaveText("$2,000.00");
+    await expect(headlineValue("Won")).toHaveText("$0.00");
+    await expect(headlineValue("Invoiced")).toHaveText("$500.00");
+    await expect(headlineValue("Collected")).toHaveText("$500.00");
+
+    await shootLb(page, "revenue-caption");
+
+    // The live deal's own row shows the same real figure - not $0.00.
+    const dealRow = page.getByRole("row", { name: /Valdez patio rebuild/ });
+    await expect(dealRow).toContainText("$2,000.00");
+
+    // The orphan row: named, explained, and never a link - there is nowhere
+    // for it to point to.
+    const noJobRow = page.getByRole("row", { name: /No job/ });
+    await expect(noJobRow).toBeVisible();
+    await expect(noJobRow.getByRole("link")).toHaveCount(0);
+    await expect(noJobRow).toContainText("$500.00");
+
+    // The table adds up to the headline: Valdez ($2,000 quoted, nothing
+    // else) plus No job ($500 invoiced and collected, nothing else) is
+    // exactly the whole table - no third row is hiding any of this period's
+    // money.
+    const moneyRows = page.getByRole("row").filter({ hasText: /Valdez patio rebuild|No job/ });
+    await expect(moneyRows).toHaveCount(2);
   });
 });

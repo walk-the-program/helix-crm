@@ -183,6 +183,21 @@ async function shoot(page: Page, name: string): Promise<void> {
   await settleTheme(page, "light");
 }
 
+/**
+ * CPO-LB-IMPL-W4: the round-4 money findings' own screenshot evidence, at a
+ * fixed 1280x800 (not full-page - the brief asks for one frame, not the
+ * whole scrolled screen), prefixed "w4-" into its own folder so it never
+ * collides with another agent's screenshots in this shared tree.
+ */
+async function shootLb(page: Page, name: string): Promise<void> {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  for (const theme of ["light", "dark"] as const) {
+    await settleTheme(page, theme);
+    await page.screenshot({ path: `tests/e2e-mac/.cache/screens/lb/w4-${name}-${theme}.png` });
+  }
+  await settleTheme(page, "light");
+}
+
 // ---------------------------------------------------------------------------
 // The tests
 // ---------------------------------------------------------------------------
@@ -896,5 +911,389 @@ test.describe("invoices screens", () => {
     // something real to show rather than "nothing owed to you".
     await expect(page.getByText(number2)).toBeVisible();
     await shoot(page, "ar-block");
+  });
+});
+
+/**
+ * CPO-LB-IMPL-W4: browser-level regressions for six money findings fixed this
+ * round (commits 835a797, 7bea580, d2aea80, 044ee0c, 52eb441, 4d22ae4), which
+ * until now only had repo-level or no coverage at all. Money is asserted
+ * against the database; what the owner sees is asserted against the screen -
+ * the whole point of these findings is that the two used to disagree.
+ */
+test.describe("invoices: audited findings (round 4 pin)", () => {
+  test("F-LB-4: a paid invoice can be corrected back to unpaid, from the Status control", async ({
+    page,
+    helix,
+  }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    // A paid invoice, arranged straight through the bridge - this test is
+    // about the correction, not about how a document gets marked paid (the
+    // other tests in this file already cover that).
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      ["c-oduya", "Oduya", "Chike", iso(-30 * DAY), iso(-30 * DAY)],
+    );
+    const docId = "doc-oduya-paid";
+    const now = iso(0);
+    const number = "INV-2026-0930";
+    db.execute(
+      `INSERT INTO documents (
+         id, kind, number, contact_id, status, issued_on, due_on,
+         subtotal_cents, tax_rate_bp, tax_cents, total_cents,
+         sent_at, paid_on, paid_method, paid_note, created_at, updated_at
+       ) VALUES (?, 'invoice', ?, ?, 'paid', ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        docId,
+        number,
+        "c-oduya",
+        dateOnly(0),
+        dateOnly(14 * DAY),
+        40000,
+        40000,
+        iso(-2 * DAY),
+        dateOnly(0),
+        "bank",
+        "Paid on time",
+        now,
+        now,
+      ],
+    );
+    db.execute(
+      `INSERT INTO document_items (id, document_id, name, qty, unit_cents, taxable, kind, position)
+       VALUES (?, ?, ?, 1, ?, 0, 'one_time', 0)`,
+      ["item-oduya", docId, "Hedge removal", 40000],
+    );
+
+    await page.goto(`/invoices/${docId}`);
+    await expect(page.getByTestId("document-status")).toBeVisible();
+
+    // Before this fix, `TRANSITIONS.invoice.paid` was `[]` - a paid invoice
+    // had nowhere left to go, so the Status control's own option list would
+    // have been just ["Paid"], disabled, and this "Sent" option would not
+    // exist to click.
+    //
+    // The screenshot needs the dropdown open WITH "Sent" showing, in each
+    // theme - and switching theme while it is open closes the popover (a
+    // viewport/attribute change reads as a dismiss to Radix), so each shot
+    // settles its theme first and only then opens the menu fresh.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    for (const theme of ["light", "dark"] as const) {
+      await settleTheme(page, theme);
+      await page.getByRole("combobox", { name: "Status" }).click();
+      await expect(page.getByRole("option", { name: "Sent" })).toBeVisible();
+      await page.screenshot({
+        path: `tests/e2e-mac/.cache/screens/lb/w4-paid-status-${theme}.png`,
+      });
+      await page.keyboard.press("Escape");
+    }
+    await settleTheme(page, "light");
+
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await expect(page.getByRole("option", { name: "Sent" })).toBeVisible();
+    await page.getByRole("option", { name: "Sent" }).click();
+
+    const unpayDialog = page.getByRole("dialog", { name: `Mark ${number} unpaid?` });
+    await expect(unpayDialog).toBeVisible();
+    await unpayDialog.getByRole("button", { name: "Mark unpaid" }).click();
+    await expect(unpayDialog).toBeHidden();
+
+    const [[status, paidOn, paidMethod, paidNote]] = db.query(
+      "SELECT status, paid_on, paid_method, paid_note FROM documents WHERE id = ?",
+      [docId],
+    ) as [[string, string | null, string | null, string | null]];
+    expect(status).toBe("sent");
+    expect(paidOn).toBeNull();
+    expect(paidMethod).toBeNull();
+    expect(paidNote).toBeNull();
+
+    // Back on Receivables: it is owed again.
+    await page.goto("/reports/receivables");
+    await expect(page.getByText(number)).toBeVisible();
+
+    // And out of Collected on Revenue - nothing else moved money this
+    // period, so the headline reads exactly zero once the payment is gone.
+    await page.goto("/reports/revenue");
+    const collectedLabel = page.getByText("Collected", { exact: true }).first();
+    const collectedValue = collectedLabel.locator("xpath=preceding-sibling::span[1]");
+    await expect(collectedValue).toHaveText("$0.00");
+  });
+
+  test("F-LB-23: a draft invoice can be deleted; a sent one only offers Void", async ({
+    page,
+    helix,
+  }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      ["c-thandiwe", "Thandiwe", "Moyo", iso(-3 * DAY), iso(-3 * DAY)],
+    );
+    const now = iso(0);
+    const draftId = "doc-thandiwe-draft";
+    const draftNumber = "INV-2026-0940";
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'draft', ?, ?, 0, 0, ?, ?, ?)`,
+      [draftId, draftNumber, "c-thandiwe", dateOnly(0), 12000, 12000, now, now],
+    );
+    const sentId = "doc-thandiwe-sent";
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, due_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, sent_at, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'sent', ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+      [sentId, "INV-2026-0941", "c-thandiwe", dateOnly(0), dateOnly(14 * DAY), 20000, 20000, now, now, now],
+    );
+
+    // Before this fix, a sent-or-later document's only destructive control was
+    // Void; a draft had no way off the list except the same button, wearing
+    // the word "Void" on a document nobody had ever seen.
+    await page.goto(`/invoices/${sentId}`);
+    await expect(page.getByRole("button", { name: "Void" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
+
+    await page.goto(`/invoices/${draftId}`);
+    await page.getByRole("button", { name: "Delete" }).click();
+    const dialog = page.getByRole("dialog", { name: `Delete ${draftNumber}?` });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete this invoice" }).click();
+
+    await page.waitForURL(/\/invoices$/);
+    // The default tab on /invoices is Unpaid, so a deleted draft would not
+    // show there anyway - the real proof is the soft-delete in the database.
+    await expect(page.getByRole("link", { name: draftNumber })).toHaveCount(0);
+
+    const [[deletedAt]] = db.query("SELECT deleted_at FROM documents WHERE id = ?", [
+      draftId,
+    ]) as [string | null][];
+    expect(deletedAt).not.toBeNull();
+  });
+
+  test("F-LB-10: Today says when invoices are sitting as drafts", async ({ page, helix }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    // `useTodayIsUnstarted` (src/features/today/lib/useToday.ts) counts only
+    // tasks, open deals and activities - never documents - so Today shows the
+    // three-card first-run screen instead of any section, drafts line
+    // included, until an open deal exists. One is seeded here so this test
+    // reaches the real dashboard; see this run's regression note about that
+    // gate hiding the very feature under test on a documents-only workspace.
+    const stageId = stageIdByName(db, "New");
+    const now = iso(0);
+    db.execute(
+      `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at, position, created_at, updated_at)
+       VALUES (?, ?, 0, 'USD', ?, ?, 0, ?, ?)`,
+      ["deal-esteban-anchor", "Keeps Today out of its first-run state", stageId, now, now, now],
+    );
+
+    // Before this fix, `UnpaidInvoicesSection` never rendered anything about
+    // a draft at all - it read `useUnpaidInvoices`, which explicitly filters
+    // to `status = 'sent'`, so a drafted invoice was invisible everywhere on
+    // Today.
+    await page.goto("/");
+    await expect(page.getByTestId("unsent-drafts")).toHaveCount(0);
+
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      ["c-esteban", "Esteban", "Roig", iso(-2 * DAY), iso(-2 * DAY)],
+    );
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'draft', ?, ?, 0, 0, ?, ?, ?)`,
+      ["doc-esteban-draft-1", "INV-2026-0950", "c-esteban", dateOnly(0), 5000, 5000, now, now],
+    );
+
+    await page.goto("/");
+    const unpaidSection = page.locator('[data-today-section="unpaid-invoices"]');
+    // It shows up even though nothing is unpaid and the section itself has
+    // collapsed to its one-line empty state.
+    await expect(unpaidSection.getByText("nothing unpaid")).toBeVisible();
+    await expect(page.getByTestId("unsent-drafts")).toHaveText(
+      /^1 invoice is drafted and not sent yet\./,
+    );
+
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'draft', ?, ?, 0, 0, ?, ?, ?)`,
+      ["doc-esteban-draft-2", "INV-2026-0951", "c-esteban", dateOnly(0), 7500, 7500, now, now],
+    );
+
+    await page.goto("/");
+    await expect(unpaidSection.getByText("nothing unpaid")).toBeVisible();
+    await expect(page.getByTestId("unsent-drafts")).toHaveText(
+      /^2 invoices are drafted and not sent yet\./,
+    );
+    await expect(
+      page.getByTestId("unsent-drafts").getByRole("link", { name: "Open invoices" }),
+    ).toBeVisible();
+
+    await shootLb(page, "today-drafts");
+  });
+
+  test("F-LB-13: New invoice fills its lines from the job, edits write back onto the deal, and opens with no line until a customer is chosen", async ({
+    page,
+    helix,
+  }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await quickAddContact(page, "Priyanka Deol");
+
+    const [[contactId]] = db.query(
+      "SELECT id FROM contacts WHERE first_name = ?",
+      ["Priyanka"],
+    ) as [string][];
+    const stageId = stageIdByName(db, "New");
+    const dealId = "deal-priyanka-grounds";
+    const now = iso(0);
+    db.execute(
+      `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at, position, contact_id, company_id, created_at, updated_at)
+       VALUES (?, ?, ?, 'USD', ?, ?, 0, ?, NULL, ?, ?)`,
+      [dealId, "Grounds contract", 188000, stageId, now, contactId, now, now],
+    );
+    db.execute(
+      `INSERT INTO products (id, name, description, kind, interval, unit_price_cents, taxable, active, position, created_at, updated_at)
+       VALUES (?, ?, NULL, 'one_time', NULL, ?, 0, 1, 0, ?, ?)`,
+      ["prod-lawn-mow", "Lawn mowing", 8000, now, now],
+    );
+    // One one-time line linked to a product (F-LB-13's own claim: editing it
+    // must not orphan the product link) and one monthly line, which an
+    // invoice must never show and must never remove.
+    db.execute(
+      `INSERT INTO deal_items (id, deal_id, product_id, name, description, kind, interval, qty, suggested_unit_cents, actual_unit_cents, taxable, position)
+       VALUES (?, ?, ?, ?, NULL, 'one_time', NULL, 1, ?, ?, 0, 0)`,
+      ["item-priyanka-onetime", dealId, "prod-lawn-mow", "Lawn mowing", 8000, 8000],
+    );
+    db.execute(
+      `INSERT INTO deal_items (id, deal_id, product_id, name, description, kind, interval, qty, suggested_unit_cents, actual_unit_cents, taxable, position)
+       VALUES (?, ?, NULL, ?, NULL, 'recurring', 'month', 1, ?, ?, 0, 1)`,
+      ["item-priyanka-monthly", dealId, "Monthly maintenance", 15000, 15000],
+    );
+
+    // Before this fix, the screen mounted one blank line unconditionally, for
+    // a customer who was not chosen yet.
+    await page.goto("/invoices/new");
+    await expect(page.getByLabel("Description")).toHaveCount(0);
+
+    await page.getByRole("combobox", { name: "Contact" }).click();
+    await page.getByRole("option", { name: "Priyanka Deol" }).click();
+    await pickJob(page, "Grounds contract");
+
+    // Picking the job fills the ONE-TIME line only - the monthly line is
+    // billed by the schedule, not shown here. Before this fix, picking an
+    // EXISTING deal filled in nothing at all: the line editor stayed empty
+    // and the owner had to retype the price himself.
+    const descriptions = page.getByLabel("Description");
+    await expect(descriptions).toHaveCount(1);
+    await expect(descriptions.first()).toHaveValue("Lawn mowing");
+    await expect(page.getByLabel("Unit price").first()).toHaveValue("80.00");
+
+    // Edit the prefilled line - this must write back onto the SAME deal
+    // item (an UPDATE, not a delete-and-readd, so `product_id` survives).
+    await descriptions.first().fill("Lawn mowing, biweekly");
+    await page.getByLabel("Unit price").first().fill("95.00");
+
+    // Add a line the owner typed himself - this must ADD a new deal item.
+    await page.getByRole("button", { name: "Add a line" }).click();
+    await page.getByRole("button", { name: "Custom line" }).click();
+    await descriptions.nth(1).fill("Gutter clearing");
+    await page.getByLabel("Unit price").nth(1).fill("150.00");
+
+    await page.getByRole("button", { name: "Create invoice" }).click();
+    await page.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
+    const docId = page.url().split("/").pop() as string;
+
+    // The document itself carries only the two lines it showed - never the
+    // deal's monthly line.
+    const docItems = db.query(
+      "SELECT name, unit_cents FROM document_items WHERE document_id = ? ORDER BY position",
+      [docId],
+    ) as [string, number][];
+    expect(docItems).toEqual([
+      ["Lawn mowing, biweekly", 9500],
+      ["Gutter clearing", 15000],
+    ]);
+
+    // The deal now has three lines. Before this fix, `useSyncDealLines` did
+    // not exist: an edited line here never reached the deal at all, so the
+    // deal kept its original $8,000 lawn-mowing price and the deal page
+    // could read a different figure than the invoice that was just raised
+    // against it.
+    const dealItemRows = db.query(
+      "SELECT id, name, actual_unit_cents, product_id, kind FROM deal_items WHERE deal_id = ?",
+      [dealId],
+    ) as [string, string, number, string | null, string][];
+    expect(dealItemRows).toHaveLength(3);
+
+    const oneTime = dealItemRows.find((row) => row[0] === "item-priyanka-onetime");
+    expect(oneTime).toEqual(["item-priyanka-onetime", "Lawn mowing, biweekly", 9500, "prod-lawn-mow", "one_time"]);
+
+    const monthly = dealItemRows.find((row) => row[0] === "item-priyanka-monthly");
+    expect(monthly).toEqual(["item-priyanka-monthly", "Monthly maintenance", 15000, null, "recurring"]);
+
+    const added = dealItemRows.find(
+      (row) => row[0] !== "item-priyanka-onetime" && row[0] !== "item-priyanka-monthly",
+    );
+    expect(added?.[1]).toBe("Gutter clearing");
+    expect(added?.[2]).toBe(15000);
+  });
+
+  test("F-LB-14: a billed job lands won, a quoted job stays open", async ({ page, helix }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await quickAddContact(page, "Soraya Beltran");
+
+    // Kind defaults to Invoice. Before this fix, "New job" always landed in
+    // the FIRST stage regardless of kind, so raising an invoice against a
+    // brand-new job left it sitting in the open pipeline - inflating Open
+    // value while the same job was simultaneously being invoiced - and
+    // Won never moved because nothing ever stamped `closed_at`.
+    await page.goto("/invoices/new");
+    await page.getByRole("combobox", { name: "Contact" }).click();
+    await page.getByRole("option", { name: "Soraya Beltran" }).click();
+    await page.getByRole("combobox", { name: "Job" }).click();
+    await page.keyboard.type("Deck resurfacing");
+    await page.getByRole("option", { name: /New job/ }).click();
+    await expect(page.getByText("Started Deck resurfacing.")).toBeVisible();
+
+    const [[invoiceIsWon, invoiceClosedAt]] = db.query(
+      `SELECT s.is_won, d.closed_at FROM deals d JOIN stages s ON s.id = d.stage_id WHERE d.title = ?`,
+      ["Deck resurfacing"],
+    ) as [[number, string | null]];
+    expect(invoiceIsWon).toBe(1);
+    expect(invoiceClosedAt).not.toBeNull();
+
+    // A fresh screen, Kind switched to Quote: the work has not been agreed
+    // to, so "New job" must leave it in the first stage, open.
+    await page.goto("/invoices/new");
+    await page.getByRole("combobox", { name: "Contact" }).click();
+    await page.getByRole("option", { name: "Soraya Beltran" }).click();
+    await page.getByRole("combobox", { name: "Kind" }).click();
+    await page.getByRole("option", { name: "Quote" }).click();
+    await page.getByRole("combobox", { name: "Job" }).click();
+    await page.keyboard.type("Fence estimate");
+    await page.getByRole("option", { name: /New job/ }).click();
+    await expect(page.getByText("Started Fence estimate.")).toBeVisible();
+
+    const [[firstStageId]] = db.query(
+      "SELECT id FROM stages WHERE deleted_at IS NULL ORDER BY position ASC LIMIT 1",
+      [],
+    ) as [string][];
+    const [[quoteStageId, quoteClosedAt]] = db.query(
+      "SELECT stage_id, closed_at FROM deals WHERE title = ?",
+      ["Fence estimate"],
+    ) as [[string, string | null]];
+    expect(quoteStageId).toBe(firstStageId);
+    expect(quoteClosedAt).toBeNull();
   });
 });
