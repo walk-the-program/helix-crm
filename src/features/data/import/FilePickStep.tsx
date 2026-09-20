@@ -5,9 +5,15 @@
  * paths), a browser File (the e2e build), and falls back to the file dialog
  * whenever the dropped path is not something Helix may read.
  *
- * It is a panel with a dashed hairline and a lot of air, not a bordered web
- * upload widget: no 40px spot glyph in the middle (docs/DESIGN.md §11), no
- * second border weight, and the drag state is a tint rather than a colour.
+ * It is a panel with a dashed hairline, not a bordered web upload widget: no
+ * 40px spot glyph in the middle (docs/DESIGN.md §11), no second border weight,
+ * and the drag state is a tint rather than a colour.
+ *
+ * The step above this one (TypePicker) already asks and answers the real
+ * question - what kind of file is this - with a sentence under each choice,
+ * so this step explains nothing on its own: one line under the box names the
+ * formats it reads and points at the example file, and that is the only
+ * sentence on the step (phase-two design direction, rule 3).
  */
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
@@ -75,29 +81,21 @@ export function FilePickStep(props: {
         onDrop={onDrop}
         data-testid="import-dropzone"
         className={[
-          "flex flex-col items-center justify-center gap-[var(--space-5)]",
+          "flex flex-col items-center justify-center gap-[var(--space-4)]",
           "border border-dashed",
-          "px-[var(--space-6)] py-[var(--space-10)] text-center",
+          "px-[var(--space-6)] py-[var(--space-7)] text-center",
           "transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] motion-reduce:transition-none",
           dragging
             ? "border-[var(--color-border-strong)] bg-[var(--color-accent-soft)]"
             : "border-[var(--color-border-strong)] bg-[var(--color-surface)]",
         ].join(" ")}
       >
-        <div className="flex flex-col items-center gap-[var(--space-2)]">
-          <p className="font-[family-name:var(--font-heading)] text-[length:var(--text-subhead)] font-bold leading-[var(--leading-subhead)] tracking-[var(--tracking-title)] text-[var(--color-heading)]">
-            Drop a spreadsheet here
-          </p>
-          <p className="max-w-[var(--content-max)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-            A CSV exported from HubSpot, Zoho, Pipedrive, Google Contacts, or
-            saved out of Excel. Helix works out the columns; you check them
-            before anything is written.
-          </p>
-        </div>
+        <p className="font-[family-name:var(--font-heading)] text-[length:var(--text-subhead)] font-bold leading-[var(--leading-subhead)] tracking-[var(--tracking-title)] text-[var(--color-heading)]">
+          Drop a spreadsheet here
+        </p>
         <Button
           ref={buttonRef}
           variant="primary"
-         
           loading={busy}
           loadingLabel="Opening…"
           iconLeft={<FolderOpen size={16} weight="bold" aria-hidden="true" />}
@@ -108,9 +106,9 @@ export function FilePickStep(props: {
       </div>
 
       <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-        Helix will read this file as {typeLabel.toLowerCase()}. Not sure what the
-        columns should be? Download an example from the top right, fill it in,
-        and bring it back.
+        Works with a CSV from HubSpot, Zoho, Pipedrive, Google Contacts, or
+        Excel, read in as {typeLabel.toLowerCase()}. Not sure of the columns?
+        Download an example from the top right.
       </p>
     </div>
   );

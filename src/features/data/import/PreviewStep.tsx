@@ -6,7 +6,19 @@
  * raised. The policy is a grouped inset list under a small-capitals label,
  * which is how a native settings pane asks a question like this.
  */
-import { Badge, Card, CardGroupLabel, CardRow, Table, TBody, TD, TH, THead, TR } from "@/ui";
+import {
+  Badge,
+  Card,
+  CardGroupLabel,
+  CardRow,
+  Table,
+  TableScroll,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/ui";
 import { formatPhone } from "@/lib/phone";
 import {
   DEDUPE_POLICIES,
@@ -54,6 +66,7 @@ export function PreviewStep(props: {
             auto layout gave the name almost nothing and let two phone numbers
             wrap a row to double height; a fixed layout keeps every row one line
             tall and puts the full value in a title attribute instead. */}
+        <TableScroll maxHeight="60vh">
         <Table className="table-fixed">
           <THead>
             <TR>
@@ -127,6 +140,7 @@ export function PreviewStep(props: {
             })}
           </TBody>
         </Table>
+        </TableScroll>
       </Card>
 
       <fieldset className="m-0 border-0 p-0">

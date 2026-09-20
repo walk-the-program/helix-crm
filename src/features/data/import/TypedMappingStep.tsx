@@ -12,7 +12,7 @@
  * guessed correctly needs nothing.
  */
 import { useMemo } from "react";
-import { Card, Select, Table, TBody, TD, TH, THead, TR } from "@/ui";
+import { Card, Select, Table, TableScroll, TBody, TD, TH, THead, TR } from "@/ui";
 import {
   SKIP,
   typedMappingSummary,
@@ -93,49 +93,51 @@ export function TypedMappingStep(props: {
       </div>
 
       <Card className="overflow-hidden">
-        <Table>
-          <THead>
-            <TR>
-              <TH>Column in your file</TH>
-              <TH>First value</TH>
-              <TH>Import as</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {mapping.map((column) => {
-              const sample = sampleFor(sampleRows, column.index);
-              const hint = hintFor(column.field);
-              return (
-                <TR key={`${column.header}-${column.index}`}>
-                  <TD primary title={column.header}>
-                    {column.header.length > 0 ? column.header : "(unnamed column)"}
-                  </TD>
-                  <TD muted>{sample.length > 0 ? sample : "—"}</TD>
-                  <TD className="w-[34%]">
-                    <div className="flex max-w-[22rem] flex-col gap-[var(--space-1)]">
-                      <Select
-                        value={column.field}
-                        onValueChange={(v) => setField(column.index, v)}
-                        options={options.map((option) => ({
-                          value: option.value,
-                          label: option.label,
-                          disabled: takenElsewhere(option.value, column.index),
-                        }))}
-                        ariaLabel={`Import "${column.header}" as`}
-                        className="min-w-0"
-                      />
-                      {hint ? (
-                        <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-                          {hint}
-                        </span>
-                      ) : null}
-                    </div>
-                  </TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
+        <TableScroll maxHeight="60vh">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Column in your file</TH>
+                <TH>First value</TH>
+                <TH>Import as</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {mapping.map((column) => {
+                const sample = sampleFor(sampleRows, column.index);
+                const hint = hintFor(column.field);
+                return (
+                  <TR key={`${column.header}-${column.index}`}>
+                    <TD primary title={column.header}>
+                      {column.header.length > 0 ? column.header : "(unnamed column)"}
+                    </TD>
+                    <TD muted>{sample.length > 0 ? sample : "—"}</TD>
+                    <TD className="w-[34%]">
+                      <div className="flex max-w-[22rem] flex-col gap-[var(--space-1)]">
+                        <Select
+                          value={column.field}
+                          onValueChange={(v) => setField(column.index, v)}
+                          options={options.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                            disabled: takenElsewhere(option.value, column.index),
+                          }))}
+                          ariaLabel={`Import "${column.header}" as`}
+                          className="min-w-0"
+                        />
+                        {hint ? (
+                          <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+                            {hint}
+                          </span>
+                        ) : null}
+                      </div>
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </TableScroll>
       </Card>
     </div>
   );

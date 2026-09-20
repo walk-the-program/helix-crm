@@ -12,7 +12,7 @@
  * neither of these needs the owner to do anything.
  */
 import { useMemo } from "react";
-import { Card, Input, Select, Table, TBody, TD, TH, THead, TR } from "@/ui";
+import { Card, Input, Select, Table, TableScroll, TBody, TD, TH, THead, TR } from "@/ui";
 import {
   FIELDS,
   allowsMultiple,
@@ -111,53 +111,55 @@ export function MappingStep(props: {
       </div>
 
       <Card className="overflow-hidden">
-        <Table>
-          <THead>
-            <TR>
-              <TH>Column in your file</TH>
-              <TH>First value</TH>
-              <TH>Import as</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {mapping.map((column) => {
-              const sample = sampleFor(sampleRows, column.index);
-              const options = FIELDS.map((field) => ({
-                value: field.id,
-                label: field.label,
-                disabled: takenElsewhere(field.id, column.index),
-              }));
-              return (
-                <TR key={`${column.header}-${column.index}`}>
-                  <TD primary title={column.header}>
-                    {column.header.length > 0 ? column.header : "(unnamed column)"}
-                  </TD>
-                  <TD muted>{sample.length > 0 ? sample : "—"}</TD>
-                  <TD className="w-[34%]">
-                    <div className="flex max-w-[22rem] items-center gap-[var(--space-2)]">
-                      <Select
-                        value={column.field}
-                        onValueChange={(v) => setField(column.index, v as FieldId)}
-                        options={options}
-                        ariaLabel={`Import "${column.header}" as`}
-                        className="min-w-0 flex-1"
-                      />
-                      {column.field === "custom" ? (
-                        <Input
-                          value={column.customName ?? ""}
-                          onChange={(e) => setCustomName(column.index, e.target.value)}
-                          aria-label={`Name of the custom field for "${column.header}"`}
-                          placeholder="Field name"
+        <TableScroll maxHeight="60vh">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Column in your file</TH>
+                <TH>First value</TH>
+                <TH>Import as</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {mapping.map((column) => {
+                const sample = sampleFor(sampleRows, column.index);
+                const options = FIELDS.map((field) => ({
+                  value: field.id,
+                  label: field.label,
+                  disabled: takenElsewhere(field.id, column.index),
+                }));
+                return (
+                  <TR key={`${column.header}-${column.index}`}>
+                    <TD primary title={column.header}>
+                      {column.header.length > 0 ? column.header : "(unnamed column)"}
+                    </TD>
+                    <TD muted>{sample.length > 0 ? sample : "—"}</TD>
+                    <TD className="w-[34%]">
+                      <div className="flex max-w-[22rem] items-center gap-[var(--space-2)]">
+                        <Select
+                          value={column.field}
+                          onValueChange={(v) => setField(column.index, v as FieldId)}
+                          options={options}
+                          ariaLabel={`Import "${column.header}" as`}
                           className="min-w-0 flex-1"
                         />
-                      ) : null}
-                    </div>
-                  </TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
+                        {column.field === "custom" ? (
+                          <Input
+                            value={column.customName ?? ""}
+                            onChange={(e) => setCustomName(column.index, e.target.value)}
+                            aria-label={`Name of the custom field for "${column.header}"`}
+                            placeholder="Field name"
+                            className="min-w-0 flex-1"
+                          />
+                        ) : null}
+                      </div>
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        </TableScroll>
       </Card>
     </div>
   );

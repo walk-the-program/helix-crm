@@ -10,7 +10,19 @@
  * Money and dates are shown the way they will be stored, because this is the
  * last screen where anything is free to change.
  */
-import { Badge, Card, CardGroupLabel, CardRow, Table, TBody, TD, TH, THead, TR } from "@/ui";
+import {
+  Badge,
+  Card,
+  CardGroupLabel,
+  CardRow,
+  Table,
+  TableScroll,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from "@/ui";
 import { policiesFor } from "@/features/data/lib/typedImportRun";
 import type { DedupePolicy } from "@/features/data/lib/importRun";
 import type { DraftRow } from "@/features/data/lib/typedMapping";
@@ -79,6 +91,7 @@ export function TypedPreviewStep(props: {
 
       <Card className="overflow-hidden">
         {/* table-fixed: one line per row, the whole value in a title. */}
+        <TableScroll maxHeight="60vh">
         <Table className="table-fixed">
           <THead>
             <TR>
@@ -86,7 +99,9 @@ export function TypedPreviewStep(props: {
                 Row
               </TH>
               {columns.map((field) => (
-                <TH key={field.key}>{field.label}</TH>
+                <TH key={field.key} align={field.parser === "money" ? "right" : "left"}>
+                  {field.label}
+                </TH>
               ))}
               <TH className="w-[20%]">What Helix noticed</TH>
             </TR>
@@ -103,6 +118,7 @@ export function TypedPreviewStep(props: {
                   return (
                     <TD
                       key={field.key}
+                      align={field.parser === "money" ? "right" : "left"}
                       muted={!first}
                       title={text || undefined}
                       className={[
@@ -141,6 +157,7 @@ export function TypedPreviewStep(props: {
             ))}
           </TBody>
         </Table>
+        </TableScroll>
       </Card>
 
       <fieldset className="m-0 border-0 p-0">
