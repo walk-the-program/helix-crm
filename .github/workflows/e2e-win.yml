@@ -79,7 +79,8 @@ jobs:
           $webview2 = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -Name pv -ErrorAction SilentlyContinue).pv
           Write-Host "WebView2 runtime:   $webview2"
           & "${{ steps.msedgedriver.outputs.msedgedriver-path }}" --version
-          & tauri-driver --version
+          # tauri-driver has no --version flag; cargo knows which one it installed.
+          cargo install --list | Select-String -Pattern 'tauri-driver'
           Write-Host "node:               $((Get-Command node).Source) $(node --version)"
           Write-Host "--- src-tauri\target\debug (top level) ---"
           Get-ChildItem src-tauri\target\debug -File | Select-Object Name, Length | Format-Table -AutoSize | Out-String -Width 200
