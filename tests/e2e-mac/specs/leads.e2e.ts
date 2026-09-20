@@ -514,6 +514,140 @@ test.describe("polling", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* B1b. the commercial lifecycle states (LR-REV)                              */
+/* -------------------------------------------------------------------------- */
+
+test.describe("the website's commercial lifecycle states (LR-REV)", () => {
+  test("a site with no lead endpoint says so, instead of blaming the connection", async ({
+    page,
+    helix,
+  }) => {
+    await installLeadsErrorHook(page);
+    await connectSite(page);
+
+    // A ClearPath site deployed without the CRM block, or with the route
+    // registered after the /api catch-all, answers 404. Before LR-REV this
+    // read "Helix cannot reach your website", which sent the owner to his
+    // router and Walker to the wrong problem entirely (F-REV-1).
+    await page.evaluate(() => {
+      (window as unknown as { __helixE2E: any }).__helixE2E.leadsError = {
+        code: "HTTP_STATUS",
+        message: "HTTP 404 from the site: Not Found",
+      };
+    });
+
+    await page.getByRole("button", { name: "Poll now" }).click();
+
+    const banner = page.getByTestId("lead-poll-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(/not set up to send leads yet/i);
+    await expect(banner).toContainText(/ClearPath/);
+    await expect(banner).not.toContainText(/cannot reach your website/i);
+
+    // And the "Last result" row reads as a sentence, not an exception name.
+    await expect(page.getByTestId("site-last-error")).toContainText(
+      /no lead connection on it yet/i,
+    );
+    await expect(page.getByTestId("site-last-error")).not.toContainText(/LeadPoll/);
+    await expect(page.getByTestId("site-last-error-detail")).toHaveText("HTTP 404");
+
+    // Stored in Helix's own words for Diagnostics, and without the site's
+    // 404 page, which is long, useless and third-party text.
+    const stored = String(
+      helix.bridge.query("SELECT last_error FROM lead_sync LIMIT 1", [])[0][0],
+    );
+    expect(stored).toBe("LeadPollEndpointError: HTTP 404");
+    expect(stored).not.toContain("Not Found");
+  });
+
+  test("Test connection waits for Save rather than testing the old token", async ({
+    page,
+    helix,
+  }) => {
+    await connectSite(page);
+
+    // The owner has been handed a rotated token and pastes it. Testing now
+    // would test the token already in the keychain and report on the wrong
+    // one (F-REV-3).
+    await page.getByLabel("Token").fill("a-freshly-rotated-token");
+    await expect(page.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await expect(page.getByTestId("site-test-needs-save")).toContainText(/save first/i);
+
+    // Proof of what the button would have tested: the keychain still holds
+    // the token from before, so a test now would have reported on that one.
+    const before = await page.evaluate(
+      () => (window as unknown as { __helixE2E: any }).__helixE2E.secrets,
+    );
+    expect(JSON.stringify(before)).toContain(TOKEN);
+
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByTestId("site-test-needs-save")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Test connection" })).toBeEnabled();
+    const after = await page.evaluate(
+      () => (window as unknown as { __helixE2E: any }).__helixE2E.secrets,
+    );
+    expect(JSON.stringify(after)).toContain("a-freshly-rotated-token");
+    expect(helix.dbPath).toContain("helix.db");
+  });
+
+  test("the example token from .env.example is refused by name", async ({ page, helix }) => {
+    await page.goto("/settings/site");
+    await page.getByLabel("Website address").fill(SITE_ORIGIN);
+    await page.getByLabel("Token").fill("replace-with-a-long-random-string");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    // Every ClearPath template ships this literal string in `.env.example`.
+    // Saving it used to succeed and then 401 forever (F-REV-8).
+    await expect(page.getByText(/example token/i).first()).toBeVisible();
+    await expect(page.getByText("Not connected", { exact: true })).toBeVisible();
+    // Neither half of the connection was written: a refused token must not
+    // leave a half-saved connection behind.
+    expect(
+      helix.bridge.query("SELECT key FROM settings WHERE key = 'siteOrigin'", []),
+    ).toHaveLength(0);
+  });
+
+  test("Disconnect clears the token, stops the poll, and keeps every deal", async ({
+    page,
+    helix,
+  }) => {
+    await connectSite(page);
+    await setLeadsStub(page, [
+      {
+        id: "disc-1",
+        createdAt: "2026-09-10T09:00:00.000Z",
+        name: "Ilse Bergman",
+        email: "ilse@example.com",
+        phone: null,
+        service: "Spring cleanup",
+        message: "Quote for the back garden please",
+        pageUrl: null,
+      },
+    ]);
+    await page.getByRole("button", { name: "Poll now" }).click();
+    await expect
+      .poll(() => Number(helix.bridge.query("SELECT count(*) FROM deals", [])[0][0]))
+      .toBe(1);
+
+    await page.getByRole("button", { name: "Disconnect" }).click();
+    await page.getByRole("button", { name: "Disconnect", exact: true }).last().click();
+
+    await expect(page.getByText("Not connected", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Poll now" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Test connection" })).toBeDisabled();
+
+    // The whole promise a leaving client relies on: the site is gone from
+    // Helix, and everything the site ever sent is still here.
+    expect(Number(helix.bridge.query("SELECT count(*) FROM deals", [])[0][0])).toBe(1);
+    const origin = helix.bridge.query(
+      "SELECT value_json FROM settings WHERE key = 'siteOrigin'",
+      [],
+    );
+    expect(origin.length === 0 || origin[0][0] === "null").toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* B2. the CPO-LB-IMPL-W1 audited findings                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -545,7 +679,16 @@ test.describe("audited findings (F-LB-1, F-LB-6, F-LB-8, F-LB-16, F-LB-17)", () 
     // Never the success toasts: this is a rejected page, not zero new leads.
     await expect(page.getByText("Checked your website. Nothing new.")).toHaveCount(0);
     await expect(page.getByText(/new leads? came in/)).toHaveCount(0);
-    await expect(page.getByText(/has not been able to reach your website/i)).toBeVisible();
+    // The subject here is "a malformed page is a failure, not a success", and
+    // the toast is how the owner is told. LR-REV stopped reporting a site that
+    // answered as an unreachable one, so the failure now speaks in the shape
+    // error's own words instead of the generic network sentence. Same
+    // assertion, more accurate subject.
+    // Three places say it now - the banner, the "Last result" row and the
+    // toast - so this asserts the first rather than all three.
+    await expect(
+      page.getByText(/sent a lead list Helix could not read/i).first(),
+    ).toBeVisible();
 
     expect(Number(helix.bridge.query("SELECT count(*) FROM deals", [])[0][0])).toBe(0);
     const sync = helix.bridge.query(
