@@ -30,6 +30,19 @@ mkdirSync(SCREENS, { recursive: true });
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * What this workspace calls a deal, on screen.
+ *
+ * The New document screen's deal field follows `settings.vocabulary` like the
+ * rest of the product (F-LB-D21), and these specs run on a workspace that
+ * never sets it - so the default, "Deal", is what the label reads. Naming it
+ * once here rather than inlining the literal is the point: a spec that
+ * hard-codes "Job" is what made that field the last one in the product still
+ * telling the owner what to call his own work.
+ */
+const DEAL_WORD = "Deal";
+const NEW_DEAL_WORD = /New deal/;
+
 function iso(msFromNow: number): string {
   return new Date(Date.now() + msFromNow).toISOString();
 }
@@ -52,7 +65,7 @@ function stageIdByName(bridge: HelixHarness["bridge"], name: string): string {
  * first test seeds its own deal. Round 3 made a deal a required parent for
  * every document a screen creates (`src/db/repos/documents.ts`), so every
  * test below that submits NewDocumentScreen needs one of these first. The
- * Job combobox's own "New job" row is a real feature in its own right and
+ * deal combobox's own "New deal" row is a real feature in its own right and
  * gets no separate coverage here - seeding through the bridge is the
  * deterministic path, not a workaround.
  */
@@ -70,7 +83,7 @@ function seedContactDeal(
 
 /** Picks a job on NewDocumentScreen's Job combobox by its (unique) title. */
 async function pickJob(page: Page, dealTitle: string): Promise<void> {
-  await page.getByRole("combobox", { name: "Job" }).click();
+  await page.getByRole("combobox", { name: DEAL_WORD }).click();
   await page.getByRole("option").filter({ hasText: dealTitle }).click();
 }
 
@@ -1261,9 +1274,9 @@ test.describe("invoices: audited findings (round 4 pin)", () => {
     await page.goto("/invoices/new");
     await page.getByRole("combobox", { name: "Contact" }).click();
     await page.getByRole("option", { name: "Soraya Beltran" }).click();
-    await page.getByRole("combobox", { name: "Job" }).click();
+    await page.getByRole("combobox", { name: DEAL_WORD }).click();
     await page.keyboard.type("Deck resurfacing");
-    await page.getByRole("option", { name: /New job/ }).click();
+    await page.getByRole("option", { name: NEW_DEAL_WORD }).click();
     await expect(page.getByText("Started Deck resurfacing.")).toBeVisible();
 
     const [[invoiceIsWon, invoiceClosedAt]] = db.query(
@@ -1280,9 +1293,9 @@ test.describe("invoices: audited findings (round 4 pin)", () => {
     await page.getByRole("option", { name: "Soraya Beltran" }).click();
     await page.getByRole("combobox", { name: "Kind" }).click();
     await page.getByRole("option", { name: "Quote" }).click();
-    await page.getByRole("combobox", { name: "Job" }).click();
+    await page.getByRole("combobox", { name: DEAL_WORD }).click();
     await page.keyboard.type("Fence estimate");
-    await page.getByRole("option", { name: /New job/ }).click();
+    await page.getByRole("option", { name: NEW_DEAL_WORD }).click();
     await expect(page.getByText("Started Fence estimate.")).toBeVisible();
 
     const [[firstStageId]] = db.query(

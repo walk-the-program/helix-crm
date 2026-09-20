@@ -37,6 +37,7 @@ import {
 import { computeTotals } from "@/db/repos/documents";
 import type { TotalsInput } from "@/db/repos/documents";
 import { useFormats } from "@/app/formats";
+import { useVocabulary } from "@/app/vocabulary";
 import { addDaysToDateString, todayLocal } from "@/lib/dates";
 import {
   useCreateDealForDocument,
@@ -67,6 +68,7 @@ const DEFAULT_VALID_DAYS = 30;
 
 export function NewDocumentScreen() {
   const [, navigate] = useLocation();
+  const vocabulary = useVocabulary();
   const { data: settings } = useInvoiceSettings();
   const formats = useFormats();
   const createDocument = useCreateDocument();
@@ -209,7 +211,7 @@ export function NewDocumentScreen() {
   async function resolveDealId(): Promise<string | null> {
     if (dealId) return dealId;
     // Left literal ("job") to match the Job field above - see F-LB-D21.
-    setDealError("Pick the job this belongs to, or start a new one.");
+    setDealError(`Pick the ${vocabulary.lower} this belongs to, or start a new one.`);
     return null;
   }
 
@@ -372,41 +374,32 @@ export function NewDocumentScreen() {
               </Field>
             </div>
 
-            {/*
-              F-LB-D21 (deferred): this field's label, placeholder, empty
-              text and "New job" create-row are hardcoded rather than
-              `useVocabulary()`-driven like DealPage.tsx's own breadcrumb.
-              The workspace's default vocabulary is "Deals", so the honest
-              fix is `vocabulary.one` / `vocabulary.lower` throughout - but
-              tests/e2e-mac/specs/invoices.e2e.ts (outside this task's
-              ownership) drives this exact combobox by
-              `getByRole("combobox", { name: "Job" })` and matches
-              `New job` by regex in two places, on a workspace that never
-              sets the vocabulary setting. Renaming the field would fail
-              that frozen regression spec. Reported to lead-money rather
-              than silently left inconsistent or silently fixed by editing
-              a file outside this packet's writable paths.
-            */}
+            {/* F-LB-D21, closed. Every string here follows the workspace's
+                own word: a "Deals" workspace reads Deal, a landscaping one
+                reads Job. It was the last field on this screen still naming
+                the concept for the owner instead of after him. */}
             <Field
-              label="Job"
+              label={vocabulary.one}
               error={dealError ?? undefined}
               hint={
                 customerChosen
-                  ? "Every invoice belongs to a job, so the money lands against the work."
-                  : "Pick the customer first, then the job."
+                  ? `Every invoice belongs to a ${vocabulary.lower}, so the money lands against the work.`
+                  : `Pick the customer first, then the ${vocabulary.lower}.`
               }
             >
               <Combobox
                 id="doc-deal"
-                aria-label="Job"
+                aria-label={vocabulary.one}
                 disabled={!customerChosen}
                 value={dealId}
                 items={dealItems}
                 clearable
-                placeholder="Search this customer's jobs"
-                emptyText="No job yet for this customer."
+                placeholder={`Search this customer's ${vocabulary.lowerMany}`}
+                emptyText={`No ${vocabulary.lower} yet for this customer.`}
                 createLabel={(query) =>
-                  query.trim().length > 0 ? `New job “${query.trim()}”` : "New job for this"
+                  query.trim().length > 0
+                    ? `${vocabulary.newOne} “${query.trim()}”`
+                    : `${vocabulary.newOne} for this`
                 }
                 onCreate={(query) => void startDeal(query)}
                 onChange={(id) => {

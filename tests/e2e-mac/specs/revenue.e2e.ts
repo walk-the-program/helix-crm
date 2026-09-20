@@ -459,7 +459,7 @@ test.describe("revenue: audited findings (round 4 pin)", () => {
     // Invoiced and Collected.
     await expect(
       page.getByText(
-        "Each number falls on its own day: quoted when you created the job, won when you closed it, invoiced when you billed it, collected when the money arrived.",
+        "Quoted, won, invoiced and collected each fall on their own day, so a month can collect more than it billed, or win what it quoted last month.",
       ),
     ).toBeVisible();
 
