@@ -40,6 +40,10 @@ backups, logs, and the site-lead ingestion path (untrusted input from a public f
 Format: `F-<role>-<n>` | class (Blocker / Required / Follow-up) | finding | why that class | fix commit(s) | evidence.
 Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
+### OPS (accepted by Fable; full table in `launch-returns/ops.md`)
+
+1 Blocker (F-OPS-1: no recovery key, so a dead laptop made every encrypted backup unreadable; now a recovery key the owner can show/save/print plus "Open a backup from another machine"), 10 Required: second backup copy to a folder the owner chooses; pre-import backup; keychain-denial boot screen with the right cause; older-app-on-newer-schema refusal; UNIQUE index on deals.external_id (migration 0005); purge-sweep overlap guard; prune could delete the file a restore was copying; restore ordering tested; npm + cargo audit in CI; and F-OPS-12 (the write-lock nesting shortcut let a concurrent writer join an import's transaction and lose its work on rollback), escalated by the lead and fixed by Fable with a mutation-checked repo test. docs/OPERATIONS.md holds ten incident procedures (7 tested, 1 inspected only, 1 needs Walker's machine, 1 mixed) and the founder-task inventory. Scale pass 20k/5k/10k: worst query 32 ms. Decisions: LR-4, LR-5, LR-6 below.
+
 ### SEC (accepted by Fable; full table in `launch-returns/sec.md`)
 
 1 Blocker (F-SEC-1: a corrupt keychain item made the app mint a new key over the real one, destroying the workspace), 16 Required (plaintext pre-encryption copy kept; lost key overwritten instead of reported; site 401 body with echoed token reaching helix.log; purge left notes/tasks orphaned and searchable; unbounded lead response body, redirects off-origin with the token, unbounded lead count/field length, JSON-depth stack overflow, infinite poll loop on a stuck cursor; attachment display names with bidi overrides; change_log unbounded; purged documents' PDFs left on disk; CSV formula guard missed LF and leading whitespace; no import size/row limit; unescaped mailto; false claims in CHANGELOG and Help), 12 Follow-ups (delete-workspace command, external_id UNIQUE migration, backoff persistence, export-moment disclosure, etc.). All Blocker/Required fixed with tests. Not applicable by design: accounts, sessions, roles, tenants, webhooks, public rate limits, in-app billing. CI requests handed to OPS: npm audit, cargo audit. Escalations: signing (spending), CONTRACTS.md edits for F-SEC-1/2/3/5 (accepted by Fable).
@@ -50,6 +54,9 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 | --- | --- | --- | --- |
 | LR-1 | Phases run strictly in the order SEC → OPS → REV → CS → PX → LA. One Opus lead per phase for SEC/OPS/REV/CS; up to three leads for PX; LA gets an independent lead that implemented nothing. | Fable | The prompt requires each phase closed before the next; the codebase is one shared checkout. |
 | LR-2 | No accounts, roles or billing code will be introduced to satisfy a checklist item that does not apply to a local desktop app. Findings that depend on a business decision (pricing, signing budget) are recorded as Walker's decisions, with the implementation prepared where possible. | Fable | Prompt §1 "do not invent a business model". |
+| LR-4 | CONTRACTS.md change accepted: the workspace key may be shown to the owner of the open workspace as a recovery key (narrows SEC's "key never crosses IPC"). | Fable | The owner is the trust boundary of a local app; an unrecoverable backup is the larger risk (F-OPS-1). |
+| LR-5 | No scheduled `rustsec/audit-check` run (F-OPS-13): audits run on push only. | Fable | A scheduled run opens GitHub issues on Walker's repo; he never manages GitHub. |
+| LR-6 | The recovery key must be surfaced during first run / onboarding, not only in Settings → Backups. Assigned to the CS phase. | Fable | OPS §9: a client who never opens Backups has no key saved, which makes the F-OPS-1 fix optional in practice. |
 | LR-3 | Each lead writes its return to `docs/rounds/launch-returns/<role>.md`; Fable owns this record and merges. | Fable | One writer per file. |
 
 ## 4. Task ledger
@@ -57,8 +64,8 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 | task | role | owner | state | children | writable areas | return |
 | --- | --- | --- | --- | --- | --- | --- |
 | LR-SEC | CSPO | Opus lead | accepted 13:xx (24 commits, 552177f..7652ee9) | ≤3 Sonnet | see packet | `launch-returns/sec.md` |
-| LR-OPS | CROO | Opus lead | running (packet rev 1) | ≤3 | | `launch-returns/ops.md` |
-| LR-REV | CRevOps | Opus lead | planned (after OPS) | ≤2 | | `launch-returns/rev.md` |
+| LR-OPS | CROO | Opus lead | accepted 14:xx (23 commits 44d72d8..38835f8 + Fable's F-OPS-12 fix) | ≤3 | | `launch-returns/ops.md` |
+| LR-REV | CRevOps | Opus lead | running (packet rev 1) | ≤2 | | `launch-returns/rev.md` |
 | LR-CS | CCSO | Opus lead | planned (after REV) | ≤3 | | `launch-returns/cs.md` |
 | LR-PX | CPEO | up to 3 Opus leads | planned (after CS) | ≤9 total | | `launch-returns/px-*.md` |
 | LR-LA | CLAO | Opus lead (fresh) | planned (after PX) | ≤3 | | `launch-returns/la.md` |
@@ -67,6 +74,7 @@ Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
 | when | what | result |
 | --- | --- | --- |
+| 14:xx | OPS gate (Fable, after F-OPS-12 fix): typecheck clean; vitest 177 files / 2285 passed / 3 skipped; cargo 123 passed; vite build clean; new concurrent-writer test fails on the old code, passes on the fix | OPS accepted |
 | 13:xx | SEC gate (Fable, 7652ee9): typecheck clean; vitest 170 files / 2221 passed / 3 skipped; cargo 102 passed; vite build clean; tree clean | SEC accepted |
 | 12:0x | baseline `e8e7650`: typecheck clean; vitest 2102 passed / 3 skipped; CI + e2e-win green on GitHub; release app built and installed locally | baseline |
 
