@@ -360,6 +360,20 @@ export async function recomputeStatements(
     values.recurringStartedOn = options.on ?? todayLocal();
   }
 
+  // A deal that is not won is not earning, so the recurring clock is stopped
+  // and reset rather than left where it was. This only mattered once a deal
+  // could be reopened: the start date survived, and `ensureForWonDeal` reads
+  // it as the FIRST BILLING DATE, so a deal reopened in March and won again in
+  // September would have started billing in March and `issueDue` would draft
+  // every missed month in one run the next time the app opened. Clearing it
+  // means winning it again starts the clock again, on the day it was won
+  // again. (MRR was never affected: `reports.recurringDeals` joins through
+  // `stages.is_won`, so a reopened deal drops out of it on its own.)
+  if (state && !state.isWon) {
+    if (state.recurringStartedOn !== null) values.recurringStartedOn = null;
+    if (state.recurringEndedOn !== null) values.recurringEndedOn = null;
+  }
+
   return {
     totals: computed,
     statements: [updateStatement("deals", dealId, values)],

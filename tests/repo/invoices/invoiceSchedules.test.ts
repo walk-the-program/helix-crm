@@ -31,6 +31,26 @@ async function firstStageId(): Promise<string> {
   return (await stages.list(pipeline.id))[0].id;
 }
 
+/**
+ * Billing follows the deal's stage, so every fixture here has to sit in a won
+ * one. That is not a workaround for the test: `ensureForWonDeal` is the only
+ * thing that ever creates a schedule and it only looks at won deals, so a
+ * schedule on an open deal was never a state the product could produce.
+ */
+async function wonStageId(): Promise<string> {
+  const pipeline = await pipelines.getDefaultOrThrow();
+  const won = (await stages.list(pipeline.id)).find((stage) => stage.isWon);
+  if (!won) throw new Error("the seeded pipeline has no won stage");
+  return won.id;
+}
+
+async function lostStageId(): Promise<string> {
+  const pipeline = await pipelines.getDefaultOrThrow();
+  const lost = (await stages.list(pipeline.id)).find((stage) => stage.isLost);
+  if (!lost) throw new Error("the seeded pipeline has no lost stage");
+  return lost.id;
+}
+
 async function addDealItem(
   dealId: string,
   values: {
@@ -62,7 +82,7 @@ async function addDealItem(
 async function monthlyDeal(startedOn: string, cents = 12_500): Promise<string> {
   const deal = await deals.create({
     title: "Monthly grounds care",
-    stageId: await firstStageId(),
+    stageId: await wonStageId(),
   });
   await addDealItem(deal.id, {
     name: "Monthly grounds care",
@@ -245,7 +265,7 @@ describe("invoiceSchedules: issueDue", () => {
 
   it("catches up a yearly schedule the same way", async () => {
     h = await createSeededHarness();
-    const deal = await deals.create({ title: "Annual", stageId: await firstStageId() });
+    const deal = await deals.create({ title: "Annual", stageId: await wonStageId() });
     await addDealItem(deal.id, {
       name: "Annual inspection",
       actualUnitCents: 30_000,
@@ -351,12 +371,53 @@ describe("invoiceSchedules: ensureForWonDeals", () => {
 
     // Recurring, but still open: not won, so not yet.
     const openRecurring = await monthlyDeal("2026-09-01");
+    await deals.moveToStage(openRecurring, await firstStageId());
 
     const created = await schedules.ensureForWonDeals("2026-09-19");
     expect(created).toHaveLength(1);
     expect(created[0].dealId).toBe(wonRecurring);
     expect(await schedules.forDeal(wonOneTime.id)).toBeNull();
     expect(await schedules.forDeal(openRecurring)).toBeNull();
+  });
+
+  it("stops billing a deal that is moved to lost, and resumes when it is won again", async () => {
+    h = await createSeededHarness();
+    const dealId = await monthlyDeal("2026-09-01");
+    const schedule = await schedules.ensureForWonDeal(dealId, "2026-09-01");
+    expect(schedule).toBeTruthy();
+
+    // Won: it bills.
+    expect(await schedules.due("2026-09-19")).toHaveLength(1);
+    expect(await schedules.isBillable(dealId)).toBe(true);
+
+    // The customer cancelled and the owner moved the job to lost. The schedule
+    // row is still there and still active - nothing deactivates it - but it
+    // must not draft another invoice for somebody who has gone.
+    await deals.moveToStage(dealId, await lostStageId(), {
+      outcomeReason: "Sold the property",
+    });
+    expect(await schedules.due("2026-09-19")).toEqual([]);
+    expect(await schedules.isBillable(dealId)).toBe(false);
+    expect((await schedules.forDeal(dealId))?.active).toBe(true);
+
+    const run = await schedules.issueDue("2026-09-19", ISSUE);
+    expect(run.issued).toEqual([]);
+    expect(run.failed).toEqual([]);
+
+    // Won back: billing resumes.
+    await deals.moveToStage(dealId, await wonStageId());
+    expect(await schedules.due("2026-09-19")).toHaveLength(1);
+    expect(await schedules.isBillable(dealId)).toBe(true);
+  });
+
+  it("does not bill a deal in the trash", async () => {
+    h = await createSeededHarness();
+    const dealId = await monthlyDeal("2026-09-01");
+    await schedules.ensureForWonDeal(dealId, "2026-09-01");
+    expect(await schedules.due("2026-09-19")).toHaveLength(1);
+
+    await deals.softDelete(dealId);
+    expect(await schedules.due("2026-09-19")).toEqual([]);
   });
 
   it("does not give a deal a second schedule on the next pass", async () => {

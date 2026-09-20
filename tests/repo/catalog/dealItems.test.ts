@@ -12,6 +12,7 @@ import * as dealItems from "../../../src/db/repos/dealItems";
 import * as products from "../../../src/db/repos/products";
 import * as stages from "../../../src/db/repos/stages";
 import * as pipelines from "../../../src/db/repos/pipelines";
+import * as invoiceSchedules from "../../../src/db/repos/invoiceSchedules";
 
 let h: Harness | null = null;
 
@@ -312,6 +313,88 @@ describe("winning and ending the recurring revenue", () => {
     await dealItems.recompute(f.dealId, { on: "2026-09-19" });
 
     expect((await derived(f.dealId)).recurringStartedOn).toBe("2026-03-01");
+  });
+
+  it("stops and resets the clock when the deal is reopened, so re-winning it does not back-bill", async () => {
+    const f = await fixture();
+    await dealItems.add({
+      dealId: f.dealId,
+      name: "Monthly upkeep",
+      kind: "recurring",
+      interval: "month",
+      suggestedUnitCents: 18_000,
+    });
+
+    // Won in March: the clock starts in March.
+    await deals.moveToStage(f.dealId, f.wonStageId);
+    await dealItems.recompute(f.dealId, { on: "2026-03-01" });
+    expect((await derived(f.dealId)).recurringStartedOn).toBe("2026-03-01");
+
+    // Reopened: not won any more, so it is not earning and the clock is reset.
+    await deals.moveToStage(f.dealId, f.firstStageId);
+    await dealItems.recompute(f.dealId, { on: "2026-03-02" });
+    const reopened = await derived(f.dealId);
+    expect(reopened.recurringStartedOn).toBeNull();
+    expect(reopened.recurringEndedOn).toBeNull();
+
+    // Won again six months later: it starts from the day it was won again,
+    // not from March. This is the whole point - `ensureForWonDeal` reads
+    // `recurring_started_on` as the FIRST BILLING DATE, so a stale March date
+    // would make `issueDue` draft six missed months in one run.
+    await deals.moveToStage(f.dealId, f.wonStageId);
+    await dealItems.recompute(f.dealId, { on: "2026-09-01" });
+    expect((await derived(f.dealId)).recurringStartedOn).toBe("2026-09-01");
+
+    const schedule = await invoiceSchedules.ensureForWonDeal(f.dealId, "2026-09-01");
+    expect(schedule?.nextIssueOn).toBe("2026-09-01");
+  });
+
+  it("clears an end date too when the deal is reopened", async () => {
+    const f = await fixture();
+    await dealItems.add({
+      dealId: f.dealId,
+      name: "Monthly upkeep",
+      kind: "recurring",
+      interval: "month",
+      suggestedUnitCents: 18_000,
+    });
+    await deals.moveToStage(f.dealId, f.wonStageId);
+    await dealItems.recompute(f.dealId, { on: "2026-03-01" });
+    await dealItems.endRecurring(f.dealId, { on: "2026-06-30" });
+    expect((await derived(f.dealId)).recurringEndedOn).toBe("2026-06-30");
+
+    await deals.moveToStage(f.dealId, f.firstStageId);
+    await dealItems.recompute(f.dealId, { on: "2026-07-01" });
+
+    const reopened = await derived(f.dealId);
+    expect(reopened.recurringStartedOn).toBeNull();
+    expect(reopened.recurringEndedOn).toBeNull();
+  });
+
+  it("leaves a won deal's clock alone on an ordinary recompute", async () => {
+    const f = await fixture();
+    await dealItems.add({
+      dealId: f.dealId,
+      name: "Monthly upkeep",
+      kind: "recurring",
+      interval: "month",
+      suggestedUnitCents: 18_000,
+    });
+    await deals.moveToStage(f.dealId, f.wonStageId);
+    await dealItems.recompute(f.dealId, { on: "2026-03-01" });
+    await dealItems.endRecurring(f.dealId, { on: "2026-09-30" });
+
+    // Adding another line to a won deal must not disturb either date.
+    await dealItems.add({
+      dealId: f.dealId,
+      name: "Extra tidy",
+      kind: "one_time",
+      suggestedUnitCents: 5_000,
+    });
+
+    const after = await derived(f.dealId);
+    expect(after.recurringStartedOn).toBe("2026-03-01");
+    expect(after.recurringEndedOn).toBe("2026-09-30");
   });
 
   it("ends the recurring revenue without touching what was sold", async () => {

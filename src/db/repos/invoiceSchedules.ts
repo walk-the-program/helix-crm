@@ -148,18 +148,48 @@ export async function list(
   return mapRows(SCHEDULE_COLS, rows);
 }
 
-/** Schedules whose next issue date has arrived. */
+/**
+ * Schedules whose next issue date has arrived, on a deal that is still won.
+ *
+ * The stage test is not decoration. `ensureForWonDeals` only ever creates a
+ * schedule; nothing used to take one away. So a deal moved from Won to Lost -
+ * the customer cancelled, which is exactly when an owner moves it - kept its
+ * active schedule and kept drafting an invoice for that customer every month,
+ * for ever. Billing follows the deal's stage, and the deal page's panel says
+ * so ("Billing is paused while this job is not won").
+ *
+ * Reopening it resumes billing, and `next_issue_on` has moved on in the
+ * meantime, so it resumes from now rather than back-billing the gap.
+ */
 export async function due(
   reference: string = todayLocal(),
 ): Promise<InvoiceSchedule[]> {
   const rows = await raw.query(
     `SELECT ${selectList(SCHEDULE_COLS, "s")} ${SCHEDULE_FROM}
+     JOIN stages st ON st.id = d.stage_id
      WHERE s.deleted_at IS NULL AND s.active = 1 AND s.next_issue_on <= ?
-       AND d.deleted_at IS NULL
+       AND d.deleted_at IS NULL AND st.is_won = 1
      ORDER BY s.next_issue_on ASC`,
     [reference],
   );
   return mapRows(SCHEDULE_COLS, rows);
+}
+
+/**
+ * Whether the deal behind a schedule is still in a won stage, for the deal
+ * page's panel: the schedule row is still there and still `active`, but
+ * nothing will be billed against it until the deal is won again, and the owner
+ * should be told that rather than left reading "Billing every month" under a
+ * lost job.
+ */
+export async function isBillable(dealId: string): Promise<boolean> {
+  const rows = await raw.query(
+    `SELECT s.is_won AS s_is_won
+     FROM deals d JOIN stages s ON s.id = d.stage_id
+     WHERE d.id = ? AND d.deleted_at IS NULL`,
+    [dealId],
+  );
+  return rows.length > 0 && Number(rows[0][0]) !== 0;
 }
 
 /* -------------------------------------------------------------------------- */
