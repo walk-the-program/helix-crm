@@ -23,7 +23,9 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
+  Combobox,
   ConfirmDialog,
+  DatePicker,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -65,6 +67,7 @@ import {
   TabsList,
   TabsTrigger,
   Textarea,
+  TimePicker,
   Tooltip,
   TooltipProvider,
   Topbar,
@@ -1309,13 +1312,88 @@ function buildBrandSection(): Section {
         label: "Mark only",
         html: mount(<Brand size="lg" wordmark={false} />),
       },
-      {
-        id: "brand.no-sticker",
-        label: "Lockup without the sticker shadow",
-        html: mount(<Brand size="lg" sticker={false} />),
-      },
     ],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Pickers: Combobox / DatePicker / TimePicker (round 3)
+//
+// The three primitives that replaced a long `Select` and the native
+// `<input type="date|time">`. Each one is shown closed, which is what a form
+// row actually looks like, and open, which is the part that had to stop
+// running off the bottom of the screen.
+// ---------------------------------------------------------------------------
+
+const PICKER_CONTACTS = [
+  { id: "c1", label: "Aisha Okafor", detail: "Okafor Roofing" },
+  { id: "c2", label: "Ben Whitcombe", detail: "Whitcombe & Sons" },
+  { id: "c3", label: LONG_LABEL },
+];
+
+function buildPickerSection(): Section {
+  const specimens: Specimen[] = [];
+
+  specimens.push({
+    id: "combobox.closed",
+    label: "Combobox, nothing chosen",
+    html: mount(<Combobox value={null} onChange={() => {}} items={PICKER_CONTACTS} placeholder="Search contacts" aria-label="Contact" />),
+  });
+  specimens.push({
+    id: "combobox.chosen",
+    label: "Combobox, a contact chosen",
+    html: mount(<Combobox value="c1" onChange={() => {}} items={PICKER_CONTACTS} aria-label="Contact" />),
+  });
+
+  const comboOpen = mountOverlay(
+    <Combobox value="c1" onChange={() => {}} items={PICKER_CONTACTS} aria-label="Contact" />,
+    (container) => {
+      const trigger = container.querySelector<HTMLElement>("[data-testid='combobox']");
+      trigger?.click();
+    },
+  );
+  if (comboOpen.trim()) {
+    specimens.push({ id: "combobox.open", label: "Combobox, list open", html: comboOpen, overlay: true });
+  } else {
+    skippedOverlays.push("Combobox (open list)");
+  }
+
+  specimens.push({
+    id: "datepicker.empty",
+    label: "DatePicker, no date",
+    html: mount(<DatePicker value={null} onChange={() => {}} aria-label="Due date" />),
+  });
+  specimens.push({
+    id: "datepicker.chosen",
+    label: "DatePicker, a date chosen",
+    html: mount(<DatePicker value="2026-09-19" onChange={() => {}} aria-label="Due date" locale="en-GB" />),
+  });
+
+  const dateOpen = mountOverlay(
+    <DatePicker value="2026-09-19" onChange={() => {}} aria-label="Due date" locale="en-GB" />,
+    (container) => {
+      const trigger = container.querySelector<HTMLElement>("[data-testid='date-picker']");
+      trigger?.click();
+    },
+  );
+  if (dateOpen.trim()) {
+    specimens.push({ id: "datepicker.open", label: "DatePicker, calendar open", html: dateOpen, overlay: true });
+  } else {
+    skippedOverlays.push("DatePicker (open calendar)");
+  }
+
+  specimens.push({
+    id: "timepicker.empty",
+    label: "TimePicker, no time",
+    html: mount(<TimePicker value={null} onChange={() => {}} aria-label="Start time" />),
+  });
+  specimens.push({
+    id: "timepicker.chosen",
+    label: "TimePicker, a time chosen",
+    html: mount(<TimePicker value="09:30" onChange={() => {}} aria-label="Start time" />),
+  });
+
+  return { id: "pickers", title: "Pickers", specimens };
 }
 
 // ---------------------------------------------------------------------------
@@ -1564,6 +1642,7 @@ export function renderGallery(): string {
     buildInputSection(),
     buildTextareaSection(),
     buildSelectSection(),
+    buildPickerSection(),
     buildCheckboxSection(),
     buildSwitchSection(),
     buildBadgeSection(),
