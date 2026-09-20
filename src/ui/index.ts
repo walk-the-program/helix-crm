@@ -17,6 +17,7 @@ export * from "./DropdownMenu";
 export * from "./Popover";
 export * from "./Tooltip";
 export * from "./Badge";
+export * from "./BulkBar";
 export * from "./Card";
 export * from "./EmptyState";
 export * from "./Table";

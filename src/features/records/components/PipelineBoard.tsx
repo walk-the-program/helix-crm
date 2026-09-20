@@ -311,6 +311,8 @@ function orphanStage(stageId: string): Stage {
     color: "transparent",
     position: Number.MAX_SAFE_INTEGER,
     quietDays: 0,
+    followUpDays: null,
+    followUpTitle: null,
     isWon: false,
     isLost: false,
     createdAt: "",

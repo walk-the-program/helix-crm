@@ -18,22 +18,37 @@
  * Hiding unnamed contacts is done in SQL (`ContactFilter.hasName`), not
  * filtered out here in JS, so the header count and the virtualised list agree.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "@/ui/icons";
+import { Buildings, CaretDown, DownloadSimple, Plus, Tag, Trash } from "@/ui/icons";
 import {
   Badge,
+  BulkBar,
   Button,
   Checkbox,
   ColumnHeaderCell,
+  Combobox,
+  ConfirmDialog,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
   EmptyState,
   Input,
   PageHeader,
   Select,
   Switch,
+  toast,
   VirtualList,
+  type ComboboxItem,
   type RowNavProps,
   type SortDirection,
 } from "@/ui";
@@ -41,9 +56,17 @@ import { focusRingInset } from "@/ui/styles";
 import { cn } from "@/ui/cn";
 import { contactName, type ContactListRow } from "@/db/repos/contacts";
 import * as settingsRepo from "@/db/repos/settings";
+import * as companiesRepo from "@/db/repos/companies";
+import * as bulkRepo from "@/db/repos/bulk";
 import { formatPhone } from "@/lib/phone";
 import { oneTap } from "@/lib/actions";
+import { useSelection } from "@/lib/selection";
+import { todayLocal } from "@/lib/dates";
 import { qk } from "@/app/queryClient";
+import { pushUndo } from "@/app/undo";
+import { undoBatch } from "@/db/changeLog";
+import { pickSavePath, writeTextFileAt } from "@/features/data/lib/fsBridge";
+import { toCsvFromObjects, type CsvCell } from "@/features/data/lib/exportCsv";
 import {
   useContacts,
   useDebounced,
@@ -51,6 +74,7 @@ import {
   useSources,
   useTags,
 } from "@/features/records/lib/hooks";
+import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { HelpLink } from "@/features/help";
 import { NewContactDialog } from "@/features/records/components/NewContactDialog";
@@ -200,6 +224,161 @@ export function ContactsScreen() {
     () => (showAs === "company" ? groupByCompany(rows) : rows.map(contactRow)),
     [rows, showAs],
   );
+
+  // Selection is keyed by id, in the order the list actually renders in
+  // (flat or grouped by company), so a shift-click range means what it looks
+  // like on screen either way. `useSelection` reconciles on its own whenever
+  // this array's *content* changes — a refilter, a resort, a query refetch —
+  // so scrolling the virtualised list below (which never touches this array)
+  // can never drop or corrupt the selection.
+  const orderedContactIds = useMemo(
+    () => listRows.filter((row): row is Extract<ListRow, { kind: "contact" }> => row.kind === "contact").map((row) => row.contact.id),
+    [listRows],
+  );
+  const selection = useSelection(orderedContactIds);
+  const [settingCompany, setSettingCompany] = useState(false);
+  const [confirmingBulkTrash, setConfirmingBulkTrash] = useState(false);
+
+  // Escape clears the selection. This is additional to, and does not touch,
+  // the roving-tabindex arrow navigation VirtualList installs per row
+  // (useRovingRowNav only answers Arrow/Home/End/Enter/Space) — Escape was
+  // never one of its keys.
+  useEffect(() => {
+    if (selection.count === 0) return;
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") selection.clear();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection.count]);
+
+  async function afterBulkAction(
+    result: { batchId: string; count: number },
+    undoLabel: string,
+    doneSentence: string,
+  ): Promise<void> {
+    pushUndo({ batchId: result.batchId, label: undoLabel });
+    toast.undo(doneSentence, () => {
+      void (async () => {
+        try {
+          await undoBatch(result.batchId);
+          await invalidateRecords();
+          toast.success(`Undone: ${undoLabel}`);
+        } catch (err) {
+          reportError(err, "Could not undo that.");
+        }
+      })();
+    });
+    selection.clear();
+    await invalidateRecords();
+  }
+
+  async function handleAddTag(tagId: string, tagName: string): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await bulkRepo.addTagToContacts(ids, tagId);
+      const word = ids.length === 1 ? "person" : "people";
+      await afterBulkAction(
+        result,
+        `added the tag ${tagName} to ${ids.length} ${word}`,
+        `Added the tag ${tagName} to ${ids.length} ${word}`,
+      );
+    } catch (err) {
+      reportError(err, "That tag could not be added.");
+    }
+  }
+
+  async function handleRemoveTag(tagId: string, tagName: string): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await bulkRepo.removeTagFromContacts(ids, tagId);
+      const word = ids.length === 1 ? "person" : "people";
+      await afterBulkAction(
+        result,
+        `removed the tag ${tagName} from ${ids.length} ${word}`,
+        `Removed the tag ${tagName} from ${ids.length} ${word}`,
+      );
+    } catch (err) {
+      reportError(err, "That tag could not be removed.");
+    }
+  }
+
+  async function handleSetCompany(companyId: string | null, companyLabel: string | null): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await bulkRepo.setContactsCompany(ids, companyId);
+      const word = ids.length === 1 ? "person" : "people";
+      const phrase = companyLabel
+        ? `set the company to ${companyLabel} on ${ids.length} ${word}`
+        : `cleared the company on ${ids.length} ${word}`;
+      await afterBulkAction(
+        result,
+        phrase,
+        `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`,
+      );
+    } catch (err) {
+      reportError(err, "That change did not save.");
+    }
+  }
+
+  async function handleBulkTrash(): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await bulkRepo.trashContacts(ids);
+      const word = ids.length === 1 ? "contact" : "contacts";
+      pushUndo({ batchId: result.batchId, label: `moved ${ids.length} ${word} to trash` });
+      toast.undo(`Moved ${ids.length} ${word} to trash`, () => {
+        void (async () => {
+          try {
+            await undoBatch(result.batchId);
+            await invalidateRecords();
+            toast.success(`Undone: moved ${ids.length} ${word} to trash`);
+          } catch (err) {
+            reportError(err, "Could not undo that.");
+          }
+        })();
+      });
+      selection.clear();
+      await invalidateRecords();
+    } catch (err) {
+      reportError(err, "Those contacts could not be moved to trash.");
+    }
+  }
+
+  /** The same columns the list shows, for exactly the ticked rows. */
+  async function handleExportSelected(): Promise<void> {
+    const ids = new Set(selection.selectedIds);
+    const selectedRows = rows.filter((contact) => ids.has(contact.id));
+    type ExportRow = Record<string, CsvCell>;
+    const headers = [
+      { key: "name", label: "Name" },
+      { key: "phone", label: "Phone" },
+      { key: "company", label: "Company" },
+      { key: "nextStep", label: "Next step" },
+      { key: "tags", label: "Tags" },
+    ];
+    const exportRows: ExportRow[] = selectedRows.map((contact) => ({
+      name: contactName(contact),
+      phone: contact.primaryPhoneRaw ?? "",
+      company: contact.companyName ?? "",
+      nextStep: contact.nextTaskTitle ?? "",
+      tags: (tagIndex?.get(contact.id) ?? []).map((tag) => tag.name).join("; "),
+    }));
+    const csv = toCsvFromObjects<ExportRow>(headers, exportRows);
+    try {
+      const path = await pickSavePath({
+        title: "Export selected contacts",
+        defaultPath: `helix-contacts-selected-${todayLocal()}.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (path === null) return;
+      await writeTextFileAt(path, csv);
+      toast.success(`Exported ${selectedRows.length} contacts`);
+    } catch (err) {
+      reportError(err, "That export did not save.");
+    }
+  }
 
   const filtered = debouncedSearch.trim().length > 0 || tagId !== ALL || sourceId !== ALL;
   /**
@@ -452,6 +631,19 @@ export function ContactsScreen() {
             role="row"
             className="section-label flex h-[var(--control-h)] w-full flex-none items-center gap-[var(--space-4)] border-b border-[var(--color-border)] px-[var(--space-4)]"
           >
+            <div className="flex w-[var(--control-h-sm)] flex-none items-center justify-center">
+              <Checkbox
+                checked={
+                  orderedContactIds.length > 0 && selection.count === orderedContactIds.length
+                    ? true
+                    : selection.count > 0
+                      ? "indeterminate"
+                      : false
+                }
+                onCheckedChange={(checked) => (checked ? selection.selectAll() : selection.clear())}
+                aria-label="Select every contact in this filter"
+              />
+            </div>
             <ColumnHeaderCell
               className="min-w-0 flex-1"
               sortable={showAs === "name"}
@@ -491,10 +683,86 @@ export function ContactsScreen() {
                   tagNames={(tagIndex?.get(row.contact.id) ?? []).map((tag) => tag.name)}
                   onOpen={() => navigate(`/contacts/${row.contact.id}`)}
                   nav={nav}
+                  selected={selection.isSelected(row.contact.id)}
+                  onSelectToggle={() => selection.toggle(row.contact.id)}
+                  onSelectRange={() =>
+                    selection.onRowClick(row.contact.id, {
+                      shiftKey: true,
+                      metaKey: false,
+                      ctrlKey: false,
+                    })
+                  }
                 />
               )
             }
           />
+
+          <BulkBar count={selection.count} noun={{ one: "person", many: "people" }} onClear={selection.clear}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" iconRight={<CaretDown size={14} weight="bold" aria-hidden="true" />}>
+                  <Tag size={16} weight="bold" aria-hidden="true" /> Add tag
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {(tags ?? []).length === 0 ? (
+                  <DropdownMenuLabel>No tags yet</DropdownMenuLabel>
+                ) : (
+                  (tags ?? []).map((tag) => (
+                    <DropdownMenuItem key={tag.id} onSelect={() => void handleAddTag(tag.id, tag.name)}>
+                      {tag.name}
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" iconRight={<CaretDown size={14} weight="bold" aria-hidden="true" />}>
+                  <Tag size={16} weight="bold" aria-hidden="true" /> Remove tag
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {(tags ?? []).length === 0 ? (
+                  <DropdownMenuLabel>No tags yet</DropdownMenuLabel>
+                ) : (
+                  (tags ?? []).map((tag) => (
+                    <DropdownMenuItem key={tag.id} onSelect={() => void handleRemoveTag(tag.id, tag.name)}>
+                      {tag.name}
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<Buildings size={16} weight="bold" aria-hidden="true" />}
+              onClick={() => setSettingCompany(true)}
+            >
+              Set company
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<Trash size={16} weight="bold" aria-hidden="true" />}
+              onClick={() => setConfirmingBulkTrash(true)}
+            >
+              Move to trash
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}
+              onClick={() => void handleExportSelected()}
+            >
+              Export selected
+            </Button>
+          </BulkBar>
         </div>
       )}
 
@@ -503,7 +771,91 @@ export function ContactsScreen() {
         onOpenChange={setCreating}
         onCreated={(id) => navigate(`/contacts/${id}`)}
       />
+
+      <SetCompanyDialog
+        open={settingCompany}
+        onOpenChange={setSettingCompany}
+        count={selection.count}
+        onConfirm={handleSetCompany}
+      />
+
+      <ConfirmDialog
+        open={confirmingBulkTrash}
+        onOpenChange={setConfirmingBulkTrash}
+        title={`Move ${selection.count} ${selection.count === 1 ? "contact" : "contacts"} to trash?`}
+        description="They move to Trash and can be restored for 30 days."
+        confirmLabel="Move to trash"
+        destructive
+        onConfirm={handleBulkTrash}
+      />
     </div>
+  );
+}
+
+/** The "Set company" bulk action: a Combobox over the workspace's companies,
+ *  never a Select — DESIGN.md forbids a Select for picking a record. */
+function SetCompanyDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  count: number;
+  onConfirm: (companyId: string | null, companyLabel: string | null) => Promise<void>;
+}) {
+  const { open, onOpenChange, count, onConfirm } = props;
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyItem, setCompanyItem] = useState<ComboboxItem | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setCompanyId(null);
+      setCompanyItem(null);
+    }
+  }, [open]);
+
+  async function search(query: string): Promise<ComboboxItem[]> {
+    const rows = await companiesRepo.search(query);
+    return rows.map((row) => ({ id: row.id, label: row.label, ...(row.detail ? { detail: row.detail } : {}) }));
+  }
+
+  async function confirm() {
+    setSaving(true);
+    try {
+      await onConfirm(companyId, companyItem?.label ?? null);
+      onOpenChange(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>Set company for {count} {count === 1 ? "contact" : "contacts"}?</DialogTitle>
+        </DialogHeader>
+        <Combobox
+          aria-label="Company"
+          value={companyId}
+          selectedItem={companyItem}
+          items={search}
+          clearable
+          placeholder="Search companies"
+          emptyText="No company matches"
+          onChange={(id, item) => {
+            setCompanyId(id);
+            setCompanyItem(item ?? null);
+          }}
+        />
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button variant="primary" loading={saving} loadingLabel="Saving…" onClick={() => void confirm()}>
+            Set company
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -522,9 +874,41 @@ function ContactRow(props: {
    *  handling so ContactRow still works stand-alone (gallery specimens,
    *  tests). */
   nav?: RowNavProps;
+  /** Bulk selection (LR-PX-C): whether this row's checkbox is ticked, plain
+   *  toggle for a bare or Cmd/Ctrl click, and the shift-click range. All
+   *  optional so ContactRow still works stand-alone. */
+  selected?: boolean;
+  onSelectToggle?: () => void;
+  onSelectRange?: () => void;
 }) {
-  const { contact, tagNames, showCompany, onOpen, nav } = props;
+  const { contact, tagNames, showCompany, onOpen, nav, selected, onSelectToggle, onSelectRange } = props;
   const name = contactName(contact);
+  const shiftHeldRef = useRef(false);
+
+  // Two handlers, deliberately on two phases. `onCheckedChange` gets no
+  // event, so the shift modifier has to be read off the native click and
+  // stashed in a ref for it to see — but Radix's own click handler (which
+  // calls `onCheckedChange`) fires on the checkbox button itself, and a
+  // bubble-phase listener on this wrapper runs AFTER that, which reads last
+  // click's value one click late. The CAPTURE phase runs before the target's
+  // own handlers, so recording the modifier there is what makes it current
+  // by the time `onCheckedChange` reads it. Stopping the row's onClick
+  // (`onOpen`) still has to happen on the bubble, once the checkbox itself
+  // has been given the chance to react to the click.
+  function handleCheckboxClickCapture(event: MouseEvent<HTMLElement>) {
+    shiftHeldRef.current = event.shiftKey;
+  }
+
+  function handleCheckboxClick(event: MouseEvent<HTMLElement>) {
+    // The checkbox's own gesture, never the row's: it must not also open the
+    // record.
+    event.stopPropagation();
+  }
+
+  function handleCheckedChange() {
+    if (shiftHeldRef.current && onSelectRange) onSelectRange();
+    else onSelectToggle?.();
+  }
   const rowNav: {
     tabIndex: 0 | -1;
     onFocus?: () => void;
@@ -585,11 +969,24 @@ function ContactRow(props: {
       className={cn(
         "flex min-h-[var(--row-h)] w-full cursor-default items-center gap-[var(--space-4)]",
         "border-b border-[var(--color-border)] px-[var(--space-4)]",
-        "hover:bg-[var(--color-hover)]",
+        // A selected row is the quiet --color-selected tint, never the
+        // primary block — that belongs to the sidebar (DESIGN.md §9).
+        selected ? "bg-[var(--color-selected)]" : "hover:bg-[var(--color-hover)]",
         focusRingInset,
       )}
       {...rowNav}
     >
+      <div
+        className="flex w-[var(--control-h-sm)] flex-none items-center justify-center"
+        onClickCapture={handleCheckboxClickCapture}
+        onClick={handleCheckboxClick}
+      >
+        <Checkbox
+          checked={selected ?? false}
+          onCheckedChange={handleCheckedChange}
+          aria-label={`Select ${name}`}
+        />
+      </div>
       <div
         data-testid="contact-row-name"
         className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"

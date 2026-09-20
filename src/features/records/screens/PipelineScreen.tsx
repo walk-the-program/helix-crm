@@ -5,12 +5,31 @@
  * Quotes — while the database, the routes and this file's variables all keep
  * saying "deal".
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { useLocation } from "wouter";
-import { ListDashes, Plus, SlidersHorizontal, Table as TableIcon } from "@/ui/icons";
+import {
+  CaretDown,
+  DownloadSimple,
+  Funnel,
+  ListChecks,
+  ListDashes,
+  Plus,
+  SlidersHorizontal,
+  Table as TableIcon,
+  Trash,
+} from "@/ui/icons";
 import {
   Badge,
+  BulkBar,
   Button,
+  Checkbox,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+  ConfirmDialog,
   EmptyState,
   Input,
   PageHeader,
@@ -21,12 +40,21 @@ import {
   TD,
   TH,
   THead,
+  toast,
   TR,
 } from "@/ui";
 import { useVocabulary } from "@/app/vocabulary";
 import { useFormats } from "@/app/formats";
+import { pushUndo } from "@/app/undo";
+import { undoBatch } from "@/db/changeLog";
+import * as bulkRepo from "@/db/repos/bulk";
+import * as dealsRepo from "@/db/repos/deals";
 import { formatBreakdown, formatMoneyTrim, formatMonthly } from "@/lib/money";
+import { todayLocal } from "@/lib/dates";
+import { useSelection } from "@/lib/selection";
 import { upfrontCents } from "@/db/repos/dealItems";
+import { pickSavePath, writeTextFileAt } from "@/features/data/lib/fsBridge";
+import { toCsvFromObjects, type CsvCell } from "@/features/data/lib/exportCsv";
 import {
   useBoard,
   useDeals,
@@ -36,9 +64,11 @@ import {
   useStages,
   useTasks,
 } from "@/features/records/lib/hooks";
+import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { PipelineBoard } from "@/features/records/components/PipelineBoard";
 import { dealCustomer } from "@/features/records/components/DealCard";
+import { StageMoveDialog } from "@/features/records/components/StageMoveDialog";
 import { TrashMark } from "@/features/records/components/RecordChip";
 import { NewDealDialog } from "@/features/records/components/NewDealDialog";
 import { StageManagerDialog } from "@/features/records/components/StageManagerDialog";
@@ -149,6 +179,149 @@ export function PipelineScreen() {
       currency: deals[0]?.currency ?? "USD",
     };
   }, [board]);
+
+  // Bulk selection on the list view (LR-PX-C). Keyed by id, in the list's own
+  // stage/position order, so `useSelection` can reconcile it whenever a
+  // refilter or a refetch changes what `listDeals` holds — never on a scroll,
+  // because this table is not virtualised and nothing about scrolling it
+  // changes this array.
+  const orderedDealIds = useMemo(() => (listDeals?.rows ?? []).map((deal) => deal.id), [listDeals]);
+  const selection = useSelection(orderedDealIds);
+  const [confirmingBulkTrash, setConfirmingBulkTrash] = useState(false);
+  const [pendingStageMove, setPendingStageMove] = useState<{
+    stageId: string;
+    stageName: string;
+    requiresReason: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    if (selection.count === 0) return;
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") selection.clear();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection.count]);
+
+  async function afterBulkAction(
+    result: { batchId: string; count: number },
+    undoLabel: string,
+    doneSentence: string,
+  ): Promise<void> {
+    pushUndo({ batchId: result.batchId, label: undoLabel });
+    toast.undo(doneSentence, () => {
+      void (async () => {
+        try {
+          await undoBatch(result.batchId);
+          await invalidateRecords();
+          toast.success(`Undone: ${undoLabel}`);
+        } catch (err) {
+          reportError(err, "Could not undo that.");
+        }
+      })();
+    });
+    selection.clear();
+    await invalidateRecords();
+  }
+
+  /**
+   * Move to stage. Picking an open stage from the menu moves right away, with
+   * today's date, exactly the way an ordinary board drop does. Picking a won
+   * or lost stage opens `StageMoveDialog` first — the same dialog the board
+   * uses for one card — because a bulk move into a lost stage still needs one
+   * reason, and `moveManyToStage` refuses (and rolls back) the WHOLE move
+   * without one. Nothing is written until Confirm.
+   */
+  function handlePickStage(stageId: string, stageName: string, isWon: boolean, isLost: boolean) {
+    if (isWon || isLost) {
+      setPendingStageMove({ stageId, stageName, requiresReason: isLost });
+      return;
+    }
+    void moveSelectedToStage(stageId, stageName, {});
+  }
+
+  async function moveSelectedToStage(
+    stageId: string,
+    stageName: string,
+    options: { at?: string; outcomeReason?: string | null },
+  ): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await dealsRepo.moveManyToStage(ids, stageId, options);
+      const word = ids.length === 1 ? vocabulary.lower : vocabulary.lowerMany;
+      await afterBulkAction(
+        { batchId: result.batchId, count: result.moved },
+        `moved ${ids.length} ${word} to ${stageName}`,
+        `Moved ${ids.length} ${word} to ${stageName}`,
+      );
+    } catch (err) {
+      reportError(err, "That move did not save.");
+    }
+  }
+
+  async function handleSetSource(sourceId: string | null, sourceLabel: string | null): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await bulkRepo.setDealsSource(ids, sourceId);
+      const word = ids.length === 1 ? vocabulary.lower : vocabulary.lowerMany;
+      const phrase = sourceLabel
+        ? `set the source to ${sourceLabel} on ${ids.length} ${word}`
+        : `cleared the source on ${ids.length} ${word}`;
+      await afterBulkAction(result, phrase, `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`);
+    } catch (err) {
+      reportError(err, "That change did not save.");
+    }
+  }
+
+  async function handleBulkTrash(): Promise<void> {
+    const ids = selection.selectedIds;
+    try {
+      const result = await bulkRepo.trashDeals(ids);
+      const word = ids.length === 1 ? vocabulary.lower : vocabulary.lowerMany;
+      await afterBulkAction(
+        result,
+        `moved ${ids.length} ${word} to trash`,
+        `Moved ${ids.length} ${word} to trash`,
+      );
+    } catch (err) {
+      reportError(err, `Those ${vocabulary.lowerMany} could not be moved to trash.`);
+    }
+  }
+
+  /** The same columns the list table shows, for exactly the ticked rows. */
+  async function handleExportSelected(): Promise<void> {
+    const ids = new Set(selection.selectedIds);
+    const selectedRows = (listDeals?.rows ?? []).filter((deal) => ids.has(deal.id));
+    type ExportRow = Record<string, CsvCell>;
+    const headers = [
+      { key: "title", label: vocabulary.one },
+      { key: "customer", label: "Customer" },
+      { key: "stage", label: "Stage" },
+      { key: "value", label: "Value" },
+      { key: "expected", label: "Expected" },
+    ];
+    const exportRows: ExportRow[] = selectedRows.map((deal) => ({
+      title: deal.title,
+      customer: dealCustomer(deal).name,
+      stage: deal.stageName,
+      value: (deal.valueCents / 100).toFixed(2),
+      expected: deal.expectedOn ?? "",
+    }));
+    const csv = toCsvFromObjects<ExportRow>(headers, exportRows);
+    try {
+      const path = await pickSavePath({
+        title: `Export selected ${vocabulary.lowerMany}`,
+        defaultPath: `helix-${vocabulary.key}-selected-${todayLocal()}.csv`,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+      });
+      if (path === null) return;
+      await writeTextFileAt(path, csv);
+      toast.success(`Exported ${selectedRows.length} ${vocabulary.lowerMany}`);
+    } catch (err) {
+      reportError(err, "That export did not save.");
+    }
+  }
 
   if (pipelineLoading || boardLoading) {
     return (
@@ -299,63 +472,173 @@ export function PipelineScreen() {
             />
           </div>
 
-          <div className="mt-[var(--space-4)] overflow-x-auto border border-[var(--color-border)] bg-[var(--color-surface)]">
-            <Table>
-              <THead>
-                <TR>
-                  <TH className="w-[34%]">{vocabulary.one}</TH>
-                  <TH className="w-[22%]">Customer</TH>
-                  <TH className="w-[18%]">Stage</TH>
-                  <TH align="right" className="w-[13%]">
-                    Value
-                  </TH>
-                  <TH className="w-[13%]">Expected</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {(listDeals?.rows ?? []).map((deal) => (
-                  <TR key={deal.id} onClick={() => navigate(`/deals/${deal.id}`)}>
-                    <TD primary title={deal.title}>
-                      {deal.title}
-                    </TD>
-                    {/* The same customer the board card names. The list used to
-                        print the COMPANY here, so a job for a person with no
-                        company read as an em dash in the list and as "Priya
-                        Raghunathan" on the board - two views of one thing
-                        disagreeing about whose job it is (F-LA-12 fixed the
-                        card; this is its other half). */}
-                    <TD muted>
-                      <span
-                        className="block max-w-[220px] truncate"
-                        title={dealCustomer(deal).tooltip}
-                      >
-                        {dealCustomer(deal).name}
-                        <TrashMark deletedAt={dealCustomer(deal).deletedAt} />
-                      </span>
-                    </TD>
-                    <TD>
-                      <Badge dotColor={stages.find((s) => s.id === deal.stageId)?.color}>
-                        {deal.stageName}
-                      </Badge>
-                    </TD>
-                    <TD align="right">
-                      <span className="money" data-testid="row-value">
-                        {deal.recurringMonthlyCents > 0
-                          ? formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
-                              currency: deal.currency,
-                            })
-                          : formats.money(deal.valueCents, deal.currency)}
-                      </span>
-                    </TD>
-                    <TD muted>
-                      <span className="tabular">
-                        {deal.expectedOn ? formats.date(deal.expectedOn) : "—"}
-                      </span>
-                    </TD>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+            <div className="overflow-x-auto">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH className="w-[var(--control-h-sm)]">
+                      <Checkbox
+                        checked={
+                          orderedDealIds.length > 0 && selection.count === orderedDealIds.length
+                            ? true
+                            : selection.count > 0
+                              ? "indeterminate"
+                              : false
+                        }
+                        onCheckedChange={(checked) =>
+                          checked ? selection.selectAll() : selection.clear()
+                        }
+                        aria-label={`Select every ${vocabulary.lower} in this filter`}
+                      />
+                    </TH>
+                    <TH className="w-[32%]">{vocabulary.one}</TH>
+                    <TH className="w-[20%]">Customer</TH>
+                    <TH className="w-[18%]">Stage</TH>
+                    <TH align="right" className="w-[13%]">
+                      Value
+                    </TH>
+                    <TH className="w-[13%]">Expected</TH>
                   </TR>
-                ))}
-              </TBody>
-            </Table>
+                </THead>
+                <TBody>
+                  {(listDeals?.rows ?? []).map((deal) => (
+                    <TR
+                      key={deal.id}
+                      selected={selection.isSelected(deal.id)}
+                      onClick={() => navigate(`/deals/${deal.id}`)}
+                    >
+                      <TD onClick={(event) => event.stopPropagation()}>
+                        <DealRowCheckbox
+                          label={deal.title}
+                          checked={selection.isSelected(deal.id)}
+                          onToggle={() => selection.toggle(deal.id)}
+                          onRange={() =>
+                            selection.onRowClick(deal.id, {
+                              shiftKey: true,
+                              metaKey: false,
+                              ctrlKey: false,
+                            })
+                          }
+                        />
+                      </TD>
+                      <TD primary title={deal.title}>
+                        {deal.title}
+                      </TD>
+                      {/* The same customer the board card names. The list used to
+                          print the COMPANY here, so a job for a person with no
+                          company read as an em dash in the list and as "Priya
+                          Raghunathan" on the board - two views of one thing
+                          disagreeing about whose job it is (F-LA-12 fixed the
+                          card; this is its other half). */}
+                      <TD muted>
+                        <span
+                          className="block max-w-[220px] truncate"
+                          title={dealCustomer(deal).tooltip}
+                        >
+                          {dealCustomer(deal).name}
+                          <TrashMark deletedAt={dealCustomer(deal).deletedAt} />
+                        </span>
+                      </TD>
+                      <TD>
+                        <Badge dotColor={stages.find((s) => s.id === deal.stageId)?.color}>
+                          {deal.stageName}
+                        </Badge>
+                      </TD>
+                      <TD align="right">
+                        <span className="money" data-testid="row-value">
+                          {deal.recurringMonthlyCents > 0
+                            ? formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
+                                currency: deal.currency,
+                              })
+                            : formats.money(deal.valueCents, deal.currency)}
+                        </span>
+                      </TD>
+                      <TD muted>
+                        <span className="tabular">
+                          {deal.expectedOn ? formats.date(deal.expectedOn) : "—"}
+                        </span>
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+
+            <BulkBar
+              count={selection.count}
+              noun={{ one: vocabulary.lower, many: vocabulary.lowerMany }}
+              onClear={selection.clear}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    iconRight={<CaretDown size={14} weight="bold" aria-hidden="true" />}
+                  >
+                    <ListChecks size={16} weight="bold" aria-hidden="true" /> Move to stage
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" data-testid="bulk-move-stage-menu">
+                  {stages.length === 0 ? (
+                    <DropdownMenuLabel>No stages yet</DropdownMenuLabel>
+                  ) : (
+                    stages.map((stage) => (
+                      <DropdownMenuItem
+                        key={stage.id}
+                        onSelect={() => handlePickStage(stage.id, stage.name, stage.isWon, stage.isLost)}
+                      >
+                        {stage.name}
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    iconRight={<CaretDown size={14} weight="bold" aria-hidden="true" />}
+                  >
+                    <Funnel size={16} weight="bold" aria-hidden="true" /> Set source
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onSelect={() => void handleSetSource(null, null)}>
+                    No source
+                  </DropdownMenuItem>
+                  {(sources ?? []).map((source) => (
+                    <DropdownMenuItem
+                      key={source.id}
+                      onSelect={() => void handleSetSource(source.id, source.name)}
+                    >
+                      {source.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<Trash size={16} weight="bold" aria-hidden="true" />}
+                onClick={() => setConfirmingBulkTrash(true)}
+              >
+                Move to trash
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}
+                onClick={() => void handleExportSelected()}
+              >
+                Export selected
+              </Button>
+            </BulkBar>
           </div>
         </div>
       )}
@@ -374,6 +657,78 @@ export function PipelineScreen() {
         pipelineId={pipeline.id}
         stages={stages}
         vocabularyMany={vocabulary.many}
+      />
+
+      {/* Bulk "move to stage" into a won or lost stage: the same dialog the
+          board uses for one card. `moveManyToStage` refuses (and rolls back)
+          the whole move without a reason when the target is a lost stage, so
+          this collects one reason up front rather than letting the write
+          fail after the fact. */}
+      <StageMoveDialog
+        open={pendingStageMove !== null}
+        stageName={pendingStageMove?.stageName ?? ""}
+        requiresReason={pendingStageMove?.requiresReason ?? false}
+        onOpenChange={(open) => {
+          if (!open) setPendingStageMove(null);
+        }}
+        onConfirm={async ({ at, outcomeReason }) => {
+          const pending = pendingStageMove;
+          setPendingStageMove(null);
+          if (!pending) return;
+          await moveSelectedToStage(pending.stageId, pending.stageName, { at, outcomeReason });
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmingBulkTrash}
+        onOpenChange={setConfirmingBulkTrash}
+        title={`Move ${selection.count} ${
+          selection.count === 1 ? vocabulary.lower : vocabulary.lowerMany
+        } to trash?`}
+        description="They move to Trash and can be restored for 30 days."
+        confirmLabel="Move to trash"
+        destructive
+        onConfirm={handleBulkTrash}
+      />
+    </div>
+  );
+}
+
+/** The row checkbox: plain/Cmd/Ctrl click toggles, shift-click selects the
+ *  range, and the click never reaches the row's own onClick (which opens the
+ *  record) — the same pattern ContactsScreen's row checkbox uses. */
+function DealRowCheckbox(props: {
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+  onRange: () => void;
+}) {
+  const { label, checked, onToggle, onRange } = props;
+  const shiftHeldRef = useRef(false);
+
+  // Capture phase records the modifier BEFORE the checkbox's own click
+  // (which fires onCheckedChange) sees it; the bubble phase then stops the
+  // click from reaching the row's onClick. See ContactsScreen's ContactRow
+  // for the longer version of this note — the two phases cannot be merged
+  // into one handler without reading the modifier one click late.
+  function handleClickCapture(event: MouseEvent<HTMLElement>) {
+    shiftHeldRef.current = event.shiftKey;
+  }
+
+  function handleClick(event: MouseEvent<HTMLElement>) {
+    event.stopPropagation();
+  }
+
+  return (
+    <div
+      className="flex w-[var(--control-h-sm)] flex-none items-center justify-center"
+      onClickCapture={handleClickCapture}
+      onClick={handleClick}
+    >
+      <Checkbox
+        checked={checked}
+        onCheckedChange={() => (shiftHeldRef.current ? onRange() : onToggle())}
+        aria-label={`Select ${label}`}
       />
     </div>
   );
