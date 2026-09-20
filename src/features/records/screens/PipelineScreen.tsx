@@ -178,6 +178,9 @@ export function PipelineScreen() {
       <PageHeader
         title={vocabulary.many}
         subtitle={
+          // "0 open - $0" over a "no jobs yet" empty state is a report about
+          // nothing (phase two, direction rule 6).
+          totals.count === 0 ? null : (
           <span className="tabular" data-testid="pipeline-total">
             {totals.count} open · {totals.monthly > 0 ? "Upfront " : null}
             {formatMoneyTrim(totals.upfront, totals.currency)}
@@ -185,6 +188,7 @@ export function PipelineScreen() {
               ? ` \u00b7 ${formatMonthly(totals.monthly, totals.currency)}`
               : null}
           </span>
+          )
         }
         actions={
           <div className="flex items-center gap-[var(--space-2)]">
@@ -229,8 +233,12 @@ export function PipelineScreen() {
           title={`No ${vocabulary.lowerMany} yet`}
           description={`Every quote you give somebody is one of these. Add the one you promised this week and it lands in ${stages[0].name}.`}
           action={
+            // Not `vocabulary.newOne` again: the header button beside it already
+            // says "New job", and the same words twice on one screen read as two
+            // different things the owner has to tell apart. Contacts and
+            // Companies already use the "Add your first ..." phrasing here.
             <Button variant="secondary" onClick={() => setCreating(true)}>
-              {vocabulary.newOne}
+              Add your first {vocabulary.lower}
             </Button>
           }
         />

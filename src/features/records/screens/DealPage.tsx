@@ -238,6 +238,21 @@ export function DealPage() {
           <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             In this stage {formatRelative(deal.stageEnteredAt)}
           </span>
+          {/* When it closes, or when it did. Phase one removed this line because
+              the Identity card says the same thing; the design pass put it back,
+              because at 1024 the Identity card is below the whole timeline and
+              the owner could not see his own close date without scrolling past
+              it. Stating a fact here and editing it there is not duplication -
+              two editable controls would be. */}
+          <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            {deal.stageIsWon || deal.stageIsLost
+              ? deal.closedAt
+                ? `${deal.stageIsWon ? "Won" : "Lost"} ${formats.date(deal.closedAt)}`
+                : null
+              : deal.expectedOn
+                ? `Expected ${formats.date(deal.expectedOn)}`
+                : "No expected date"}
+          </span>
         </div>
 
         {/* The two AI actions, together and out of the header. The cluster used

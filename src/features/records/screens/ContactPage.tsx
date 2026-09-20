@@ -347,13 +347,11 @@ export function ContactPage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-[var(--space-5)]">
-          <TaskRail contactId={id} />
-
-          <div>
-            <CardGroupLabel>Reminders</CardGroupLabel>
-            <RecurringPanel contactId={id} aboutLabel={name} reference={todayLocal()} />
-          </div>
-
+          {/* The work comes first in the rail. The header already carries the
+              phone and the next step, so what this pane has to answer next is
+              "what are we doing for this person" - and at 1024 the rail sits
+              under the whole timeline, so anything below the fold here is a
+              long way down (phase two, direction rule 1). */}
           <DealsCard
             title={`Open ${vocabulary.lowerMany}`}
             deals={openDeals?.rows ?? []}
@@ -364,6 +362,13 @@ export function ContactPage() {
             deals={closedDeals?.rows ?? []}
             emptyText="Nothing won or lost yet."
           />
+
+          <TaskRail contactId={id} />
+
+          <div>
+            <CardGroupLabel>Reminders</CardGroupLabel>
+            <RecurringPanel contactId={id} aboutLabel={name} reference={todayLocal()} />
+          </div>
 
           <Group label="Details">
             <CardBody className="flex flex-col gap-[var(--space-4)]">

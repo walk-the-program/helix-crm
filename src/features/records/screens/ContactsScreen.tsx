@@ -202,6 +202,18 @@ export function ContactsScreen() {
 
   const filtered = debouncedSearch.trim().length > 0 || tagId !== ALL || sourceId !== ALL;
   /**
+   * A workspace with no contacts at all, and nothing filtered.
+   *
+   * It used to render the full toolbar over the empty state: a count reading
+   * "0 of 0 people" and six controls for narrowing nothing. An empty state is a
+   * title, one sentence and one action (phase two, direction rule 6), so the
+   * controls and the count stand down until there is something to use them on.
+   * A filter that matches nothing is the opposite case and keeps everything on
+   * screen, because the owner needs the control that got him there.
+   */
+  const unused =
+    !isLoading && (data?.total ?? 0) === 0 && !filtered && !showArchived;
+  /**
    * A saved view can outlive the tag it filters on: `tags.softDelete` leaves
    * `tag_links` alone, so the view still applies but the tag has gone from
    * the Select and every contact falls out. The screen used to answer that
@@ -219,9 +231,11 @@ export function ContactsScreen() {
         subtitle={
           isLoading
             ? "Loading"
-            : `${rows.length.toLocaleString()} of ${total.toLocaleString()} ${
-                total === 1 ? "person" : "people"
-              }`
+            : unused
+              ? null
+              : `${rows.length.toLocaleString()} of ${total.toLocaleString()} ${
+                  total === 1 ? "person" : "people"
+                }`
         }
         actions={
           <div className="flex items-end gap-[var(--space-2)]">
@@ -241,7 +255,10 @@ export function ContactsScreen() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-[var(--space-3)] py-[var(--space-4)]">
+      <div
+        hidden={unused}
+        className="flex flex-wrap items-center gap-[var(--space-3)] py-[var(--space-4)]"
+      >
         <div className="min-w-[260px] flex-1">
           <label htmlFor="contact-search" className="sr-only">
             Search contacts
@@ -404,6 +421,13 @@ export function ContactsScreen() {
           />
         )
       ) : (
+        // NOTE (phase two, direction rule 1): this panel fills the content column,
+        // so a list shorter than the window paints a slab of empty surface below
+        // its last row. Making the panel content-height here does not work - the
+        // VirtualList measures its own flex height, and a content-height parent
+        // measures 0 before the first rows arrive, so the list renders nothing
+        // (caught by listNav.e2e.ts). It needs the kit's bounded-region
+        // primitive; raised with lead-platform as a kit finding.
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           {/* The column strip: the one uppercase type in the product, which is
               how a native list view labels a column (DESIGN.md §4). Name is

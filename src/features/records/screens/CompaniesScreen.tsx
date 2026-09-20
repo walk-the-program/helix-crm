@@ -137,6 +137,10 @@ export function CompaniesScreen() {
   }, [data, sort, tagId, tagIndex]);
 
   const filtered = debouncedSearch.trim().length > 0 || tagId !== ALL || sourceId !== ALL;
+  // Nothing to filter and nothing filtered: the toolbar and the count stand
+  // down so the empty state is a title, a sentence and one action, not six
+  // controls for narrowing nothing (phase two, direction rule 6).
+  const unused = !isLoading && rows.length === 0 && !filtered && !showArchived;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -145,7 +149,9 @@ export function CompaniesScreen() {
         subtitle={
           isLoading
             ? "Loading"
-            : `${rows.length.toLocaleString()} ${rows.length === 1 ? "company" : "companies"}`
+            : unused
+              ? null
+              : `${rows.length.toLocaleString()} ${rows.length === 1 ? "company" : "companies"}`
         }
         actions={
           <div className="flex items-end gap-[var(--space-2)]">
@@ -165,7 +171,10 @@ export function CompaniesScreen() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-[var(--space-3)] py-[var(--space-4)]">
+      <div
+        hidden={unused}
+        className="flex flex-wrap items-center gap-[var(--space-3)] py-[var(--space-4)]"
+      >
         <div className="min-w-[260px] flex-1">
           <label htmlFor="company-search" className="sr-only">
             Search companies
@@ -274,6 +283,13 @@ export function CompaniesScreen() {
           />
         )
       ) : (
+        // NOTE (phase two, direction rule 1): this panel fills the content column,
+        // so a list shorter than the window paints a slab of empty surface below
+        // its last row. Making the panel content-height here does not work - the
+        // VirtualList measures its own flex height, and a content-height parent
+        // measures 0 before the first rows arrive, so the list renders nothing
+        // (caught by listNav.e2e.ts). It needs the kit's bounded-region
+        // primitive; raised with lead-platform as a kit finding.
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
           {/* The column strip: the one uppercase type in the product, which is
               how a native list view labels a column (DESIGN.md §4). Name is
