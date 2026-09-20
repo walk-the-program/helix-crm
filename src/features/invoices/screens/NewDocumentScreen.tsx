@@ -40,6 +40,7 @@ import { addDaysToDateString, todayLocal } from "@/lib/dates";
 import { newId } from "@/lib/ids";
 import { useCreateDocument, useInvoiceSettings } from "@/features/invoices/lib/hooks";
 import { formatTaxRate } from "@/features/invoices/lib/settings";
+import { summarizeTaxLines, taxRowLabel } from "@/features/invoices/lib/taxLabel";
 import { CompanyPicker, ContactPicker } from "@/features/records/components/Pickers";
 
 const KIND_OPTIONS = [
@@ -161,6 +162,19 @@ export function NewDocumentScreen() {
     }));
     return computeTotals(inputs, settings?.taxRateBp ?? 0);
   }, [lines, settings?.taxRateBp]);
+
+  const taxRow = useMemo(() => {
+    const taxSummary = summarizeTaxLines(
+      lines.map((line) => ({
+        taxable: line.taxable,
+        amountCents: Math.max(0, Math.trunc(Number(line.qty) || 0)) * (parseMoneyToCents(line.unitPrice) ?? 0),
+      })),
+    );
+    const percentText = settings ? formatTaxRate(settings.taxRateBp) : "";
+    return taxRowLabel(taxSummary, totals.taxCents, percentText, (cents) =>
+      formatMoney(cents, settings?.currency, settings?.locale),
+    );
+  }, [lines, totals.taxCents, settings]);
 
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((current) => current.map((line) => (line.id === id ? { ...line, ...patch } : line)));
@@ -473,10 +487,12 @@ export function NewDocumentScreen() {
               <span>Subtotal</span>
               <span className="money">{formatMoney(totals.subtotalCents, settings?.currency, settings?.locale)}</span>
             </div>
-            <div className="flex items-center justify-between text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              <span>Tax{settings ? ` (${formatTaxRate(settings.taxRateBp)})` : ""}</span>
-              <span className="money">{formatMoney(totals.taxCents, settings?.currency, settings?.locale)}</span>
-            </div>
+            {taxRow.show ? (
+              <div className="flex items-center justify-between text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                <span>{taxRow.label}</span>
+                <span className="money">{formatMoney(totals.taxCents, settings?.currency, settings?.locale)}</span>
+              </div>
+            ) : null}
 
             {/* The one primary block on this screen: the total, flat-filled,
                 with the accent sticker shadow as its single detail — the same

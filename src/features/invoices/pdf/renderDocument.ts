@@ -15,6 +15,12 @@ import type { RGB } from "pdf-lib";
 import { formatMoney } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
 import {
+  hasMixedTaxability,
+  summarizeTaxLines,
+  taxRowLabel,
+  type TaxLineSummary,
+} from "@/features/invoices/lib/taxLabel";
+import {
   COLOR_HAIRLINE,
   COLOR_MUTED,
   COLOR_NEAR_BLACK,
@@ -497,6 +503,7 @@ function drawLineRow(
   currency: string,
   startY: number,
   cols: ColumnLayout,
+  showTaxTag: boolean,
 ): number {
   const nameSize = 9.5;
   const baseline = startY - nameSize;
@@ -510,10 +517,17 @@ function drawLineRow(
     color: COLOR_NEAR_BLACK,
   });
 
+  // "per month" and "taxable" are both muted captions trailing the name -
+  // only the second appears, and only when the document mixes taxable and
+  // non-taxable lines, so a line reads as taxed without a reader having to
+  // find it in a column further right.
+  const captionParts: string[] = [];
   const suffix = intervalSuffix(line);
-  if (suffix) {
+  if (suffix) captionParts.push(suffix);
+  if (showTaxTag) captionParts.push("taxable");
+  if (captionParts.length > 0) {
     const nameWidth = fonts.bodyBold.widthOfTextAtSize(nameText, nameSize);
-    page.drawText(` ${suffix}`, {
+    page.drawText(` ${captionParts.join(" · ")}`, {
       x: cols.descriptionColX + nameWidth + 4,
       y: baseline,
       size: nameSize - 1.5,
@@ -564,7 +578,14 @@ function drawLineRow(
   return startY - ROW_HEIGHT;
 }
 
-function drawTotals(page: PDFPage, fonts: FontSet, input: RenderInput, startY: number, contentRight: number): number {
+function drawTotals(
+  page: PDFPage,
+  fonts: FontSet,
+  input: RenderInput,
+  startY: number,
+  contentRight: number,
+  taxSummary: TaxLineSummary,
+): number {
   const boxWidth = 220;
   const boxX = contentRight - boxWidth;
   const rowSize = 9.5;
@@ -573,10 +594,11 @@ function drawTotals(page: PDFPage, fonts: FontSet, input: RenderInput, startY: n
   let y = startY;
 
   const rate = input.taxRateBp / 100;
-  const rows: Array<[string, number]> = [
-    ["Subtotal", input.subtotalCents],
-    [`Tax (${formatPercent(rate)}%)`, input.taxCents],
-  ];
+  const rows: Array<[string, number]> = [["Subtotal", input.subtotalCents]];
+  const taxRow = taxRowLabel(taxSummary, input.taxCents, `${formatPercent(rate)}%`, (cents) =>
+    formatMoney(cents, input.currency),
+  );
+  if (taxRow.show) rows.push([taxRow.label, input.taxCents]);
 
   for (const [label, cents] of rows) {
     y -= rowSize;
@@ -679,6 +701,14 @@ export async function renderDocument(input: RenderInput, assets?: DocumentAssets
   const contentRight = PAGE_WIDTH - PAGE_MARGIN;
   const cols = buildColumnLayout(contentRight);
 
+  const taxSummary = summarizeTaxLines(
+    input.lines.map((line) => ({
+      taxable: line.taxable,
+      amountCents: Math.round(line.qty * line.unitCents),
+    })),
+  );
+  const mixedTax = hasMixedTaxability(taxSummary);
+
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
     const page = doc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
     const isFirstPage = pageIndex === 0;
@@ -697,12 +727,12 @@ export async function renderDocument(input: RenderInput, assets?: DocumentAssets
 
     const pageLines = input.lines.slice(pageIndex * LINES_PER_PAGE, (pageIndex + 1) * LINES_PER_PAGE);
     for (const line of pageLines) {
-      cursorY = drawLineRow(page, fonts, line, input.currency, cursorY, cols);
+      cursorY = drawLineRow(page, fonts, line, input.currency, cursorY, cols, mixedTax && line.taxable);
     }
 
     if (isLastPage) {
       cursorY -= 14;
-      cursorY = drawTotals(page, fonts, input, cursorY, contentRight);
+      cursorY = drawTotals(page, fonts, input, cursorY, contentRight, taxSummary);
       cursorY = drawNotesAndPayment(page, fonts, input, cursorY);
     }
 

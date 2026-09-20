@@ -14,11 +14,12 @@
  */
 import { useEffect, useState } from "react";
 import { Trash } from "@/ui/icons";
-import { Button, Checkbox, IconButton, Input, Table, TBody, TD, TFoot, TH, THead, TR } from "@/ui";
+import { Badge, Button, Checkbox, IconButton, Input, Table, TBody, TD, TFoot, TH, THead, TR } from "@/ui";
 import { centsToDecimalString, formatMoney, parseMoneyToCents } from "@/lib/money";
 import { computeTotals, type DocumentItem, type NewDocumentItem } from "@/db/repos/documents";
 import { intervalLabel } from "@/features/invoices/lib/format";
 import { formatTaxRate } from "@/features/invoices/lib/settings";
+import { hasMixedTaxability, summarizeTaxLines, taxRowLabel } from "@/features/invoices/lib/taxLabel";
 
 /** A line while it is being edited: money as the text in the box. */
 export type DraftLine = {
@@ -126,6 +127,14 @@ export function DocumentLines(props: {
     taxRateBp,
   );
 
+  const taxSummary = summarizeTaxLines(
+    lines.map((line) => ({ taxable: line.taxable, amountCents: lineCents(line) })),
+  );
+  const mixedTax = hasMixedTaxability(taxSummary);
+  const taxRow = taxRowLabel(taxSummary, totals.taxCents, formatTaxRate(taxRateBp), (cents) =>
+    formatMoney(cents, currency, locale),
+  );
+
   function patch(key: string, values: Partial<DraftLine>) {
     onChange?.(lines.map((line) => (line.key === key ? { ...line, ...values } : line)));
   }
@@ -166,12 +175,17 @@ export function DocumentLines(props: {
                   </div>
                 ) : (
                   <div className="flex flex-col">
-                    <span className="text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
+                    <span className="flex items-center text-[length:var(--text-base)] font-medium text-[var(--color-text)]">
                       {line.name}
                       {line.kind === "recurring" ? (
                         <span className="ml-[var(--space-2)] text-[length:var(--text-sm)] font-normal text-[var(--color-text-muted)]">
                           {intervalLabel(line.kind, line.interval)}
                         </span>
+                      ) : null}
+                      {mixedTax && line.taxable ? (
+                        <Badge tone="neutral" className="ml-[var(--space-2)]">
+                          Taxable
+                        </Badge>
                       ) : null}
                     </span>
                     {line.description ? (
@@ -250,10 +264,10 @@ export function DocumentLines(props: {
             </TD>
             {editable ? <TD /> : null}
           </TR>
-          {taxRateBp > 0 ? (
+          {taxRow.show ? (
             <TR>
               <TD colSpan={TOTALS_LABEL_SPAN} className="text-right">
-                Tax ({formatTaxRate(taxRateBp)})
+                {taxRow.label}
               </TD>
               <TD className={numericCell}>
                 {formatMoney(totals.taxCents, currency, locale)}
