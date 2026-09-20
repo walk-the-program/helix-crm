@@ -37,6 +37,7 @@ import {
   type WorkspaceEntry,
 } from "@/app/appSettings";
 import { registry as featureRegistry } from "@/app/registry";
+import { shouldShowOnboarding } from "@/features/onboarding/gate";
 
 export type BootResult = {
   registry: HelixRegistry;
@@ -45,7 +46,23 @@ export type BootResult = {
   migration: MigrateResult;
   sqliteVersion: string;
   sizeBytes: number;
+  /**
+   * The onboarding gate. True only on a first run: setup has never been
+   * finished or skipped AND the workspace holds no contacts and no deals.
+   * `src/features/onboarding/gate.ts` owns the decision and is the only feature
+   * module the boot path imports; App.tsx acts on it and nothing else does.
+   */
+  showOnboarding: boolean;
 };
+
+/**
+ * What one db_open produces. The gate is not part of it: a workspace switch and
+ * a restore both come through `openWorkspace`, and neither one is a first run.
+ */
+export type OpenedWorkspace = Omit<
+  BootResult,
+  "registry" | "workspace" | "showOnboarding"
+>;
 
 /**
  * In the e2e build the Playwright harness binds window.__helixDb before the
@@ -67,7 +84,7 @@ function installDriver(): void {
 export async function openWorkspace(
   workspace: WorkspaceEntry,
   options: { label?: string | null } = {},
-): Promise<Omit<BootResult, "registry" | "workspace">> {
+): Promise<OpenedWorkspace> {
   const label = options.label === undefined ? "Opening the workspace…" : options.label;
   const endTransition = label === null ? () => {} : beginDbTransition(label);
   try {
@@ -114,7 +131,17 @@ export async function boot(): Promise<BootResult> {
     await setLastOpened(workspace.id);
   }
 
-  return { registry, workspace, ...opened };
+  // A gate that throws must never be the reason the app will not start: the
+  // worst case of answering "no" is that the owner sets up from the command
+  // palette instead.
+  let showOnboarding = false;
+  try {
+    showOnboarding = await shouldShowOnboarding();
+  } catch (err) {
+    console.error("[helix] could not read the onboarding state", err);
+  }
+
+  return { registry, workspace, ...opened, showOnboarding };
 }
 
 /**
@@ -142,7 +169,7 @@ export async function runFeatureBoot(): Promise<void> {
  */
 export async function switchWorkspace(
   workspace: WorkspaceEntry,
-): Promise<Omit<BootResult, "registry" | "workspace">> {
+): Promise<OpenedWorkspace> {
   const endTransition = beginDbTransition("Switching workspace…");
   try {
     await raw.close();

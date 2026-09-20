@@ -2822,18 +2822,134 @@ and 5 in `src-tauri/src/secrets.rs`.
   itself on the first launch of a build that includes this change, and the
   plaintext original will be sitting in that workspace's `backups/` folder as
   `<iso>Z-pre-encryption.db` afterwards.
+- **The unsigned-macOS Keychain gotcha now bites harder, and E5 matters more.**
+  Until this change, a denied or missed Keychain prompt cost the AI key or the
+  site token. Now it costs the workspace: `db_open` cannot open the file without
+  the `dbkey` entry, so it answers `SECRET_ERROR` and the boot screen shows it.
+  A dev rebuild changes the binary's identity, so macOS asks again — click
+  **Always Allow**, not Allow, on the first prompt after a rebuild.
+  `HELIX_INSECURE_KEY_STORE=memory` is not a workaround for this: it mints a
+  fresh key each run, so an existing encrypted workspace will not open under it.
+  It is for scratch workspaces and tests only.
 - Nothing under `src/features/**`, `src/ui` or `src/styles` was touched. The
   Diagnostics line is the orchestrator's to mount; nothing new is exported from
   this work.
 - `tests/e2e-mac/fixtures.ts` was not touched and still runs on plain
   better-sqlite3. It never sees the cipher, which is why the two new `DbInfo`
   fields are optional.
-- The `npm test` and `npm run typecheck` numbers above are from before the
+- The `npm test` and `npm run typecheck` numbers above were taken before the
   onboarding, recurring, templates and help features started landing in the same
-  working tree. At the time of this commit both are red for reasons outside this
-  work: `src/features/onboarding/sample/index.ts` imports industry preset files
-  that are not written yet, `src/app/boot.ts` is missing the `showOnboarding`
-  field another agent added to `BootResult`, and
+  working tree. Re-running them later in the session showed two failures and
+  several type errors, all from that in-flight work sitting uncommitted beside
+  this change: `src/features/onboarding/sample/index.ts` imports industry preset
+  files that are not written yet, `src/app/boot.ts` is missing the
+  `showOnboarding` field another agent added to `BootResult`, and
   `src/features/templates/components/SendSplitButton.tsx` imports a `lib/hooks`
-  that does not exist. Verified by stashing this change's only front-end edit and
-  re-running the two failing files: they fail identically without it.
+  that does not exist. None of it is committed, so the committed tree is
+  unaffected — proved by stashing this change's only front-end edit (the two
+  optional `DbInfo` fields) and re-running the two failing files, which fail
+  identically without it, and by CI, which is green on this commit.
+
+---
+
+## 2026-09-19 — Onboarding agent (first run, trade presets, sample data)
+
+Decisions D16 and D19 built: a workspace with nothing in it opens on setup
+rather than on an empty shell, the setup is the owner's own trade already
+filled in, and "Show me an example" is one click to remove again.
+
+- **The gate.** `src/features/onboarding/gate.ts` answers one question: setup
+  has never been finished or skipped, AND the workspace holds no contacts and
+  no deals. `boot()` calls it once and puts the answer in
+  `BootResult.showOnboarding`; `App.tsx` renders the flow full-window (brand
+  lockup, no sidebar) instead of `ShellRoot` until the flow says it is done. A
+  gate that throws answers "no" — it must never be why the app will not start.
+  Feature `onBoot` hooks are held back until the shell shows, because four
+  overlay roots and a lead poller have nothing to do behind a first-run screen.
+  Those are the only two edits outside `src/features/onboarding/`.
+- **Three screens, four clicks.** "Your business" (name prefilled from the
+  workspace, owner name, email, phone, and a grid of the nine ClearPath trades
+  plus "Something else" with a free-text line), "How you'll track work" (the
+  trade's preset — the word for the work with one line saying why, the stages
+  with quiet days, the sources, the two or three extra details — every row
+  renameable, removable and addable inline), and "Bring your customers in"
+  (import / connect the site / show me an example / start empty). "Skip for
+  now" is on all three and writes `onboarding.skippedAt`. Reopenable at
+  `/setup` and from the command "Set up your business".
+- **One transaction.** "Use this setup" replaces the stages, replaces the
+  sources, creates the custom fields, writes `settings.vocabulary` and writes
+  `onboarding.completedAt` in a single `withTransaction` + `raw.batch`, with a
+  `change_log` row for every one of them. No repository write function is
+  called from inside it (the write lock is not reentrant); every change is a
+  statement built from `insertStatement` and the repositories' own builders.
+  `planBatch` is deliberately **not** used: it moves every non-insert to the
+  end of the batch, which would delete the stages the same batch just inserted.
+  On a workspace that already has records the apply turns additive — existing
+  stages and sources stay, because `deals.stage_id` is ON DELETE RESTRICT and
+  because a setup screen does not get to throw away data.
+- **Ten presets and ten sample sets.** `presets/<trade>.ts` and
+  `sample/<trade>.ts`, written from Walker's own
+  `ClearPath Sites/templates/INDUSTRIES.md`. Vocabulary per trade: jobs for
+  landscaping and home services, quotes for dental, medical spa, wedding venue
+  and restaurant, deals for church, Pilates and CrossFit, where nothing is
+  quoted and nothing is a job. Church deals carry no money at all except the
+  two things the building actually charges for. No trademarks and no health
+  information anywhere in the shipped data: a dental field asks about insurance
+  and interest, never a condition.
+- **Sample data, and getting rid of it.** 12 to 20 contacts, 6 to 10 companies
+  where the trade has them (none for the spa, the studio and the gym), 8 to 12
+  deals across the preset's stages, 15 to 25 activities and 6 to 10 tasks with
+  two already late. Every row — including the tasks and the activities, which
+  nothing else in the product tags — carries a link to one tag, "Sample", plus
+  the setting `sample.loadedAt`. Removal purges every tagged row, drops the
+  tag and clears the setting in one transaction. Invented names, `.example`
+  emails, 801-555-01xx phones, relative dates only, so a set is as current in a
+  year as it is today.
+
+**For the orchestrator.** `src/features/onboarding/index.tsx` exports
+`RemoveSampleDataButton` — mount `<RemoveSampleDataButton />` in Settings'
+Workspace section and on Today's first-run card. It renders **nothing** when
+the workspace has no sample data, so it is safe to mount unconditionally and
+needs no prop. The confirm dialog behind it is mounted by this feature through
+the shell's `overlays` slot, and the command `remove-sample-data` opens the
+same dialog from anywhere.
+
+**Two things for other owners.**
+
+1. `src/features/onboarding/lib/settings.ts` holds nine keys outside the typed
+   registry in `src/db/repos/settings.ts` (`onboarding.completedAt`,
+   `onboarding.skippedAt`, `business.name`, `business.trade`,
+   `business.tradeOther`, `owner.name`, `owner.email`, `owner.phone`,
+   `sample.loadedAt`) and a `settingStatement(key, value)` that duplicates the
+   repository's upsert so it can go in a batch. Both want promoting into
+   `settings.ts`, the same way the AI keys were.
+2. The sidebar's pipeline row is the static string "Pipeline"
+   (`src/features/records/index.tsx`), although the comment above it says the
+   label follows the vocabulary. After setup for a landscaping business the
+   Pipeline **screen** reads "Jobs" and the sidebar still reads "Pipeline".
+   That is the records feature's to fix; the e2e asserts the screen, not the
+   sidebar.
+
+**Harness change (tests/e2e-mac/fixtures.ts).** Every existing spec starts from
+an empty workspace and expects the shell on its first `goto("/")`, which is
+exactly the shape the gate fires on. The gate's state cannot be arranged as a
+real settings row — the `settings` table does not exist until the app runs its
+first migration, which happens after the page has loaded — so the fixture gained
+an `onboarding` option, defaulting to `"skip"`, which sets
+`window.__helixSkipOnboarding`. The gate reads that flag only under
+`import.meta.env.VITE_E2E`, so it is dead code in a shipped build.
+`onboarding.e2e.ts` declares `test.use({ onboarding: "show" })`. No existing
+spec was edited.
+
+Verified: `npm run typecheck` clean; `npm test` 1163 green in 77 files (191 of
+them new: preset and sample invariants for all ten trades, and the repo tests
+for the apply transaction, the sample load and the purge);
+`onboarding.e2e.ts` 2 passed and `smoke.e2e.ts` + `today.e2e.ts` 12 passed on
+port 4196; `npx vite build --outDir dist-onb` succeeds (deleted after); the
+forbidden grep (`#hex|rgb|hsl|rounded-|lucide-react`) returns nothing in the
+feature folder or its tests. All three screens captured at 1280 in light and
+dark into `tests/e2e-mac/.cache/screens/onboarding/` and read against
+`docs/DESIGN.md`: one primary block per screen ("Continue", "Use this setup",
+and none at all on screen 3, where the four cards are equals),
+`--shadow-sticker` only on the lockup, no radius, the accent never a
+background, "Skip for now" in `--color-link`.

@@ -278,7 +278,13 @@ class DbBridge {
  * It is written as one self-contained function with no imports because
  * addInitScript serialises it.
  */
-function installShim(seed: { appData: string; workspacesDir: string; files?: Record<string, string> }): void {
+function installShim(seed: {
+  appData: string;
+  workspacesDir: string;
+  files?: Record<string, string>;
+  /** See the `onboarding` fixture option below. Defaults to true. */
+  skipOnboarding?: boolean;
+}): void {
   type Rpc = (method: string, args: unknown[]) => Promise<RpcResultLike>;
   type RpcResultLike =
     | { ok: true; value: unknown }
@@ -618,6 +624,15 @@ function installShim(seed: { appData: string; workspacesDir: string; files?: Rec
 
   // Tells the app it is under the e2e harness, alongside VITE_E2E at build time.
   w.__HELIX_E2E__ = true;
+
+  // The onboarding gate's stand-in for a settings row. Every spec here starts
+  // from an empty workspace and its first goto("/") expects the shell, and the
+  // gate fires on exactly that shape - so the harness answers "already skipped"
+  // unless a spec says otherwise. It cannot be arranged as a real setting: the
+  // `settings` table does not exist until the app runs its first migration,
+  // which happens after the page has loaded. The app only reads this flag in the
+  // VITE_E2E build (src/features/onboarding/gate.ts).
+  w.__helixSkipOnboarding = seed.skipOnboarding !== false;
 }
 
 // ---------------------------------------------------------------------------
@@ -633,8 +648,21 @@ export type HelixHarness = {
   bridge: DbBridge;
 };
 
-export const test = base.extend<{ helix: HelixHarness }>({
-  helix: async ({ page }, use) => {
+export const test = base.extend<{
+  /**
+   * Whether the first-run setup flow may appear.
+   *
+   * "skip" (the default) makes the app behave as though the owner had already
+   * taken "Skip for now", so a spec that starts from an empty workspace and
+   * expects the shell keeps working. A spec about onboarding itself declares
+   * `test.use({ onboarding: "show" })` and gets the gate.
+   */
+  onboarding: "skip" | "show";
+  helix: HelixHarness;
+}>({
+  onboarding: ["skip", { option: true }],
+
+  helix: async ({ page, onboarding }, use) => {
     const root = mkdtempSync(join(tmpdir(), "helix-e2e-"));
     const workspaceDir = join(root, "workspaces", "e2e-workspace");
     mkdirSync(join(workspaceDir, "attachments"), { recursive: true });
@@ -677,6 +705,7 @@ export const test = base.extend<{ helix: HelixHarness }>({
       appData: root,
       workspacesDir: join(root, "workspaces"),
       files: { [join(root, "helix.json")]: JSON.stringify(registry) },
+      skipOnboarding: onboarding !== "show",
     });
     // The app opens its workspace itself, but tests that arrange rows before
     // the first paint need the file to exist.
