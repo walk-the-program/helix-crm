@@ -274,6 +274,8 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 
 | 00:4x | Lead A follow-up CPO-LA-3 (`docs/rounds/cpo-returns/lead-a-followup-3.md`): `ab4a665` merged-away records name their survivor and offer no Restore (`trash.mergedInto`, reversed merges excluded); `13d4ed3` CompanyPage on the shared DealsCard; audit specs gone. typecheck clean; 271 tests in area; records+today e2e 31 passed on 4231. Fable inspected `ab4a665`. | accepted; Lead A finished |
 
+| 00:5x | Lead C implementation return (`docs/rounds/cpo-returns/lead-c-platform-impl.md`): 22 commits; 17 findings implemented, F-LC-19 refuted with a pinning test, F-LC-18 and F-LC-22 deferred; tsc clean; 957 tests in its suites; data/settings/smoke/onboarding/ai/hig e2e 62 passed on 4251; zero CSS warnings. Fable inspected `1a4a034`, `b2aed5e`, `fdeeea7`. Contract text placed in CONTRACTS.md (Field wiring on pickers; `FeatureCommand.aliases`) and DESIGN.md §4 (PDF fonts exception). | accepted; Lead C finished phase one |
+
 Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
 with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
 into `c0bd452 test(leads): …` (content correct, attribution wrong, left as is), then ran

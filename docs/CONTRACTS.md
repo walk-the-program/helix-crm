@@ -549,6 +549,11 @@ The rules:
   all ignored.
 - Registry order breaks a tie, which is also the order the palette lists
   commands in, so two features claiming one key is visible rather than random.
+- **`FeatureCommand.aliases?: string[]`** (CPO pass, 2026-09-20): extra chords bound
+  to the same command under the same grammar and the same rules as `shortcut`. The
+  shortcuts sheet prints the first alias beside the shortcut ("⌘K or ⌘/"). Today's
+  "search" command carries `aliases: ["mod+/"]`; the search overlay no longer binds
+  that key itself.
 
 **`mod+k` and `mod+shift+k` stay the shell's own** (`SHELL_OWN_SHORTCUTS` in
 `Shell.tsx`) and the generic binder skips them, because they are lookups rather
@@ -834,6 +839,11 @@ export function parseTimeInput(raw: string, opts?: { prefer24h?: boolean }): str
 `DatePicker` returns `ReactElement` rather than the plan's literal `JSX.Element`: the
 global `JSX` namespace is not exported that way under this repo's TypeScript, and
 `ReactElement` is the house convention (`Field.tsx`). The call signature is unchanged.
+
+**Field wiring (CPO pass, 2026-09-20).** `Combobox`, `MultiCombobox` and `Select`
+accept `aria-describedby` and `aria-invalid` and forward them to the trigger; `Field`
+injects them exactly as it does for `Input` and `DatePicker`. `Select`'s own `invalid`
+prop still wins when both are given.
 
 **Test ids** (e2e depends on these exact strings): `combobox`, `combobox-input`,
 `combobox-option` (+ `data-id`), `combobox-create`, `combobox-empty`; `date-picker`,

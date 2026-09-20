@@ -156,6 +156,12 @@ top of `src/styles/tokens.css`, under a banner that says so:
 declared family is not downloaded until something asks for it, so carrying
 four costs nothing at runtime.
 
+The quote and invoice PDFs are the one exception to the switch: they embed Zilla
+Slab and Lato (the brand guide's print faces, shipped as TTFs under
+`src/features/invoices/pdf/fonts`) and do not follow it, because a printed document
+needs an embedded face and the brand guide specified those two for print
+(CPO pass, 2026-09-20).
+
 Two things do not follow the switch on their own and have to be moved with it:
 
 - the two `index.html` preloads, which name files (today `dm-sans-700.woff2`
