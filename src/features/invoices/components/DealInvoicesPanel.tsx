@@ -15,11 +15,23 @@
  * The deal page already spends the screen's one primary block on the deal
  * value, so every control here is secondary. That is the rule, not a
  * preference (docs/DESIGN.md section 5).
+ *
+ * `resolveErrorMessage` / `report` (F-LB-22): a `ValidationError` off
+ * `documents.createFromDeal` carries both a generic top-level message
+ * ("There is nothing to put on this document.") and, on its `issues`, the
+ * specific one ("This deal has no services on it yet. Add one first." vs
+ * "...no monthly or yearly services on it.") - the half that actually tells
+ * the owner what to do about it. The toast shows the field message when there
+ * is one and falls back to the error's own message, then to `fallback`,
+ * exactly the way the sibling catalog panel's own local `report` helper
+ * already does it. `resolveErrorMessage` is the pure half of that, exported
+ * so the choice is unit testable without a toast or a DOM.
  */
 import { Link } from "wouter";
 import { Button, Badge, CardGroupLabel, toast } from "@/ui";
 import { formatMoney } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
+import { ValidationError } from "@/db/errors";
 import {
   useCreateFromDeal,
   useDealDocuments,
@@ -28,6 +40,17 @@ import {
   useIssueScheduledInvoice,
 } from "@/features/invoices/lib/hooks";
 import { dueLabel, isOverdue, statusLabel, statusTone } from "@/features/invoices/lib/format";
+
+export function resolveErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ValidationError && err.issues.length > 0) {
+    return err.issues[0].message;
+  }
+  return err instanceof Error && err.message.trim().length > 0 ? err.message : fallback;
+}
+
+function report(err: unknown, fallback: string): void {
+  toast.error(resolveErrorMessage(err, fallback));
+}
 
 export function DealInvoicesPanel(props: { dealId: string }) {
   const { dealId } = props;
@@ -44,11 +67,7 @@ export function DealInvoicesPanel(props: { dealId: string }) {
       const created = await createFromDeal.mutateAsync({ dealId, kind });
       toast.success(`Drafted ${created.number}.`);
     } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : `That ${kind} could not be created.`,
-      );
+      report(err, `That ${kind} could not be created.`);
     }
   }
 
@@ -58,9 +77,7 @@ export function DealInvoicesPanel(props: { dealId: string }) {
       const created = await issueScheduled.mutateAsync(schedule.id);
       toast.success(`Drafted ${created.number}.`);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "That invoice could not be created.",
-      );
+      report(err, "That invoice could not be created.");
     }
   }
 
