@@ -42,7 +42,7 @@ import {
   writeWithUndo,
 } from "@/features/records/lib/mutations";
 import { dueLabel } from "@/features/records/lib/taskGroups";
-import { InlineText } from "@/features/records/components/InlineEdit";
+import { InlineDate, InlineText } from "@/features/records/components/InlineEdit";
 import {
   CompanyPicker,
   ContactPicker,
@@ -338,13 +338,33 @@ export function DealPage() {
                 )}
               </CardRow>
               <CardRow className="items-stretch">
-                <InlineText
-                  className="w-full"
-                  label="Expected date"
-                  type="date"
-                  value={deal.expectedOn ?? ""}
-                  onSave={(value) => patch({ expectedOn: value.trim().length > 0 ? value : null })}
-                />
+                {/* Round 3, criterion 25: an open deal is asked when it will
+                    close; a closed one is told when it did. The closed date is
+                    set by the stage move, so it is read here rather than
+                    edited in two places. */}
+                {deal.stageIsWon || deal.stageIsLost ? (
+                  <div className="w-full">
+                    <span className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                      {deal.stageIsWon ? "Won on" : "Lost on"}
+                    </span>
+                    <p className="tabular m-0 text-[length:var(--text-base)] text-[var(--color-text)]">
+                      {deal.closedAt ? formatDateDisplay(deal.closedAt) : "Not recorded"}
+                    </p>
+                    <p className="mt-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+                      Change it by moving the stage again.
+                    </p>
+                  </div>
+                ) : (
+                  <InlineDate
+                    className="w-full"
+                    label="Expected close"
+                    hint="When you expect to win it"
+                    value={deal.expectedOn ?? ""}
+                    onSave={(value) =>
+                      patch({ expectedOn: value.trim().length > 0 ? value : null })
+                    }
+                  />
+                )}
               </CardRow>
             </Card>
           </div>

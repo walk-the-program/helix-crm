@@ -13,6 +13,7 @@ import {
   DialogTitle,
   Field,
   FormRow,
+  DatePicker,
   Input,
 } from "@/ui";
 import * as dealsRepo from "@/db/repos/deals";
@@ -190,11 +191,12 @@ export function NewDealDialog(props: {
           </div>
 
           <div className="grid grid-cols-2 gap-[var(--space-4)]">
-            <Field label="Expected date">
-              <Input
-                type="date"
-                value={expectedOn}
-                onChange={(event) => setExpectedOn(event.target.value)}
+            <Field label="Expected close">
+              <DatePicker
+                aria-label="Expected close"
+                value={expectedOn.length > 0 ? expectedOn : null}
+                clearable
+                onChange={(next) => setExpectedOn(next ?? "")}
               />
             </Field>
             <div>

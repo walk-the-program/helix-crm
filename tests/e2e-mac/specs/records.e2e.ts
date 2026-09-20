@@ -454,6 +454,136 @@ test.describe("records", () => {
     expect(rows).toHaveLength(2);
     expect(rows.find((r) => r[2] === "co-acme")).toEqual(["", "", "co-acme"]);
   });
+
+  // -------------------------------------------------------------------------
+  // Round 3, criteria 3 and 4: the record pickers and the date fields.
+  // -------------------------------------------------------------------------
+
+
+  /** A local YYYY-MM-DD this many days from today, the way the app stores it. */
+  function localDateIn(days: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${month}-${day}`;
+  }
+
+  /**
+   * Pick a row out of a Combobox. The popover is portaled to the body, so the
+   * options are looked up on the page and not inside the dialog.
+   */
+  async function pickFromCombobox(
+    page: Page,
+    trigger: ReturnType<Page["getByRole"]>,
+    query: string,
+    optionText: string,
+  ): Promise<void> {
+    await trigger.click();
+    await page.getByTestId("combobox-input").fill(query);
+    await page
+      .getByTestId("combobox-option")
+      .filter({ hasText: optionText })
+      .first()
+      .click();
+  }
+
+  // Walker: "it should let me start typing and then it'll autofill... if I
+  // pick one, it should automatically fill the company."
+  test("new deal: typing finds the contact and fills their company", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await quickAddContact(page, "Priya Raman");
+
+    // Give her a company through the company combobox's create row, which is
+    // the same "Add “…”" path the deal form offers.
+    const [[contactId]] = contactRows(helix.bridge);
+    await page.goto(`/contacts/${contactId}`);
+    const companyPicker = page.getByRole("combobox", { name: "Company" });
+    await companyPicker.click();
+    await page.getByTestId("combobox-input").fill("Acme Roofing");
+    await page.getByTestId("combobox-create").click();
+    await expect(companyPicker).toContainText("Acme Roofing");
+
+    // Now the deal form: three characters, pick her, and the company fills.
+    await page.goto("/pipeline");
+    await page.getByRole("button", { name: "New deal" }).click();
+    const dialog = page.getByRole("dialog", { name: "New deal" });
+    await dialog.getByLabel("Title").fill("Re-roof at 14 Elm");
+
+    await pickFromCombobox(
+      page,
+      dialog.getByRole("combobox", { name: "Contact" }),
+      "Pri",
+      "Priya Raman",
+    );
+
+    await expect(dialog.getByRole("combobox", { name: "Contact" })).toContainText(
+      "Priya Raman",
+    );
+    await expect(dialog.getByRole("combobox", { name: "Company" })).toContainText(
+      "Acme Roofing",
+    );
+  });
+
+  // Walker: "When I hit New Deal and then Contact, the list is off the screen.
+  // That 100% needs to be fixed."
+  test("the contact list stays on screen in a short window", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 620 });
+    await page.goto("/");
+    await quickAddContact(page, "Priya Raman");
+
+    await page.goto("/pipeline");
+    await page.getByRole("button", { name: "New deal" }).click();
+    const dialog = page.getByRole("dialog", { name: "New deal" });
+    await dialog.getByRole("combobox", { name: "Contact" }).click();
+
+    const list = page.getByTestId("combobox-option").first();
+    await expect(list).toBeVisible();
+
+    const box = await list.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    // Every option the owner can see is inside the window, top and bottom.
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+  });
+
+  // Criterion 3: no native date control survives anywhere in records.
+  test("a task's due date is chosen with the in-app date picker", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await openQuickAdd(page);
+    const dialog = quickAddDialog(page);
+    await dialog.getByRole("tab", { name: "Task", exact: true }).click();
+    await dialog.getByLabel("Title").fill("Call about the roof");
+
+    // The native control would be an <input type="date">; this is a button
+    // that opens a grid drawn by the app. Each day cell carries its own
+    // data-date, so the test picks an exact day rather than a digit that an
+    // adjacent month also shows.
+    await expect(dialog.locator('input[type="date"]')).toHaveCount(0);
+    const target = localDateIn(3);
+    await dialog.getByTestId("date-picker").first().click();
+    await expect(page.getByTestId("date-picker-grid")).toBeVisible();
+    await page.locator(`[data-testid="date-picker-day"][data-date="${target}"]`).click();
+
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(dialog).toBeHidden();
+
+    const rows = helix.bridge.query(
+      "SELECT title, due_on FROM tasks WHERE deleted_at IS NULL",
+      [],
+    ) as [string, string | null][];
+    expect(rows).toHaveLength(1);
+    expect(rows[0][1]).toBe(target);
+  });
+
 });
 
 /**
@@ -686,5 +816,81 @@ test.describe("records screens", () => {
     await page.goto("/trash");
     await expect(page.getByRole("table")).toBeVisible();
     await shoot(page, "trash-list");
+  });
+
+  /**
+   * Round 3's four review shots, into design/round3/: the states Walker
+   * called out, each with its picker open so the popover is in the frame.
+   */
+  test("round 3 review shots", async ({ page, helix }) => {
+    const ROUND3 = "design/round3";
+
+    async function shootTo(name: string): Promise<void> {
+      for (const theme of ["light", "dark"] as const) {
+        await settleTheme(page, theme);
+        await settle(page);
+        await page.screenshot({ path: `${ROUND3}/${name}-${theme}.png` });
+      }
+      await settleTheme(page, "light");
+    }
+
+    await page.goto("/");
+    await expect(page.getByRole("navigation")).toBeVisible();
+
+    // --- the Create contact dialog (criterion 10: spacing) ------------------
+    await page.goto("/contacts");
+    await page.getByRole("button", { name: "New contact" }).click();
+    const contactDialog = page.getByRole("dialog", { name: "New contact" });
+    await expect(contactDialog).toBeVisible();
+    await contactDialog.getByLabel("First name").fill("Priya");
+    await contactDialog.getByLabel("Email").fill("priya@acme.example");
+    await shootTo("records-create-contact");
+    await contactDialog.getByRole("button", { name: /^Create contact$/ }).click();
+    await expect(contactDialog).toBeHidden();
+
+    // --- New deal with the contact combobox open (criterion 4) --------------
+    await page.goto("/pipeline");
+    await page.getByRole("button", { name: "New deal" }).click();
+    const dealDialog = page.getByRole("dialog", { name: "New deal" });
+    await dealDialog.getByLabel("Title").fill("Re-roof at 14 Elm");
+    await dealDialog.getByRole("combobox", { name: "Contact" }).click();
+    await page.getByTestId("combobox-input").fill("Pri");
+    await expect(page.getByTestId("combobox-option").first()).toBeVisible();
+    await shootTo("records-new-deal-combobox");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+
+    // --- Tasks with the date picker open (criterion 3) ----------------------
+    await openQuickAdd(page);
+    const quick = quickAddDialog(page);
+    await quick.getByRole("tab", { name: "Task", exact: true }).click();
+    await quick.getByLabel("Title").fill("Call about the roof");
+    await quick.getByTestId("date-picker").first().click();
+    await expect(page.getByTestId("date-picker-grid")).toBeVisible();
+    await shootTo("records-task-date-picker");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+
+    // --- the deal page services picker (criterion 11) -----------------------
+    const contactId = contactRows(helix.bridge)[0][0];
+    await page.goto("/pipeline");
+    await page.getByRole("button", { name: "New deal" }).click();
+    const second = page.getByRole("dialog", { name: "New deal" });
+    await second.getByLabel("Title").fill("Gutter work at 14 Elm");
+    await second.getByRole("button", { name: /^Create/ }).click();
+    await expect(second).toBeHidden();
+    void contactId;
+
+    const dealId = (
+      helix.bridge.query("SELECT id FROM deals WHERE deleted_at IS NULL LIMIT 1", []) as [
+        string,
+      ][]
+    )[0][0];
+    await page.goto(`/deals/${dealId}`);
+    const servicesAction = page.getByRole("button", { name: "Add services" });
+    await expect(servicesAction).toBeVisible();
+    await servicesAction.click();
+    await expect(page.getByTestId("combobox-input")).toBeVisible();
+    await shootTo("records-deal-services-picker");
   });
 });

@@ -234,8 +234,13 @@ test.describe("recurring reminders", () => {
     await expect(dialog).toBeVisible();
     await dialog.getByLabel("What is it").fill("Spring cleanup");
     await dialog.getByRole("button", { name: "Every year", exact: true }).click();
-    // Due in three days, so it lands inside Today's seven-day window.
-    await dialog.getByLabel("First one due").fill(dateOnly(3 * DAY));
+    // Due in three days, so it lands inside Today's seven-day window. The
+    // native date input is gone (round 3, criterion 3), so this opens the
+    // in-app picker and clicks the exact day cell by its data-date.
+    const firstDue = dateOnly(3 * DAY);
+    await dialog.getByTestId("date-picker").first().click();
+    await expect(page.getByTestId("date-picker-grid")).toBeVisible();
+    await page.locator(`[data-testid="date-picker-day"][data-date="${firstDue}"]`).click();
     await dialog.getByRole("button", { name: "Add reminder" }).click();
     await expect(dialog).toHaveCount(0);
 

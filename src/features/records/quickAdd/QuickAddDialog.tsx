@@ -21,7 +21,9 @@ import {
   DialogTitle,
   Field,
   FormRow,
+  DatePicker,
   Input,
+  TimePicker,
   Kbd,
   Textarea,
 } from "@/ui";
@@ -420,17 +422,18 @@ export function QuickAddDialog() {
             {type === "task" ? (
               <div className="grid grid-cols-2 gap-[var(--space-4)]">
                 <Field label="Due date">
-                  <Input
-                    type="date"
-                    value={dueOn}
-                    onChange={(event) => setDueOn(event.target.value)}
+                  <DatePicker
+                    aria-label="Due date"
+                    value={dueOn.length > 0 ? dueOn : null}
+                    clearable
+                    onChange={(next) => setDueOn(next ?? "")}
                   />
                 </Field>
                 <Field label="Time (optional)">
-                  <Input
-                    type="time"
-                    value={dueTime}
-                    onChange={(event) => setDueTime(event.target.value)}
+                  <TimePicker
+                    aria-label="Time"
+                    value={dueTime.length > 0 ? dueTime : null}
+                    onChange={(next) => setDueTime(next ?? "")}
                   />
                 </Field>
               </div>
