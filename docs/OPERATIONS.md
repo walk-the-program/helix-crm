@@ -711,6 +711,339 @@ or read a real `helix.log` off disk in this session.
 
 ---
 
+# Commercial lifecycle
+
+Helix is free and AGPL. There is no Helix price, plan, trial, subscription or
+licence, and nothing in the app checks whether a client has paid for anything
+(`docs/rounds/2026-09-20-launch-readiness-record.md` §1.1). What ClearPath
+sells is the **website**. The only thing that connects a paying website client
+to Helix is the `CRM_API_TOKEN` on their site, which they paste into
+Settings > Website.
+
+So the whole commercial lifecycle is the lifecycle of one string:
+
+```
+site sold -> site deployed with CRM_API_TOKEN -> token handed over
+          -> client installs Helix and pastes it -> leads flow
+          -> rotated / the site changes / the arrangement ends
+          -> the client keeps Helix and every record in it; leads stop
+```
+
+Two consequences worth stating once, because both come up in support calls:
+
+- **There is no entitlement to drift.** "Billing changed but access did not"
+  cannot happen here, because access is not a thing the app has. Nothing is
+  unlocked, nothing expires, and no ClearPath action reaches inside a client's
+  Helix.
+- **The reverse cannot lose data either.** Taking a client's website down,
+  deleting the token, or rotating it stops new leads arriving and does nothing
+  else. Everything already in Helix is in a SQLCipher file on the client's own
+  machine, its key is in that machine's keychain, and neither Walker nor
+  ClearPath has any path to either. This is proved rather than asserted:
+  `tests/repo/leads/lifecycle.test.ts` counts the deals before and after a
+  disconnect, after a site that has been unreachable twelve times running, and
+  after the whole site is gone.
+
+---
+
+## What the owner sees in every state, and what Walker does
+
+The owner-facing words all come from one module,
+`src/features/leads/lib/pollMessages.ts`, so the banner on Settings > Website,
+the quiet line on Today and the "Last result" row cannot disagree with each
+other or with this table. Each one is asserted in
+`tests/repo/leads/lifecycle.test.ts`.
+
+| State | What the owner sees | What Helix does | What Walker does |
+|---|---|---|---|
+| **Connected** | "Everything came through." and a "Last checked" time | Polls every 5 min while open, plus once at start | Nothing |
+| **Token rotated (401/403)** | "Your website turned the connection down. Check the token." / "New leads are not coming in until the token is right. Paste a fresh one below and save." | **Stops the timer outright.** Nothing retries until the settings change | CL-2 below |
+| **No lead endpoint (404)** | "Your website is not set up to send leads yet." / "Helix reached the site, but there is no lead connection on it. Ask ClearPath to switch it on. Nothing is wrong with this computer." | Keeps retrying, so it heals by itself the moment the endpoint ships; banner at once, not after three tries | CL-3 case A |
+| **Site cannot read the marker (400)** | "Your website could not read where Helix left off." / "Helix is starting again from your first lead. Nothing will be duplicated, and nothing you have edited will be overwritten." | Drops the cursor once and starts again from the first lead | Usually nothing; CL-3 case D if it repeats |
+| **Site error (any other status)** | "Your website answered with an error (503)." / "New leads are not coming in. Helix keeps trying on its own. If it stays this way, tell ClearPath." | Backs off 1, 2, 4, 8 min; banner at once, because the site did answer | CL-3 case C |
+| **Site unreachable (no answer)** | Silent for two tries, then "Helix cannot reach your website." / "Nothing has come through for N tries. Helix keeps trying on its own." | Backs off 1, 2, 4, 8 min and holds at 8 forever | Nothing; it resumes on its own |
+| **Site gone for good** | The same, plus, from the twelfth failure: "If the site is gone for good, you can disconnect it below. Every lead already in Helix stays." | Same as above; it never gives up on its own and never deletes anything | CL-5 below |
+| **Keychain refused the token** | "Helix could not read your website token from this computer." / "Your keychain turned Helix down. Paste the token below and save it again, and allow the keychain prompt when it appears." | Stops the timer | Procedure 9 above |
+| **Disconnected** | "Not connected". Poll now and Test connection are both off | Timer off, token deleted from the keychain, address forgotten, **every record kept** | Nothing |
+
+**Mark: tested.** `npx vitest run tests/repo/leads/lifecycle.test.ts` - 17
+passed, one describe block per state above.
+`npx vitest run tests/unit/leads/pollMessages.test.ts` - 13 passed, pinning
+every string in the table. E2E, through the real screen:
+`E2E_PORT=4280 E2E_OUT=dist-rev npx playwright test -c tests/e2e-mac/playwright.config.ts leads settings`
+- 40 passed, including the 404 banner, the Disconnect click and the refused
+placeholder token. Not exercised: a real ClearPath site over a real network.
+
+---
+
+## CL-1. Issue a token and hand it over
+
+**When.** Once per client, on the day their site goes live, before install day.
+
+1. Generate it on the site, never by hand: `openssl rand -base64 32`. That is
+   44 characters and 256 bits, which is the value every template's
+   `.env.example` documents and the only generator this process uses. Do not
+   shorten it, do not reuse one client's token on another client's site, and do
+   not use anything memorable.
+2. Set it as `CRM_API_TOKEN` in that site's environment (Replit Secrets, or
+   `.env` for a local run) and redeploy. Until it is set, `GET /api/crm/leads`
+   answers 401 to everything, which is the template's deliberate default.
+3. Confirm it yourself before it goes anywhere:
+   `curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer <token>" https://<site>/api/crm/leads`
+   must print `200`, and the same call with no header must print `401`.
+4. Record the issue date in the roster (CL-6). **Never the value.**
+
+**Handing it over.** In order of preference, and the reason the order is this
+way: the token is a read key to that one site's lead list - eight fields per
+lead, no admin access, no money, no access to Helix itself - so the risk is
+bounded, but it is a real client's incoming enquiries.
+
+- **Best: it never travels.** Paste it into Helix yourself on install day, in
+  person or on a screen share, straight from the site's environment settings
+  into Settings > Website. Then no copy of it exists outside the site and the
+  client's keychain. This is the default and it costs nothing, because install
+  day already has Walker in front of the machine.
+- **If the client self-installs:** send it through whatever channel the client
+  already uses for business (their phone's messages, a chat app), in a message
+  that contains the token and nothing else - not the site address, not
+  "this is your CRM token", not their business name. A message with only a
+  random string in it is worth far less to anyone who finds it later.
+- **Plain email is the honest fallback, with the risk stated.** An emailed
+  token sits in at least two mailboxes forever, gets backed up, and follows the
+  client to whatever provider they move to. If it goes by email, say so in the
+  roster's "handed over how" column and rotate it (CL-2) once the client
+  confirms Helix is connected. Rotating turns a permanent copy into a copy of
+  something that no longer works.
+- **Never** paste it into a shared document, a ticket, a spreadsheet, or the
+  roster file.
+
+**Mark: needs access.** The generation and the two `curl` checks are the
+templates' own documented process (`templates/CRM-ENDPOINT-PORT.md`, the
+"Optional live smoke" section, run for real on `home-services-classic` on
+2026-09-18); the hand-over policy is new here and has never been run with a
+real client.
+
+---
+
+## CL-2. Rotate a client's token
+
+**When.** After the token went by email; when a client's machine is lost or
+sold; when anyone who should not have it might; or on request.
+
+1. Set the new `CRM_API_TOKEN` on the site and redeploy. **The old one stops
+   working the moment the new one is live** - there is no overlap window, and
+   the client's Helix will start showing the banner within five minutes.
+2. Verify the new token with the two `curl` calls from CL-1 before telling
+   anyone.
+3. Get it to the client (CL-1's hand-over order).
+4. The client: Settings > Website, paste it into Token, **Save**. Leaving the
+   Token box empty keeps the stored one, which is how they change only the
+   address. Test connection is off until they save, because it checks what is
+   saved rather than what is typed.
+5. Confirm with them that the banner is gone and "Last result" says
+   "Everything came through."
+6. Record the rotation date in the roster.
+
+**What it costs the client: nothing.** The site is the source of truth and
+Helix's poll uses the site's own cursor, not a time window. Every lead that
+arrived while the token was wrong is still on the site and lands on the first
+successful poll after the new token is saved. Helix resumes from the cursor it
+had before the 401 - it does not start over, and it does not skip.
+
+**Mark: tested**, for the Helix half: `tests/repo/leads/lifecycle.test.ts`,
+"resumes from the cursor once the new token is saved, losing no lead" - the
+failed poll leaves the cursor untouched and the next request carries it. The
+site half (setting the variable and redeploying) needs a real site.
+
+---
+
+## CL-3. The site is deployed but no leads arrive
+
+Four different causes, four different fixes. The owner's screen already names
+which one it is, so the first question on a support call is always: **what does
+the banner on Settings > Website say?**
+
+**A. "Your website is not set up to send leads yet" (404).** The site has no
+`/api/crm/leads`. Either that template never got the CRM block, or the route
+was registered after the `/api/{*rest}` catch-all, which makes it dead
+(`templates/CRM-ENDPOINT-PORT.md`, "Things that have already bitten"). All
+eighteen templates have it as of 2026-09-18
+(`templates/CRM-ENDPOINT-STATUS.md`), so on a current site this means the
+client's site was built from an older copy. *Walker:* port the block, run that
+template's four gates, redeploy. The client does nothing - Helix keeps
+retrying and picks it up on its own within eight minutes.
+
+**B. "Your website turned the connection down" (401) on a brand-new install.**
+Two causes that look identical. Either `CRM_API_TOKEN` is not set on the
+deployed site at all - the endpoint's own default is to refuse everything -
+or the token does not match. *Walker:* check the variable is set **on the
+deployed environment**, not only in a local `.env`; the commonest version of
+this is a token set on a Replit dev run and never added to the deployment's
+Secrets. Then run CL-1 step 3. If the site is right, the paste was wrong:
+Helix now strips a pasted `CRM_API_TOKEN=`, surrounding quotes and a paste a
+mail client wrapped, and refuses the literal `replace-with-a-long-random-string`
+placeholder by name, so a client who copied the wrong line out of
+`.env.example` is told so instead of getting a 401.
+
+**C. "Your website answered with an error (5xx)."** The site is up but the
+handler or the store behind it is not - most often a `DATABASE_URL` that is
+set but not reachable. *Walker:* fix the site. *The client:* nothing; Helix
+keeps trying and recovers on its own. A 429 lands here too, which on a
+one-client site means something other than Helix is calling that endpoint
+(the template allows 60 requests a minute per token and Helix uses one every
+five minutes).
+
+**D. "Your website could not read where Helix left off" (400).** By the site
+contract a 400 means exactly one thing: the `after` marker Helix sent could not
+be decoded. Helix drops the marker and reads from the first lead again, which
+is safe because a re-read creates nothing (`deals.external_id` carries a
+partial UNIQUE index, `drizzle/0005_lead_dedup.sql`). *Walker:* nothing, unless
+it repeats - a 400 on a request with no marker at all is a site bug.
+
+**E. An `http://` or staging address.** Helix refuses to save a plain `http://`
+address unless it is `localhost` or `127.0.0.1`, in Rust and again in the UI,
+and says why: "The address has to start with https://. Plain http:// only
+works for a test site on this computer." A staging site served over plain HTTP
+cannot be connected, by design - the token would cross the network in clear.
+*Walker:* connect Helix to the live HTTPS site, not to staging.
+
+**Mark: tested** for what the owner sees in A, B, C and D
+(`tests/repo/leads/lifecycle.test.ts`, `tests/e2e-mac/specs/leads.e2e.ts`) and
+for E (`tests/unit/leads/siteOrigin.test.ts`). **Needs access** for every
+site-side fix.
+
+---
+
+## CL-4. The website changes address
+
+**When.** Staging to live, apex to www, or a rebrand onto a new domain.
+
+Helix keeps one place-in-the-list per address, and a lead's identity is
+`<address>:<lead id>`. So a new address is, to everything downstream, a new
+website. Saving one without saying what it means used to re-read the whole
+site and turn the client's pipeline into a second copy of itself.
+
+The screen now asks. When the address in the box differs from the saved one, a
+picker appears above Save:
+
+- **"The same website, at a new address"** (the default, and the right answer
+  for every domain move): the old address's cursor moves to the new one, the
+  site resumes where it stopped, and no lead is read twice.
+- **"A different website"**: the new address is read from its first lead,
+  which is what a genuinely different site needs.
+
+*Walker:* tell the client which one to pick before they change it, and update
+the roster's "Site address" column. A client who already picked wrong and
+duplicated their pipeline merges the copies on the Duplicates screen; that is
+reversible for 30 days (`src/db/repos/merge.ts`, `MERGE_REVERSAL_DAYS`).
+
+**Known limitation.** Choosing "the same website" carries the cursor but does
+not rewrite the `external_id` of leads already on file, so a lead the old
+address already delivered would come in again if the site ever re-sent it from
+before the cursor. Re-keying the old ids needs a migration and is recorded as a
+follow-up in `docs/rounds/launch-returns/rev.md`.
+
+**Mark: tested.** `tests/repo/leads/lifecycle.test.ts`, "state 3c" - the
+cursor carries, a genuinely different site starts from the beginning, and an
+address Helix already follows is never rewound.
+
+---
+
+## CL-5. Offboarding: the site arrangement ends
+
+**What actually happens.** The client stops paying, Walker takes the site down
+or rotates its token, and the client's Helix starts failing. From the twelfth
+consecutive failure the banner offers Disconnect. Nothing else changes.
+
+*Walker:*
+
+1. Rotate or remove `CRM_API_TOKEN` on the site, or take the site down. Either
+   ends the lead flow. Removing the variable is cleaner than leaving a live
+   token on a site nobody is watching.
+2. Tell the client plainly what they keep, because they will assume they lose
+   it: Helix is theirs, it is free, it is not going to stop working, and every
+   customer, job, invoice, note and file in it is on their machine. Point them
+   at **Settings > Website > Disconnect**, which removes the address and the
+   token and deletes nothing.
+3. Set the roster row to offboarded, with the date and what was done to the
+   token. Keep the row. They still have Helix and may still call.
+
+**What Walker must not do.** There is no remote off switch and there must never
+be one. Do not ask a client to delete their workspace, and do not treat a
+Helix install as leverage in a billing conversation - it is AGPL software the
+client is entitled to keep running.
+
+**If the client wants their data gone**, that is their own action, not
+Walker's: Help > "Removing a workspace" has the steps (archive, quit, delete
+the folder). Diagnostics names the exact folder.
+
+**Mark: tested** for the Helix half: `tests/repo/leads/lifecycle.test.ts`,
+"state 5" and "state 6" - the token is really gone from the keychain, the poll
+refuses to run, and the deal count is identical before and after. **Needs
+access** for the site-side half.
+
+---
+
+## CL-6. The client roster
+
+Helix has no telemetry, no licence server and no account, so nothing anywhere
+knows which client runs it, on what, connected to which site, since when. The
+only record is one Walker keeps.
+
+- The blank template is `docs/CLIENT-ROSTER-TEMPLATE.md` in this repository.
+- **Copy it out before filling it in.** This repository is public. The
+  recommended home is
+  `/Users/walker_tracy/Desktop/ClearPath Sites/HELIX-CLIENT-ROSTER.md`, a
+  folder that is not a git repository at its top level and already holds the
+  other cross-client notes.
+- Four things never go in it: the token value, a recovery key, the client's
+  Anthropic key, and any of the client's CRM data.
+
+Fill the whole row on install day; anything left blank then stays blank.
+Update "Helix version" only when a client confirms they installed it, not when
+the link was sent - a column that records intent is worse than no column.
+Update it on every rotation, every support contact and at offboarding.
+
+**Mark: inspected only.** The template is written and committed; no roster has
+been kept yet, because there is no client yet.
+
+---
+
+## CL-7. How Walker learns a client's Helix is broken
+
+**He does not.** There is no telemetry, no crash reporting, no update ping and
+no error channel, by design (`docs/DESIGN.md` §2.10, `CHANGELOG.md` "Not in
+v1"), and nothing in this round added one. A client whose lead sync has been
+broken for a month looks exactly like a client having a quiet month.
+
+The honest support model, in the order it actually runs:
+
+1. **The client notices.** Today shows one quiet line when lead collection has
+   stopped, on the screen they open every morning. That is the only automatic
+   prompt that exists, and it only fires if they open Helix.
+2. **The client calls or emails.** There is no in-app support channel. Help
+   says so in as many words: "Helix has no support team watching in the
+   background."
+3. **Walker asks two questions before anything else:** what does the banner on
+   Settings > Website say, and what does "Last result" say. Those two answers
+   identify the state in the table above and therefore the fix, usually without
+   a log.
+4. **If more is needed, ask for the log.** Procedure 10 above: Settings >
+   Diagnostics > **Copy log**, pasted into an email. It carries app starts,
+   backups, poll results and errors, and the connected site's address; it does
+   not carry the token, the site's response body, or any customer's name,
+   phone, email or message.
+5. **Walker asks, periodically.** Nothing else will tell him. A short check-in
+   after install and then occasionally is the whole monitoring story, and the
+   roster's "Last contact" column is what makes it a habit rather than a
+   memory.
+
+**Do not add telemetry to fix this.** It is the product's central promise, the
+clients are solo owners whose customer lists are the asset, and a phone-home
+would be the one network call Helix makes that the owner did not ask for.
+
+---
+
 # Founder-task inventory
 
 Everything below only happens today if Walker remembers it. For each: how
