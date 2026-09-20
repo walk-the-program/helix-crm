@@ -15,18 +15,24 @@ import { Link } from "wouter";
 import { ArrowsClockwise, PencilSimple, Plus } from "@/ui/icons";
 import { Badge, Button, Card, CardRow, IconButton, Tooltip } from "@/ui";
 import { formatDateDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { describeInterval, type RecurringRule } from "@/db/repos/recurring";
 import { useRecurringFor } from "@/features/recurring/lib/hooks";
 import { RuleDialog } from "@/features/recurring/components/RuleDialog";
 
-/** "Due 12 Apr 2027" or "Due today", plus the interval. */
-export function ruleLine(rule: RecurringRule, reference: string): string {
+/**
+ * "Due 12 Apr 2027" or "Due today", plus the interval.
+ *
+ * Pure, so it takes the locale rather than reaching for `useFormats()` itself
+ * (a non-component must not call a hook); the caller below supplies it.
+ */
+export function ruleLine(rule: RecurringRule, reference: string, locale?: string): string {
   const when =
     rule.nextDueOn === reference
       ? "Due today"
       : rule.nextDueOn < reference
-        ? `Due ${formatDateDisplay(rule.nextDueOn) || rule.nextDueOn}, still open`
-        : `Due ${formatDateDisplay(rule.nextDueOn) || rule.nextDueOn}`;
+        ? `Due ${formatDateDisplay(rule.nextDueOn, locale) || rule.nextDueOn}, still open`
+        : `Due ${formatDateDisplay(rule.nextDueOn, locale) || rule.nextDueOn}`;
   return `${when} · ${describeInterval(rule.everyN, rule.unit).toLowerCase()}`;
 }
 
@@ -38,6 +44,7 @@ export function RecurringPanel(props: {
   reference: string;
 }) {
   const { contactId, companyId, aboutLabel, reference } = props;
+  const formats = useFormats();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<RecurringRule | null>(null);
   const { data } = useRecurringFor({ contactId, companyId });
@@ -58,7 +65,7 @@ export function RecurringPanel(props: {
                   {rule.title}
                 </span>
                 <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  {ruleLine(rule, reference)}
+                  {ruleLine(rule, reference, formats.locale)}
                 </span>
               </span>
               <span className="flex flex-none items-center gap-[var(--space-2)]">

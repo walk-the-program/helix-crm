@@ -25,7 +25,8 @@ import {
   Select,
   toast,
 } from "@/ui";
-import { formatDateDisplay, todayLocal } from "@/lib/dates";
+import { todayLocal } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import {
   RECURRING_UNITS,
   advanceDate,
@@ -60,6 +61,7 @@ export function RuleDialog(props: {
   aboutLabel?: string | null;
 }) {
   const { open, onOpenChange, target, rule, aboutLabel } = props;
+  const formats = useFormats();
   const editing = Boolean(rule);
 
   const [title, setTitle] = useState("");
@@ -87,7 +89,7 @@ export function RuleDialog(props: {
   const sentence =
     everyValid && startOn
       ? `${describeInterval(parsedEvery, unit)}, starting ${
-          formatDateDisplay(startOn) || startOn
+          formats.date(startOn) || startOn
         }.`
       : null;
 

@@ -28,7 +28,8 @@ import {
   Table,
   toast,
 } from "@/ui";
-import { formatDateDisplay, todayLocal } from "@/lib/dates";
+import { todayLocal } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import {
   describeInterval,
   type RecurringDue,
@@ -66,6 +67,7 @@ function WhoCell({ entry }: { entry: RecurringDue }) {
 
 export function RecurringScreen() {
   const reference = todayLocal();
+  const formats = useFormats();
   const { data, isLoading } = useRecurringRules({});
   const entries = data ?? [];
   const rules = entries.map((entry) => entry.rule);
@@ -135,7 +137,7 @@ export function RecurringScreen() {
                   <TR key={rule.id} data-testid="recurring-row">
                     <TD className="tabular whitespace-nowrap">
                       <span className={overdue ? "font-medium text-[var(--color-text)]" : undefined}>
-                        {formatDateDisplay(rule.nextDueOn) || rule.nextDueOn}
+                        {formats.date(rule.nextDueOn) || rule.nextDueOn}
                       </span>
                     </TD>
                     <TD>
@@ -154,7 +156,7 @@ export function RecurringScreen() {
                     </TD>
                     <TD className="tabular whitespace-nowrap">
                       {rule.lastCompletedOn
-                        ? formatDateDisplay(rule.lastCompletedOn) || rule.lastCompletedOn
+                        ? formats.date(rule.lastCompletedOn) || rule.lastCompletedOn
                         : "Not yet"}
                     </TD>
                     <TD>
