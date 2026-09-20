@@ -1,5 +1,14 @@
 /**
- * A prune must not delete the file a restore is reading (LR-OPS, F-OPS-6).
+ * What a restore actually does, and the one thing that could undo it
+ * (LR-OPS, F-OPS-6 and F-OPS-7).
+ *
+ * `restoreFromBackup`'s five steps had no test of their own: the Rust side
+ * proves an encrypted workspace file and an encrypted backup of it are
+ * interchangeable by copying one over the other
+ * (`src-tauri/tests/recovery_tests.rs`), and nothing proved the JS around it
+ * does those steps, in that order. The order is the whole safety property: the
+ * pre-restore backup has to exist before the close, and the copy has to land
+ * after it, or a restore that goes wrong takes today's data with it.
  *
  * Found by LR-OPS-W2 while proving the timer guards. `restoreFromBackup` calls
  * `pauseTimers()`, but that only stops a NEW scheduler tick from starting: a
@@ -89,6 +98,51 @@ beforeEach(() => {
   close.mockResolvedValue(undefined);
   open.mockResolvedValue(undefined);
   copyFileTo.mockResolvedValue(undefined);
+});
+
+describe("restoreFromBackup's order", () => {
+  /**
+   * Back up today first, THEN close, THEN copy over the live file, THEN
+   * reopen. Any other order loses something: copying before the close writes
+   * under an open connection, and closing before the pre-restore backup leaves
+   * the owner no way back from a restore they did not mean.
+   */
+  it("backs up today, closes, copies, and only then reopens", async () => {
+    const order: string[] = [];
+    backup.mockImplementation(async (reason: unknown) => {
+      order.push(`backup:${String(reason)}`);
+      return "/w/backups/2026-09-20T12-00-00Z-pre-restore.db";
+    });
+    close.mockImplementation(async () => {
+      order.push("close");
+    });
+    copyFileTo.mockImplementation(async (from: unknown, to: unknown) => {
+      order.push(`copy:${String(from)}->${String(to)}`);
+    });
+    open.mockImplementation(async () => {
+      order.push("open");
+    });
+
+    await restoreFromBackup(oldFile);
+
+    expect(order).toEqual([
+      "backup:pre-restore",
+      "close",
+      `copy:/w/backups/${OLD}->/w/helix.db`,
+      "open",
+    ]);
+  });
+
+  /**
+   * A failure after the close leaves the database shut, and the screen tells
+   * the owner to restart rather than pretending the restore worked. What must
+   * not happen is the error being swallowed.
+   */
+  it("rethrows a failed copy instead of reporting a restore that did not happen", async () => {
+    copyFileTo.mockRejectedValueOnce(new Error("the drive went away"));
+    await expect(restoreFromBackup(oldFile)).rejects.toThrow("the drive went away");
+    expect(open).not.toHaveBeenCalled();
+  });
 });
 
 describe("pruneBackups during a restore", () => {

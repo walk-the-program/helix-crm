@@ -114,10 +114,12 @@ fn recovery_key_for(workspace_id: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// What Settings -> Backups -> Restore does, minus the React: back up, change
-/// something, copy the backup over the live file, reopen. The JS side is
-/// covered by its own tests; this is the half that proves the encrypted file
-/// really is interchangeable with its backup, which is the assumption the whole
-/// restore design rests on.
+/// something, copy the backup over the live file, reopen. This is the half that
+/// proves the encrypted file really is interchangeable with its backup, which is
+/// the assumption the whole restore design rests on. The other half - that the
+/// JS does those steps in that order, and that nothing deletes the file being
+/// copied while it is being copied - is
+/// `tests/unit/data/restorePruneGuard.test.ts`.
 #[test]
 fn restore_over_the_live_file_brings_the_old_rows_back() {
     let (_tmp, workspaces) = temp_workspaces_dir();

@@ -442,31 +442,36 @@ prompted it is really gone and the expected state is back, per
 **What recovers the data if the restore itself goes wrong.** The
 `pre-restore` backup taken in step 2, from Settings > Backups, the same way.
 
-**Mark: needs access**, for clicking Restore in a real running app and
-watching the window. What can be verified without that has moved since this
-packet was written: `src-tauri/tests/recovery_tests.rs` (landed this phase,
-commit `a5ac006`) now proves the assumption the whole restore design rests
-on at the file level — that an encrypted workspace file and an encrypted
-backup of it are truly interchangeable by copying one over the other.
-`cargo test --test recovery_tests` at this revision — 9 passed, including
-`restore_over_the_live_file_brings_the_old_rows_back` ("what Settings ->
-Backups -> Restore does, minus the React: back up, change something, copy
-the backup over the live file, reopen") and confirming the restored file
-"must still be encrypted."
+**Mark: tested**, for everything except clicking Restore in a real running
+app and watching the window, which still **needs access**.
 
-That test's own comment says "The JS side is covered by its own tests" —
-searched for a test of `restoreFromBackup` itself
-(`src/features/data/lib/backupsFs.ts`) and found none;
-`tests/unit/data/backupCopyOut.test.ts` only exercises `runBackup`'s failure
-message, not the restore orchestration (pause timers, pre-restore backup,
-close, copy, reopen, re-boot). Flagging this gap between the comment and
-what actually exists rather than taking the comment's word for it — see
-Findings, F-OPS-W3-6.
+What is proven, at this revision:
 
-**Placeholder for the lead:** replace the mark with **tested** and cite
-either a real click-through restore or a JS-level test of
-`restoreFromBackup`'s five-step orchestration, once either exists; the file
--level mechanism it depends on is now solidly covered.
+- `cargo test --test recovery_tests` (9 passed) covers the file-level
+  assumption the whole design rests on -
+  `restore_over_the_live_file_brings_the_old_rows_back`: back up, change
+  something, copy the backup over the live file, reopen, and the change made
+  after the backup is gone while the earlier rows are back. It also asserts
+  the restored file is still encrypted.
+- `npx vitest run tests/unit/data/restorePruneGuard.test.ts` (6 passed)
+  covers the JS orchestration the packet found untested: that the five steps
+  happen in that order (`backup:pre-restore`, `close`, `copy`, `open`, as an
+  exact sequence), that a failed copy is rethrown rather than reported as a
+  restore that worked, and that a scheduled prune cannot delete the file the
+  restore is copying from.
+
+What that last one is about: `pauseTimers()` only stops a NEW scheduler tick
+from starting. A tick that passed its own check a moment earlier runs to the
+end, and the end is `pruneBackups()`. If the backup the owner picked is the
+oldest one past the retention window - which is exactly the one somebody
+reaches for after a bad week - it could be deleted mid-copy. A restore now
+switches pruning off for its duration (LR-OPS-W2's B4 finding, fixed in
+`7e637ac`).
+
+What still needs access: the real window. Nobody has clicked Restore in a
+built app and watched it close, copy, reopen and repaint. That is
+`tests/RELEASE-CHECKLIST.md`'s "Backup and restore" section, and it stays
+Walker's to do on a real launch.
 
 ---
 
@@ -753,7 +758,7 @@ a CI check, or an honest "nothing catches this today."
 | F-OPS-W3-3 | Resolved during this phase | The keychain-denial boot screen (procedure 9) showed the generic "Helix can't open your data / another copy may have it, or the folder may not be writable" headline for a `SECRET_ERROR`. Flagged twice while procedure 9 was being drafted (once after `a5ac006` improved only the Details text, restated as still-open) and closed both times: `d084392` gave `SECRET_ERROR` its own `SecretStoreError` class, its own re-throw in `boot.ts`, and its own `BootScreens.tsx` screen headed "Helix needs permission to use this computer's keychain," landing under the lead's own finding number (their commit and `tests/unit/app/bootFailure.test.ts` cite it as "LR-OPS F-OPS-5" — a different numbering sequence from this one; see Deviations for why this document's findings are prefixed `F-OPS-W3-`). | Restated for the record. `npx vitest run tests/unit/app/bootFailure.test.ts` — 9 passed, asserting the new heading contains "keychain" and the two wrong causes are both absent. |
 | F-OPS-W3-4 | Follow-up | No scheduled dependency-audit run; `npm audit`/`rust-audit` (this task's A1/A2) only run on push/PR, so an advisory published against an unchanged dependency is not caught until the next commit. | Adding a `schedule` trigger changes `rustsec/audit-check`'s own behavior (it creates GitHub issues on a scheduled run, never on push/PR) — a product decision about issue-spam, not a mechanical CI addition, left for the lead. |
 | F-OPS-W3-5 | Follow-up | Nothing enforces "a version bump was followed by a tag" or "a tag was followed by publishing the draft release" (founder-task inventory, items 2–3). | Both are pure process gaps with no in-repo data to check against (task 2) or check against a page this repo does not control (task 3, the Releases UI). Documented as procedure, not automated. |
-| F-OPS-W3-6 | Follow-up | `src-tauri/tests/recovery_tests.rs`'s `restore_over_the_live_file_brings_the_old_rows_back` says in its own comment "The JS side is covered by its own tests." Searched `tests/` for a test of `restoreFromBackup` (`src/features/data/lib/backupsFs.ts`) and found none — `tests/unit/data/backupCopyOut.test.ts` only covers `runBackup`'s failure message. | The comment overstates existing coverage. Not a functional bug — the Rust-level file mechanism is genuinely well tested — but worth a one-line correction to the comment, or better, an actual JS-level test of the five-step restore orchestration, so procedure 7 can move from "needs access" to "tested." |
+| F-OPS-W3-6 | Closed by the lead | `src-tauri/tests/recovery_tests.rs` claimed in a comment that "the JS side is covered by its own tests" for `restoreFromBackup`, and no such test existed. Correct catch. | Both halves fixed: `tests/unit/data/restorePruneGuard.test.ts` now covers the five-step orchestration and the prune race, and the Rust comment points at it by name instead of at nothing. Procedure 7 moved to **tested** except for the real window. |
 
 ---
 
