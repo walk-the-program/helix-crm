@@ -29,7 +29,17 @@ and your bank's app; Helix is built to feel that ordinary. It is not an
 - **Pipeline**: drag jobs between stages on a board, or work them as a list.
   Call the stages Deals, Jobs, or Quotes, whatever fits your business.
 - **Timeline**: every call, email, note, and text on a contact, company, or
-  job, in one running record.
+  job, in one running record, alongside what Helix did (a task added, a
+  stage moved, an invoice sent).
+- **Services, quotes and invoices**: keep a price list of what you sell, put
+  services on a job, turn the job into a quote or an invoice as a branded
+  PDF, mark it sent and paid, and see who owes you what and how late it is.
+  Every invoice belongs to a job, so the money on a job, a customer and the
+  reports always agrees.
+- **Reminders**: work that comes back around (a spring cleanup every year, a
+  filter change every three months) shows up on Today a week before it is due.
+- **Templates**: the text messages and emails you send again and again, with
+  the customer's name and details filled in.
 - **Tasks and follow-ups**: a due date, a done checkbox, snooze to tomorrow
   or next week. Nothing fancier than that.
 - **Today screen**: what's due, new leads from the last week, and who's gone
@@ -49,8 +59,9 @@ and your bank's app; Helix is built to feel that ordinary. It is not an
   phone number or address, with a one-click "log this" after.
 - **Saved views**: name a filter and pin it to the sidebar so it's one click
   away.
-- **Reports**: pipeline value by stage, wins and losses, where your leads
-  come from, and how long jobs sit in each stage, as charts and tables.
+- **Reports**: revenue (quoted, won, invoiced, collected), deals (new,
+  won rate, time to win), contacts and companies, receivables and pipeline
+  value by stage, as charts and tables with a period picker.
 - **Duplicate detection**: Helix finds the same person entered twice and
   walks you through merging them, with a 30-day undo.
 - **Attachments**: drop in a photo, a signed quote, or a contract. It's
@@ -58,8 +69,8 @@ and your bank's app; Helix is built to feel that ordinary. It is not an
 - **Export and backup**: export any list, or everything as CSV and JSON.
   Helix backs itself up automatically after launch and every six hours while
   open, and keeps 30 days of history.
-- **Undo and trash**: every delete can be undone for ten seconds, and
-  nothing is gone for good for 30 days.
+- **Undo and trash**: Cmd/Ctrl+Z reverses the last twenty things you did,
+  every delete offers an undo, and nothing is gone for good for 30 days.
 - **Settings**: rename Deals to Jobs or Quotes, add your own fields and
   tags, pick light or dark and a comfortable or compact layout, and run more
   than one business.
@@ -116,10 +127,13 @@ a sign anything is wrong.
 
 ## First run
 
-On first launch, Helix creates a workspace for you and opens straight to the
-Today screen, empty, with three things to get you started: import a CSV, add
-your first contact, or connect your website. There's nothing to configure
-before you can use it.
+On first launch, Helix creates a workspace and walks you through a short
+setup: your business name, your trade (which gives you stages, sources,
+fields and a price list in your trade's own words), and how you want to
+bring your customers in. You can load a week of example data to see the
+screens full, and take it out again with one click. Skip all of it and you
+land on the Today screen with three ways to start: import a CSV, add a
+contact, or connect your website.
 
 ## Importing your data
 
@@ -137,7 +151,7 @@ quote-form leads straight into Helix.
 1. On the site, set the `CRM_API_TOKEN` environment variable to a long
    random string (`openssl rand -base64 32` works well). Leaving it unset
    keeps the lead endpoint turned off.
-2. In Helix, go to **Settings → Site connection** and enter that site's
+2. In Helix, go to **Settings → Website connection** and enter that site's
    address and the same token.
 3. Click **Test connection**. Helix checks in every five minutes while it's
    open and turns each new lead into a contact and a job in your first
@@ -159,8 +173,11 @@ Backups live in a `backups` folder next to that file, and attachments in an
 unless you turn on the AI module or connect a website, and even then only
 what those features need is sent, and only when you ask.
 
-The database file itself isn't encrypted; that's what your operating
-system's full-disk encryption (FileVault, BitLocker) is for.
+Each workspace file is encrypted at rest (SQLCipher) with a key that lives
+in your operating system's keychain, so a copied file or a lost laptop does
+not give up your customers. Backups are encrypted the same way. Full-disk
+encryption (FileVault, BitLocker) still protects everything else, and
+Diagnostics shows whether it is on.
 
 ## Keyboard shortcuts
 
@@ -170,6 +187,8 @@ system's full-disk encryption (FileVault, BitLocker) is for.
 | `Cmd/Ctrl + Shift + K` | Open the command palette |
 | `Cmd/Ctrl + /` | Search (alternate key) |
 | `Cmd/Ctrl + N` | Quick add a contact, company, job, task, or note |
+| `Cmd/Ctrl + Z`, `Cmd/Ctrl + Shift + Z` | Undo and redo |
+| `Cmd/Ctrl + \` | Collapse or expand the sidebar |
 | `Cmd/Ctrl + Shift + V` | Paste an email or text into a record (AI, when turned on) |
 | `Cmd/Ctrl + ,` | Open settings |
 | `?` | Show the keyboard shortcuts sheet |
