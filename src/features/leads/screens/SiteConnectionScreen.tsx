@@ -35,6 +35,7 @@ import {
 } from "@/ui";
 import * as leadSync from "@/db/repos/leadSync";
 import { useFormats } from "@/app/formats";
+import { HelpLink } from "@/features/help";
 import { PollBanner } from "@/features/leads/components/PollBanner";
 import { usePollStatus, leadKeys } from "@/features/leads/hooks";
 import {
@@ -66,6 +67,28 @@ class TokenError extends Error {
     super(message);
     this.name = "TokenError";
   }
+}
+
+/**
+ * The readable text out of whatever this screen's mutations rejected with.
+ *
+ * `setSiteToken`, `disconnectSite` and `invokeLeadsFetch` (through
+ * `saveSiteOrigin` / the keychain / `leads_fetch`) all end in a raw
+ * `invoke()`, and Tauri v2 rejects a command with a plain `{ code, message }`
+ * object, not an `Error` - the exact trap `src/features/leads/poller.ts` and
+ * `src/features/data/lib/backupsFs.ts` already name and fix (F-LB-6):
+ * `err instanceof Error` is false for that shape, and `String(err)` on a
+ * plain object gives "[object Object]", which this screen was showing
+ * verbatim under the address or token field, or in the disconnect toast, for
+ * any real keychain or network failure.
+ */
+function messageFrom(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return String(err);
 }
 
 export function SiteConnectionScreen() {
@@ -144,7 +167,7 @@ export function SiteConnectionScreen() {
       await reloadAll();
     },
     onError: (err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageFrom(err);
       // A bad token is a bad token, not a bad address: putting its message
       // under the address field sent the owner to fix the wrong box.
       if (err instanceof TokenError) setTokenError(message);
@@ -220,9 +243,7 @@ export function SiteConnectionScreen() {
       // Usually the keychain refusing to delete. Before this the dialog just
       // sat there and the owner had no idea it had failed (LR-REV, F-REV-9).
       setConfirmingDisconnect(false);
-      toast.error(
-        `Helix could not disconnect your website. ${err instanceof Error ? err.message : String(err)}`,
-      );
+      toast.error(`Helix could not disconnect your website. ${messageFrom(err)}`);
     },
   });
 
@@ -258,7 +279,10 @@ export function SiteConnectionScreen() {
       />
 
       <div className="flex max-w-[46rem] flex-col gap-[var(--space-6)]">
-        <PollBanner status={status} />
+        <PollBanner
+          status={status}
+          action={<HelpLink to="website-leads">How this works</HelpLink>}
+        />
 
         <div>
           <CardGroupLabel>Connection</CardGroupLabel>
@@ -509,8 +533,7 @@ function describeFetchError(err: unknown): string {
   if (status !== null) {
     return `Your website answered with an error (${status}). Try again in a minute.`;
   }
-  const message = err instanceof Error ? err.message : String(err);
-  return `Helix could not reach your website. ${message}`;
+  return `Helix could not reach your website. ${messageFrom(err)}`;
 }
 
 export default SiteConnectionScreen;
