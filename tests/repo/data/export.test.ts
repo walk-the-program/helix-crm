@@ -16,6 +16,7 @@ import * as pipelines from "../../../src/db/repos/pipelines";
 import * as stages from "../../../src/db/repos/stages";
 import * as products from "../../../src/db/repos/products";
 import * as documents from "../../../src/db/repos/documents";
+import * as payments from "../../../src/db/repos/payments";
 import * as customFields from "../../../src/db/repos/customFields";
 import * as recurring from "../../../src/db/repos/recurring";
 import * as templates from "../../../src/db/repos/templates";
@@ -43,6 +44,7 @@ async function csvRows(csv: string): Promise<{ headers: string[]; rows: string[]
 describe("exportRun: entityLabel and EXPORT_ENTITIES", () => {
   it("names every entity", () => {
     // Round 2 (F-LC-4): Services and Invoices joined the "By list" rows.
+    // LR-PX-A W3: Payments joined them too.
     expect(EXPORT_ENTITIES).toEqual([
       "contacts",
       "companies",
@@ -51,6 +53,7 @@ describe("exportRun: entityLabel and EXPORT_ENTITIES", () => {
       "activities",
       "services",
       "invoices",
+      "payments",
     ]);
     for (const entity of EXPORT_ENTITIES) {
       expect(entityLabel(entity).length).toBeGreaterThan(0);
@@ -382,6 +385,75 @@ describe("exportRun: buildEntityCsv", () => {
     expect(byHeader.Total.length).toBeGreaterThan(0);
     expect(csv).not.toContain("quoted");
   });
+
+  it("exports payments with money readable, the invoice number and the human method label (LR-PX-A W3)", async () => {
+    h = await createSeededHarness();
+    const pipeline = await pipelines.getDefaultOrThrow();
+    const stage = await stages.firstStage(pipeline.id);
+    if (!stage) throw new Error("seeded pipeline has no first stage");
+    const acme = await companies.create({ name: "Acme Inc" });
+    const deal = await deals.create({ title: "Analytical Engine", stageId: stage.id, companyId: acme.id });
+
+    const invoice = await documents.create({
+      kind: "invoice",
+      dealId: deal.id,
+      items: [{ name: "Engine build", qty: 1, unitCents: 150000 }],
+      prefix: "INV",
+      issuedOn: "2026-09-01",
+    });
+    await documents.send(invoice.id);
+    await payments.create({
+      documentId: invoice.id,
+      amountCents: 60000,
+      paidOn: "2026-09-10",
+      method: "check",
+      reference: "4412",
+      note: "Deposit",
+    });
+
+    // A payment against an invoice the Trash has taken: excluded, because
+    // every money query (and now the export) joins documents and tests
+    // `d.deleted_at IS NULL` - soft-deleting the invoice does not touch its
+    // payment rows (fix(payments) fae3c78), so the export has to filter on
+    // the DOCUMENT's deleted_at, not only the payment's own.
+    const trashedInvoice = await documents.create({
+      kind: "invoice",
+      dealId: deal.id,
+      items: [{ name: "Retired job", qty: 1, unitCents: 40000 }],
+      prefix: "INV",
+      issuedOn: "2026-09-01",
+    });
+    await documents.send(trashedInvoice.id);
+    await payments.create({ documentId: trashedInvoice.id, amountCents: 40000, paidOn: "2026-09-12", method: "cash" });
+    await documents.softDelete(trashedInvoice.id);
+
+    const { csv, rows: rowCount } = await buildEntityCsv("payments");
+    expect(rowCount).toBe(1);
+
+    const { headers, rows } = await csvRows(csv);
+    expect(headers).toEqual([
+      "Date Paid",
+      "Invoice Number",
+      "Customer",
+      "Deal",
+      "Amount",
+      "Method",
+      "Reference",
+      "Note",
+      "Recorded",
+    ]);
+    const byHeader = Object.fromEntries(headers.map((label, i) => [label, rows[0][i]]));
+    expect(byHeader["Date Paid"]).toBe("2026-09-10");
+    expect(byHeader["Invoice Number"]).toBe(invoice.number);
+    expect(byHeader.Customer).toBe("Acme Inc");
+    expect(byHeader.Deal).toBe("Analytical Engine");
+    expect(byHeader.Amount).toBe("600.00");
+    expect(byHeader.Method).toBe("Check");
+    expect(byHeader.Reference).toBe("4412");
+    expect(byHeader.Note).toBe("Deposit");
+    expect(csv).not.toContain("Retired job");
+    expect(csv).not.toContain("400.00");
+  });
 });
 
 describe("exportRun: the newly added zip tables (F-LC-4)", () => {
@@ -515,6 +587,7 @@ describe("exportRun: the newly added zip tables (F-LC-4)", () => {
       "documents.csv",
       "document_items.csv",
       "services.csv",
+      "payments.csv",
       "tags.csv",
       "tag_links.csv",
       "custom_fields.csv",
@@ -546,6 +619,7 @@ const ZIP_FILES = [
   "documents.csv",
   "document_items.csv",
   "services.csv",
+  "payments.csv",
   "tags.csv",
   "tag_links.csv",
   "custom_fields.csv",
@@ -584,6 +658,7 @@ describe("exportRun: buildEverythingZip", () => {
         "documents",
         "documentItems",
         "services",
+        "payments",
         "tags",
         "tagLinks",
         "customFields",

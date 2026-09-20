@@ -57,6 +57,12 @@ describe("receivablesCsv", () => {
         dueOn: "2026-08-01",
         daysOverdue: 12,
         totalCents: 432100,
+        // LR-PX-A: ReceivableRow gained paidCents/balanceCents/status. This
+        // row is untouched (no payment yet), so the balance equals the total
+        // and every assertion below is unchanged.
+        paidCents: 0,
+        balanceCents: 432100,
+        status: "sent",
       },
       {
         id: "doc-2",
@@ -65,6 +71,9 @@ describe("receivablesCsv", () => {
         dueOn: "2026-09-25",
         daysOverdue: 0,
         totalCents: 5000,
+        paidCents: 0,
+        balanceCents: 5000,
+        status: "sent",
       },
     ];
 
