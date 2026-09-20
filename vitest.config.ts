@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.ts", "tests/repo/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.{ts,tsx}", "tests/repo/**/*.test.{ts,tsx}"],
     exclude: ["tests/e2e-mac/**", "tests/e2e-win/**", "node_modules/**"],
     hookTimeout: 30000,
     testTimeout: 30000,
