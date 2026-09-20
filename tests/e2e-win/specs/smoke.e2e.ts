@@ -63,10 +63,31 @@ describe('Helix CRM smoke', () => {
     // whenever that happens, since a blank name blocks Continue. The trade
     // grid has no default selection either, so a tile has to be picked
     // before Continue is enabled.
-    const businessNameField = await $('aria/What is the business called?');
-    await businessNameField.waitForDisplayed({
+    //
+    // The field is reached through its own <label>, not through
+    // `aria/What is the business called?`. src/ui/Field.tsx renders
+    // `<label htmlFor={id}><span>{label}</span></label>` beside the control it
+    // clones that id onto, so BOTH the label and the input answer to that
+    // accessible name - and msedgedriver handed back the label, whose `clear`
+    // is "invalid element state" because a <label> is not editable. Reading the
+    // label's `for` and matching the input by id is still text-driven (the id
+    // is never written down here, it is read off the label the owner sees) and
+    // it can only ever resolve to the control. XPath rather than a `#id`
+    // selector because React's useId puts characters in the id that a CSS id
+    // selector cannot carry unescaped.
+    const businessNameLabel = await $('label*=What is the business called?');
+    await businessNameLabel.waitForDisplayed({
       timeout: 15000,
       timeoutMsg: 'The business name field never appeared on the "Your business" screen',
+    });
+    const businessNameId = await businessNameLabel.getAttribute('for');
+    if (!businessNameId) {
+      throw new Error('The business name label is not associated with any control');
+    }
+    const businessNameField = await $(`//input[@id="${businessNameId}"]`);
+    await businessNameField.waitForDisplayed({
+      timeout: 15000,
+      timeoutMsg: 'The business name input never appeared beside its label',
     });
     if ((await businessNameField.getValue()) === '') {
       await businessNameField.setValue('Smoke Test Co.');
