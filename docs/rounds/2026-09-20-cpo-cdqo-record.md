@@ -278,6 +278,10 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 
 | 01:0x | Regression found by lead-money: `1ea980d` (Today keeps starter cards until something is on Today) tested tasks, open deals and activities only, so a workspace whose one Today item is an overdue invoice showed "Nothing here yet"; `invoices.e2e.ts` "mark paid from Today" red. | fix packet CPO-LA-4 to lead-records (fourth term from `useOutstandingSummary`, unit test, e2e green) |
 
+| 01:2x | Lead B implementation return (`docs/rounds/cpo-returns/lead-b-money-impl.md`): 16 commits; all 23 findings implemented except F-LB-7's payments table (deferred by R7) and rev 2.1b (refuted: no duplicate route exists); typecheck clean; vitest 2049 passed / 3 skipped; invoices+revenue e2e 17 passed on 4243; leads e2e 23 passed; PDF samples looked at. Fable inspected `7bea580`, `2de8734`, `d2aea80`. | accepted; Lead B finished phase one |
+
+| 01:3x | Lead A CPO-LA-4: `e2813d2` the first-run gate counts every Today section (tasks, open deals, activities, documents of any status, reminders) through a pure `todayIsUnstarted(counts)` with a per-section unit test; invoices+today e2e 27 passed on 4231; full vitest 2049 passed. | accepted; Lead A finished phase one |
+
 Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
 with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
 into `c0bd452 test(leads): …` (content correct, attribution wrong, left as is), then ran
