@@ -8,9 +8,12 @@
  * every component in src/ui gets its spacing.
  *
  * tokens.css and globals.css belong to the design agent: this file never
- * edits them, it only decides where they sit in the cascade.
+ * edits them, it only decides where they sit in the cascade. The one rule this
+ * file declares itself is the macOS title-bar inset at the bottom, and it is
+ * here for exactly that reason: it is a cascade decision that cannot be made
+ * from inside a file imported into `base`.
  */
-@layer theme, base, components, utilities;
+@layer theme, base, components, utilities, platform;
 
 @import "tailwindcss";
 @import "./globals.css" layer(base);
@@ -226,3 +229,27 @@
 @source inline("{bg,text,border}-{bg,surface,surface-raised,sidebar,hover,selected,overlay,border,strong,heading,text,muted,faint,disabled,accent,accent-hover,accent-text,accent-soft,accent-ink,link,tint,danger,danger-soft,danger-ink,success,success-soft,success-ink,warning,warning-soft,warning-ink,info,info-soft,info-ink,focus}");
 @source inline("{bg,text,border}-brand-{primary,secondary,accent,neutral-dark,neutral-light,primary-soft,primary-ink,secondary-soft,secondary-ink,accent-soft,accent-ink}");
 @source inline("{bg,text,border}-stage-{1,2,3,4,5,6,7,8}{,-soft}");
+
+/* ---------------------------------------------------------------------------
+ * The macOS title bar, and why this one rule lives here.
+ *
+ * The window runs `titleBarStyle: "Overlay"`, so the web view starts at y=0 and
+ * the traffic lights are drawn over the sidebar's first rows. globals.css has
+ * said `[data-platform="macos"] [data-titlebar-inset] { padding-top: var(
+ * --titlebar-inset) }` for a while and it never once applied: globals.css is
+ * imported into `base`, the brand slot's padding comes from a Tailwind
+ * `pt-[…]` utility, and a later LAYER beats any specificity an earlier one can
+ * muster. The lockup therefore kept its 16px and kept sitting under the close
+ * button on every Mac (design/apple-hig-review.md, finding 1) — which no
+ * attribute assertion would have caught, only a computed-pixel one.
+ *
+ * `platform` is declared after `utilities` above, so this is the one place the
+ * rule can win from. Nothing else belongs in this layer: it is for chrome the
+ * operating system forces on us, not for styling.
+ * ------------------------------------------------------------------------ */
+
+@layer platform {
+  [data-platform="macos"] [data-titlebar-inset] {
+    padding-top: var(--titlebar-inset);
+  }
+}
