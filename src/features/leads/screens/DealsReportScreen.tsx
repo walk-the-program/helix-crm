@@ -61,6 +61,7 @@ import type {
   TrendGrain,
   WonLostRow,
 } from "@/db/repos/reports";
+import { useVocabulary } from "@/app/vocabulary";
 import { ReportsFrame } from "@/features/leads/components/ReportsFrame";
 import { ReportCard } from "@/features/leads/components/ReportCard";
 import { DataTable } from "@/features/leads/components/DataTable";
@@ -149,21 +150,22 @@ export function DealsReportScreen() {
   }, [period]);
 
   const query = useDealsReport(period, grain, granularity);
+  const vocabulary = useVocabulary();
 
   return (
     <ReportsFrame
       active="deals"
-      title="Deals"
+      title={vocabulary.many}
       subtitle="What came in, what closed, and how long a win takes."
       period={{ value: period, onChange: setPeriod }}
     >
       {query.isPending ? (
         <div className="flex justify-center py-[var(--space-10)]">
-          <Spinner label="Loading the deals report" />
+          <Spinner label={`Loading the ${vocabulary.lowerMany} report`} />
         </div>
       ) : query.isError ? (
         <EmptyState
-          title="The deals report could not load"
+          title={`The ${vocabulary.lowerMany} report could not load`}
           description={
             query.error instanceof Error
               ? query.error.message
@@ -258,6 +260,7 @@ function TrendCard(props: {
   onGrainChange: (grain: TrendGrain) => void;
 }) {
   const { rows, grain, onGrainChange } = props;
+  const vocabulary = useVocabulary();
   const empty = rows.every((row) => row.count === 0);
 
   const data = rows.map((row) => ({
@@ -296,15 +299,15 @@ function TrendCard(props: {
 
   return (
     <ReportCard
-      title="New deals"
+      title={`New ${vocabulary.lowerMany}`}
       description={
         grain === "week"
-          ? "Deals created in each of the last twelve weeks."
-          : "Deals created in each of the last twelve months."
+          ? `${vocabulary.many} created in each of the last twelve weeks.`
+          : `${vocabulary.many} created in each of the last twelve months.`
       }
       empty={empty}
-      emptyTitle="No deals yet"
-      emptyDescription="Deals show up here the week they come in."
+      emptyTitle={`No ${vocabulary.lowerMany} yet`}
+      emptyDescription={`${vocabulary.many} show up here the week they come in.`}
       headerExtra={<GrainControl value={grain} onChange={onGrainChange} />}
       csv={csv}
       chart={
@@ -483,6 +486,7 @@ function WonLostCard(props: {
   onGranularityChange: (value: Granularity) => void;
 }) {
   const { rows, granularity, onGranularityChange } = props;
+  const vocabulary = useVocabulary();
   const empty = rows.length === 0;
 
   const wonTotalCents = rows.reduce((sum, row) => sum + row.wonValueCents, 0);
@@ -541,10 +545,10 @@ function WonLostCard(props: {
   return (
     <ReportCard
       title="Won and lost"
-      description="Deals that closed in this period, by outcome."
+      description={`${vocabulary.many} that closed in this period, by outcome.`}
       empty={empty}
       emptyTitle="No wins or losses yet"
-      emptyDescription="Deals that close in this period show up here, won or lost."
+      emptyDescription={`${vocabulary.many} that close in this period show up here, won or lost.`}
       headerExtra={<GranularityControl value={granularity} onChange={onGranularityChange} />}
       csv={csv}
       chart={

@@ -704,7 +704,42 @@ export type FromDealOptions = {
   paymentInstructions?: string | null;
   notes?: string | null;
   issuedOn?: string;
+  /**
+   * Take what has already been billed against this deal off the total, as one
+   * negative line naming the invoices it credits.
+   *
+   * This is how a deposit works without a payments table (CPO audit, F-LB-7,
+   * ruling R7). The owner raises a deposit invoice for half the job now; when
+   * the work is done, the balance invoice carries the deal's one-time lines in
+   * full and then subtracts what the deposit already billed, so the two
+   * invoices add up to the deal's one-time value to the cent and Invoiced is
+   * never double-counted.
+   *
+   * It credits every sent or paid invoice on the deal, not a document flagged
+   * "deposit" - there is no such flag and there does not need to be one. Two
+   * partial invoices credit as naturally as one, and a voided invoice credits
+   * nothing, because it billed nothing.
+   */
+  creditPriorInvoices?: boolean;
 };
+
+/** What has already been billed against a deal: sent and paid, never draft or void. */
+async function priorInvoiced(
+  dealId: string,
+): Promise<{ cents: number; numbers: string[] }> {
+  const rows = await raw.query(
+    `SELECT d.number AS d_number, d.total_cents AS d_total_cents
+     FROM documents d
+     WHERE d.deal_id = ? AND d.kind = 'invoice' AND d.deleted_at IS NULL
+       AND d.status IN ('sent', 'paid')
+     ORDER BY d.issued_on ASC, d.rowid ASC`,
+    [dealId],
+  );
+  return {
+    cents: rows.reduce((sum, row) => sum + Number(row[1] ?? 0), 0),
+    numbers: rows.map((row) => String(row[0])),
+  };
+}
 
 /**
  * Raise a quote or an invoice from a deal, copying its lines at the price the
@@ -731,6 +766,23 @@ export async function createFromDeal(
 
   const issuedOn = options.issuedOn ?? todayLocal();
 
+  const extraItems: NewDocumentItem[] = [];
+  if (options.creditPriorInvoices) {
+    const prior = await priorInvoiced(dealId);
+    if (prior.cents > 0) {
+      extraItems.push({
+        name: `Less already invoiced (${prior.numbers.join(", ")})`,
+        // Not taxable: the credit takes money off the total, and taxing a
+        // negative line would hand back tax that was never charged on it.
+        taxable: false,
+        qty: 1,
+        unitCents: -prior.cents,
+        kind: "one_time",
+        interval: null,
+      });
+    }
+  }
+
   // contactId/companyId are not passed here: `create` -> `insertDocument`
   // always takes them from the deal itself, so fetching them here as well
   // would be redundant, dead-reading code.
@@ -750,21 +802,116 @@ export async function createFromDeal(
         : null,
     notes: options.notes ?? null,
     paymentInstructions: options.paymentInstructions ?? null,
-    items: lines.map((line) => ({
-      name: line.name,
-      description: line.description,
-      qty: line.qty,
-      unitCents: line.actualUnitCents,
-      taxable: line.taxable,
-      kind: line.kind === "recurring" ? ("recurring" as const) : ("one_time" as const),
-      interval:
-        line.kind === "recurring"
-          ? line.interval === "year"
-            ? ("year" as const)
-            : ("month" as const)
-          : null,
-    })),
+    items: [
+      ...lines.map((line) => ({
+        name: line.name,
+        description: line.description,
+        qty: line.qty,
+        unitCents: line.actualUnitCents,
+        taxable: line.taxable,
+        kind: line.kind === "recurring" ? ("recurring" as const) : ("one_time" as const),
+        interval:
+          line.kind === "recurring"
+            ? line.interval === "year"
+              ? ("year" as const)
+              : ("month" as const)
+            : null,
+      })),
+      ...extraItems,
+    ],
   });
+}
+
+/**
+ * A deposit: one invoice for part of the deal's one-time value, now.
+ *
+ * Deliberately one line rather than a percentage of each line. An owner asks
+ * for "half down" or "five hundred up front", not for half of the mulch and
+ * half of the edging, and one line is what the customer can read. The balance
+ * invoice is an ordinary `createFromDeal` with `creditPriorInvoices`, which is
+ * what makes the two add up.
+ *
+ * Tax sits on the balance invoice, not here: the deposit line is untaxed and
+ * the balance carries the deal's real taxable lines at their full value, so
+ * the tax the customer pays across the two is the tax on the job.
+ */
+export async function createDeposit(
+  dealId: string,
+  options: {
+    amountCents: number;
+    prefix: string;
+    dueDays?: number;
+    paymentInstructions?: string | null;
+    issuedOn?: string;
+  },
+): Promise<Document> {
+  if (!Number.isInteger(options.amountCents) || options.amountCents <= 0) {
+    throw new ValidationError("A deposit needs an amount.", [
+      { path: "amountCents", message: "Enter how much to ask for up front." },
+    ]);
+  }
+  const lines = selectLines(await dealLines(dealId), "one_time");
+  const oneTimeCents = lines.reduce(
+    (sum, line) => sum + Math.round(line.qty * line.actualUnitCents),
+    0,
+  );
+  if (lines.length === 0) {
+    throw new ValidationError("There is nothing to take a deposit on.", [
+      { path: "items", message: "This deal has no one-off services on it yet. Add one first." },
+    ]);
+  }
+  const prior = await priorInvoiced(dealId);
+  const remaining = oneTimeCents - prior.cents;
+  if (options.amountCents > remaining) {
+    throw new ValidationError("That is more than the job is worth.", [
+      {
+        path: "amountCents",
+        message:
+          prior.cents > 0
+            ? `Only ${formatMoney(remaining)} of this job has not been invoiced yet.`
+            : `This job is worth ${formatMoney(oneTimeCents)}.`,
+      },
+    ]);
+  }
+
+  const issuedOn = options.issuedOn ?? todayLocal();
+  return create({
+    kind: "invoice",
+    dealId,
+    prefix: options.prefix,
+    taxRateBp: 0,
+    issuedOn,
+    dueOn: addDaysToDateString(issuedOn, options.dueDays ?? 14),
+    paymentInstructions: options.paymentInstructions ?? null,
+    items: [
+      {
+        name: "Deposit",
+        description: "Part payment up front. The balance is invoiced when the work is done.",
+        qty: 1,
+        unitCents: options.amountCents,
+        taxable: false,
+        kind: "one_time",
+        interval: null,
+      },
+    ],
+  });
+}
+
+/** The deal's one-time value, and what is left to bill after sent and paid invoices. */
+export async function remainingOneTime(
+  dealId: string,
+): Promise<{ oneTimeCents: number; invoicedCents: number; remainingCents: number }> {
+  const lines = selectLines(await dealLines(dealId), "one_time");
+  const oneTimeCents = lines.reduce(
+    (sum, line) => sum + Math.round(line.qty * line.actualUnitCents),
+    0,
+  );
+  const prior = await priorInvoiced(dealId);
+  return {
+    oneTimeCents,
+    invoicedCents: prior.cents,
+    remainingCents: oneTimeCents - prior.cents,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

@@ -27,19 +27,24 @@
  * already does it. `resolveErrorMessage` is the pure half of that, exported
  * so the choice is unit testable without a toast or a DOM.
  */
+import { useState } from "react";
 import { Link } from "wouter";
 import { Button, Badge, CardGroupLabel, toast } from "@/ui";
 import { formatMoney } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
 import { ValidationError } from "@/db/errors";
 import {
+  useCreateDeposit,
   useCreateFromDeal,
   useDealDocuments,
   useDealSchedule,
   useInvoiceSettings,
   useIssueScheduledInvoice,
+  useRemainingOneTime,
 } from "@/features/invoices/lib/hooks";
+import { DepositDialog } from "@/features/invoices/components/DepositDialog";
 import { dueLabel, isOverdue, statusLabel, statusTone } from "@/features/invoices/lib/format";
+import { useDeal } from "@/features/records/lib/hooks";
 
 export function resolveErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof ValidationError && err.issues.length > 0) {
@@ -59,16 +64,52 @@ export function DealInvoicesPanel(props: { dealId: string }) {
   const { data: settings } = useInvoiceSettings();
   const createFromDeal = useCreateFromDeal();
   const issueScheduled = useIssueScheduledInvoice();
+  const createDeposit = useCreateDeposit();
+  const { data: remaining } = useRemainingOneTime(dealId);
+  const { data: deal } = useDeal(dealId);
+  const [depositOpen, setDepositOpen] = useState(false);
 
   const rows = documents ?? [];
+  const money = (cents: number) => formatMoney(cents, settings?.currency, settings?.locale);
+
+  // Anything already billed comes off the balance invoice, by number, so a
+  // deposit and its balance add up to the job's one-time value (R7).
+  const alreadyInvoiced = (remaining?.invoicedCents ?? 0) > 0;
+  const canTakeDeposit = (remaining?.remainingCents ?? 0) > 0;
+
+  /**
+   * A won job with services on it and nothing billed for it (F-LB-15).
+   *
+   * The landscaping preset's won stage is called "Paid", so an owner who
+   * invoices somewhere else will see Won and Collected disagree for ever, and
+   * that is fine - the Revenue card's caption now explains it. But an owner
+   * who DOES invoice here and simply forgot has no prompt at all, and a job
+   * marked won with nothing billed is the most expensive thing this product
+   * can fail to mention. One line of text, no badge and no colour: it is a
+   * reminder, not an alarm, and it says nothing on an unpriced job or one that
+   * is still open.
+   */
+  const notBilledYet =
+    deal?.stageIsWon === true &&
+    (remaining?.oneTimeCents ?? 0) > 0 &&
+    rows.filter((row) => row.kind === "invoice" && row.status !== "void").length === 0;
 
   async function create(kind: "quote" | "invoice") {
     try {
-      const created = await createFromDeal.mutateAsync({ dealId, kind });
+      const created = await createFromDeal.mutateAsync({
+        dealId,
+        kind,
+        creditPriorInvoices: kind === "invoice",
+      });
       toast.success(`Drafted ${created.number}.`);
     } catch (err) {
       report(err, `That ${kind} could not be created.`);
     }
+  }
+
+  async function takeDeposit(amountCents: number) {
+    const created = await createDeposit.mutateAsync({ dealId, amountCents });
+    toast.success(`Drafted ${created.number} for ${money(amountCents)}.`);
   }
 
   async function issueThisPeriod() {
@@ -103,6 +144,16 @@ export function DealInvoicesPanel(props: { dealId: string }) {
           >
             Create invoice
           </Button>
+          {canTakeDeposit && !alreadyInvoiced ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={createDeposit.isPending}
+              onClick={() => setDepositOpen(true)}
+            >
+              Deposit invoice
+            </Button>
+          ) : null}
           {schedule && schedule.active ? (
             <Button
               variant="secondary"
@@ -114,6 +165,22 @@ export function DealInvoicesPanel(props: { dealId: string }) {
             </Button>
           ) : null}
         </div>
+
+        {notBilledYet ? (
+          <p
+            data-testid="won-not-billed"
+            className="border-b border-[var(--color-border)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+          >
+            This job is won and nothing has been billed for it.
+          </p>
+        ) : null}
+
+        {alreadyInvoiced && remaining ? (
+          <p className="border-b border-[var(--color-border)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            {money(remaining.invoicedCents)} of this job has been invoiced already. The next
+            invoice bills the {money(remaining.remainingCents)} that is left.
+          </p>
+        ) : null}
 
         {schedule ? (
           <p className="border-b border-[var(--color-border)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
@@ -159,6 +226,15 @@ export function DealInvoicesPanel(props: { dealId: string }) {
           </ul>
         )}
       </div>
+
+      <DepositDialog
+        open={depositOpen}
+        onOpenChange={setDepositOpen}
+        remainingCents={remaining?.remainingCents ?? 0}
+        currency={settings?.currency}
+        locale={settings?.locale}
+        onConfirm={takeDeposit}
+      />
     </div>
   );
 }

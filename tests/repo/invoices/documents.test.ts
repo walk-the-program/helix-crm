@@ -85,6 +85,127 @@ function lines(...unitCents: number[]): documents.NewDocumentItem[] {
 
 /* -------------------------------------------------------------------------- */
 
+describe("documents: deposits and the balance (F-LB-7)", () => {
+  it("a deposit and its balance add up to the job's one-time value, to the cent", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal("Retaining wall");
+    await addDealItem(dealId, { name: "Blockwork", actualUnitCents: 145_000, position: 0 });
+    await addDealItem(dealId, { name: "Haulage", qty: 3, actualUnitCents: 11_111, position: 1 });
+    // A monthly line must not affect any of this: it is billed by the schedule.
+    await addDealItem(dealId, {
+      name: "Monthly upkeep",
+      actualUnitCents: 18_000,
+      kind: "recurring",
+      interval: "month",
+      position: 2,
+    });
+
+    const before = await documents.remainingOneTime(dealId);
+    const oneTime = 145_000 + 33_333;
+    expect(before.oneTimeCents).toBe(oneTime);
+    expect(before.invoicedCents).toBe(0);
+    expect(before.remainingCents).toBe(oneTime);
+
+    // Half down, rounded to the cent.
+    const depositCents = Math.round(oneTime / 2);
+    const deposit = await documents.createDeposit(dealId, {
+      amountCents: depositCents,
+      prefix: "INV",
+    });
+    expect(deposit.totalCents).toBe(depositCents);
+    const depositItems = await documents.listItems(deposit.id);
+    expect(depositItems).toHaveLength(1);
+    expect(depositItems[0].name).toBe("Deposit");
+
+    // A draft deposit is not billed yet, so nothing is credited.
+    expect((await documents.remainingOneTime(dealId)).invoicedCents).toBe(0);
+    await documents.send(deposit.id);
+    expect((await documents.remainingOneTime(dealId)).invoicedCents).toBe(depositCents);
+
+    const balance = await documents.createFromDeal(dealId, {
+      kind: "invoice",
+      prefix: "INV",
+      taxRateBp: 0,
+      creditPriorInvoices: true,
+    });
+    const balanceItems = await documents.listItems(balance.id);
+    // The deal's two one-time lines, then the credit naming the deposit.
+    expect(balanceItems).toHaveLength(3);
+    expect(balanceItems[2].name).toBe(`Less already invoiced (${deposit.number})`);
+    expect(balanceItems[2].unitCents).toBe(-depositCents);
+    expect(balanceItems[2].taxable).toBe(false);
+
+    // The whole point: the two invoices are the job, exactly.
+    expect(deposit.totalCents + balance.totalCents).toBe(oneTime);
+  });
+
+  it("credits two partial invoices, and a voided one not at all", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal("Sod and grading");
+    await addDealItem(dealId, { name: "Sod", actualUnitCents: 90_000, position: 0 });
+
+    const first = await documents.createDeposit(dealId, { amountCents: 20_000, prefix: "INV" });
+    await documents.send(first.id);
+    const second = await documents.createDeposit(dealId, { amountCents: 30_000, prefix: "INV" });
+    await documents.send(second.id);
+    const dead = await documents.createDeposit(dealId, { amountCents: 5_000, prefix: "INV" });
+    await documents.send(dead.id);
+    await documents.markVoid(dead.id);
+
+    const balance = await documents.createFromDeal(dealId, {
+      kind: "invoice",
+      prefix: "INV",
+      taxRateBp: 0,
+      creditPriorInvoices: true,
+    });
+    const items = await documents.listItems(balance.id);
+    expect(items[1].name).toBe(`Less already invoiced (${first.number}, ${second.number})`);
+    expect(items[1].unitCents).toBe(-50_000);
+    expect(first.totalCents + second.totalCents + balance.totalCents).toBe(90_000);
+  });
+
+  it("refuses a deposit bigger than what is left, and one on a deal with no one-off work", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal("Too much");
+    await addDealItem(dealId, { name: "Edging", actualUnitCents: 10_000, position: 0 });
+
+    await expect(
+      documents.createDeposit(dealId, { amountCents: 10_001, prefix: "INV" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      documents.createDeposit(dealId, { amountCents: 0, prefix: "INV" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    const monthlyOnly = await aDeal("Upkeep only");
+    await addDealItem(monthlyOnly, {
+      name: "Monthly upkeep",
+      actualUnitCents: 18_000,
+      kind: "recurring",
+      interval: "month",
+      position: 0,
+    });
+    await expect(
+      documents.createDeposit(monthlyOnly, { amountCents: 5_000, prefix: "INV" }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it("adds no credit line when nothing has been billed yet", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal("Clean slate");
+    await addDealItem(dealId, { name: "Mulch", actualUnitCents: 45_000, position: 0 });
+
+    const invoice = await documents.createFromDeal(dealId, {
+      kind: "invoice",
+      prefix: "INV",
+      taxRateBp: 0,
+      creditPriorInvoices: true,
+    });
+    const items = await documents.listItems(invoice.id);
+    expect(items).toHaveLength(1);
+    expect(invoice.totalCents).toBe(45_000);
+  });
+});
+
 describe("documents: numbering", () => {
   it("counts up per kind, with the prefix and the year", async () => {
     h = await createSeededHarness();

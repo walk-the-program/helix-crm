@@ -218,6 +218,7 @@ export function useCreateFromDeal() {
       dealId: string;
       kind: "quote" | "invoice";
       lines?: documents.LineSelection;
+      creditPriorInvoices?: boolean;
     }) => {
       const settings = await settingsNow();
       return documents.createFromDeal(input.dealId, {
@@ -225,6 +226,33 @@ export function useCreateFromDeal() {
         lines: input.lines,
         prefix: prefixFor(input.kind, settings),
         taxRateBp: settings.taxRateBp,
+        dueDays: settings.dueDays,
+        paymentInstructions: settings.paymentInstructions || null,
+        creditPriorInvoices: input.creditPriorInvoices,
+      });
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** What is left to bill on a deal, for the deposit dialog and the balance nudge. */
+export function useRemainingOneTime(dealId: string) {
+  return useQuery({
+    queryKey: ["invoices", "remaining", dealId] as const,
+    queryFn: () => documents.remainingOneTime(dealId),
+    enabled: dealId.length > 0,
+  });
+}
+
+/** A deposit invoice: part of the deal's one-time value, billed now (R7). */
+export function useCreateDeposit() {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: async (input: { dealId: string; amountCents: number }) => {
+      const settings = await settingsNow();
+      return documents.createDeposit(input.dealId, {
+        amountCents: input.amountCents,
+        prefix: prefixFor("invoice", settings),
         dueDays: settings.dueDays,
         paymentInstructions: settings.paymentInstructions || null,
       });
