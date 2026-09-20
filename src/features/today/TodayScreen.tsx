@@ -27,14 +27,36 @@
  * wants the example gone, and a button he can only reach by emptying the
  * workspace first is no button at all.
  *
- * Above all of it, in either state, sits the recovery-key card (LR-6): a
+ * Above all of it, in every state, sits the recovery-key card (LR-6): a
  * fresh workspace cannot reach a steady state without the owner having seen
  * the key and confirmed they kept it, and Settings > Backups is a screen a
  * client may never open. It is the one first-run screen with a fourth thing on
  * it rather than a fourth onboarding step, because it is not part of setup —
  * it is a standing condition on every Today until it is met, then gone for
- * good. While it is showing it is also the screen's one primary block, which
- * is why FirstRun's "Import a CSV" steps down to secondary underneath it (§5).
+ * good. That includes an existing workspace already in daily use: records and
+ * history do not imply anyone was ever shown the key, so the card shows there
+ * too until `recoveryKey.confirmedAt` is set, from either this card or
+ * `RecoveryKeyPanel` in Settings > Backups (F-CS-1 A9) — one truth, one
+ * setting, read by `shouldShowRecoveryKeyCard`. While it is showing it is
+ * also the screen's one primary block, which is why the guidance screens'
+ * own primary action steps down to secondary underneath it (§5).
+ *
+ * There are three states, not two (F-CS-1). The CPO audit (F-LA-6) fixed half
+ * of "Today lies about what state the workspace is in" — one contact must not
+ * blank the screen to six empty panels — but left the other half standing: an
+ * owner who imports fifty-two real customers and then opens Today still saw
+ * the ORIGINAL first-run screen, "Import a spreadsheet" and all, telling him
+ * to do the thing he had just finished doing. `useTodayScreenState()`
+ * (src/features/today/lib/useToday.ts) is the one place this is decided:
+ *
+ *   "empty"   — no contact, no company, nothing due either: the original
+ *               three-starter-card first run, unchanged.
+ *   "records" — a contact or a company exists (one, or fifty-two off a CSV;
+ *               both get the same honest screen) but nothing Today reports on
+ *               yet: a different set of starter cards, the next real actions
+ *               rather than "import your customers" again.
+ *   "active"  — a task, an open job, an activity, a document or a reminder
+ *               exists: the real panels.
  */
 
 import type { ReactNode } from "react";
@@ -56,7 +78,7 @@ import {
   useShowRecoveryKeyCard,
 } from "@/features/today/sections/RecoveryKeyCard";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
-import { useTodayIsUnstarted } from "@/features/today/lib/useToday";
+import { useConnectCard, useTodayScreenState } from "@/features/today/lib/useToday";
 import { useVocabulary } from "@/app/vocabulary";
 import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
 import { UnpaidInvoicesSection } from "@/features/invoices";
@@ -68,13 +90,27 @@ import { PollNotice } from "@/features/leads";
  * Until records ships it, the button takes him to Contacts, which is where he
  * would go next anyway.
  */
-export function runQuickAdd(): void {
-  const command = allCommands().find((c) => c.id === "quick-add");
+function runCommand(id: string, fallback: () => void): void {
+  const command = allCommands().find((c) => c.id === id);
   if (command) {
     void command.run();
     return;
   }
-  navigate("/contacts");
+  fallback();
+}
+
+export function runQuickAdd(): void {
+  runCommand("quick-add", () => navigate("/contacts"));
+}
+
+/** "Open a job/deal/quote" on the records-state screen. */
+export function runNewDeal(): void {
+  runCommand("new-deal", () => navigate("/pipeline"));
+}
+
+/** "Set a follow-up" on the records-state screen. */
+export function runAddFollowUp(): void {
+  runCommand("quick-add-task", () => navigate("/tasks"));
 }
 
 function todayLabel(locale?: string): string {
@@ -238,10 +274,87 @@ function FirstRun({ primary }: { primary: boolean }) {
   );
 }
 
+/**
+ * The second state (F-CS-1): a contact or a company already exists — an
+ * import landed, or someone was added by hand — but nothing Today reports on
+ * yet. "Nothing here yet" is as false here as it was for the CPO's
+ * one-contact case, so this says what is actually true and offers the next
+ * real actions instead of the original three: "Import a spreadsheet" is
+ * done, so it drops out, and "Connect a website" only stays while the
+ * workspace genuinely has none connected.
+ *
+ * `primary` follows the same rule as `FirstRun`'s: false while the
+ * recovery-key card owns the screen's one primary block above it.
+ */
+function RecordsStarted({ primary }: { primary: boolean }) {
+  const vocabulary = useVocabulary();
+  const connectCard = useConnectCard();
+  const showConnect = connectCard.data ? connectCard.data.siteOrigin === null : false;
+
+  return (
+    <div className="flex flex-col gap-[var(--space-6)]">
+      <div className="max-w-[var(--content-max)]">
+        <h2>Your customers are in Helix</h2>
+        <p className="mt-[var(--space-2)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
+          Today starts reporting the moment one of them is moving: a{" "}
+          {vocabulary.lower} open, a follow-up on the calendar, or a call
+          logged. Pick one below.
+        </p>
+      </div>
+
+      <ul className="m-0 grid list-none grid-cols-1 gap-[var(--space-4)] p-0 lg:grid-cols-3">
+        <StarterCard
+          title={`Open a ${vocabulary.lower}`}
+          description={`Start one for a customer who is already here. The ${vocabulary.lowerMany} board takes it from there.`}
+          action={
+            <Button type="button" variant="secondary" onClick={runNewDeal}>
+              {`Open a ${vocabulary.lower}`}
+            </Button>
+          }
+        />
+        <StarterCard
+          title="Set a follow-up"
+          description="A date and a name is enough. Today shows it the moment it exists."
+          action={
+            <Button
+              type="button"
+              variant={primary ? "primary" : "secondary"}
+              onClick={runAddFollowUp}
+            >
+              Set a follow-up
+            </Button>
+          }
+        />
+        <StarterCard
+          title="Log a call"
+          description="Open a customer's page and log the call, text or note that happened. That is what tells Today something moved."
+          action={
+            <Link href="/contacts" className={secondaryLinkClasses}>
+              Go to your customers
+            </Link>
+          }
+        />
+        {showConnect ? (
+          <StarterCard
+            title="Connect a website"
+            description="Leads from your website land here on their own. ClearPath sites work straight away; Help covers any other site."
+            action={
+              <Link href="/settings/site" className={secondaryLinkClasses}>
+                Connect website
+              </Link>
+            }
+          />
+        ) : null}
+      </ul>
+    </div>
+  );
+}
+
 export function TodayScreen() {
-  const { data: isEmpty, isLoading } = useTodayIsUnstarted();
+  const { data: screenState, isLoading } = useTodayScreenState();
   const showRecoveryCard = useShowRecoveryKeyCard();
   const formats = useFormats();
+  const isActive = screenState === "active";
 
   return (
     <div className="flex flex-col">
@@ -250,7 +363,7 @@ export function TodayScreen() {
         subtitle={
           <>
             {todayLabel(formats.locale)}
-            {isEmpty ? null : <WeekSummaryLine />}
+            {isActive ? <WeekSummaryLine /> : null}
           </>
         }
         actions={
@@ -273,8 +386,10 @@ export function TodayScreen() {
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             Reading the database.
           </p>
-        ) : isEmpty ? (
+        ) : screenState === "empty" ? (
           <FirstRun primary={!showRecoveryCard} />
+        ) : screenState === "records" ? (
+          <RecordsStarted primary={!showRecoveryCard} />
         ) : (
           <TodayPanels />
         )}
