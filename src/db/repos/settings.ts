@@ -88,6 +88,13 @@ const SETTINGS = {
   // automatically as soon as the owner touches them, workspace-wide.
   "contacts.showAs": { schema: z.enum(["name", "company"]), default: "name" },
   "contacts.hideUnnamed": { schema: z.boolean(), default: false },
+  // Today's recovery-key card (LR-6, F-OPS-1's second half): null until the
+  // owner has revealed the key and kept a copy of it, then the ISO instant
+  // they confirmed. The card in src/features/today/sections/RecoveryKeyCard.tsx
+  // reads and writes this through getRaw/setRaw, the same way the onboarding
+  // and AI keys above do; it is registered here only so getAll and the
+  // diagnostics screen know it exists.
+  "recoveryKey.confirmedAt": { schema: z.string().nullable(), default: null },
 };
 
 export type SettingKey = keyof typeof SETTINGS;
