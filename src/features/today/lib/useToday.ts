@@ -18,6 +18,8 @@ import * as activitiesRepo from "@/db/repos/activities";
 import * as settingsRepo from "@/db/repos/settings";
 import * as documentsRepo from "@/db/repos/documents";
 import * as recurringRepo from "@/db/repos/recurring";
+import * as contactsRepo from "@/db/repos/contacts";
+import * as companiesRepo from "@/db/repos/companies";
 import { nowIso, todayLocal } from "@/lib/dates";
 import { newLeads, type NewLead } from "@/db/repos/deals";
 import {
@@ -293,6 +295,67 @@ export function useTodayIsUnstarted() {
       });
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// The third state (F-CS-1): records exist, but nothing Today reports on yet
+// ---------------------------------------------------------------------------
+
+/**
+ * Does the workspace hold a contact or a company at all — an import landed,
+ * or someone typed one in by hand.
+ *
+ * This is deliberately not folded into `todayIsUnstarted`: that rule decides
+ * whether the real panels have anything to show, and stays exactly what it
+ * was (CPO audit, F-LA-6). This is a second, independent fact, and
+ * `todayScreenState` below is what combines the two.
+ */
+export function useWorkspaceHasRecords() {
+  return useQuery({
+    queryKey: [...qk.today(), "has-records"] as const,
+    queryFn: async () => {
+      const [contacts, companies] = await Promise.all([
+        contactsRepo.list({}, { limit: 1 }),
+        companiesRepo.list({}, { limit: 1 }),
+      ]);
+      return contacts.total > 0 || companies.total > 0;
+    },
+  });
+}
+
+export type TodayScreenState = "empty" | "records" | "active";
+
+/**
+ * The whole of Today's three-way branch, decided in one place rather than as
+ * inline JSX conditionals.
+ *
+ * `unstarted` false is `"active"` regardless of `hasRecords` — the real
+ * panels win once there is something for them to report. Otherwise it is
+ * `"records"` for a workspace that already holds a contact or a company (one,
+ * or fifty-two off a CSV: both get the same honest screen, F-CS-1) and
+ * `"empty"` for a workspace that holds nothing at all, which keeps the
+ * original three-starter-card first run unchanged.
+ */
+export function todayScreenState(input: {
+  unstarted: boolean;
+  hasRecords: boolean;
+}): TodayScreenState {
+  if (!input.unstarted) return "active";
+  return input.hasRecords ? "records" : "empty";
+}
+
+/** The composed hook TodayScreen.tsx actually renders off. */
+export function useTodayScreenState(): {
+  data: TodayScreenState | undefined;
+  isLoading: boolean;
+} {
+  const unstarted = useTodayIsUnstarted();
+  const hasRecords = useWorkspaceHasRecords();
+  const data =
+    unstarted.data === undefined || hasRecords.data === undefined
+      ? undefined
+      : todayScreenState({ unstarted: unstarted.data, hasRecords: hasRecords.data });
+  return { data, isLoading: unstarted.isLoading || hasRecords.isLoading };
 }
 
 // ---------------------------------------------------------------------------
