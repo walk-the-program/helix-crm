@@ -219,6 +219,17 @@ export async function sweepOldChangeLog(now: Date = new Date()): Promise<number>
   return removed;
 }
 
+/**
+ * Same reasoning as the lead poller's `scheduleIn` (LR-OPS-W2 B1): a
+ * `setTimeout` does not run during macOS sleep and fires once, late, on
+ * wake - never a burst of catch-up firings for however long the lid was
+ * closed. A 24-hour sweep firing a few hours late because the laptop slept
+ * through its slot is correct behaviour for a "once a day, while the app
+ * happens to be open" job; there is no clock this product owes anything to.
+ * The `sweeping` guard below is what keeps a slow sweep from ever being
+ * re-entered - sleep or no sleep, the next `schedule()` call only happens
+ * after the current one is completely done.
+ */
 function schedule(delay: number): void {
   if (timer !== null) clearTimeout(timer);
   timer = setTimeout(() => {

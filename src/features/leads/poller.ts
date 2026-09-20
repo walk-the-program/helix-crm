@@ -116,6 +116,21 @@ function clearTimer(): void {
   }
 }
 
+/**
+ * `setTimeout` does not fire during macOS sleep and fires once, late, on
+ * wake - it never queues up multiple catch-up firings for the time that
+ * passed (LR-OPS-W2 B1). For a five-minute poll interval that is the right
+ * behaviour with no extra machinery: a laptop closed for six hours wakes up,
+ * this fires once as soon as the event loop resumes, `tick()` runs (or is
+ * skipped for the ordinary reasons - not configured, paused, already
+ * running), and `rescheduleAfterTick()` puts the next one five minutes out
+ * from THEN. Nothing here ever runs twice for one sleep, and nothing here
+ * ever stops permanently because of one: every path through `tick()` -
+ * success, a network error, an auth stop (which intentionally does not
+ * reschedule; that is `refresh()`'s job) - reaches its own `finally` and
+ * either reschedules or leaves the stopped state exactly as visible as it
+ * already was.
+ */
 function scheduleIn(delayMs: number): void {
   clearTimer();
   timer = setTimeout(() => {
