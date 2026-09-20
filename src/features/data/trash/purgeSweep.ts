@@ -94,6 +94,7 @@ export type SweepResult = {
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
+let sweeping = false;
 let lastResult: SweepResult = { purged: 0, filesRemoved: 0, failed: [] };
 
 /** What the last sweep did. Read by Diagnostics; nothing else depends on it. */
@@ -221,26 +222,56 @@ export async function sweepOldChangeLog(now: Date = new Date()): Promise<number>
 function schedule(delay: number): void {
   if (timer !== null) clearTimeout(timer);
   timer = setTimeout(() => {
+    timer = null;
     void tick();
   }, delay);
 }
 
-async function tick(): Promise<void> {
+/**
+ * One sweep. Exported (LR-OPS-W2 B2) so a test can call it directly instead of
+ * only through the real 24-hour `setTimeout` chain - the same reason
+ * `poller.ts` exports `tick`.
+ *
+ * Three rules, matching the poller's own `tick()`:
+ *   - refuses to overlap itself (`sweeping`) - nothing in this file exposes a
+ *     second caller today (`sweepExpiredTrash` is exported separately, for a
+ *     future "empty the trash now" button, and does NOT come through here),
+ *     but the 24-hour chain only ever reaches the next `schedule()` after
+ *     this one fully returns, so this guard is what keeps that true if a
+ *     second entry point into this beat is ever added;
+ *   - skips while `timersPaused()` (an import or a restore holds the write
+ *     lock) rather than queueing a sweep behind it - and tries again soon
+ *     rather than waiting out the full 24 hours (LR-OPS-W2 B3);
+ *   - always reschedules, even when a sweep throws - both sweeps below
+ *     already catch their own errors, so nothing here can escape uncaught,
+ *     but the `finally` is the actual guarantee, not the fact that today's
+ *     callees happen to be well-behaved.
+ */
+export async function tick(): Promise<void> {
   if (timersPaused()) {
     schedule(RETRY_WHILE_BUSY_MS);
     return;
   }
-  try {
-    await sweepExpiredTrash();
-  } catch (err) {
-    // A failed sweep is not worth a banner: nothing the owner does depends on
-    // it, and the next one is a day away.
-    console.warn("[helix] purge sweep failed", err);
+  if (sweeping) {
+    schedule(RETRY_WHILE_BUSY_MS);
+    return;
   }
+  sweeping = true;
   try {
-    await sweepOldChangeLog();
-  } catch (err) {
-    console.warn("[helix] change_log sweep failed", err);
+    try {
+      await sweepExpiredTrash();
+    } catch (err) {
+      // A failed sweep is not worth a banner: nothing the owner does depends
+      // on it, and the next one is a day away.
+      console.warn("[helix] purge sweep failed", err);
+    }
+    try {
+      await sweepOldChangeLog();
+    } catch (err) {
+      console.warn("[helix] change_log sweep failed", err);
+    }
+  } finally {
+    sweeping = false;
   }
   schedule(PURGE_SWEEP_INTERVAL_MS);
 }
@@ -256,4 +287,14 @@ export function stopPurgeSweep(): void {
   if (timer !== null) clearTimeout(timer);
   timer = null;
   started = false;
+}
+
+/** Test seam: forget everything between cases, like the poller's own reset. */
+export function __resetPurgeSweepForTests(): void {
+  if (timer !== null) clearTimeout(timer);
+  timer = null;
+  started = false;
+  sweeping = false;
+  lastResult = { purged: 0, filesRemoved: 0, failed: [] };
+  lastChangeLogSwept = 0;
 }

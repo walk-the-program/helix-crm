@@ -15,6 +15,7 @@ import * as contacts from "../../../src/db/repos/contacts";
 import * as companies from "../../../src/db/repos/companies";
 import * as trash from "../../../src/db/repos/trash";
 import { raw } from "../../../src/db/client";
+import { pauseTimers } from "../../../src/db/writeLock";
 
 /**
  * The sweep reaches the filesystem through `fsBridge.removePath` and the
@@ -43,7 +44,7 @@ vi.mock("../../../src/features/data/lib/workspace", () => ({
   }),
 }));
 
-const { sweepExpiredTrash } = await import(
+const { sweepExpiredTrash, tick, __resetPurgeSweepForTests } = await import(
   "../../../src/features/data/trash/purgeSweep"
 );
 
@@ -54,6 +55,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  __resetPurgeSweepForTests();
+  vi.restoreAllMocks();
   h?.dispose();
   h = null;
 });
@@ -192,5 +195,81 @@ describe("the 30-day trash sweep", () => {
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0].reason).toContain("something held on to it");
     purge.mockRestore();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* LR-OPS-W2 B2/B3: tick() overlap, pause and reschedule                      */
+/* -------------------------------------------------------------------------- */
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+describe("tick() - overlap, pause and reschedule (LR-OPS-W2 B2/B3)", () => {
+  it("cannot overlap itself: a second tick landing mid-sweep does not run a second sweep", async () => {
+    h = await createSeededHarness();
+
+    let inFlight = 0;
+    let sawOverlap = false;
+    const expiredSpy = vi.spyOn(trash, "expired").mockImplementation(async () => {
+      inFlight += 1;
+      if (inFlight > 1) sawOverlap = true;
+      await delay(15);
+      inFlight -= 1;
+      return [];
+    });
+
+    // Both calls land while the write lock is free - the same shape as a
+    // daily timer tick and a hypothetical second trigger (a future "empty
+    // the trash now" button routed through tick(), or two workspaces'
+    // timers firing in the same task drain) landing together.
+    await Promise.all([tick(), tick()]);
+
+    expect(sawOverlap).toBe(false);
+    // One of the two calls actually swept; the other saw `sweeping` and
+    // rescheduled instead of running trash.expired() at all.
+    expect(expiredSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a tick while timersPaused() (an import or a restore) and sweeps normally once resumed (B3)", async () => {
+    h = await createSeededHarness();
+    const old = await contacts.create({ firstName: "Old", lastName: "Enough" });
+    await contacts.softDelete(old.id);
+    await backdate("contacts", old.id, 31);
+
+    const expiredSpy = vi.spyOn(trash, "expired");
+    const resume = pauseTimers();
+    try {
+      await tick();
+      // Nothing was even asked what is expired: an import or a restore in
+      // progress must not have hundreds of deletes queued up behind it, and
+      // the row backdated above is still exactly where it was.
+      expect(expiredSpy).not.toHaveBeenCalled();
+      expect(await contacts.get(old.id)).not.toBeNull();
+    } finally {
+      resume();
+    }
+
+    await tick();
+    expect(expiredSpy).toHaveBeenCalledTimes(1);
+    expect(await contacts.get(old.id)).toBeNull();
+  });
+
+  it("a tick that throws still reschedules rather than dying silently", async () => {
+    h = await createSeededHarness();
+    const expiredSpy = vi
+      .spyOn(trash, "expired")
+      .mockRejectedValueOnce(new Error("the disk went away mid-sweep"));
+
+    // sweepExpiredTrash's own error is caught inside tick(), not re-thrown -
+    // the assertion that matters is what happens AFTER, not this call itself.
+    await expect(tick()).resolves.toBeUndefined();
+
+    // If the throw had left `sweeping` stuck true, or `schedule()` had never
+    // run, this second call would silently do nothing at all. It does not:
+    // trash.expired() is reached again, on the very next tick.
+    await tick();
+    expect(expiredSpy).toHaveBeenCalledTimes(2);
   });
 });
