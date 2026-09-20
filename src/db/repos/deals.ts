@@ -512,22 +512,51 @@ export async function update(
   return updated.deal;
 }
 
-type StageFlags = { pipelineId: string; name: string; isWon: boolean; isLost: boolean };
+type StageFlags = {
+  pipelineId: string;
+  name: string;
+  isWon: boolean;
+  isLost: boolean;
+  /** The stage's own follow-up rule (0008_automations). Null means no rule. */
+  followUpDays: number | null;
+  followUpTitle: string | null;
+};
 
 async function stageFlags(stageId: string): Promise<StageFlags> {
   const rows = await raw.query(
     `SELECT s.pipeline_id AS s_pipeline_id, s.name AS s_name,
-            s.is_won AS s_is_won, s.is_lost AS s_is_lost
+            s.is_won AS s_is_won, s.is_lost AS s_is_lost,
+            s.follow_up_days AS s_follow_up_days,
+            s.follow_up_title AS s_follow_up_title
      FROM stages s WHERE s.id = ? AND s.deleted_at IS NULL`,
     [stageId],
   );
   if (rows.length === 0) throw new NotFoundError("stage", stageId);
+  const days = rows[0][4];
+  const title = rows[0][5];
   return {
     pipelineId: String(rows[0][0]),
     name: String(rows[0][1]),
     isWon: Number(rows[0][2]) !== 0,
     isLost: Number(rows[0][3]) !== 0,
+    followUpDays: days === null || days === undefined ? null : Number(days),
+    followUpTitle: title === null || title === undefined ? null : String(title),
   };
+}
+
+/**
+ * Who a deal is about, for an automation's task title and its timeline line.
+ *
+ * The contact's name if there is one, otherwise the company's, otherwise the
+ * deal's own title - a rule must always have something to put in {name},
+ * rather than writing "Call  about their request".
+ */
+function customerNameOf(deal: Deal): string {
+  const person = `${deal.contactFirstName ?? ""} ${deal.contactLastName ?? ""}`.trim();
+  if (person.length > 0) return person;
+  const company = trimmed(deal.companyName ?? "");
+  if (company.length > 0) return company;
+  return deal.title;
 }
 
 /**
@@ -556,98 +585,188 @@ export async function moveToStage(
   } = {},
 ): Promise<Deal> {
   return withTransaction(async () => {
-    const before = await getOrThrow(id);
-    const target = await stageFlags(toStageId);
-    const source = await stageFlags(before.stageId);
-
-    if (target.pipelineId !== source.pipelineId) {
-      throw new ValidationError("That stage belongs to another pipeline.", [
-        { path: "stageId", message: "Stage is in a different pipeline." },
-      ]);
-    }
-    // The reason this deal will end up with: an explicit value wins, even an
-    // explicit null, so "clear the reason" cannot silently keep the old one.
-    const effectiveReason =
-      options.outcomeReason !== undefined
-        ? options.outcomeReason
-        : before.outcomeReason;
-    if (target.isLost && trimmed(effectiveReason).length === 0) {
-      // The owner's own word for these. A workspace that calls them jobs
-      // should not be told a "deal" needs anything (phase two, copy: the
-      // vocabulary reaches every string the owner reads, including the ones a
-      // repository writes).
-      const word = vocabularyFor(await settingsRepo.get("vocabulary")).lower;
-      throw new ValidationError(`Losing a ${word} needs a reason.`, [
-        { path: "outcomeReason", message: "Say why it was lost." },
-      ]);
-    }
-
-    const now = nowIso();
-    const at = options.at ?? now;
-    const changedStage = before.stageId !== toStageId;
-    const closing = target.isWon || target.isLost;
-    /**
-     * Re-picking the stage a closed deal already sits in, with a date, is how
-     * a wrong won or lost date is corrected.
-     *
-     * Before this, `closed_at` was `before.closedAt ?? at`, so the first close
-     * won forever and the only way to fix a mistyped date was to reopen and
-     * re-win - two stage events and two timeline lines for one correction
-     * (CPO audit, F-LA-10; ruling R2). An explicitly passed `at` now wins.
-     * Nothing else changes: no `deal_stage_events` row, because the deal did
-     * not move, and the timeline says what actually happened.
-     */
-    const redatingClose =
-      !changedStage && closing && options.at !== undefined && options.at !== before.closedAt;
-
-    const values: Record<string, unknown> = {
-      stageId: toStageId,
-      updatedAt: now,
-      closedAt: closing ? (redatingClose ? at : (before.closedAt ?? at)) : null,
-    };
-    if (changedStage || redatingClose) values.stageEnteredAt = at;
-    // An open stage has no outcome, so leaving won or lost clears the reason:
-    // that is the reopen path.
-    values.outcomeReason = closing ? trimmedOrNull(effectiveReason) : null;
-
-    const stmt = updateStatement("deals", id, values);
-    await raw.execute(stmt.sql, stmt.params);
-
-    if (changedStage) {
-      const ev = insertStatement("deal_stage_events", {
-        id: newId(),
-        createdAt: now,
-        updatedAt: now,
-        dealId: id,
-        fromStageId: before.stageId,
-        toStageId,
-        at,
-      });
-      await raw.execute(ev.sql, ev.params);
-
-      // The dated, confirmed timeline entry (D24): "Moved to Won on Sep 19",
-      // in the same transaction as the move it describes.
-      const sys = systemStatement({
-        dealId: id,
-        body: `Moved to ${target.name} on ${formatDateDisplay(at)}`,
-        occurredAt: at,
-      });
-      await raw.execute(sys.sql, sys.params);
-    } else if (redatingClose) {
-      const sys = systemStatement({
-        dealId: id,
-        body: `${target.isWon ? "Won" : "Lost"} date changed to ${formatDateDisplay(at)}`,
-        occurredAt: at,
-      });
-      await raw.execute(sys.sql, sys.params);
-    }
-
-    await reposition(id, toStageId, options.toIndex);
-    // The stage it left must not keep a hole where it used to sit.
-    if (changedStage) await compactStage(before.stageId);
-    await logWrite("deal", id, "update", before, values, options.batchId);
+    await applyStageMove(id, toStageId, options);
     return getOrThrow(id);
   }, "Moving a deal");
+}
+
+/**
+ * Move several deals into one stage as ONE write.
+ *
+ * The bulk bar on the deals list needs three things a loop of `moveToStage`
+ * calls cannot give it: one transaction (twelve moves either all land or none
+ * do), one `batch_id` (so Cmd+Z reverses the whole move rather than one deal
+ * at a time), and each stage rule firing exactly once per deal. It shares its
+ * body with `moveToStage`, so a bulk move IS the single move - same
+ * validation, same `deal_stage_events` row, same timeline line, same
+ * follow-up task - run twelve times inside one lock.
+ *
+ * A deal already sitting in the target stage is not a move: it writes no
+ * event and fires no rule, exactly as the single-deal path decides. A deal
+ * that fails validation (a lost stage with no reason) throws, and the
+ * transaction takes every other deal back with it.
+ */
+export async function moveManyToStage(
+  ids: string[],
+  toStageId: string,
+  options: {
+    outcomeReason?: string | null;
+    at?: string;
+    batchId?: string;
+  } = {},
+): Promise<{ moved: number; batchId: string }> {
+  const unique = [...new Set(ids)];
+  const batchId = options.batchId ?? newId();
+  if (unique.length === 0) return { moved: 0, batchId };
+  return withTransaction(async () => {
+    for (const id of unique) {
+      await applyStageMove(id, toStageId, { ...options, batchId });
+    }
+    return { moved: unique.length, batchId };
+  }, "Moving deals");
+}
+
+/**
+ * One deal's stage move, with the caller already holding the write lock.
+ *
+ * The lock is not reentrant, so this takes neither `withWrite` nor
+ * `withTransaction`: `moveToStage` and `moveManyToStage` each open one and
+ * call this inside it.
+ */
+async function applyStageMove(
+  id: string,
+  toStageId: string,
+  options: {
+    toIndex?: number;
+    outcomeReason?: string | null;
+    at?: string;
+    batchId?: string;
+  },
+): Promise<void> {
+  const before = await getOrThrow(id);
+  const target = await stageFlags(toStageId);
+  const source = await stageFlags(before.stageId);
+
+  if (target.pipelineId !== source.pipelineId) {
+    throw new ValidationError("That stage belongs to another pipeline.", [
+      { path: "stageId", message: "Stage is in a different pipeline." },
+    ]);
+  }
+  // The reason this deal will end up with: an explicit value wins, even an
+  // explicit null, so "clear the reason" cannot silently keep the old one.
+  const effectiveReason =
+    options.outcomeReason !== undefined
+      ? options.outcomeReason
+      : before.outcomeReason;
+  if (target.isLost && trimmed(effectiveReason).length === 0) {
+    // The owner's own word for these. A workspace that calls them jobs
+    // should not be told a "deal" needs anything (phase two, copy: the
+    // vocabulary reaches every string the owner reads, including the ones a
+    // repository writes).
+    const word = vocabularyFor(await settingsRepo.get("vocabulary")).lower;
+    throw new ValidationError(`Losing a ${word} needs a reason.`, [
+      { path: "outcomeReason", message: "Say why it was lost." },
+    ]);
+  }
+
+  const now = nowIso();
+  const at = options.at ?? now;
+  const changedStage = before.stageId !== toStageId;
+  const closing = target.isWon || target.isLost;
+  /**
+   * Re-picking the stage a closed deal already sits in, with a date, is how
+   * a wrong won or lost date is corrected.
+   *
+   * Before this, `closed_at` was `before.closedAt ?? at`, so the first close
+   * won forever and the only way to fix a mistyped date was to reopen and
+   * re-win - two stage events and two timeline lines for one correction
+   * (CPO audit, F-LA-10; ruling R2). An explicitly passed `at` now wins.
+   * Nothing else changes: no `deal_stage_events` row, because the deal did
+   * not move, and the timeline says what actually happened.
+   */
+  const redatingClose =
+    !changedStage && closing && options.at !== undefined && options.at !== before.closedAt;
+
+  const values: Record<string, unknown> = {
+    stageId: toStageId,
+    updatedAt: now,
+    closedAt: closing ? (redatingClose ? at : (before.closedAt ?? at)) : null,
+  };
+  if (changedStage || redatingClose) values.stageEnteredAt = at;
+  // An open stage has no outcome, so leaving won or lost clears the reason:
+  // that is the reopen path.
+  values.outcomeReason = closing ? trimmedOrNull(effectiveReason) : null;
+
+  const stmt = updateStatement("deals", id, values);
+  await raw.execute(stmt.sql, stmt.params);
+
+  if (changedStage) {
+    const ev = insertStatement("deal_stage_events", {
+      id: newId(),
+      createdAt: now,
+      updatedAt: now,
+      dealId: id,
+      fromStageId: before.stageId,
+      toStageId,
+      at,
+    });
+    await raw.execute(ev.sql, ev.params);
+
+    // The dated, confirmed timeline entry (D24): "Moved to Won on Sep 19",
+    // in the same transaction as the move it describes.
+    const sys = systemStatement({
+      dealId: id,
+      body: `Moved to ${target.name} on ${formatDateDisplay(at)}`,
+      occurredAt: at,
+    });
+    await raw.execute(sys.sql, sys.params);
+  } else if (redatingClose) {
+    const sys = systemStatement({
+      dealId: id,
+      body: `${target.isWon ? "Won" : "Lost"} date changed to ${formatDateDisplay(at)}`,
+      occurredAt: at,
+    });
+    await raw.execute(sys.sql, sys.params);
+  }
+
+  await reposition(id, toStageId, options.toIndex);
+  // The stage it left must not keep a hole where it used to sit.
+  if (changedStage) await compactStage(before.stageId);
+  await logWrite("deal", id, "update", before, values, options.batchId);
+
+  /**
+   * The stage's own follow-up rule (LR-PX-C): "when a job enters this stage,
+   * remind me to ... in N days".
+   *
+   * It fires only on a real move - re-picking the stage a deal already sits
+   * in, or re-dating a close, is not an entry - and it fires inside this same
+   * transaction, which is coordinator decision PX-4: an automation is part of
+   * the write that triggered it, never a queued job. The runner returns
+   * statements rather than writing them, because the write lock this
+   * transaction is holding is not reentrant.
+   *
+   * The import is dynamic for the same reason `update` reaches for
+   * `documents` that way: automations read stages and deals, and a static
+   * import here would close a cycle at module load.
+   */
+  if (changedStage) {
+    const automations = await import("@/db/repos/automations");
+    const fired = await automations.runStageEntered({
+      dealId: id,
+      dealTitle: before.title,
+      contactId: before.contactId,
+      companyId: before.companyId,
+      customerName: customerNameOf(before),
+      stageId: toStageId,
+      stageName: target.name,
+      followUpDays: target.followUpDays,
+      followUpTitle: target.followUpTitle,
+      enteredAt: at,
+      now,
+      batchId: options.batchId,
+    });
+    if (fired.statements.length > 0) await raw.batch(fired.statements);
+  }
 }
 
 /** Rewrite one stage's positions to 0..n-1, closing any gaps. */

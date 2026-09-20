@@ -35,6 +35,7 @@ import * as deals from "@/db/repos/deals";
 import * as activities from "@/db/repos/activities";
 import * as sources from "@/db/repos/sources";
 import * as settings from "@/db/repos/settings";
+import * as automations from "@/db/repos/automations";
 import { nowIso } from "@/lib/dates";
 import { normalizeEmail } from "@/lib/email";
 import { normalizePhone } from "@/lib/phone";
@@ -138,6 +139,18 @@ export async function prepareApply(): Promise<ApplyContext | null> {
 function isExternalIdConflict(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return /unique constraint failed/i.test(message) && /external_id/i.test(message);
+}
+
+/**
+ * What the speed-to-lead reminder calls this person.
+ *
+ * `splitLeadName` already falls back to "Website lead" when the form gave no
+ * name at all, so this is never empty; the deal title is the last resort for
+ * a mapping that somehow produced neither.
+ */
+function leadCustomerName(mapped: MappedLead): string {
+  const person = `${mapped.firstName} ${mapped.lastName}`.trim();
+  return person.length > 0 ? person : mapped.dealTitle;
 }
 
 /** One lead's own statements, and how to undo what `result` assumed about it. */
@@ -298,6 +311,30 @@ export async function applyLeadPage(
           after: { system: true, body: mapped.activityBody },
         }),
       );
+
+      /**
+       * Speed to lead (LR-PX-C, rule `lead_arrived`).
+       *
+       * The whole point of the feature is that the owner answers today's
+       * lead today, so the reminder is written in the same transaction as
+       * the lead it is about: a lead that rolls back takes its follow-up
+       * with it, and a lead that lands can never land without one. The
+       * runner returns statements rather than writing, because the write
+       * lock this transaction holds is not reentrant - the same reason
+       * everything else in this loop is a statement builder.
+       *
+       * It returns nothing at all when the rule is switched off, and its
+       * own `automation_runs` row makes a second task for this deal
+       * impossible even if a re-poll ever reached here.
+       */
+      const followUp = await automations.runLeadArrived({
+        dealId,
+        dealTitle: mapped.dealTitle,
+        contactId,
+        companyId: null,
+        customerName: leadCustomerName(mapped),
+      });
+      unitStatements.push(...followUp.statements);
 
       claimedThisPage.set(mapped.externalId, dealId);
       result.created += 1;

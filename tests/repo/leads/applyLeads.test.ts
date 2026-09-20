@@ -19,9 +19,26 @@ import {
   prepareApply,
 } from "../../../src/features/leads/lib/applyLeads";
 import { externalIdFor, LEAD_UPDATE_INTRO } from "../../../src/features/leads/lib/leadMapping";
+import { FOLLOW_UP_INTRO } from "../../../src/db/repos/automations";
 import type { Lead } from "../../../src/features/leads/lib/types";
 
 const SITE = "https://sorensenlandscaping.com";
+
+/**
+ * A deal's timeline now carries two kinds of line: the ones this file is
+ * about, written from what the website sent, and the one the speed-to-lead
+ * rule writes beside them (LR-PX-C, on by default). These two split them, so
+ * an assertion about the lead's own story still counts only the lead's own
+ * story - and so the rule's line can be asserted deliberately rather than
+ * absorbed into a bumped number.
+ */
+function leadEntries<T extends { body: string }>(rows: T[]): T[] {
+  return rows.filter((a) => !a.body.startsWith(FOLLOW_UP_INTRO));
+}
+
+function followUpEntries<T extends { body: string }>(rows: T[]): T[] {
+  return rows.filter((a) => a.body.startsWith(FOLLOW_UP_INTRO));
+}
 
 let h: Harness | null = null;
 
@@ -83,8 +100,12 @@ describe("applyLeadPage", () => {
 
     // One immutable system entry holding the message, the service and the page.
     const timeline = await activities.list({ dealId: deal!.id });
-    expect(timeline.rows).toHaveLength(1);
-    const entry = timeline.rows[0];
+    const leadRows = leadEntries(timeline.rows);
+    expect(leadRows).toHaveLength(1);
+    // And beside it, the speed-to-lead rule's own line - enabled by default,
+    // so a lead landing always leaves exactly these two (LR-PX-C).
+    expect(followUpEntries(timeline.rows)).toHaveLength(1);
+    const entry = leadRows[0];
     expect(entry.isSystem).toBe(true);
     expect(entry.kind).toBe("system");
     expect(entry.body).toContain("Zone 3 will not shut off.");
@@ -380,8 +401,9 @@ describe("applyLeadPage - a dedupe merge adds a new phone/email as secondary", (
     // merge logic did not touch it.
     const deal = await deals.findByExternalId(externalIdFor(SITE, "dedupe-1"));
     const timeline = await activities.list({ dealId: deal!.id });
-    expect(timeline.rows).toHaveLength(1);
-    expect(timeline.rows[0].body).toContain("Sprinkler repair");
+    const leadRows = leadEntries(timeline.rows);
+    expect(leadRows).toHaveLength(1);
+    expect(leadRows[0].body).toContain("Sprinkler repair");
   });
 
   it("adds a new email as a secondary entry without touching the existing one", async () => {
@@ -551,9 +573,17 @@ describe("applyLeadPage - a UNIQUE violation on external_id is treated as alread
 /* -------------------------------------------------------------------------- */
 
 describe("applyLeadPage - a re-poll with changed field values", () => {
+  /**
+   * The lead's own system entries, without the speed-to-lead rule's line.
+   *
+   * These tests count "how many times did the website's own story change",
+   * and the follow-up a rule wrote is not part of that story - it is asserted
+   * on its own in the first test above. Filtering rather than raising the
+   * expected numbers keeps each count meaning exactly what it meant before.
+   */
   async function systemActivitiesFor(dealId: string) {
     const rows = await activities.list({ dealId, kind: "system" });
-    return rows.rows;
+    return leadEntries(rows.rows);
   }
 
   it("writes exactly one update activity when Service/Message/Page changed, and leaves the deal alone", async () => {

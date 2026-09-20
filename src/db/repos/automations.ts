@@ -178,6 +178,16 @@ export function dueInPhrase(delayMinutes: number): string {
 
 export type AutomationResult = { statements: Statement[]; taskId: string | null };
 
+/**
+ * How every automation's timeline entry opens.
+ *
+ * Exported for the same reason `LEAD_UPDATE_INTRO` is
+ * (src/features/leads/lib/leadMapping.ts): a test that needs to tell "the line
+ * a rule wrote" from "the line the owner's own work wrote" must not re-type
+ * the sentence and quietly stop matching when the wording is improved.
+ */
+export const FOLLOW_UP_INTRO = "Helix added a follow-up:";
+
 function computeDue(now: string, delayMinutes: number): { dueOn: string; dueAt: string } {
   const at = new Date(new Date(now).getTime() + delayMinutes * 60_000);
   return { dueAt: toIso(at), dueOn: toLocalDateString(at) };
@@ -239,7 +249,7 @@ async function fire(input: FireInput): Promise<AutomationResult> {
 
   // A task with no record link has no timeline to appear on.
   if (input.contactId || input.companyId || input.dealId) {
-    const body = `Helix added a follow-up: ${title}. Due ${dueInPhrase(
+    const body = `${FOLLOW_UP_INTRO} ${title}. Due ${dueInPhrase(
       input.delayMinutes,
     )}, because ${input.reason}.`;
     const activity = activities.systemStatement({
