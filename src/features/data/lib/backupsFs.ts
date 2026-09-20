@@ -242,6 +242,15 @@ export async function pruneBackups(
  *   5. reopen it
  *   6. re-run the boot path so migrations and the query cache re-run
  *
+ * A backup that starts while this is running (LR-OPS). Three things stop them
+ * colliding, and they are worth naming because the failure would be silent:
+ * `pauseTimers()` makes the scheduler skip its tick rather than queue; the
+ * screen covers itself while a restore is in flight, so "Back up now" cannot be
+ * pressed; and if one were somehow already in flight, `db_close` takes the Rust
+ * `backup_guard` before it closes, so the close waits for the VACUUM INTO to
+ * finish and the file copy below can never land under a reader. Lock order is
+ * always backup_guard -> state (see the header of `src-tauri/src/db.rs`).
+ *
  * `dbPath` and the workspace id are captured *before* closing: once the
  * database is closed, raw.info() (which workspacePaths() calls) has nothing
  * to ask. If anything after step 3 throws, the database may be left closed;

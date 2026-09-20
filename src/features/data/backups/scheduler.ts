@@ -6,6 +6,17 @@
  *     -> shouldBackupOnBoot? run one ("boot")
  *     -> setTimeout chained on msUntilNextBackup, forever, until stopBackupScheduler()
  *
+ * Sleep and wake (LR-OPS). A chained setTimeout does not run while the lid is
+ * shut, so a laptop that sleeps for ten hours misses one or two beats. That
+ * costs nothing here, and deliberately so: every delay is recomputed from
+ * `lastBackupAt` rather than from a fixed cadence, so a tick that arrives late
+ * finds `msUntilNextBackup` already at 0 and backs up immediately, and a launch
+ * after a long sleep is handled by `shouldBackupOnBoot` before the timer is even
+ * started. Nothing accumulates and nothing double-fires: `scheduleNext` clears
+ * the previous timer before setting the next, and `tick` is only ever called by
+ * that one timer. `tests/unit/data/retention.test.ts` pins both sums (a backup
+ * seven hours old answers 0 ms; one fifty minutes old answers the remainder).
+ *
  * Every tick checks timersPaused() first: an import or a restore holds the
  * write lock's timer pause, and a backup must never queue behind one - it
  * just skips that tick and checks again a minute later. A failed backup sets
