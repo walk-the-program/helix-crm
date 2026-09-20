@@ -49,6 +49,16 @@ import {
   type Page,
   type Statement,
 } from "@/db/repos/_base";
+import {
+  PICKER_LIMIT,
+  bestRank,
+  contains,
+  normalizeQuery,
+  nullableTextOf,
+  sortRanked,
+  textOf,
+  widen,
+} from "@/db/repos/_pickers";
 
 export const PRODUCT_KINDS = ["one_time", "recurring"] as const;
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
@@ -373,4 +383,88 @@ export function productStatements(input: {
     row,
     statements: [insertStatement("products", row)],
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* type-ahead search, for the services pickers                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row of a services picker. The price and the billing shape ride along
+ * because every caller - an invoice line, a deal item - needs them the moment
+ * the owner picks the row, and a second round trip per pick would be silly.
+ */
+export type ProductSearchResult = {
+  id: string;
+  label: string;
+  detail?: string;
+  description: string | null;
+  kind: ProductKind;
+  interval: ProductInterval | null;
+  unitPriceCents: number;
+  taxable: boolean;
+};
+
+const PRODUCT_SEARCH_SELECT = `
+  SELECT p.id               AS p_id,
+         p.name             AS p_name,
+         p.description      AS p_description,
+         p.kind             AS p_kind,
+         p.interval         AS p_interval,
+         p.unit_price_cents AS p_unit_price_cents,
+         p.taxable          AS p_taxable
+  FROM products p`;
+
+function productResult(r: readonly unknown[]): ProductSearchResult {
+  const description = nullableTextOf(r[2]);
+  return {
+    id: textOf(r[0]),
+    label: textOf(r[1]),
+    ...(description ? { detail: description } : {}),
+    description,
+    kind: textOf(r[3]) as ProductKind,
+    interval: (nullableTextOf(r[4]) as ProductInterval | null) ?? null,
+    unitPriceCents: Number(r[5]),
+    taxable: Number(r[6]) === 1,
+  };
+}
+
+/**
+ * Active services matching what the owner has typed, best first. Matches the
+ * name and the description; an empty query answers with the catalog in its
+ * own order, which is the order the owner arranged it in.
+ */
+export async function search(
+  query: string,
+  limit = PICKER_LIMIT,
+): Promise<ProductSearchResult[]> {
+  const q = normalizeQuery(query);
+
+  if (q.length === 0) {
+    const rows = await raw.query(
+      `${PRODUCT_SEARCH_SELECT}
+       WHERE p.deleted_at IS NULL AND p.active = 1
+       ORDER BY p.position ASC, p.created_at ASC
+       LIMIT ?`,
+      [limit],
+    );
+    return rows.map(productResult);
+  }
+
+  const like = contains(q);
+  const rows = await raw.query(
+    `${PRODUCT_SEARCH_SELECT}
+     WHERE p.deleted_at IS NULL AND p.active = 1 AND (
+       p.name LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\'
+     )
+     LIMIT ?`,
+    [like, like, widen(limit)],
+  );
+
+  const ranked = rows.map((r) => {
+    const item = productResult(r);
+    return { rank: bestRank([item.label, item.description], q), item };
+  });
+
+  return sortRanked(ranked).slice(0, limit);
 }

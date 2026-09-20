@@ -6,7 +6,7 @@ import { z } from "zod";
 import { raw } from "@/db/client";
 import { withWrite } from "@/db/writeLock";
 import { NotFoundError, type DuplicateWarning } from "@/db/errors";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, formatPhone } from "@/lib/phone";
 import { nowIso } from "@/lib/dates";
 import {
   countRows,
@@ -30,6 +30,19 @@ import {
   type DuplicatePair,
   type MatchedOn,
 } from "@/db/repos/_base";
+import {
+  PICKER_LIMIT,
+  bestRank,
+  contains,
+  digitsOf,
+  ftsIds,
+  idInClause,
+  normalizeQuery,
+  nullableTextOf,
+  sortRanked,
+  textOf,
+  widen,
+} from "@/db/repos/_pickers";
 
 export type Company = {
   id: string;
@@ -360,4 +373,95 @@ export async function findCompanyPairs(limit = 200): Promise<DuplicatePair[]> {
     });
   }
   return pairs;
+}
+
+/* -------------------------------------------------------------------------- */
+/* type-ahead search, for the company pickers                                 */
+/* -------------------------------------------------------------------------- */
+
+export type CompanySearchResult = {
+  id: string;
+  label: string;
+  detail?: string;
+};
+
+const COMPANY_SEARCH_SELECT = `
+  SELECT co.id         AS co_id,
+         co.name       AS co_name,
+         co.website    AS co_website,
+         co.phone_raw  AS co_phone_raw,
+         co.phone_e164 AS co_phone_e164
+  FROM companies co`;
+
+function companyResult(r: readonly unknown[]): CompanySearchResult {
+  const website = nullableTextOf(r[2]);
+  const phone = nullableTextOf(r[3]) ?? nullableTextOf(r[4]);
+  const detail = website ?? (phone ? formatPhone(phone) : null);
+  return {
+    id: textOf(r[0]),
+    label: textOf(r[1]) || "(no name)",
+    ...(detail ? { detail } : {}),
+  };
+}
+
+/**
+ * Companies matching what the owner has typed, best first. Matches the name,
+ * the website and the phone; an empty query answers with the companies
+ * touched most recently.
+ */
+export async function search(
+  query: string,
+  limit = PICKER_LIMIT,
+): Promise<CompanySearchResult[]> {
+  const q = normalizeQuery(query);
+
+  if (q.length === 0) {
+    const rows = await raw.query(
+      `${COMPANY_SEARCH_SELECT}
+       WHERE co.deleted_at IS NULL
+       ORDER BY co.updated_at DESC, co.rowid DESC
+       LIMIT ?`,
+      [limit],
+    );
+    return rows.map(companyResult);
+  }
+
+  const ids = await ftsIds(q, "company", widen(limit));
+  const like = contains(q);
+  const digits = digitsOf(q);
+  const digitLike = digits.length >= 3 ? `%${digits}%` : null;
+
+  const rows = await raw.query(
+    `${COMPANY_SEARCH_SELECT}
+     WHERE co.deleted_at IS NULL AND (
+       co.name LIKE ? ESCAPE '\\'
+       OR co.website LIKE ? ESCAPE '\\'
+       OR co.phone_raw LIKE ? ESCAPE '\\'
+       ${digitLike ? "OR co.phone_e164 LIKE ?" : ""}
+       OR ${idInClause("co.id", ids)}
+     )
+     LIMIT ?`,
+    [
+      like,
+      like,
+      like,
+      ...(digitLike ? [digitLike] : []),
+      ...ids,
+      widen(limit),
+    ],
+  );
+
+  const ranked = rows.map((r) => {
+    const item = companyResult(r);
+    const website = nullableTextOf(r[2]);
+    const phone = nullableTextOf(r[3]) ?? nullableTextOf(r[4]);
+    const phoneRank =
+      digitLike && phone && digitsOf(phone).includes(digits) ? 2 : 3;
+    return {
+      rank: Math.min(bestRank([item.label, website], q), phoneRank),
+      item,
+    };
+  });
+
+  return sortRanked(ranked).slice(0, limit);
 }

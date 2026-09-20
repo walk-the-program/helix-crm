@@ -11,7 +11,7 @@ import { z } from "zod";
 import { raw } from "@/db/client";
 import { withWrite } from "@/db/writeLock";
 import { NotFoundError, type DuplicateWarning } from "@/db/errors";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, formatPhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
 import { nowIso } from "@/lib/dates";
 import { newId } from "@/lib/ids";
@@ -37,6 +37,20 @@ import {
   type DuplicatePair,
   type MatchedOn,
 } from "@/db/repos/_base";
+import {
+  PICKER_LIMIT,
+  bestRank,
+  contains,
+  digitsOf,
+  ftsIds,
+  idInClause,
+  normalizeQuery,
+  nullableTextOf,
+  rankText,
+  sortRanked,
+  textOf,
+  widen,
+} from "@/db/repos/_pickers";
 
 export type ContactPhone = {
   id: string;
@@ -862,4 +876,133 @@ export async function findContactPairs(limit = 200): Promise<DuplicatePair[]> {
     });
   }
   return pairs;
+}
+
+/* -------------------------------------------------------------------------- */
+/* type-ahead search, for the contact pickers                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row of a contact picker. `companyId` is here because every picker that
+ * chooses a contact sits next to one that chooses a company: picking the
+ * contact fills the company, and the owner can still change it.
+ */
+export type ContactSearchResult = {
+  id: string;
+  label: string;
+  detail?: string;
+  companyId: string | null;
+  companyName: string | null;
+};
+
+const CONTACT_SEARCH_SELECT = `
+  SELECT c.id          AS c_id,
+         c.first_name  AS c_first_name,
+         c.last_name   AS c_last_name,
+         c.company_id  AS c_company_id,
+         co.name       AS co_name,
+         (SELECT e.email_lower FROM contact_emails e
+           WHERE e.contact_id = c.id AND e.deleted_at IS NULL
+           ORDER BY e.is_primary DESC, e.created_at ASC LIMIT 1) AS c_email,
+         (SELECT p.raw FROM contact_phones p
+           WHERE p.contact_id = c.id AND p.deleted_at IS NULL
+           ORDER BY p.is_primary DESC, p.created_at ASC LIMIT 1) AS c_phone
+  FROM contacts c
+  LEFT JOIN companies co ON co.id = c.company_id`;
+
+function contactResult(r: readonly unknown[]): ContactSearchResult {
+  const first = textOf(r[1]);
+  const last = textOf(r[2]);
+  const companyName = nullableTextOf(r[4]);
+  const email = nullableTextOf(r[5]);
+  const phone = nullableTextOf(r[6]);
+  const detail = companyName ?? email ?? (phone ? formatPhone(phone) : null);
+  return {
+    id: textOf(r[0]),
+    label: contactName({ firstName: first, lastName: last }),
+    ...(detail ? { detail } : {}),
+    companyId: nullableTextOf(r[3]),
+    companyName,
+  };
+}
+
+/**
+ * Contacts matching what the owner has typed, best first.
+ *
+ * Matches a name, an email, a phone (typed any way - the digits are compared
+ * against E.164) or the company name, plus anything the FTS index catches.
+ * An empty query answers with the contacts touched most recently, so opening
+ * the picker is useful before a single keystroke.
+ */
+export async function search(
+  query: string,
+  limit = PICKER_LIMIT,
+): Promise<ContactSearchResult[]> {
+  const q = normalizeQuery(query);
+
+  if (q.length === 0) {
+    const rows = await raw.query(
+      `${CONTACT_SEARCH_SELECT}
+       WHERE c.deleted_at IS NULL
+       ORDER BY c.updated_at DESC, c.rowid DESC
+       LIMIT ?`,
+      [limit],
+    );
+    return rows.map(contactResult);
+  }
+
+  const ids = await ftsIds(q, "contact", widen(limit));
+  const like = contains(q);
+  const digits = digitsOf(q);
+  const digitLike = digits.length >= 3 ? `%${digits}%` : null;
+
+  const rows = await raw.query(
+    `${CONTACT_SEARCH_SELECT}
+     WHERE c.deleted_at IS NULL AND (
+       trim(c.first_name || ' ' || c.last_name) LIKE ? ESCAPE '\\'
+       OR c.first_name LIKE ? ESCAPE '\\'
+       OR c.last_name LIKE ? ESCAPE '\\'
+       OR co.name LIKE ? ESCAPE '\\'
+       OR EXISTS (SELECT 1 FROM contact_emails e
+                   WHERE e.contact_id = c.id AND e.deleted_at IS NULL
+                     AND e.email_lower LIKE ? ESCAPE '\\')
+       OR EXISTS (SELECT 1 FROM contact_phones p
+                   WHERE p.contact_id = c.id AND p.deleted_at IS NULL
+                     AND (p.raw LIKE ? ESCAPE '\\'
+                          ${digitLike ? "OR p.e164 LIKE ?" : ""}))
+       OR ${idInClause("c.id", ids)}
+     )
+     LIMIT ?`,
+    [
+      like,
+      like,
+      like,
+      like,
+      like,
+      like,
+      ...(digitLike ? [digitLike] : []),
+      ...ids,
+      widen(limit),
+    ],
+  );
+
+  const ranked = rows.map((r) => {
+    const item = contactResult(r);
+    const email = nullableTextOf(r[5]);
+    const phone = nullableTextOf(r[6]);
+    const phoneRank =
+      digitLike && phone && digitsOf(phone).includes(digits) ? 2 : 3;
+    return {
+      rank: Math.min(
+        bestRank([item.label, email], q),
+        // A hit on the company is a weaker reason to show a contact than a
+        // hit on their own name, so it never outranks one.
+        Math.min(rankText(item.companyName, q) + 1, 3),
+        phoneRank,
+      ),
+      item,
+    };
+  });
+
+  return sortRanked(ranked).slice(0, limit);
 }
