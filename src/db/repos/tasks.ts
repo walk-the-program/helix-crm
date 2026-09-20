@@ -41,6 +41,9 @@ import {
   type Page,
 } from "@/db/repos/_base";
 
+/** Who created a task. Automations (Lead C's rules) write "automation". */
+export type TaskSource = "user" | "automation";
+
 export type Task = {
   id: string;
   title: string;
@@ -50,6 +53,12 @@ export type Task = {
   contactId: string | null;
   companyId: string | null;
   dealId: string | null;
+  /** "user" unless a rule wrote it. Never null: 0007_visits defaults it. */
+  source: TaskSource;
+  /** Where a visit happens. Free text, null for a task that is not one. */
+  place: string | null;
+  /** How long to allow, in minutes. Null when no length was given. */
+  durationMinutes: number | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -62,6 +71,15 @@ export const newTaskSchema = z.object({
   contactId: z.string().nullable().optional(),
   companyId: z.string().nullable().optional(),
   dealId: z.string().nullable().optional(),
+  source: z.enum(["user", "automation"]).optional(),
+  place: z.string().nullable().optional(),
+  durationMinutes: z
+    .number()
+    .int("A duration is a whole number of minutes.")
+    .positive("A duration is at least a minute.")
+    .max(24 * 60, "A visit cannot be longer than a day.")
+    .nullable()
+    .optional(),
 });
 
 export type NewTask = z.input<typeof newTaskSchema>;
@@ -74,6 +92,10 @@ export type TaskFilter = {
   doneOnly?: boolean;
   dueOnOrBefore?: string;
   dueFrom?: string;
+  /** Only tasks a rule wrote, or only tasks a person wrote. */
+  source?: TaskSource;
+  /** Only tasks with a time on them (due_at set). */
+  timedOnly?: boolean;
   includeDeleted?: boolean;
   onlyDeleted?: boolean;
 };
@@ -87,6 +109,9 @@ const TASK_COLS: readonly Col<Task>[] = [
   ["contactId", "t.contact_id", "textNull"],
   ["companyId", "t.company_id", "textNull"],
   ["dealId", "t.deal_id", "textNull"],
+  ["source", "t.source", "text"],
+  ["place", "t.place", "textNull"],
+  ["durationMinutes", "t.duration_minutes", "intNull"],
   ["createdAt", "t.created_at", "text"],
   ["updatedAt", "t.updated_at", "text"],
   ["deletedAt", "t.deleted_at", "textNull"],
@@ -108,6 +133,13 @@ export function normalizeDue(input: {
   }
   if (!dueOn) return { dueOn: null, dueAt: null };
   return { dueOn, dueAt };
+}
+
+/** Free text that is only whitespace is no text at all. */
+function emptyToNull(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null;
+  const t = value.trim();
+  return t === "" ? null : t;
 }
 
 export async function get(id: string): Promise<Task | null> {
@@ -153,6 +185,11 @@ function whereFor(filter: TaskFilter): { sql: string; params: unknown[] } {
     clauses.push("t.due_on IS NOT NULL AND t.due_on >= ?");
     params.push(filter.dueFrom);
   }
+  if (filter.source) {
+    clauses.push("t.source = ?");
+    params.push(filter.source);
+  }
+  if (filter.timedOnly) clauses.push("t.due_at IS NOT NULL");
 
   return {
     sql: clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "",
@@ -274,6 +311,9 @@ export async function create(
       contactId: parsed.contactId ?? null,
       companyId: parsed.companyId ?? null,
       dealId: parsed.dealId ?? null,
+      source: parsed.source ?? "user",
+      place: emptyToNull(parsed.place),
+      durationMinutes: parsed.durationMinutes ?? null,
       deletedAt: null,
     };
     const stmt = insertStatement("tasks", row);
@@ -306,6 +346,11 @@ export async function update(
     if (patch.contactId !== undefined) values.contactId = patch.contactId ?? null;
     if (patch.companyId !== undefined) values.companyId = patch.companyId ?? null;
     if (patch.dealId !== undefined) values.dealId = patch.dealId ?? null;
+    if (patch.source !== undefined) values.source = patch.source ?? "user";
+    if (patch.place !== undefined) values.place = emptyToNull(patch.place);
+    if (patch.durationMinutes !== undefined) {
+      values.durationMinutes = patch.durationMinutes ?? null;
+    }
 
     const stmt = updateStatement("tasks", id, values);
     await raw.execute(stmt.sql, stmt.params);

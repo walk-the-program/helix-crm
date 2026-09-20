@@ -353,10 +353,21 @@ export const tasks = sqliteTable(
     dealId: text("deal_id").references(() => deals.id, {
       onDelete: "set null",
     }),
+    /**
+     * Who created this task: 'user' (a person typed it) or 'automation' (a
+     * rule wrote it). Defaulted rather than nullable so every row written
+     * before 0007_visits reads as what it is — a person's task.
+     */
+    source: text("source").notNull().default("user"),
+    /** Where a visit happens. Free text, prefilled from the record's address. */
+    place: text("place"),
+    /** How long to allow for a visit, in minutes. NULL means no length given. */
+    durationMinutes: integer("duration_minutes"),
     ...stamps(),
   },
   (t) => [
     index("idx_tasks_due_on").on(t.dueOn),
+    index("idx_tasks_source").on(t.source),
     index("idx_tasks_due_at").on(t.dueAt),
     index("idx_tasks_done_at").on(t.doneAt),
     index("idx_tasks_contact_id").on(t.contactId),
