@@ -59,6 +59,8 @@ export type Task = {
   place: string | null;
   /** How long to allow, in minutes. Null when no length was given. */
   durationMinutes: number | null;
+  /** What the title has no room for: a gate code, what to bring. */
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -80,6 +82,7 @@ export const newTaskSchema = z.object({
     .max(24 * 60, "A visit cannot be longer than a day.")
     .nullable()
     .optional(),
+  notes: z.string().nullable().optional(),
 });
 
 export type NewTask = z.input<typeof newTaskSchema>;
@@ -112,6 +115,7 @@ const TASK_COLS: readonly Col<Task>[] = [
   ["source", "t.source", "text"],
   ["place", "t.place", "textNull"],
   ["durationMinutes", "t.duration_minutes", "intNull"],
+  ["notes", "t.notes", "textNull"],
   ["createdAt", "t.created_at", "text"],
   ["updatedAt", "t.updated_at", "text"],
   ["deletedAt", "t.deleted_at", "textNull"],
@@ -314,6 +318,7 @@ export async function create(
       source: parsed.source ?? "user",
       place: emptyToNull(parsed.place),
       durationMinutes: parsed.durationMinutes ?? null,
+      notes: emptyToNull(parsed.notes),
       deletedAt: null,
     };
     const stmt = insertStatement("tasks", row);
@@ -351,6 +356,7 @@ export async function update(
     if (patch.durationMinutes !== undefined) {
       values.durationMinutes = patch.durationMinutes ?? null;
     }
+    if (patch.notes !== undefined) values.notes = emptyToNull(patch.notes);
 
     const stmt = updateStatement("tasks", id, values);
     await raw.execute(stmt.sql, stmt.params);

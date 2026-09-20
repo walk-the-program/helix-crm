@@ -38,6 +38,7 @@ function visitItem(overrides: Partial<ScheduleItem> = {}): ScheduleItem {
     companyId: null,
     dealId: null,
     phone: "555-123-4567",
+    note: null,
     ...overrides,
   };
 }
@@ -119,6 +120,13 @@ describe("DESCRIPTION", () => {
     const out = buildIcs(toIcsEvent(visitItem()));
     expect(unfold(out)).toContain(
       "DESCRIPTION:Priya Raman\\n555-123-4567\\nHelix /contacts/c1\\nAdded from Helix CRM.",
+    );
+  });
+
+  it("carries the visit's own note, between the phone and the Helix line", () => {
+    const out = buildIcs(toIcsEvent(visitItem({ note: "Gate code 4821" })));
+    expect(unfold(out)).toContain(
+      "DESCRIPTION:Priya Raman\\n555-123-4567\\nGate code 4821\\nHelix /contacts/c1\\nAdded from Helix CRM.",
     );
   });
 

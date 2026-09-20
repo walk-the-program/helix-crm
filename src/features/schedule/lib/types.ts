@@ -59,6 +59,12 @@ export type ScheduleItem = {
   who: ScheduleWho | null;
   /** Where the visit is. Only a task ever has one. */
   place: string | null;
+  /**
+   * The line the title has no room for — a gate code, what to bring. Only a
+   * task ever has one, and it travels to the calendar export's description
+   * because that is where the owner reads it, standing at the gate.
+   */
+  note: string | null;
   /** The record this row links to, e.g. "/deals/abc" or "/tasks". */
   href: string;
   contactId: string | null;

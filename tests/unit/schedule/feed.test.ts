@@ -34,6 +34,7 @@ function task(overrides: Partial<Task> = {}): Task {
     durationMinutes: null,
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
+    notes: null,
     deletedAt: null,
     ...overrides,
   };
@@ -212,6 +213,7 @@ describe("scheduleItems: tasks", () => {
           companyId: null,
           dealId: null,
           phone: "555-0100",
+          note: null,
         },
       ]);
     });
@@ -277,6 +279,7 @@ describe("scheduleItems: deals", () => {
         companyId: null,
         dealId: "deal-1",
         phone: null,
+        note: null,
       },
     ]);
   });
@@ -335,6 +338,7 @@ describe("scheduleItems: recurring", () => {
         companyId: null,
         dealId: null,
         phone: "555-0111",
+        note: null,
       },
     ]);
   });
@@ -388,6 +392,7 @@ describe("scheduleItems: invoices due", () => {
         companyId: null,
         dealId: "deal-1",
         phone: null,
+        note: null,
       },
     ]);
   });
@@ -447,6 +452,7 @@ describe("scheduleItems: invoice schedules", () => {
         companyId: null,
         dealId: "deal-2",
         phone: null,
+        note: null,
       },
     ]);
   });

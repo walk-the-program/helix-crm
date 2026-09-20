@@ -64,6 +64,13 @@
       "when": 1790002000000,
       "tag": "0008_automations",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790003000000,
+      "tag": "0009_visit_note",
+      "breakpoints": true
     }
   ]
 }

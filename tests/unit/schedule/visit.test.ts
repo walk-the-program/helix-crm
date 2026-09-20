@@ -99,14 +99,16 @@ describe("composeVisit", () => {
     expect(write.durationMinutes).toBe(90);
   });
 
-  it("appends a note to the title's tail with an em dash", () => {
+  it("keeps the note out of the title: they are two fields, not one", () => {
     const write = composeVisit(baseForm({ title: "Estimate", note: "Bring the long ladder" }));
-    expect(write.title).toBe("Estimate — Bring the long ladder");
+    expect(write.title).toBe("Estimate");
+    expect(write.notes).toBe("Bring the long ladder");
   });
 
-  it("leaves the title alone when there is no note", () => {
+  it("trims the title and turns a blank note into null", () => {
     const write = composeVisit(baseForm({ title: "  Visit  ", note: "  " }));
     expect(write.title).toBe("Visit");
+    expect(write.notes).toBeNull();
   });
 
   it("trims a place and turns a blank one into null", () => {

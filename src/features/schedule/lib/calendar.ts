@@ -38,14 +38,16 @@ export function endOfItem(item: ScheduleItem): string | null {
  * What the calendar entry says below its title.
  *
  * Three weeks later, on a phone, in a van, the useful facts are who it is,
- * what number to ring when nobody answers the door, and where the rest of the
- * story lives. The last line names Helix so an entry nobody recognises can be
- * traced back rather than deleted.
+ * what number to ring when nobody answers the door, the line the owner wrote
+ * for himself ("gate code 4821"), and where the rest of the story lives. The
+ * last line names Helix so an entry nobody recognises can be traced back
+ * rather than deleted.
  */
 export function visitDescription(item: ScheduleItem): string {
   const lines: string[] = [];
   if (item.who) lines.push(item.who.label);
   if (item.phone) lines.push(item.phone);
+  if (item.note) lines.push(item.note);
   if (item.who) lines.push(`Helix ${item.who.href}`);
   lines.push("Added from Helix CRM.");
   return lines.join("\n");

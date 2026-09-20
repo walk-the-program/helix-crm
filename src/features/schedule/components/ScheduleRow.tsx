@@ -48,6 +48,13 @@ export function ScheduleRow(props: { item: ScheduleItem; vocabulary: Vocabulary;
       </span>,
     );
   }
+  if (item.note) {
+    meta.push(
+      <span key="note" className="truncate">
+        {item.note}
+      </span>,
+    );
+  }
 
   return (
     <li

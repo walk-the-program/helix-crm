@@ -117,6 +117,7 @@ const VISIT: ScheduleItem = {
   companyId: null,
   dealId: null,
   phone: "555-0100",
+  note: null,
 };
 
 const DEAL_EXPECTED: ScheduleItem = {
@@ -134,6 +135,7 @@ const DEAL_EXPECTED: ScheduleItem = {
   companyId: null,
   dealId: "d1",
   phone: null,
+  note: null,
 };
 
 /* -------------------------------------------------------------------------- */

@@ -372,6 +372,8 @@ export const tasks = sqliteTable(
     place: text("place"),
     /** How long to allow for a visit, in minutes. NULL means no length given. */
     durationMinutes: integer("duration_minutes"),
+    /** The line the title has no room for: a gate code, what to bring. */
+    notes: text("notes"),
     ...stamps(),
   },
   (t) => [

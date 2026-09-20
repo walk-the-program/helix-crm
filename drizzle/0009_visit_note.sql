@@ -1,0 +1,16 @@
+-- A visit can carry a note (LR-PX-B, correcting the first cut of the dialog).
+--
+-- The "Schedule a visit" dialog collects a line the title has no room for:
+-- "gate code 4821", "bring the long ladder", "park on the verge, not the
+-- drive". The first implementation folded that into the task's own title -
+-- "Estimate — bring the long ladder" - because tasks had one text field.
+-- That is lossy in a way the owner meets the next day: the note is then part
+-- of the title everywhere (the Tasks screen, search, the timeline entry, the
+-- calendar event's SUMMARY), and re-opening the visit to edit it cannot split
+-- the two apart again, so the owner ends up hand-editing a sentence Helix
+-- glued together. A field the product asks for deserves a column.
+--
+-- `notes` rather than `note`, because that is what the same field is called
+-- on contacts, companies and documents. Nullable, so every existing row is
+-- already valid and nothing has to be backfilled.
+ALTER TABLE `tasks` ADD COLUMN `notes` text;

@@ -28,6 +28,7 @@ function item(overrides: Partial<ScheduleItem> = {}): ScheduleItem {
     companyId: null,
     dealId: null,
     phone: null,
+    note: null,
     ...overrides,
   };
 }

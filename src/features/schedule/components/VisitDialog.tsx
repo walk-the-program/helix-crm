@@ -154,7 +154,7 @@ function VisitDialogBody(props: {
           setDurationMinutes(task.durationMinutes ?? DEFAULT_DURATION);
           setPlace(task.place ?? "");
           setPlaceTouched(Boolean(task.place));
-          setNote("");
+          setNote(task.notes ?? "");
           setContactId(task.contactId);
           setCompanyId(task.companyId);
           setDealId(task.dealId);

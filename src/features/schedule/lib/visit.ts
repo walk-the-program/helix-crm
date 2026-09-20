@@ -47,7 +47,7 @@ export type VisitForm = {
   time: string;
   durationMinutes: number | null;
   place: string | null;
-  /** Free text with nowhere else to live; see the note on `composeVisit`. */
+  /** The line the title has no room for: a gate code, what to bring. */
   note: string;
   contactId: string | null;
   companyId: string | null;
@@ -60,22 +60,16 @@ export type VisitWrite = {
   dueAt: string | null;
   place: string | null;
   durationMinutes: number | null;
+  notes: string | null;
   contactId: string | null;
   companyId: string | null;
   dealId: string | null;
 };
 
-/**
- * A task has one text field. The dialog has two - the title chips and a note
- * that says more than three words. Rather than grow the schema for a line
- * that is genuinely optional, the note rides in the title's own tail, exactly
- * the way a person would write it on a paper ticket: "Estimate — bring the
- * long ladder."
- */
-function titleWithNote(title: string, note: string): string {
-  const t = title.trim();
-  const n = note.trim();
-  return n.length > 0 ? `${t} — ${n}` : t;
+/** Free text that is only whitespace is no text at all. */
+function trimToNull(value: string | null | undefined): string | null {
+  const t = (value ?? "").trim();
+  return t.length > 0 ? t : null;
 }
 
 /**
@@ -83,16 +77,23 @@ function titleWithNote(title: string, note: string): string {
  * expects it. A duration with no time is a contradiction a visit cannot have
  * - there is nothing to be long - so it is dropped rather than stored, which
  * also keeps a plain task (no time picked) from picking one up by accident.
+ *
+ * The note stays a note. An earlier cut glued it onto the end of the title,
+ * which read well on a paper ticket and badly everywhere else: the title is
+ * what the Tasks screen, search, the timeline entry and the calendar event
+ * all show, and nothing could split the two apart again when the owner
+ * re-opened the visit to change one of them. It has a column of its own
+ * (drizzle/0009_visit_note.sql).
  */
 export function composeVisit(form: VisitForm): VisitWrite {
   const due = dueFromForm(form.date, form.time);
-  const place = form.place?.trim();
   return {
-    title: titleWithNote(form.title, form.note),
+    title: form.title.trim(),
     dueOn: due.dueOn,
     dueAt: due.dueAt,
-    place: place && place.length > 0 ? place : null,
+    place: trimToNull(form.place),
     durationMinutes: due.dueAt ? (form.durationMinutes ?? null) : null,
+    notes: trimToNull(form.note),
     contactId: form.contactId,
     companyId: form.companyId,
     dealId: form.dealId,

@@ -47,6 +47,21 @@ describe("tasks: the visit columns", () => {
     expect(read.durationMinutes).toBe(90);
   });
 
+  it("stores a visit's note as its own field, never glued to the title", async () => {
+    h = await createHarness();
+    const task = await tasks.create({
+      title: "Estimate",
+      dueAt: "2026-09-24T09:00:00.000Z",
+      notes: "Gate code 4821. Bring the long ladder.",
+    });
+    expect(task.title).toBe("Estimate");
+    expect(task.notes).toBe("Gate code 4821. Bring the long ladder.");
+
+    const cleared = await tasks.update(task.id, { notes: "  " });
+    expect(cleared.notes).toBeNull();
+    expect(cleared.title).toBe("Estimate");
+  });
+
   it("treats a whitespace-only place as no place", async () => {
     h = await createHarness();
     const task = await tasks.create({ title: "Visit", place: "   " });
@@ -117,7 +132,9 @@ describe("0007_visits on a populated workspace", () => {
     // Migrate to 0005 only, write tasks the way a shipped build would have,
     // then let 0007 land on top of them.
     const all = orderMigrations(await diskMigrationSource.list());
-    const before0007 = all.filter((f) => f.tag !== "0007_visits");
+    const before0007 = all.filter(
+      (f) => f.tag !== "0007_visits" && f.tag !== "0009_visit_note",
+    );
     h = await createHarnessAt(before0007);
 
     const columnsBefore = await columnNames();
@@ -139,17 +156,18 @@ describe("0007_visits on a populated workspace", () => {
     );
 
     const result = await migrate({ source: diskMigrationSource, backup: false });
-    expect(result.applied).toEqual(["0007_visits"]);
+    expect(result.applied).toEqual(["0007_visits", "0009_visit_note"]);
 
     const columnsAfter = await columnNames();
     expect(columnsAfter).toEqual(
-      expect.arrayContaining(["source", "place", "duration_minutes"]),
+      expect.arrayContaining(["source", "place", "duration_minutes", "notes"]),
     );
 
     const old = await tasks.getOrThrow("t-old-1");
     expect(old.source).toBe("user");
     expect(old.place).toBeNull();
     expect(old.durationMinutes).toBeNull();
+    expect(old.notes).toBeNull();
     expect(old.title).toBe("Chase the Hall Lane quote");
 
     const done = await tasks.getOrThrow("t-old-2");
