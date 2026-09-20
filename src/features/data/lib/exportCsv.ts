@@ -5,15 +5,27 @@
  *
  * Formula-injection guard (docs/PLAN.md, "Security and threat model" /
  * "Export and backup"): a cell whose first character is one of `= + - @ TAB
- * CR` is prefixed with a single quote before it is quoted, so a spreadsheet
- * never treats an exported cell as a formula. Only a LEADING occurrence of
- * one of those characters triggers the guard - a value that merely contains
- * one later is left alone.
+ * CR LF` is prefixed with a single quote before it is quoted, so a
+ * spreadsheet never treats an exported cell as a formula. Only a LEADING
+ * occurrence of one of those characters triggers the guard - a value that
+ * merely contains one later is left alone.
+ *
+ * A cell is also guarded when `= + - @` appears first once *leading
+ * whitespace* is stripped - a plain space, a tab, or any Unicode space
+ * separator (LS/PS/NBSP/etc, everything `\s` matches). Excel and Google
+ * Sheets both trim leading whitespace before deciding whether a cell is a
+ * formula, so `" =1+1"` is exploitable exactly like `"=1+1"` even though the
+ * literal first character is a space - RFC 4180 quoting (which the leading
+ * space alone would trigger, see `escapeCell`) does not stop the spreadsheet
+ * from evaluating what is *inside* the quotes.
  */
 
 export type CsvCell = string | number | boolean | null | undefined;
 
-const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
+const FORMULA_TRIGGER = /^[=+\-@\t\r\n]/;
+/** Same trigger set, minus TAB/CR/LF, applied after stripping leading whitespace. */
+const FORMULA_TRIGGER_AFTER_WHITESPACE = /^[=+\-@]/;
+const LEADING_WHITESPACE = /^\s+/;
 
 function baseString(value: CsvCell): string {
   if (value === null || value === undefined) return "";
@@ -21,14 +33,24 @@ function baseString(value: CsvCell): string {
   return String(value);
 }
 
+function isFormulaTrigger(s: string): boolean {
+  if (FORMULA_TRIGGER.test(s)) return true;
+  const stripped = s.replace(LEADING_WHITESPACE, "");
+  return stripped.length > 0 && FORMULA_TRIGGER_AFTER_WHITESPACE.test(stripped);
+}
+
 /**
- * Formula-injection guard: prefixes a cell whose first character is
- * `= + - @ TAB CR` with a single quote. Everything else passes through
- * unchanged (still as a plain, unquoted string - quoting is escapeCell's job).
+ * Formula-injection guard: prefixes a cell that a spreadsheet would read as
+ * starting with `= + - @ TAB CR LF` - directly, or after the spreadsheet's
+ * own leading-whitespace trim - with a single quote. Everything else passes
+ * through unchanged (still as a plain, unquoted string - quoting is
+ * escapeCell's job). The quote always goes at the very front of the
+ * original string, ahead of any leading whitespace, because a leading
+ * apostrophe forces text mode for the whole cell regardless of what follows.
  */
 export function guardCell(value: CsvCell): string {
   const s = baseString(value);
-  return FORMULA_TRIGGER.test(s) ? `'${s}` : s;
+  return isFormulaTrigger(s) ? `'${s}` : s;
 }
 
 /**
