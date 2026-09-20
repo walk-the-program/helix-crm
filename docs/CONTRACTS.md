@@ -74,7 +74,8 @@ All commands are `#[tauri::command(async)]`. Errors are returned as
 `NET_ERROR`, `HTTP_STATUS` (with `status` in message), `FTS_MISSING`.
 
 ```
-db_open(path: string) -> { path: string }        opens (creating if absent), sets
+db_open(path: string) -> { path: string }        keys the connection first (PRAGMA key,
+                                                  the workspace's SQLCipher key), then sets
                                                   journal_mode=WAL, foreign_keys=ON,
                                                   busy_timeout=5000; closing any previous
 db_close() -> void                                waits for in-flight backup, runs
@@ -94,7 +95,8 @@ db_backup(reason: string) -> { path: string }     read-only second connection,
                                                   VACUUM INTO <dir>/backups/<iso>-<reason>.db.tmp,
                                                   rename to .db; dir derived from the open
                                                   db path; JS never supplies a path
-db_info() -> { path, sizeBytes, fts5: boolean, sqliteVersion }
+db_info() -> { path, sizeBytes, fts5: boolean, sqliteVersion,
+               encrypted: boolean, cipherVersion: string }
 ```
 
 Param binding: JS sends `null | number | string | boolean | Uint8Array`; booleans bind as
@@ -120,6 +122,12 @@ copy_in(src: string) -> { storedName: string, bytes: number, mime: string }
    copies into <workspaceDir>/attachments/<uuid>.<ext>; refuses > 50 MB (IO_ERROR)
 
 app_paths() -> { appData: string, workspacesDir: string }
+
+disk_encryption_status() -> { platform: string, encrypted: boolean | null, detail: string }
+   fdesetup on macOS, manage-bde (falling back to a Win32_EncryptableVolume WMI
+   query) on Windows; 5 s timeout. Never errors and never blocks the app;
+   `encrypted` is null when the check could not run or its output could not be
+   parsed - never a guess.
 ```
 
 ## TypeScript database layer
@@ -343,6 +351,22 @@ without a real site.
 - `db_open` returns the path absolutised but not canonicalised (Windows `\\?\` prefixes
   would otherwise leak into Diagnostics).
 - `reqwest` is pinned to 0.12 to match `tauri-plugin-http`.
+- `secret_set`, `secret_get` and `secret_delete` all refuse the kind `"dbkey"` with
+  `SECRET_ERROR`. Only `db.rs` reads or creates a workspace's database key.
+- `db_open` can now return `SECRET_ERROR` as well as `DB_OPEN_FAILED`: that is the
+  keychain itself refusing or being unavailable, which is the truthful code because the
+  file is fine and the machine's credential store is not. The frontend needs no change
+  for it - `src/app/boot.ts` already wraps any non-`DbOpenError` from `raw.open` into a
+  `DbOpenError`, so the keychain's message reaches the boot screen intact.
+- Archiving a workspace must not, and cannot, delete its `dbkey` entry: archiving clears
+  `"anthropic"` and `"site"`, and the refusal above is what keeps that from also deleting
+  the key that opens the file.
+- A backup opens only through its own workspace, never in place from the `backups`
+  folder, because the workspace id is derived from the name of the folder holding
+  `helix.db` and `backups` is not that folder.
+- The pre-encryption copy the one-time migration sets aside uses the ordinary backup
+  naming scheme, so it is subject to the normal 30-day retention policy rather than kept
+  forever.
 
 ## Wave 3 reconciliation (binding)
 
@@ -590,3 +614,129 @@ reload mid-run is also how a Playwright spec fails for no reason.
 Each agent appends a dated entry to `docs/STATUS.md` when it finishes: what it built,
 what it verified (commands run and results), what it did not do, and any contract change
 it needs. The orchestrator reads STATUS.md before starting the next wave.
+
+## Encryption at rest (binding)
+
+D18: every workspace database is encrypted at rest with SQLCipher, keyed by a random
+per-workspace key held in the OS keychain. This section is the reference to read before
+touching `db.rs`, `secrets.rs`, or `disk.rs` again; the ASCII diagram of the key and
+migration flow lives in the module doc comment at the top of `db.rs` and is not repeated
+here.
+
+### Build
+
+`rusqlite` moved from the `bundled` feature to `bundled-sqlcipher-vendored-openssl`,
+which statically links SQLCipher and builds OpenSSL from source, so neither macOS nor
+Windows needs a system dependency. FTS5 is still compiled in; a test asserts
+`sqlite_compileoption_used('ENABLE_FTS5')` still returns true on the SQLCipher build.
+`getrandom` was added as a direct dependency for the OS CSPRNG the key comes from.
+
+What "the bundled SQLCipher" currently means, measured on macOS Apple Silicon: SQLCipher
+4.14.0 community on SQLite 3.51.3, FTS5 compiled in.
+
+### The key
+
+Keychain service `helix`, user `<workspaceId>:dbkey`, a third kind beside `anthropic`
+and `site`. 32 bytes from the OS CSPRNG, stored as 64 lowercase hex characters, created
+on the first open of a workspace and stable forever after. The workspace id is the name
+of the folder holding `helix.db`, the same derivation `leads_fetch` already uses.
+
+The key never crosses the IPC boundary and is never logged. In Rust its type has no
+`Display` and a `Debug` that prints `DbKey(<redacted>)`. This is enforced, not merely
+documented: `secret_set`, `secret_get` and `secret_delete` all refuse the kind `"dbkey"`
+with `SECRET_ERROR` (see "Clarifications made during the build" above), which is also
+what stops workspace archiving - which deletes the `anthropic` and `site` entries - from
+deleting the database key and making the archived file permanently unreadable. Nothing
+in the app ever deletes a `dbkey` entry.
+
+### `db_open`
+
+`PRAGMA key = "x'<hex>'"` runs before any other statement - before `journal_mode=WAL`,
+`foreign_keys=ON`, `busy_timeout=5000`. Ordering matters: SQLCipher only recognises the
+key once it is the first thing said to the connection.
+
+The raw-key (`x'...'`) form is deliberate. SQLCipher takes the 32 bytes directly, so the
+256,000-round PBKDF2 a passphrase would trigger never runs, and opening a workspace
+costs nothing measurable. `PRAGMA cipher_memory_security` is left at the SQLCipher 4
+default, which is OFF: turning it on costs a large fraction of every read and write, and
+it only defends against an attacker who can already read this process's memory or swap,
+which is not the threat D18 addresses (a lost laptop, a copied file, a backup drive). The
+measured cost of leaving it off: 10,000 single-row inserts in one `db_batch` complete in
+47 ms in a debug build, against a 2-second budget.
+
+After keying, `db_open` runs one read to prove the key was right - SQLCipher accepts any
+key and only fails when it tries to decrypt page 1. A failure there returns
+`DB_OPEN_FAILED` with the message "The saved key does not open this workspace (<path>).
+Its key is missing from this machine's keychain, or the file belongs to another
+workspace." No new error code was added for this.
+
+### The one-time migration
+
+If the first 16 bytes of the file are `SQLite format 3\0`, the file is plaintext, and
+`db_open` converts it in place, holding the same backup guard `db_backup` holds:
+
+1. open the plaintext file unkeyed
+2. `ATTACH DATABASE '<path>.enc' AS helix_enc KEY "x'<hex>'"`
+3. `SELECT sqlcipher_export('helix_enc')`, then `DETACH`
+4. checkpoint and close
+5. prove the `.enc` file opens with the key and carries the same number of schema
+   objects as the original
+6. rename the plaintext original to `<workspaceDir>/backups/<iso>Z-pre-encryption.db`
+7. rename the `.enc` file into place
+
+Nothing is deleted. If the final rename fails, the plaintext original is put back, so the
+next launch retries.
+
+The set-aside copy deliberately uses the ordinary backup naming scheme, so the Backups
+screen lists it and the normal 30-day retention eventually clears it - which is the
+point, because a plaintext copy kept forever beside the encrypted one would hand back
+everything the encryption was for. Note the existing retention rule that the single
+newest backup is always kept, so on a workspace that is never backed up again the
+pre-encryption copy stays.
+
+### `db_backup`
+
+The read-only second connection is keyed before anything else, so `VACUUM INTO` writes
+the copy through the same cipher: the backup on disk is encrypted, not a plaintext dump.
+A test verifies this by reading the first 16 bytes of the backup and opening it with the
+key.
+
+### Restore
+
+Unchanged, and still a plain file copy: the key belongs to the workspace, not to a file,
+so the frontend copies a backup over `helix.db` and calls `db_open` again, and the same
+key opens it (`src/features/data/lib/backupsFs.ts`, `restoreFromBackup`).
+
+The consequence worth writing down: a backup cannot be opened *in place* from the
+`backups` subfolder, because the workspace id is the name of the parent folder -
+`backups` is not a workspace. Restoring a backup that came from a different workspace
+fails with the `DB_OPEN_FAILED` message above.
+
+### `db_info`
+
+Gained two fields: `encrypted: boolean` (the connection is keyed and the file does not
+start with SQLite's plaintext header - it reads the file rather than trusting the
+connection) and `cipherVersion: string` (`PRAGMA cipher_version`, currently
+`"4.14.0 community"`; empty on a build without SQLCipher). In `src/db/client.ts` both are
+optional on the `DbInfo` type, because the e2e bridge and the unit-test driver are plain
+`better-sqlite3` with no cipher, and Diagnostics has to render either way.
+
+### `disk_encryption_status`
+
+New command, documented in "Other commands" above. It reports whether the OS's own
+full-disk encryption is on - `fdesetup status` on macOS, `manage-bde -status
+<SystemDrive>` on Windows with a `Win32_EncryptableVolume` WMI fallback. `encrypted` is
+`null` when the check itself could not run or its output could not be parsed, never a
+guess. It never returns an error and can never fail the app; a 5-second timeout kills a
+hung system tool. `detail` is one short human sentence for the Diagnostics screen.
+SQLCipher protects the workspace file; full-disk encryption protects everything else
+(logs, attachments, swap), which is why Diagnostics shows both.
+
+### Tests
+
+`src-tauri/tests/encryption_tests.rs` (7 tests) and the parser tests inside `disk.rs` (9
+tests). `cargo test` never touches a real keychain: `secrets::use_in_memory_store()`
+points the key store at a process-lifetime map. It is compiled out of release builds
+(`cfg(debug_assertions)`), and a dev run can opt in with
+`HELIX_INSECURE_KEY_STORE=memory`. This is the "dev-only in-memory store gated behind an
+env flag" that `docs/PLAN.md` already promised.

@@ -2689,3 +2689,151 @@ Green on runs 35477415312 and 35477806014: three smoke assertions against the
 real window (title, sidebar "Today", Today heading) in 1.2-1.6s, with
 `Helix 0.1.0 starting` in the app's own log from
 `%APPDATA%\com.clearpathdigital.helix\logs\helix.log`.
+
+---
+
+## 2026-09-19 — Encryption at rest: SQLCipher, keys in the keychain, disk check
+
+D18 landed. Every workspace database is now SQLCipher-encrypted on disk, keyed by
+32 random bytes per workspace held in the OS keychain, with a one-time migration
+for the plaintext workspaces that exist today and a Diagnostics reading of
+whether the OS's own full-disk encryption is switched on. The reference is
+`docs/CONTRACTS.md` "Encryption at rest (binding)"; the flow diagram is in the
+module doc at the top of `src-tauri/src/db.rs`.
+
+- **Build.** `rusqlite` moved from `bundled` to
+  `bundled-sqlcipher-vendored-openssl`, which statically links SQLCipher and
+  builds OpenSSL from source, so no platform needs a system library. This Mac
+  links **SQLCipher 4.14.0 community on SQLite 3.51.3, FTS5 compiled in** —
+  checked with `sqlite_compileoption_used('ENABLE_FTS5')`, not assumed, because
+  the whole search feature rests on it. No `SQLCIPHER_*` build env was needed.
+  `getrandom` was added for the OS CSPRNG. No workflow changes: `openssl-src`
+  falls back to `no-asm` when NASM is absent on MSVC, and the Perl its configure
+  script needs ships on `windows-latest`. CI is what proves that.
+- **The key.** A third keychain kind, `dbkey`, under `<workspaceId>:dbkey` in
+  service `helix`. 32 bytes from the OS CSPRNG as 64 lowercase hex characters,
+  created on first open and stable after. Its Rust type has no `Display`, a
+  `Debug` that prints `DbKey(<redacted>)`, and a buffer it zeroes on drop, so it
+  cannot reach a log by accident. `secret_set`, `secret_get` and `secret_delete`
+  all **refuse** the kind with `SECRET_ERROR`, which is enforced in Rust rather
+  than documented: that is what stops workspace archiving — which clears
+  `anthropic` and `site` — from deleting the key and making an archived
+  workspace permanently unreadable.
+- **Open.** `PRAGMA key = "x'<hex>'"` before any other statement, then one read
+  to prove the key was right (SQLCipher accepts any key and only finds out at
+  page 1), then the existing WAL/foreign-keys/busy-timeout pragmas. The raw-key
+  form is deliberate: no PBKDF2 on open. A wrong or missing key gives
+  `DB_OPEN_FAILED` and the sentence "The saved key does not open this workspace
+  (<path>)…" rather than SQLite's "file is not a database". `db_open` can now
+  also answer `SECRET_ERROR` when the keychain itself refuses; `src/app/boot.ts`
+  already wraps that into a `DbOpenError`, so the boot screen shows the message
+  unchanged.
+- **`cipher_memory_security` stays OFF** (the SQLCipher 4 default). It was not
+  needed: 10,000 single-row inserts in one `db_batch` take **47 ms in a debug
+  build** against the 2-second budget, so there was no performance argument for
+  reaching for the pragma, and what it defends against — an attacker already
+  reading this process's memory or swap — is not the threat D18 is about.
+- **Migration.** A file whose first 16 bytes are `SQLite format 3\0` is
+  converted on open, under the same backup guard `db_backup` holds: attach
+  `<path>.enc` with the key, `sqlcipher_export`, detach, checkpoint, prove the
+  copy opens and carries the same schema objects, move the plaintext original to
+  `backups/<iso>Z-pre-encryption.db`, then move the encrypted file into place. A
+  failure at the last step puts the original back, so the next launch retries.
+  The set-aside copy uses the ordinary backup naming scheme deliberately, so the
+  Backups screen lists it and the 30-day policy clears it — a plaintext copy
+  kept forever beside the encrypted one would give back everything the
+  encryption was for.
+- **Backups.** The read-only backup connection is keyed before `VACUUM INTO`, so
+  the copy is written through the cipher. A test reads the first 16 bytes of a
+  backup, confirms they are not the plaintext header, and then opens it with the
+  workspace key.
+- **Restore is unchanged** and still a plain file copy, because the key belongs
+  to the workspace and not to the file. One consequence is now written into the
+  contract: a backup cannot be opened *in place* from `backups/`, since the
+  workspace id is the name of the folder holding `helix.db`. The existing
+  `backup_produces_valid_db_and_close_waits_for_it` test was reading a backup in
+  place; it now copies it into a workspace first, which is what
+  `restoreFromBackup` does.
+- **`disk_encryption_status()`** → `{ platform, encrypted: boolean|null, detail }`.
+  `fdesetup status` on macOS, `manage-bde -status <SystemDrive>` on Windows with
+  a `Win32_EncryptableVolume` WMI fallback, 5-second timeout, no console window.
+  It returns the struct directly rather than a `Result`, so it can never fail the
+  app; `encrypted` is `null` when the check could not run or could not be parsed,
+  never a guess. On this Mac `fdesetup status` prints "FileVault is On." and the
+  command reports `{ platform: "macos", encrypted: true, detail: "FileVault is
+  on." }`.
+- **`cargo test` never touches a real keychain.** `secrets::use_in_memory_store()`
+  points the store at a process-lifetime map; it is compiled out of release
+  builds (`cfg(debug_assertions)`) and a dev run can opt in with
+  `HELIX_INSECURE_KEY_STORE=memory`. This is the dev-only in-memory store PLAN.md
+  already promised. The release arrangement was proved to compile by inverting
+  the `cfg` and running `cargo check --lib`, rather than by a release build (disk
+  is tight on this machine).
+
+### What Diagnostics should show
+
+`db_info()` gained `encrypted: boolean` and `cipherVersion: string`. Both are
+**optional** on the `DbInfo` type in `src/db/client.ts`, because the e2e bridge
+and the unit-test driver are plain better-sqlite3 with no cipher — render
+"Unknown" when they are `undefined` rather than "Not encrypted". Two lines belong
+on the screen:
+
+```
+Workspace file    Encrypted (SQLCipher 4.14.0 community)  <- db_info().encrypted, .cipherVersion
+Disk encryption   FileVault is on.                        <- disk_encryption_status().detail
+```
+
+`disk_encryption_status()` is a fresh command, not part of `db_info`; call it
+alongside the other Diagnostics readers and treat `encrypted: null` as "Could not
+tell", with `detail` as the explanation. It never throws.
+
+### Verified
+
+```
+$ cargo build
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.82s
+
+$ cargo test
+test result: ok. 26 passed; 0 failed   (lib: db, disk, files, leads, secrets)
+test result: ok. 10 passed; 0 failed   (tests/db_tests.rs)
+test result: ok.  7 passed; 0 failed   (tests/encryption_tests.rs)
+
+$ cargo clippy --all-targets
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.72s
+    (no warnings, no errors)
+
+$ npm test
+ Test Files  69 passed (69)
+      Tests  873 passed (873)
+```
+
+Tests added: 7 in `src-tauri/tests/encryption_tests.rs` (key creation is
+idempotent; a fresh workspace has no plaintext header; plaintext is detected and
+migrated with the original set aside; FTS survives the migration; a backup is
+encrypted and opens with the same key; the wrong key is refused with a readable
+message; 10k inserts in one batch), 9 parser tests in `src-tauri/src/disk.rs`,
+and 5 in `src-tauri/src/secrets.rs`.
+
+### Not done, and one thing to know
+
+- Walker's live workspace
+  `~/Library/Application Support/com.clearpathdigital.helix/workspaces/01a0b839-…/helix.db`
+  is **still plaintext** (header checked read-only, nothing written). It migrates
+  itself on the first launch of a build that includes this change, and the
+  plaintext original will be sitting in that workspace's `backups/` folder as
+  `<iso>Z-pre-encryption.db` afterwards.
+- Nothing under `src/features/**`, `src/ui` or `src/styles` was touched. The
+  Diagnostics line is the orchestrator's to mount; nothing new is exported from
+  this work.
+- `tests/e2e-mac/fixtures.ts` was not touched and still runs on plain
+  better-sqlite3. It never sees the cipher, which is why the two new `DbInfo`
+  fields are optional.
+- The `npm test` and `npm run typecheck` numbers above are from before the
+  onboarding, recurring, templates and help features started landing in the same
+  working tree. At the time of this commit both are red for reasons outside this
+  work: `src/features/onboarding/sample/index.ts` imports industry preset files
+  that are not written yet, `src/app/boot.ts` is missing the `showOnboarding`
+  field another agent added to `BootResult`, and
+  `src/features/templates/components/SendSplitButton.tsx` imports a `lib/hooks`
+  that does not exist. Verified by stashing this change's only front-end edit and
+  re-running the two failing files: they fail identically without it.

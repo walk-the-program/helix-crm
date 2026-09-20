@@ -44,6 +44,51 @@
 //!   in-flight backup" is enforced. Lock order is always backup_guard -> state;
 //!   nothing ever takes them the other way round.
 //! ```
+//!
+//! # Encryption at rest
+//!
+//! Every workspace file is SQLCipher-encrypted (docs/PLAN.md "Security and threat
+//! model", decision D18). The key is 32 random bytes per workspace, made on the
+//! first open and kept in the OS keychain under `<workspaceId>:dbkey`; see
+//! `secrets.rs`. It is never logged, never written to disk, and never crosses to
+//! JS. Because the key belongs to the workspace rather than to a file, every file
+//! inside the workspace folder - the live database and every backup - opens with
+//! the same key, which is what makes restore a plain file copy.
+//!
+//! ```text
+//!   db_open(path)
+//!     |
+//!     +-- workspaceId = the folder holding the file      (leads::workspace_id_from_db_path)
+//!     +-- key = keychain "<workspaceId>:dbkey", created if absent
+//!     |
+//!     +-- first 16 bytes == "SQLite format 3\0" ?
+//!     |     |
+//!     |     yes: ONE-TIME MIGRATION, under the same backup guard as db_backup
+//!     |       1. open the plaintext file, no key
+//!     |       2. ATTACH '<path>.enc' AS enc KEY "x'<hex>'"
+//!     |       3. SELECT sqlcipher_export('enc'); DETACH enc
+//!     |       4. checkpoint and close the plaintext file
+//!     |       5. prove '<path>.enc' opens with the key and carries the same tables
+//!     |       6. rename the plaintext to backups/<iso>Z-pre-encryption.db
+//!     |       7. rename '<path>.enc' into place  (step 6 is undone if this fails)
+//!     |     no: nothing to do - the file is already keyed, or brand new
+//!     |
+//!     +-- PRAGMA key = "x'<hex>'"   FIRST, before any other statement
+//!     +-- prove the key opens it    (SQLITE_NOTADB here means the wrong key)
+//!     +-- journal_mode=WAL, foreign_keys=ON, busy_timeout
+//! ```
+//!
+//! The raw-key (`x'...'`) form is deliberate: it hands SQLCipher the 32 bytes
+//! directly instead of a passphrase, so the 256,000-round PBKDF2 never runs and
+//! opening a workspace stays instant.
+//!
+//! `PRAGMA cipher_memory_security` is left at the SQLCipher 4 default, which is
+//! OFF. Turning it on makes SQLite allocate through its own locked, wiped pages;
+//! it costs a large fraction of every read and write, and what it buys is
+//! protection against an attacker who can already read this process's memory or
+//! a swap file. That is not the threat D18 is about, which is a lost laptop, a
+//! copied file, a backup drive. The batch-insert smoke test in
+//! `tests/encryption_tests.rs` records what the default costs.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -58,6 +103,8 @@ use serde_json::{Map, Number, Value as Json};
 use tauri::State;
 
 use crate::error::{AppError, AppResult, Code};
+use crate::leads::workspace_id_from_db_path;
+use crate::secrets::{self, DbKey};
 
 /// Attachments and backups aside, this is the only place SQL touches the disk.
 const BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
@@ -95,6 +142,12 @@ pub struct DbInfo {
     pub size_bytes: u64,
     pub fts5: bool,
     pub sqlite_version: String,
+    /// The file on disk is SQLCipher-encrypted: the connection is keyed and the
+    /// file does not start with SQLite's plaintext header.
+    pub encrypted: bool,
+    /// `PRAGMA cipher_version`, currently `"4.14.0 community"`. Empty on a build with
+    /// no SQLCipher, which is also the only way `encrypted` can be false.
+    pub cipher_version: String,
 }
 
 /// One statement in a `db_batch`.
@@ -112,6 +165,10 @@ pub struct Statement {
 struct OpenDb {
     conn: Connection,
     path: PathBuf,
+    /// Kept so `db_backup`'s second connection can key itself without a second
+    /// trip to the keychain (which on an unsigned macOS build is also a second
+    /// permission prompt). Dropped, and zeroed, with the rest of `OpenDb`.
+    key: DbKey,
 }
 
 /// The managed state. Commands are thin wrappers over these methods so the
@@ -160,14 +217,28 @@ impl Db {
     // -- lifecycle ----------------------------------------------------------
 
     pub fn open(&self, path: &Path) -> AppResult<OpenResult> {
-        // Take the backup guard first: opening closes whatever was open, and
-        // closing must not race a backup. Same order as `close`.
+        // Take the backup guard first: opening closes whatever was open, closing
+        // must not race a backup, and the plaintext migration below is itself a
+        // backup-shaped operation. Same order as `close`.
         let _backup = lock(&self.backup_guard);
         let mut state = lock(&self.state);
 
         if let Some(prev) = state.take() {
             shutdown(prev);
         }
+
+        // Absolutised before anything else, because the workspace id - and so the
+        // key - is the name of the folder holding the file. Deliberately not
+        // canonicalised: on Windows `canonicalize` hands back a `\\?\C:\...`
+        // extended-length path, which would then show up in Diagnostics and stop
+        // matching the path the frontend passed in.
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(path))
+                .unwrap_or_else(|_| path.to_path_buf())
+        };
 
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {
@@ -180,12 +251,26 @@ impl Db {
             }
         }
 
-        let conn = Connection::open(path).map_err(|e| {
+        // The key first: without it there is nothing to open. A keychain that
+        // refuses answers SECRET_ERROR, which is the truthful code - the file is
+        // fine, the machine's credential store is not.
+        let workspace_id = workspace_id_from_db_path(&path)?;
+        let key = secrets::db_key(&workspace_id)?;
+
+        if is_plaintext_file(&path) {
+            encrypt_in_place(&path, &key)?;
+        }
+
+        let conn = Connection::open(&path).map_err(|e| {
             AppError::new(
                 Code::DbOpenFailed,
                 format!("Could not open {}: {}", path.display(), e),
             )
         })?;
+
+        // PRAGMA key before every other statement, including the pragmas in
+        // `configure`: SQLCipher will not accept it once the file has been read.
+        apply_key(&conn, &key, &path)?;
 
         configure(&conn).map_err(|e| {
             AppError::new(
@@ -194,19 +279,8 @@ impl Db {
             )
         })?;
 
-        // Absolutised but deliberately not canonicalised: on Windows
-        // `canonicalize` hands back a `\\?\C:\...` extended-length path, which
-        // would then show up in Diagnostics and stop matching the path the
-        // frontend passed in.
-        let path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()
-                .map(|cwd| cwd.join(path))
-                .unwrap_or_else(|_| path.to_path_buf())
-        };
         let shown = path.to_string_lossy().to_string();
-        *state = Some(OpenDb { conn, path });
+        *state = Some(OpenDb { conn, path, key });
         Ok(OpenResult { path: shown })
     }
 
@@ -360,33 +434,13 @@ impl Db {
 
         // Read the path and let go of the state lock immediately: the copy runs
         // on its own connection and must not block reads and writes.
-        let src = {
+        let (src, key) = {
             let state = lock(&self.state);
-            state
-                .as_ref()
-                .ok_or_else(AppError::db_closed)?
-                .path
-                .clone()
+            let open = state.as_ref().ok_or_else(AppError::db_closed)?;
+            (open.path.clone(), open.key.clone())
         };
 
-        let dir = src
-            .parent()
-            .ok_or_else(|| AppError::new(Code::BackupFailed, "The database has no parent folder."))?
-            .join("backups");
-        fs::create_dir_all(&dir).map_err(|e| {
-            AppError::new(
-                Code::BackupFailed,
-                format!("Could not create {}: {}", dir.display(), e),
-            )
-        })?;
-
-        let stem = format!("{}-{}", utc_stamp(SystemTime::now()), sanitise(reason));
-        let mut dest = dir.join(format!("{stem}.db"));
-        let mut n = 2;
-        while dest.exists() {
-            dest = dir.join(format!("{stem}-{n}.db"));
-            n += 1;
-        }
+        let dest = new_backup_path(&src, reason, Code::BackupFailed)?;
         let tmp = dest.with_extension("db.tmp");
         let _ = fs::remove_file(&tmp);
 
@@ -398,6 +452,16 @@ impl Db {
             AppError::new(
                 Code::BackupFailed,
                 format!("Could not open {} read-only: {}", src.display(), e),
+            )
+        })?;
+        // Keyed before anything else, exactly as in `open`. It matters twice
+        // over: without it the read fails, and with it `VACUUM INTO` writes the
+        // copy through the same cipher, so the backup on disk is encrypted with
+        // the workspace key rather than being a plaintext dump of it.
+        ro.execute_batch(&key.key_pragma()).map_err(|e| {
+            AppError::new(
+                Code::BackupFailed,
+                format!("Could not unlock {} for the backup: {}", src.display(), e),
             )
         })?;
         ro.busy_timeout(BUSY_TIMEOUT).ok();
@@ -453,11 +517,22 @@ impl Db {
             size_bytes += m.len();
         }
 
+        // `cipher_version` is empty on a build with no SQLCipher; `encrypted`
+        // reads the file rather than trusting the connection, so a workspace that
+        // somehow escaped the migration reports the truth.
+        let cipher_version: String = open
+            .conn
+            .query_row("PRAGMA cipher_version", [], |r| r.get(0))
+            .unwrap_or_default();
+        let encrypted = !cipher_version.trim().is_empty() && !is_plaintext_file(&open.path);
+
         Ok(DbInfo {
             path: open.path.to_string_lossy().to_string(),
             size_bytes,
             fts5: fts5 != 0,
             sqlite_version,
+            encrypted,
+            cipher_version: cipher_version.trim().to_string(),
         })
     }
 }
@@ -465,6 +540,200 @@ impl Db {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// `<dbDir>/backups/<iso>Z-<reason>.db`, with a `-<n>` suffix if a file of that
+/// name is already there. Shared by `db_backup` and by the one-time encryption
+/// migration so both land in the scheme `src/features/data/lib/retention.ts`
+/// parses: the plaintext copy the migration sets aside is an ordinary backup as
+/// far as the Backups screen and the 30-day policy are concerned.
+fn new_backup_path(src: &Path, reason: &str, code: Code) -> AppResult<PathBuf> {
+    let dir = src
+        .parent()
+        .ok_or_else(|| AppError::new(code, "The database has no parent folder."))?
+        .join("backups");
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::new(code, format!("Could not create {}: {}", dir.display(), e)))?;
+
+    let stem = format!("{}-{}", utc_stamp(SystemTime::now()), sanitise(reason));
+    let mut dest = dir.join(format!("{stem}.db"));
+    let mut n = 2;
+    while dest.exists() {
+        dest = dir.join(format!("{stem}-{n}.db"));
+        n += 1;
+    }
+    Ok(dest)
+}
+
+/// SQLite's 16-byte file header, which an encrypted file does not have: from the
+/// first byte, a SQLCipher file is ciphertext. Read rather than inferred, so the
+/// migration triggers on the one thing that actually decides it.
+const PLAINTEXT_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
+/// True only for a file that exists, is long enough to have a header, and starts
+/// with SQLite's. A missing or empty file is a workspace about to be created; an
+/// unreadable one answers false and fails loudly a moment later, in `open`, with
+/// the OS's own message rather than a guess from here.
+fn is_plaintext_file(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = fs::File::open(path) else {
+        return false;
+    };
+    let mut head = [0u8; PLAINTEXT_HEADER.len()];
+    match f.read_exact(&mut head) {
+        Ok(()) => &head == PLAINTEXT_HEADER,
+        Err(_) => false,
+    }
+}
+
+/// `PRAGMA key`, then one read to prove the key was the right one.
+///
+/// SQLCipher accepts any key without complaint - it only finds out when it tries
+/// to decrypt page 1 - so the read is not optional. `SQLITE_NOTADB` from here
+/// means the file is encrypted with a different key (or is not a database at
+/// all), which is the one failure a user can act on: the keychain entry for this
+/// workspace is gone or belongs to a different file.
+fn apply_key(conn: &Connection, key: &DbKey, path: &Path) -> AppResult<()> {
+    conn.execute_batch(&key.key_pragma()).map_err(|e| {
+        AppError::new(
+            Code::DbOpenFailed,
+            format!("Could not unlock {}: {}", path.display(), e),
+        )
+    })?;
+
+    conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| {
+        r.get::<_, i64>(0)
+    })
+    .map(|_| ())
+    .map_err(|e| {
+        AppError::new(
+            Code::DbOpenFailed,
+            format!(
+                "The saved key does not open this workspace ({}). Its key is \
+                 missing from this machine's keychain, or the file belongs to \
+                 another workspace. The underlying error was: {e}",
+                path.display()
+            ),
+        )
+    })
+}
+
+/// The one-time plaintext -> SQLCipher migration, run from `open` while it holds
+/// `backup_guard`.
+///
+/// Nothing is destroyed: the plaintext file is renamed into the `backups` folder
+/// as `<iso>Z-pre-encryption.db`, so a failed conversion can be recovered by
+/// restoring it, and the ordinary 30-day retention eventually takes it away -
+/// which is the point. Keeping a plaintext copy of the database forever beside
+/// the encrypted one would hand back everything the encryption was for.
+fn encrypt_in_place(path: &Path, key: &DbKey) -> AppResult<()> {
+    let failed = |message: String| AppError::new(Code::DbOpenFailed, message);
+
+    let enc = PathBuf::from(format!("{}.enc", path.to_string_lossy()));
+    // A previous attempt that died between the export and the rename.
+    let _ = fs::remove_file(&enc);
+
+    {
+        let plain = Connection::open(path)
+            .map_err(|e| failed(format!("Could not open {} to encrypt it: {e}", path.display())))?;
+        plain.busy_timeout(BUSY_TIMEOUT).ok();
+
+        // The path goes into SQL as a literal because ATTACH ... KEY is not a
+        // place bound parameters are guaranteed to reach; single quotes are
+        // doubled the way SQLite expects.
+        let quoted = enc.to_string_lossy().replace('\'', "''");
+        let attach = format!(
+            "ATTACH DATABASE '{quoted}' AS helix_enc {}",
+            key.attach_key_clause()
+        );
+        plain
+            .execute_batch(&attach)
+            .map_err(|e| failed(format!("Could not start the encrypted copy: {e}")))?;
+
+        // sqlcipher_export returns a row, so it goes through query_row.
+        let export = plain
+            .query_row("SELECT sqlcipher_export('helix_enc')", [], |r| {
+                r.get::<_, Option<i64>>(0)
+            })
+            .map(|_| ())
+            .map_err(|e| failed(format!("Could not write the encrypted copy: {e}")));
+
+        let detach = plain.execute_batch("DETACH DATABASE helix_enc");
+        export?;
+        detach.map_err(|e| failed(format!("Could not close the encrypted copy: {e}")))?;
+
+        // Fold the WAL back into the plaintext file before it is moved, so no
+        // orphan -wal is left pointing at a file that is no longer there.
+        let _ = plain.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)");
+    }
+
+    // Prove the copy before anything is moved. A file that will not open with
+    // the key, or that came out empty when the source was not, is a failed
+    // migration and the plaintext stays exactly where it is.
+    verify_encrypted_copy(path, &enc, key).inspect_err(|_| {
+        let _ = fs::remove_file(&enc);
+    })?;
+
+    let aside = new_backup_path(path, "pre-encryption", Code::DbOpenFailed)?;
+    fs::rename(path, &aside).map_err(|e| {
+        let _ = fs::remove_file(&enc);
+        failed(format!(
+            "Could not set {} aside as {}: {e}",
+            path.display(),
+            aside.display()
+        ))
+    })?;
+    // A clean close removes these, but a crashed previous run may have left them.
+    for suffix in ["-wal", "-shm"] {
+        let _ = fs::remove_file(PathBuf::from(format!(
+            "{}{suffix}",
+            path.to_string_lossy()
+        )));
+    }
+
+    if let Err(e) = fs::rename(&enc, path) {
+        // Put the workspace back the way it was rather than leaving no file at
+        // all: the next launch retries the migration.
+        let _ = fs::rename(&aside, path);
+        let _ = fs::remove_file(&enc);
+        return Err(failed(format!(
+            "Could not move the encrypted copy into place: {e}"
+        )));
+    }
+
+    Ok(())
+}
+
+/// Opens the freshly written encrypted file with the key and checks it carries
+/// the same number of schema objects as the plaintext source.
+fn verify_encrypted_copy(src: &Path, enc: &Path, key: &DbKey) -> AppResult<()> {
+    let failed = |message: String| AppError::new(Code::DbOpenFailed, message);
+
+    let objects = |conn: &Connection| -> rusqlite::Result<i64> {
+        conn.query_row("SELECT count(*) FROM sqlite_schema", [], |r| r.get(0))
+    };
+
+    let plain = Connection::open_with_flags(src, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| failed(format!("Could not re-read {}: {e}", src.display())))?;
+    let before =
+        objects(&plain).map_err(|e| failed(format!("Could not count {}: {e}", src.display())))?;
+    drop(plain);
+
+    let copy = Connection::open_with_flags(enc, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|e| failed(format!("Could not re-read the encrypted copy: {e}")))?;
+    apply_key(&copy, key, enc)?;
+    let after = objects(&copy)
+        .map_err(|e| failed(format!("Could not count the encrypted copy: {e}")))?;
+    drop(copy);
+
+    if after != before {
+        return Err(failed(format!(
+            "The encrypted copy of {} came out with {after} tables and indexes \
+             instead of {before}, so it was thrown away and nothing was changed.",
+            src.display()
+        )));
+    }
+    Ok(())
+}
 
 fn configure(conn: &Connection) -> AppResult<()> {
     // journal_mode returns a row, so it cannot go through pragma_update.

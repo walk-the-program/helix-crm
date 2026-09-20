@@ -510,11 +510,14 @@ No catch-all handlers in services. A single top-level React error boundary shows
   inline styles); `connect-src 'self'` only, since network calls run on the Rust side
   (`tauri-plugin-http` scoped to the Anthropic API; `leads_fetch` for the site). No
   remote code, no CDN fonts; the app works offline.
-- Secrets (site token, Anthropic key) in the OS keychain (macOS Keychain, Windows
-  Credential Manager) via the `keyring` crate, never in SQLite or `helix.json`. Known
-  gotcha: unsigned macOS builds change identity per build, so the Keychain prompt
-  reappears after each dev rebuild until E5 lands; documented in CONTRIBUTING. A
-  dev-only in-memory store is gated behind an env flag and cannot compile into release.
+- Secrets (site token, Anthropic key, and now the per-workspace database key) in the OS
+  keychain (macOS Keychain, Windows Credential Manager) via the `keyring` crate, never in
+  SQLite or `helix.json`. The database key is a third kind, `dbkey`, alongside
+  `anthropic` and `site`, and it is unreachable from JS: `secret_set`, `secret_get` and
+  `secret_delete` all refuse it, so only Rust ever reads or creates it. Known gotcha:
+  unsigned macOS builds change identity per build, so the Keychain prompt reappears after
+  each dev rebuild until E5 lands; documented in CONTRIBUTING. A dev-only in-memory store
+  is gated behind an env flag and cannot compile into release.
 - All SQL parameterised through Drizzle. FTS queries quote user input.
 - CSV export: formula-injection guard on cells starting with `= + - @ \t \r`.
 - Attachments: copied into the workspace folder via `copy_in(src)`, which chooses the
@@ -525,9 +528,22 @@ No catch-all handlers in services. A single top-level React error boundary shows
   admin.
 - AI: only explicit user actions, only the visible record, key never logged. The model's
   output is untrusted data: shown for confirmation, never auto-saved, never executed.
-- Local threat: the SQLite file is unencrypted on disk (same as the owner's other
-  documents). Full-disk encryption is the OS's job; documented in README. Encrypted
-  workspaces are a TODO.
+- Local threat: every workspace file is SQLCipher-encrypted with a random 32-byte
+  per-workspace key held in the OS keychain (D18). `db_open` keys the connection with the
+  raw-key form (`PRAGMA key = "x'<hex>'"`) rather than a passphrase, so SQLCipher's
+  256,000-round PBKDF2 never runs and there is no KDF cost on open. A one-time migration
+  converts an existing plaintext workspace the next time it is opened and sets the
+  original aside in `backups/` under the ordinary backup naming scheme rather than
+  deleting it, so it is covered by the normal 30-day retention policy instead of
+  surviving forever next to the encrypted copy it replaced. Backups are encrypted too,
+  because `db_backup`'s read-only connection is keyed before `VACUUM INTO` runs, so the
+  copy is written through the same cipher. `PRAGMA cipher_memory_security` stays off: it
+  costs a large fraction of every read and write, and it only defends against an attacker
+  who can already read this process's memory or swap, which is not the threat this
+  addresses. Full-disk encryption is still the OS's job, and Diagnostics now reports
+  whether it is on via `disk_encryption_status`. The residual risk: an attacker with the
+  user's unlocked account can read the key straight out of the keychain, so this protects
+  a lost or stolen machine and a copied file, not a live compromised session.
 
 ## Edge cases
 

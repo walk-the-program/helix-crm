@@ -26,9 +26,17 @@ tauri-plugin-opener = "2.5.5"
 tauri-plugin-log = "2.9.1"
 tauri-plugin-http = "2.6.1"
 
-# One bundled SQLite so Windows needs no system library, and so better-sqlite3 in the
-# JS test harness can be pinned to the same SQLite major.
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+# One bundled SQLCipher so Windows needs no system library, and so better-sqlite3 in the
+# JS test harness can be pinned to the same SQLite major. `bundled-sqlcipher-vendored-openssl`
+# statically links SQLCipher *and* builds OpenSSL from source, so every workspace file is
+# encrypted at rest (docs/PLAN.md "Security and threat model", D18) with no system
+# dependency on any platform. The amalgamation keeps FTS5; there is a test that asserts it.
+rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+# The OS CSPRNG (getentropy on macOS, BCryptGenRandom on Windows) for the 32-byte
+# per-workspace database key. Already in the tree via uuid/reqwest, so this pulls in
+# nothing new.
+getrandom = "0.3.4"
 
 # keyring 3 ships no backend by default; the native ones are selected explicitly.
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
@@ -52,6 +60,11 @@ tauri-plugin-single-instance = "2.4.4"
 
 [dev-dependencies]
 tempfile = "3.24.0"
+# The integration tests write a *plaintext* database by hand (no PRAGMA key, so
+# SQLCipher behaves as plain SQLite) to exercise the one-time migration, and open
+# backups directly to prove they came out encrypted. Same version and features as
+# the dependency above, so Cargo unifies them and nothing extra is compiled.
+rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

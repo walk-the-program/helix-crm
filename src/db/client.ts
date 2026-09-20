@@ -24,6 +24,15 @@ export type DbInfo = {
   sizeBytes: number;
   fts5: boolean;
   sqliteVersion: string;
+  /**
+   * The workspace file is SQLCipher-encrypted at rest (docs/PLAN.md "Security
+   * and threat model", D18). The Rust pipe always answers both of these; they
+   * are optional because the e2e bridge and the unit-test driver are plain
+   * better-sqlite3 with no cipher, and Diagnostics has to render either way.
+   */
+  encrypted?: boolean;
+  /** `PRAGMA cipher_version`, currently "4.14.0 community". */
+  cipherVersion?: string;
 };
 
 export type SqlParam = null | number | string | boolean | Uint8Array;

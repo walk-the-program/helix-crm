@@ -6,6 +6,7 @@
 //! for itself.
 
 pub mod db;
+pub mod disk;
 pub mod error;
 pub mod files;
 pub mod leads;
@@ -115,6 +116,7 @@ pub fn run() {
             leads::leads_fetch,
             files::copy_in,
             files::app_paths,
+            disk::disk_encryption_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

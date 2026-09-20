@@ -3,6 +3,13 @@
 //! Each `#[test]` defends one line of the state-machine contract laid out in
 //! `db.rs`'s module doc comment. Run with:
 //!   cargo test --test db_tests
+//!
+//! Encryption at rest has its own file, `encryption_tests.rs`. It still matters
+//! here, because every `open` now needs a key: `use_in_memory_store()` points the
+//! key store at a process-lifetime map, so these tests never prompt for Keychain
+//! access, never leave entries on the developer's machine, and pass on a CI
+//! runner with no usable credential store. Every test that calls `Db::open` has
+//! to call it first.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,6 +29,7 @@ use tempfile::TempDir;
 /// path `Db::open` recorded. That path is absolutised but not canonicalised,
 /// so callers can compare it directly against `db.info()` and `db.backup()`.
 fn open_temp() -> (TempDir, Db, PathBuf) {
+    helix_crm_lib::secrets::use_in_memory_store();
     let dir = tempfile::tempdir().expect("tempdir should be creatable");
     let path = dir.path().join("018f-test").join("helix.db");
     let db = Db::new();
@@ -397,9 +405,19 @@ fn backup_produces_valid_db_and_close_waits_for_it() {
         assert!(!name.ends_with(".tmp"), "no .tmp file should remain, found: {name}");
     }
 
-    // The backup is a real, independent database: open it with a second Db.
+    // The backup is a real, independent database, read back the way a restore
+    // reads it: copied over the workspace's own file and opened there. Since
+    // encryption at rest landed (D18) the key is the workspace's, derived from
+    // the folder holding `helix.db`, so a backup cannot be opened in place from
+    // the `backups` subfolder - see `encryption_tests.rs` and the contract note
+    // on the restore path.
+    let restore_dir = tempfile::tempdir().expect("a second tempdir");
+    let restored = restore_dir.path().join("018f-test").join("helix.db");
+    std::fs::create_dir_all(restored.parent().expect("parent")).expect("mkdir");
+    std::fs::copy(&backup_path, &restored).expect("copy the backup into a workspace");
+
     let restore = Db::new();
-    restore.open(&backup_path).expect("open the backup file");
+    restore.open(&restored).expect("open the restored copy");
     let rows = restore
         .query("SELECT label FROM t WHERE id = 1", &[])
         .expect("read the backup's rows");
@@ -477,6 +495,12 @@ fn info_reports_fts5_and_fts5_actually_works() {
     assert!(!info.sqlite_version.is_empty(), "sqlite_version should be nonempty");
     assert_eq!(info.path, path.to_string_lossy(), "info().path should match the open path");
     assert!(info.size_bytes > 0, "an opened db file should have nonzero size");
+    assert!(info.encrypted, "every workspace file is SQLCipher-encrypted (D18)");
+    assert!(
+        !info.cipher_version.is_empty(),
+        "PRAGMA cipher_version should name the SQLCipher build, got {:?}",
+        info.cipher_version
+    );
 
     db.execute("CREATE VIRTUAL TABLE docs USING fts5(body)", &[])
         .expect("create an fts5 virtual table");
@@ -506,6 +530,7 @@ fn info_reports_fts5_and_fts5_actually_works() {
 /// switching back does not lose what was already committed.
 #[test]
 fn open_switches_files_without_losing_committed_data() {
+    helix_crm_lib::secrets::use_in_memory_store();
     let dir = tempfile::tempdir().expect("tempdir");
     let path_a = dir.path().join("a").join("helix.db");
     let path_b = dir.path().join("b").join("helix.db");
