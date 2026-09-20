@@ -23,6 +23,19 @@
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test, expect, type HelixHarness } from "../fixtures";
+import { FOLLOW_UP_INTRO } from "../../../src/db/repos/automations";
+
+/**
+ * A polled lead now leaves two system lines on its deal, not one: the
+ * website's own entry, and the speed-to-lead rule's follow-up beside it
+ * (LR-PX-C, seeded on). Every count below that is about what the WEBSITE
+ * wrote says so in SQL, rather than being raised to swallow the second line -
+ * a raised number would keep passing if the website's entry disappeared and
+ * two follow-ups took its place, which is the one thing these tests exist to
+ * catch. The rule's own line is asserted on its own terms instead.
+ */
+const NOT_A_FOLLOW_UP = `body NOT LIKE '${FOLLOW_UP_INTRO}%'`;
+const IS_A_FOLLOW_UP = `body LIKE '${FOLLOW_UP_INTRO}%'`;
 import type { Locator, Page } from "@playwright/test";
 
 const SCREENS = fileURLToPath(new URL("../.cache/screens/brand-b/", import.meta.url));
@@ -409,9 +422,23 @@ test.describe("polling", () => {
     expect(
       Number(
         helix.bridge.query(
-          "SELECT count(*) FROM activities WHERE kind = 'system' AND is_system = 1",
+          `SELECT count(*) FROM activities WHERE kind = 'system' AND is_system = 1 AND ${NOT_A_FOLLOW_UP}`,
           [],
         )[0][0],
+      ),
+    ).toBe(2);
+    // And one speed-to-lead follow-up per lead, with the task behind it.
+    expect(
+      Number(
+        helix.bridge.query(
+          `SELECT count(*) FROM activities WHERE is_system = 1 AND ${IS_A_FOLLOW_UP}`,
+          [],
+        )[0][0],
+      ),
+    ).toBe(2);
+    expect(
+      Number(
+        helix.bridge.query("SELECT count(*) FROM tasks WHERE source = 'automation'", [])[0][0],
       ),
     ).toBe(2);
 
@@ -477,9 +504,16 @@ test.describe("polling", () => {
     expect(
       Number(
         helix.bridge.query(
-          "SELECT count(*) FROM activities WHERE kind = 'system' AND is_system = 1",
+          `SELECT count(*) FROM activities WHERE kind = 'system' AND is_system = 1 AND ${NOT_A_FOLLOW_UP}`,
           [],
         )[0][0],
+      ),
+    ).toBe(2);
+    // The rule is idempotent too: a re-poll adds no second follow-up and no
+    // second task, which is the automation_runs ledger doing its job.
+    expect(
+      Number(
+        helix.bridge.query("SELECT count(*) FROM tasks WHERE source = 'automation'", [])[0][0],
       ),
     ).toBe(2);
   });
@@ -847,7 +881,8 @@ test.describe("audited findings (F-LB-1, F-LB-6, F-LB-8, F-LB-16, F-LB-17)", () 
     expect(titleAfter).toBe(titleBefore); // the deal itself is untouched
 
     const systemActivities = helix.bridge.query(
-      "SELECT body FROM activities WHERE deal_id = ? AND is_system = 1 ORDER BY occurred_at ASC",
+      `SELECT body FROM activities WHERE deal_id = ? AND is_system = 1 AND ${NOT_A_FOLLOW_UP}
+       ORDER BY occurred_at ASC`,
       [dealId],
     );
     expect(systemActivities).toHaveLength(2);
@@ -858,10 +893,19 @@ test.describe("audited findings (F-LB-1, F-LB-6, F-LB-8, F-LB-16, F-LB-17)", () 
     await page.getByRole("button", { name: "Poll now" }).click();
     await expect(page.getByText("Checked your website. Nothing new.")).toBeVisible();
     const afterSecondPoll = helix.bridge.query(
-      "SELECT count(*) FROM activities WHERE deal_id = ? AND is_system = 1",
+      `SELECT count(*) FROM activities WHERE deal_id = ? AND is_system = 1 AND ${NOT_A_FOLLOW_UP}`,
       [dealId],
     );
     expect(Number(afterSecondPoll[0][0])).toBe(2);
+    // Still exactly one follow-up for this deal across all three polls.
+    expect(
+      Number(
+        helix.bridge.query(
+          `SELECT count(*) FROM activities WHERE deal_id = ? AND is_system = 1 AND ${IS_A_FOLLOW_UP}`,
+          [dealId],
+        )[0][0],
+      ),
+    ).toBe(1);
   });
 });
 
@@ -950,6 +994,7 @@ const TABS = [
   { label: "Overview", path: "/reports", heading: "Reports" },
   { label: "Revenue", path: "/reports/revenue", heading: "Revenue" },
   { label: "Deals", path: "/reports/deals", heading: "Deals" },
+  { label: "Sources", path: "/reports/sources", heading: "Sources" },
   {
     label: "Contacts and companies",
     path: "/reports/people",
@@ -988,7 +1033,7 @@ test.describe("the reports tab strip", () => {
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
-  test("the four tabs this feature owns show the strip with their own tab selected", async ({
+  test("the five tabs this feature owns show the strip with their own tab selected", async ({
     page,
     helix,
   }) => {
@@ -1002,7 +1047,7 @@ test.describe("the reports tab strip", () => {
         "aria-selected",
         "true",
       );
-      // All five are offered from every page: no report is a cul-de-sac.
+      // All six are offered from every page: no report is a cul-de-sac.
       for (const other of TABS) {
         await expect(strip.getByRole("tab", { name: other.label })).toBeVisible();
       }

@@ -91,6 +91,29 @@ describe("bulk: addTagToContacts / removeTagFromContacts", () => {
     expect(await tagLinkCount(tagId, b.id)).toBe(0);
   });
 
+  /**
+   * The mirror of the test above, and the one that was missing: a tag removal
+   * is a HARD delete, so undoing it has to put the row back rather than clear
+   * a `deleted_at` that was never set. Before the fix this passed straight
+   * through `undoBatch` without error and restored nothing at all, which is
+   * the worst shape a bug can take on an Undo the toast has already promised.
+   */
+  it("undoBatch puts a removed tag back on every contact in the run", async () => {
+    h = await createSeededHarness();
+    const a = await contacts.create({ firstName: "A", lastName: "One" });
+    const b = await contacts.create({ firstName: "B", lastName: "Two" });
+    const tagId = await makeTag("Repeat");
+    await bulk.addTagToContacts([a.id, b.id], tagId);
+
+    const { batchId } = await bulk.removeTagFromContacts([a.id, b.id], tagId);
+    expect(await tagLinkCount(tagId, a.id)).toBe(0);
+    expect(await tagLinkCount(tagId, b.id)).toBe(0);
+
+    await undoBatch(batchId);
+    expect(await tagLinkCount(tagId, a.id)).toBe(1);
+    expect(await tagLinkCount(tagId, b.id)).toBe(1);
+  });
+
   it("rolls back the WHOLE transaction when one contact id does not exist", async () => {
     h = await createSeededHarness();
     const a = await contacts.create({ firstName: "A", lastName: "One" });

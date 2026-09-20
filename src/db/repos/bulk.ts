@@ -81,8 +81,23 @@ export async function removeTagFromContacts(contactIds: string[], tagId: string)
     for (const contactId of unique) {
       await requireLive("contacts", "contact", contactId);
 
+      /**
+       * The WHOLE row, `id` included, because this is a hard delete.
+       *
+       * `changeLog.undoBatch` tells the two kinds of delete apart by whether
+       * `before` carries an `id`: without one it treats the entry as a soft
+       * delete and undoes it with an `UPDATE ... WHERE id = ?`, which matches
+       * nothing once the row is actually gone - the undo then reports success
+       * and silently restores no tag. With the full row it takes the
+       * re-insert branch instead, which is the correct reversal here.
+       *
+       * `tags.setTags` logs the short form for the same hard delete and has
+       * the same silent-undo hole; it is outside this round's ownership and
+       * is reported rather than changed here.
+       */
       const rows = await raw.query(
-        `SELECT tl.id AS tl_id FROM tag_links tl
+        `SELECT tl.id AS tl_id, tl.created_at AS tl_created_at, tl.updated_at AS tl_updated_at
+         FROM tag_links tl
          WHERE tl.tag_id = ? AND tl.entity_type = 'contact' AND tl.entity_id = ?`,
         [tagId, contactId],
       );
@@ -97,7 +112,15 @@ export async function removeTagFromContacts(contactIds: string[], tagId: string)
             entityType: "tag_link",
             entityId: linkId,
             op: "delete",
-            before: { tagId, entityType: "contact", entityId: contactId },
+            before: {
+              id: linkId,
+              tagId,
+              entityType: "contact",
+              entityId: contactId,
+              createdAt: String(r[1]),
+              updatedAt: String(r[2]),
+              deletedAt: null,
+            },
             batchId,
           }),
         );
