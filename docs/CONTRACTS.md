@@ -773,3 +773,149 @@ points the key store at a process-lifetime map. It is compiled out of release bu
 (`cfg(debug_assertions)`), and a dev run can opt in with
 `HELIX_INSECURE_KEY_STORE=memory`. This is the "dev-only in-memory store gated behind an
 env flag" that `docs/PLAN.md` already promised.
+
+## Round 3 shell, kit and OS seams (binding)
+
+Added 2026-09-20 by R3-L1, from Walker's first-use notes on 0.1.0. Everything here is
+already implemented on main; this section is the contract other agents code against.
+
+### The three picker primitives (`src/ui`)
+
+Names are fixed. Props may GROW; a prop is never renamed or removed.
+
+```ts
+// src/ui/Combobox.tsx
+export type ComboboxItem = { id: string; label: string; detail?: string; keywords?: string[] };
+export type ComboboxItems = ComboboxItem[] | ((query: string) => Promise<ComboboxItem[]>);
+
+export function Combobox(props: {
+  value: string | null;
+  onChange: (id: string | null, item?: ComboboxItem) => void;
+  items: ComboboxItems;
+  placeholder?: string; emptyText?: string;
+  onCreate?: (query: string) => void | Promise<void>;
+  createLabel?: (q: string) => string;      // default: Add “{q}”
+  multiple?: false; disabled?: boolean; "aria-label"?: string; autoFocus?: boolean;
+  selectedItem?: ComboboxItem | null;       // added: the chosen record, for the async form
+  clearable?: boolean; id?: string; className?: string;   // added
+}): JSX.Element;
+
+export function MultiCombobox(props: {
+  values: string[]; onChange: (ids: string[]) => void; items: ComboboxItems;
+  placeholder?: string; emptyText?: string;
+  onCreate?: (q: string) => void | Promise<void>; createLabel?: (q: string) => string;
+  disabled?: boolean; "aria-label"?: string;
+  summaryLabel?: (count: number) => string; // added: default "3 chosen"
+  id?: string; className?: string;
+}): JSX.Element;
+
+// src/ui/DatePicker.tsx — value is YYYY-MM-DD LOCAL; null clears.
+export function DatePicker(props: {
+  value: string | null; onChange: (v: string | null) => void;
+  min?: string; max?: string; placeholder?: string; disabled?: boolean;
+  "aria-label"?: string; clearable?: boolean;
+  id?: string; className?: string; locale?: string;   // added
+  "aria-describedby"?: string; "aria-invalid"?: boolean;   // added, wired by Field
+}): ReactElement;
+
+// src/ui/TimePicker.tsx — value is HH:MM 24-hour; rendered in the browser locale.
+export function TimePicker(props: {
+  value: string | null; onChange: (v: string | null) => void;
+  step?: 5 | 15 | 30; disabled?: boolean; "aria-label"?: string;
+  placeholder?: string; clearable?: boolean; min?: string; max?: string;   // added
+  id?: string; className?: string;                                          // added
+}): JSX.Element;
+
+/** Exported and tested on its own: "9", "9a", "930", "0930", "9:30 pm", "21:30". */
+export function parseTimeInput(raw: string, opts?: { prefer24h?: boolean }): string | null;
+```
+
+`DatePicker` returns `ReactElement` rather than the plan's literal `JSX.Element`: the
+global `JSX` namespace is not exported that way under this repo's TypeScript, and
+`ReactElement` is the house convention (`Field.tsx`). The call signature is unchanged.
+
+**Test ids** (e2e depends on these exact strings): `combobox`, `combobox-input`,
+`combobox-option` (+ `data-id`), `combobox-create`, `combobox-empty`; `date-picker`,
+`date-picker-grid`, `date-picker-day` (+ `data-date="YYYY-MM-DD"`, `data-today`,
+`aria-selected`); `time-picker`, `time-picker-option` (+ `data-time="HH:MM"`),
+`time-picker-empty`.
+
+**Rules.** A record is picked with a `Combobox`, never a `Select`. A date is picked with
+a `DatePicker` and a time with a `TimePicker`, never a native `input[type=date|time]`.
+Every popover in the three is collision-aware and height-capped, so a list can never run
+off the bottom of the window.
+
+### App settings (`helix.json`)
+
+`registrySchema` gained a `sidebar` block, app-level rather than per workspace:
+
+```ts
+sidebar: { width: number /* 200..360, default 240 */; collapsed: boolean /* default false */ }
+```
+
+Both are clamped on read as well as on write, and a `helix.json` from an older build
+parses with the defaults filled in. Write through `setSidebar(patch)`, never by hand.
+
+`subscribeToRegistry(listener): () => void` is new. Every `writeRegistry` publishes the
+new registry to it. Anything that renders a value out of `helix.json` — the sidebar's
+workspace name is the first — subscribes rather than holding a copy from boot.
+
+### Sidebar and shell
+
+- `Sidebar` takes `width`, `collapsed`, `onResize(width)` and `onResizeEnd(width)`.
+  `onResize` fires continuously during a drag; `onResizeEnd` fires once, and is what
+  writes the file. `SIDEBAR_MIN_W` 200, `SIDEBAR_MAX_W` 360, `SIDEBAR_DEFAULT_W` 240,
+  `SIDEBAR_COLLAPSED_W` 48, and `clampSidebarWidth(n)` are exported from `src/ui`.
+- `NavItem` takes `collapsed`, which renders the icon alone with the label as a tooltip
+  and as the accessible name.
+- `SidebarSeparator` is the hairline between nav groups.
+- `NAV_GROUPS` and `navGroupPosition(to)` in `src/app/feature.ts` decide the sidebar's
+  shape, keyed on the nav item's route rather than on its number. A feature keeps
+  registering `order` as it always did; a route the groups do not name still appears, in
+  its own group, placed by that number. `NAV_ORDER` gained `services`, `invoices`,
+  `reminders`, `trash` and `help`, and `tasks` moved to 60.
+- `nextTheme(current)` is now a TOGGLE: Light ↔ Dark, and from Auto the opposite of the
+  resolved appearance. It never returns `"auto"`. Auto is set only from
+  Settings > Appearance. Every surface that changes the theme goes through it.
+- The shell command `toggle-sidebar` (mod+\) lives in `src/app/sidebarCommand.ts` and is
+  registered in `registry.ts`'s `appCommands` beside the undo pair.
+
+### Layout invariants
+
+`html` and `body` are `overflow: hidden` and `#root` is `position: fixed; inset: 0`. The
+document itself never scrolls. There are exactly two scrollers in the shell — the content
+column (`<main>`) and the sidebar's nav area — plus one inside any open dialog. A screen
+that wants its own scroll region must bound it (`min-h-0` and `overflow-y-auto` inside a
+flex column), never let the page grow.
+
+### Dialog spacing
+
+`DialogContent` hoists a top-level `DialogFooter` out of the scroll box and renders it as
+a flex sibling below (`data-testid="dialog-footer"`, `data-hoisted="true"`). The body
+(`data-testid="dialog-body"`) carries `pb-[var(--space-6)]`, so there is always at least
+24px between the last field and the action bar. A footer nested too deep to be found
+falls back to the old sticky behaviour and reports `data-hoisted="false"`.
+
+`FormRow` and `FieldSet` gap their children by `--space-4`. A screen that wants more air
+splits its fields into two `FormRow`s rather than overriding the gap.
+
+### Secrets and the Keychain
+
+A workspace keeps ONE keychain item, `helix` / `<workspaceId>:bundle`, holding a JSON
+object of kind → value. It is read at most once per process. macOS authorises a keychain
+item per binary identity, so an unsigned build prompts once per DISTINCT item it reads;
+one item means one prompt. Old per-kind items (`:dbkey`, `:site`, `:anthropic`) are folded
+in lazily on first read and deleted only after the bundle write succeeds. The three
+`secret_*` commands, `db_key` and `db.rs` are unchanged from the outside.
+
+Signing removes the prompt entirely (TODO E5): a signed, notarised build keeps one stable
+code identity across versions, so the ACL the owner approves once stays approved for every
+later build.
+
+### Capabilities
+
+`src-tauri/capabilities/default.json` gained `core:window:allow-start-dragging`,
+`core:window:allow-toggle-maximize` and `core:window:allow-internal-toggle-maximize`.
+Without the first, `data-tauri-drag-region` is inert — the markup was already right and
+the IPC call behind it was being refused, which was the round-3 drag bug. Drag regions are
+the top bar and the sidebar header; a button inside either never carries the attribute.

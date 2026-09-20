@@ -32,8 +32,9 @@ The two things together:
   mode, and a compact density that is a setting rather than the design.
 - **From the brand guide**: Zilla Slab headings against Lato body, a
   #FAFAFF canvas, corners at zero, the primary `#97B1C3` used once per view as
-  a single confident block, the accent `#EDF0A3` as a detail and never a
-  background, and the mark wearing a hard offset sticker shadow.
+  a single confident block, and the accent `#EDF0A3` as a detail and never a
+  background. (The guide's offset sticker shadow on the mark was tried,
+  shipped and retired in revision 3.1; see section 6.)
 
 The owner is still the one from `design/research.md`: a solo owner, 40 to 65,
 running a trade or service business, on a laptop at a kitchen table or in a
@@ -51,9 +52,9 @@ not change the job. It gives the tool a face.
 2. **One confident block per view.** The primary `#97B1C3` appears once: the
    selected sidebar row, and — on a screen that has a primary action — the
    primary button. A screen with two primary buttons is a bug.
-3. **The accent is a detail, never a background.** `#EDF0A3` belongs to the
-   mark's sticker shadow and to at most one hero element per screen. It is
-   never a fill behind text, never a panel, never a row.
+3. **The accent is a detail, never a background.** `#EDF0A3` survives only as
+   the near-white `--color-brand-accent-soft` tint a badge may wear. It is
+   never a fill behind text, never a panel, never a row, and never ink.
 4. **Flat fills only.** No gradient, including a "subtle" one. No blurred
    shadow. A tint is the primary mixed into the neutral at 8% or less, and it
    is written as a flat hex so it does not shift with what is behind it.
@@ -94,11 +95,14 @@ not change the job. It gives the tool a face.
 └──────────────┴──────────────────────────────────────────────┘
 ```
 
-- **Sidebar**: `--sidebar-w` 240px, `--color-sidebar` (#F2F4FA — the primary at
-  8% over the neutral light, which is the guide's tint ceiling), one hairline
-  right edge, never collapses, and always runs the full height of the window.
-  The `Brand` lockup sits at the top with room under it for the sticker
-  outline's 4px overhang. Nav rows are 32px tall with
+- **Sidebar**: 240px to start, dragged anywhere between 200 and 360 and
+  collapsible to a 48px icon rail (revision 3.1; `--sidebar-w` is now only the
+  default a fresh install opens at). `--color-sidebar` (#F2F4FA — the primary
+  at 8% over the neutral light, which is the guide's tint ceiling), one
+  hairline right edge, and it always runs the full height of the window. The
+  `Brand` lockup sits in a pinned header that also reserves the macOS
+  title-bar inset, so a nav row can never slide under the traffic lights.
+  Nav rows are 32px tall with
   a hard edge, label at body size in secondary ink, icon at 18px taking the
   row's own ink. **The selected row is the primary block**: a flat `#97B1C3`
   fill with `#141414` ink at 8.24:1. Group labels are the 11px caption style.
@@ -290,52 +294,53 @@ absence of one.
 
 ### The secondary
 
-The secondary does two jobs and no others:
+**Revision 3.1 (2026-09-20): the secondary does exactly ONE job.**
 
 - **Focus.** `--color-focus` is the pure `#8B85C2`, a 2px ring at a 1px offset,
   on every interactive element, keyboard-only, never removed. It measures
   3.37:1 on white, which clears the 3:1 bar a non-text indicator has to meet.
-- **Links.** `--color-link` is `#5F58A6` — the same hue darkened until it
-  clears AA for 15px text (6.12:1 on white), because the pure secondary at
-  3.37:1 does not. This is the guide's own rule about sub-4.5:1 colour,
-  applied rather than ignored.
 
-The secondary is never a button fill and never chrome.
+That is the whole list. It is never a button fill, never chrome, and **never
+text**.
+
+**Links are ink with an underline.** `--color-link` and `--color-accent-ink`
+are `--color-heading` — `#141414` in light, `#FAFAFF` in dark — and `a` carries
+a permanent 1px underline that hover thickens to 2px rather than adding.
+
+This replaced a darkened secondary (`#5F58A6` / `#A39CD2`) that cleared AAA and
+still looked wrong. Walker's note on the shipped 0.1.0 was that the purple text
+made the app read like a web page, and he is right: a desktop app does not tint
+its prose. The underline is also the better accessibility answer, because
+colour was never allowed to be the only signal that something is a link.
+
+A nav row, a tab and a card that happen to be anchors opt out with
+`no-underline`; the kit spells that on every one of them.
+
+**No text in this product is purple, blue or yellow.** That includes the
+decorative badge tones: `brand`, `secondary` and `highlight` wear their tint
+and label it in plain ink. The four tones that MEAN something — `info`,
+`success`, `warning`, `danger` — keep their ink, because there the colour is
+the meaning.
 
 ### The accent
 
-`#EDF0A3` is a detail, and as of 2026-09-19 it is out of the sticker shadow
-entirely. It appears in exactly one shape:
+`#EDF0A3` is a detail. It appears in exactly one shape:
 
 - `--color-brand-accent-soft` (`#FDFEF6`), the accent at 10%, which is the one
   surface it is allowed to make and is nearly white by design. Badges may wear
   it as a pastel tint; buttons and controls may not.
 
-It is never a background, never a row, never a fill behind body text, and
-never a button fill.
+It is never a background, never a row, never a fill behind body text, never a
+button fill, and since revision 3.1 never text either — a `highlight` badge
+wears the tint and labels it in ink.
 
-**The sticker shadow is an outline.** `--shadow-sticker` used to be a solid
-`4px 4px 0` slab of the accent. It is now a thin ring: the element throws a
-hard-edged rectangle 4px down and right, and only the outer 1.5px of it is
-drawn, so the surface shows through the 2.5px gap between the element and the
-ring. Two layered box-shadows do it — the gap colour painted over the ring
-colour, the first one listed winning:
-
-```css
---shadow-sticker:
-  4px 4px 0 -1.5px var(--sticker-gap),      /* the surface, inset 1.5px */
-  4px 4px 0  0     var(--sticker-outline);  /* the ring, underneath     */
-```
-
-- `--sticker-outline` is the brand neutral the canvas is not: `#FAFAFF` on the
-  near-black dark theme, `#4E555A` on the light one. White on a white canvas
-  is invisible, which is why it is not simply white.
-- `--sticker-gap` is whatever surface the element is standing on, because that
-  is what has to show through. It defaults to `--color-bg`; the sidebar sets
-  its own, since the lockup lives there.
-
-It still belongs to the `Brand` lockup and to **at most one hero element per
-screen**, and compact density still brings the offset down to 3px.
+**The sticker shadow is gone** (revision 3.1, 2026-09-20). The guide's
+signature was an outline offset 4px down and right — first a solid accent slab,
+then a thin ring with the surface showing through the gap. Both were tried in
+the running app and both were wrong at the size the product actually uses it:
+26px in the sidebar. `--shadow-sticker` now resolves to `none`, the lockup is
+drawn plain, and `--sticker-outline` and `--sticker-gap` are deleted. See
+section 6.
 
 ### Brand tint pairs
 
@@ -418,13 +423,33 @@ is a bug.
   (`0 0 0 1px`) — a floating layer gets a crisp double edge instead of a grey
   haze over the content it covers. Only menus, popovers, tooltips, dialogs, the
   command palette and toasts may wear it.
-- **`--shadow-sticker`** (`4px 4px 0 var(--brand-accent)`) is **not** part of
-  that ramp. It is the brand's signature: the `Brand` lockup wears it, and a
-  screen may give it to at most one hero element. A second element wearing it
-  on the same screen is a bug.
+- **`--shadow-sticker` is RETIRED** (revision 3.1, 2026-09-20). It was the
+  brand's signature — an outline offset 4px down and right, worn by the lockup
+  and by at most one hero element per screen. Walker looked at it running and
+  called it sloppy. He is right at small sizes: at 26px in the sidebar a 1.5px
+  ring offset 4px reads as a printing misregistration, and every screen that
+  borrowed it for a hero button turned the page into a collage. The token
+  survives, resolving to `none`, so a call site that still carries
+  `shadow-[var(--shadow-sticker)]` renders flat until its owner removes the
+  class. **The product is now entirely flat: the only lift anywhere is a
+  hairline, and the only loud element is the flat primary block.**
 - **Space**: the 4px scale, `--space-1` … `--space-10`. Content gutter 32px,
   panel padding 16px, gap between panels 24px, gap between a label and its
   field 4px, gap between fields 16px.
+- **The kit's spacing rules** (revision 3.1). These are enforced by the
+  components, not by each screen remembering them:
+  - a dialog body keeps **at least `--space-6` (24px) between its last field
+    and the action bar**, in every state — scrolled, unscrolled and mid-scroll.
+    `DialogContent` hoists `DialogFooter` out of the scroll box to make that
+    structural rather than a margin something can scroll behind;
+  - `FormRow` and `FieldSet` both gap their children by `--space-4` (16px), and
+    a `Field` gaps its label from its control by `--space-1` (4px). A screen
+    that wants more air groups fields into two `FormRow`s rather than
+    overriding the gap;
+  - a dialog body is `--space-6` left and right, `--space-5` on top;
+  - a list of editable rows (an invoice's lines) separates each row from the
+    next by a hairline plus `--space-3`, and its own sub-rows by `--space-2`,
+    so the break between records reads louder than the break inside one.
 - **Heights**: `--row-h` 40px comfortable / 32px compact; `--control-h` 32/28;
   `--control-h-sm` 28/24, which is the hit-target floor and is what a bare
   glyph, a checkbox and a switch are wrapped in.
@@ -434,9 +459,7 @@ is a bug.
 Two modes and no more. **Comfortable** is the default. **Compact** takes about
 25% more rows out of padding, row height and the type scale (body 15 → 13px,
 rows 40 → 32px), and nothing drops below 10px. The guide's five steps come
-down with the rest and keep their ratios, and `--shadow-sticker` shortens to
-`3px 3px 0` so the offset stays proportional to the type it sits behind.
-Density is a token change on `<html data-density>`; a component that hard-codes
+down with the rest and keep their ratios. Density is a token change on `<html data-density>`; a component that hard-codes
 a height or a font size breaks it, which is why every size in `src/ui` is a
 `var()`.
 
@@ -456,15 +479,47 @@ One paragraph per type. The kit lives in `src/ui`; feature code never restyles
 a primitive, it passes props. Every prop and export name from revision 2 is
 unchanged — the brand landed through the tokens, not through the API.
 
-**Brand.** New in this revision. The lockup: the mark in a hard-edged square
-with a hairline and the accent sticker shadow behind it, and "Helix" in Zilla
-Slab bold beside it. Two sizes — `sm` (a 26px mark, for the sidebar header) and
-`lg` (56px, for a boot screen) — plus `wordmark` and `sticker` switches. The
-mark is a transparent PNG, so it needs the surface behind it for the sticker to
-read as an offset card rather than a smear behind the glyphs; that surface is
-also what the guide draws around it on its "Marks & Surfaces" page. When the
-wordmark is showing, the image is decorative (`alt=""`, `aria-hidden`) so a
-screen reader does not say "Helix" twice.
+**Brand.** The lockup: the mark, and "Helix" in the heading face beside it.
+Nothing else — no square, no hairline, no shadow (revision 3.1; see the sticker
+note in section 6). Two sizes: `sm` (a 26px mark, the sidebar header) and `lg`
+(56px, a boot screen). `wordmark` drops the word, which is what the collapsed
+sidebar does. `sticker` is kept as a deprecated no-op so no call site had to
+change on the same commit. When the wordmark is showing, the image is
+decorative (`alt=""`, `aria-hidden`) so a screen reader does not say "Helix"
+twice.
+
+**Combobox / MultiCombobox.** New in revision 3.1. The type-ahead record
+picker: every place the product asks "which contact, which company, which
+deal, which service". A search input owns the query, a listbox owns the
+options, and `aria-activedescendant` joins them so the keyboard never leaves
+the field. It takes a fixed array (filtered locally on the label, the detail
+line and hidden keywords, so a phone number finds a contact the row does not
+print) or an async search function. An optional create row offers
+"Add “…”" when the query matches nothing. The popover is
+collision-aware and capped at the room that is genuinely left, then scrolls
+inside it — a long list can never run off the bottom of the window, which is
+what a `Select` of four hundred contacts did.
+
+**DatePicker.** New in revision 3.1, replacing the native date input, which
+draws a different un-styleable control per platform. A month grid in a
+popover; local `YYYY-MM-DD` throughout and never a UTC round trip. Roving
+tabindex, arrows, Home/End, PageUp/PageDown, Enter, Escape. Today is a
+hairline; the chosen day is the one primary block; every number is plain ink.
+
+**TimePicker.** New in revision 3.1, replacing the native time input. A field
+the owner types into ("9", "930", "9:30 pm", "21:30" all land on the same
+minute) with a scrolling list beside it. The value is 24-hour `HH:MM`; the
+display goes through the browser locale, so AM/PM is never hard-coded.
+
+**Sidebar.** Resizable between 200 and 360px by its right edge (pointer or
+arrow keys), and collapsible to a 48px rail of icons with a tooltip per row.
+Both are remembered in `helix.json` under `sidebar.width` and
+`sidebar.collapsed` — app-level, because it is a fact about this screen and
+this pair of eyes, not about the business. Its header is pinned and always
+reserves the macOS title-bar inset; only the nav area between the header and
+the footer scrolls. Rows are grouped, with one hairline per boundary and no
+heading: Today · Contacts, Companies · Deals, Services, Invoices, Reports ·
+Tasks, Reminders · Import · Trash · Settings, Help.
 
 **Buttons.** Four variants. `primary` is the `#97B1C3` block with `#141414`
 ink, square, no shadow, **one per screen**, and it does not invert in dark.
@@ -614,14 +669,18 @@ code comments and alt text.
 - No rounded corner, anywhere, on anything.
 - No blurred shadow. A floating layer gets a second hairline; nothing else gets
   anything.
-- No second `--shadow-sticker` on a screen, and never on something that is not
-  a hero.
+- No `--shadow-sticker`, anywhere. It is retired and resolves to `none`.
+- No tinted text. Links are ink with an underline; the secondary is the focus
+  ring and nothing else.
 - No accent background. `#EDF0A3` is a detail, not a surface.
 - No second primary block on a screen.
 - No gradient, including a "subtle" one.
 - No coloured chrome beyond the one selected sidebar row.
 - No zebra striping, no vertical cell rules, no coloured row rails.
-- No `#97B1C3` or `#8B85C2` carrying small text: 2.24:1 and 3.37:1 on white.
+- No `#97B1C3` or `#8B85C2` carrying text at all, at any size.
+- No native `<input type="date">` or `<input type="time">`. Use `DatePicker`
+  and `TimePicker`.
+- No `Select` for picking a record. Use `Combobox`.
 - No Lucide, no Feather, no Heroicons, no Inter, no third webfont, no CDN.
 - No all-caps text outside the 11px caption label.
 - No emoji, anywhere, including in code comments and alt text.

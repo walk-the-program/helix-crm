@@ -14,28 +14,33 @@ function renderBadge(props: ComponentProps<typeof Badge>) {
 }
 
 describe("Badge", () => {
-  it("tone=brand renders the brand primary tint pair", () => {
+  it("tone=brand wears the brand primary tint but labels it in ink", () => {
     renderBadge({ tone: "brand", children: "Brand" });
 
     const badge = screen.getByText("Brand");
     expect(badge.className).toContain("bg-[var(--color-brand-primary-soft)]");
-    expect(badge.className).toContain("text-[var(--color-brand-primary-ink)]");
+    expect(badge.className).toContain("text-[var(--color-text)]");
+    expect(badge.className).not.toContain("text-[var(--color-brand-primary-ink)]");
   });
 
-  it("tone=secondary renders the brand secondary tint pair", () => {
+  it("tone=secondary wears the brand secondary tint but labels it in ink, not purple", () => {
+    // Round 3, criterion 2: the tint says which tag it is; the word does not
+    // have to be tinted as well, and no text in the product is purple.
     renderBadge({ tone: "secondary", children: "Secondary" });
 
     const badge = screen.getByText("Secondary");
     expect(badge.className).toContain("bg-[var(--color-brand-secondary-soft)]");
-    expect(badge.className).toContain("text-[var(--color-brand-secondary-ink)]");
+    expect(badge.className).toContain("text-[var(--color-text)]");
+    expect(badge.className).not.toContain("text-[var(--color-brand-secondary-ink)]");
   });
 
-  it("tone=highlight renders the brand accent tint pair", () => {
+  it("tone=highlight wears the brand accent tint but labels it in ink, not yellow", () => {
     renderBadge({ tone: "highlight", children: "Highlight" });
 
     const badge = screen.getByText("Highlight");
     expect(badge.className).toContain("bg-[var(--color-brand-accent-soft)]");
-    expect(badge.className).toContain("text-[var(--color-brand-accent-ink)]");
+    expect(badge.className).toContain("text-[var(--color-text)]");
+    expect(badge.className).not.toContain("text-[var(--color-brand-accent-ink)]");
   });
 
   it("is square: carries no rounded- utility", () => {
