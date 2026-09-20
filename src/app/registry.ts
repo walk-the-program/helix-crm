@@ -24,6 +24,8 @@ import { feature as onboarding } from "@/features/onboarding";
 import { feature as recurring } from "@/features/recurring";
 import { feature as templates } from "@/features/templates";
 import { feature as help } from "@/features/help";
+import { feature as catalog } from "@/features/catalog";
+import { feature as invoices } from "@/features/invoices";
 
 export const registry: FeatureModule[] = [
   today,
@@ -36,6 +38,8 @@ export const registry: FeatureModule[] = [
   recurring,
   templates,
   help,
+  catalog,
+  invoices,
 ];
 
 /** Every route, in registration order. */

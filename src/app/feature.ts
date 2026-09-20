@@ -18,7 +18,9 @@ export type FeatureId =
   | "onboarding"
   | "recurring"
   | "templates"
-  | "help";
+  | "help"
+  | "catalog"
+  | "invoices";
 
 export type IconComponent = ComponentType<{
   size?: number | string;
