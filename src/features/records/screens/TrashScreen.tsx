@@ -58,6 +58,9 @@ const TYPES: TrashEntityType[] = [
   "attachment",
   "recurring_rule",
   "template",
+  "product",
+  "custom_field",
+  "document",
 ];
 
 const TYPE_LABELS: Record<TrashEntityType, string> = {
@@ -71,6 +74,9 @@ const TYPE_LABELS: Record<TrashEntityType, string> = {
   attachment: "Attachments",
   recurring_rule: "Reminders",
   template: "Templates",
+  product: "Services",
+  custom_field: "Custom fields",
+  document: "Invoices and quotes",
 };
 
 const TYPE_LOWER_PLURAL: Record<TrashEntityType, string> = {
@@ -84,6 +90,9 @@ const TYPE_LOWER_PLURAL: Record<TrashEntityType, string> = {
   attachment: "attachments",
   recurring_rule: "reminders",
   template: "templates",
+  product: "services",
+  custom_field: "custom fields",
+  document: "invoices and quotes",
 };
 
 export function TrashScreen(): ReactElement {
@@ -258,8 +267,19 @@ function TrashTypeTable(props: {
 
             return (
               <TR key={item.entityId}>
-                <TD className="max-w-[280px] truncate" title={item.label}>
-                  {item.label}
+                <TD className="max-w-[280px]">
+                  <div className="truncate" title={item.label}>
+                    {item.label}
+                  </div>
+                  {/* A job an unvoided invoice still points at is kept rather
+                      than destroyed, because purging would cut the invoice
+                      loose from the work it was raised for. Say which one, so
+                      the owner knows what to do about it (ruling R6b). */}
+                  {item.blockedBy ? (
+                    <div className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
+                      Kept: {item.blockedBy} refers to it
+                    </div>
+                  ) : null}
                 </TD>
                 <TD
                   className="tabular"
@@ -286,6 +306,7 @@ function TrashTypeTable(props: {
                     <Button
                       variant="ghost"
                       size="sm"
+                      disabled={Boolean(item.blockedBy)}
                       loading={preparingDeleteId === item.entityId}
                       className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                       onClick={() => void openDeleteDialog(item)}
