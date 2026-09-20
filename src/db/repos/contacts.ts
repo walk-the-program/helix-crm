@@ -15,6 +15,7 @@ import { normalizePhone, formatPhone } from "@/lib/phone";
 import { normalizeEmail } from "@/lib/email";
 import { nowIso } from "@/lib/dates";
 import { newId } from "@/lib/ids";
+import * as settings from "@/db/repos/settings";
 import {
   countRows,
   insertStatement,
@@ -367,8 +368,14 @@ export async function findDuplicates(
     }
   }
 
-  const e164s = (input.phones ?? [])
-    .map((p) => normalizePhone(p).e164)
+  const rawPhones = input.phones ?? [];
+  // One read of the workspace's phone region for the whole call, not one per
+  // phone: a GB or AU workspace must not have "07700 900123" and
+  // "+44 7700 900123" normalise to two different, non-matching e164 values
+  // (F-LC-2).
+  const region = rawPhones.length > 0 ? await settings.get("defaultRegion") : undefined;
+  const e164s = rawPhones
+    .map((p) => normalizePhone(p, region).e164)
     .filter((p): p is string => p !== null);
   if (e164s.length > 0) {
     const rows = await raw.query(
@@ -649,7 +656,8 @@ export async function findByEmailOrPhone(
     );
     if (rows.length > 0) return String(rows[0][0]);
   }
-  const e164 = phone ? normalizePhone(phone).e164 : null;
+  const region = phone ? await settings.get("defaultRegion") : undefined;
+  const e164 = phone ? normalizePhone(phone, region).e164 : null;
   if (e164) {
     const rows = await raw.query(
       `SELECT c.id AS c_id FROM contact_phones p JOIN contacts c ON c.id = p.contact_id

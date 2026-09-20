@@ -8,6 +8,7 @@ import { withWrite } from "@/db/writeLock";
 import { NotFoundError, type DuplicateWarning } from "@/db/errors";
 import { normalizePhone, formatPhone } from "@/lib/phone";
 import { nowIso } from "@/lib/dates";
+import * as settings from "@/db/repos/settings";
 import {
   countRows,
   insertStatement,
@@ -186,7 +187,11 @@ export async function findDuplicates(
   excludeId?: string,
 ): Promise<DuplicateWarning[]> {
   const out: DuplicateWarning[] = [];
-  const e164 = input.phone ? normalizePhone(input.phone).e164 : null;
+  // One read of the workspace's phone region per call (F-LC-2): a GB or AU
+  // workspace must not have "07700 900123" and "+44 7700 900123" normalise
+  // to two different, non-matching e164 values.
+  const region = input.phone ? await settings.get("defaultRegion") : undefined;
+  const e164 = input.phone ? normalizePhone(input.phone, region).e164 : null;
   if (e164) {
     const rows = await raw.query(
       `SELECT co.id AS co_id, co.name AS co_name FROM companies co
