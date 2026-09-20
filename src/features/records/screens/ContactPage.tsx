@@ -46,6 +46,7 @@ import { useContact, useTasks } from "@/features/records/lib/hooks";
 import {
   deleteWithUndo,
   invalidateRecords,
+  writeWithUndo,
   reportError,
 } from "@/features/records/lib/mutations";
 import { oneTap } from "@/lib/actions";
@@ -117,8 +118,14 @@ export function ContactPage() {
     ? formatPhone(primaryPhone.raw) || primaryPhone.raw
     : null;
 
+  // Inline edits autosave with no toast, so the undo stack is the only thing
+  // standing between the owner and a field they overwrote by accident. Each
+  // save is its own batch (design/apple-hig-review.md, finding 3).
   async function patch(values: contactsRepo.ContactPatch) {
-    await contactsRepo.update(id, values);
+    await writeWithUndo({
+      label: `edited ${name}`,
+      write: (batchId) => contactsRepo.update(id, values, { batchId }).then(() => undefined),
+    });
     await invalidateRecords();
   }
 

@@ -89,6 +89,16 @@ export const feature: FeatureModule = {
       run: () => openQuickAdd(),
     },
     {
+      // The macOS File menu's "New deal". Quick add already opens on any tab;
+      // this is the id the menu item carries (src-tauri/src/menu.rs), and it
+      // earns its place in the palette too.
+      id: "new-deal",
+      label: "New deal",
+      group: "Records",
+      keywords: ["job", "quote", "opportunity", "work"],
+      run: () => openQuickAdd("deal"),
+    },
+    {
       id: "quick-add-task",
       label: "Add a task",
       group: "Records",

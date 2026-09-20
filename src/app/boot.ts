@@ -28,6 +28,7 @@ import { e2eDriver, hasE2eBridge } from "@/db/drivers/e2e";
 import { migrate, type MigrateResult } from "@/db/migrator";
 import { seedWorkspace } from "@/db/repos/seed";
 import { resetQueryCache } from "@/app/queryClient";
+import { clearUndoHistory } from "@/app/undo";
 import {
   applyAppearance,
   applyPlatform,
@@ -104,8 +105,11 @@ export async function openWorkspace(
     const migration = await migrate();
     await seedWorkspace();
 
-    // The rows behind the cache belong to a different file from here on.
+    // The rows behind the cache belong to a different file from here on, and
+    // so do the batch ids on the undo stack: replaying one against another
+    // workspace would reverse a change the owner never made.
     resetQueryCache();
+    clearUndoHistory();
 
     return {
       dbPath: info.path,

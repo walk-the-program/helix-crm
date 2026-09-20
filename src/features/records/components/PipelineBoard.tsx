@@ -45,7 +45,11 @@ import {
   findCard,
   type BoardColumn,
 } from "@/features/records/lib/board";
-import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
+import {
+  invalidateRecords,
+  reportError,
+  writeWithUndo,
+} from "@/features/records/lib/mutations";
 
 export type PipelineBoardProps = {
   stages: Stage[];
@@ -94,8 +98,18 @@ export function PipelineBoard({ stages, board, nextStepByDealId }: PipelineBoard
 
   async function persist(dealId: string, stageId: string, index: number, reason?: string) {
     try {
-      await dealsRepo.moveTo(dealId, stageId, index, {
-        outcomeReason: reason,
+      // The move carries a batch id so it lands on the application undo stack.
+      // Before the HIG pass it carried none, which is why a drag was the one
+      // change in the product that could not be taken back at all
+      // (design/apple-hig-review.md, findings 3 and 17).
+      const title = dealsById.get(dealId)?.title ?? "that card";
+      const toStage = stages.find((candidate) => candidate.id === stageId);
+      await writeWithUndo({
+        label: `moved ${title} to ${toStage?.name ?? "another stage"}`,
+        write: (batchId) =>
+          dealsRepo
+            .moveTo(dealId, stageId, index, { outcomeReason: reason, batchId })
+            .then(() => undefined),
       });
       // Dropping a card on the Won column is one of the two ways a deal is
       // won, so it starts the recurring clock the same way the deal page's

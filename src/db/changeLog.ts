@@ -158,6 +158,40 @@ function columnName(key: string): string {
   return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
+/**
+ * The real columns of a table, straight from SQLite.
+ *
+ * A repository logs the shape its callers see, which is not always the shape
+ * the table has: a contact's `before` snapshot carries `companyName`, a deal's
+ * carries `stageName`, and both are joins. Writing them back produced "no such
+ * column: company_name" and took the whole undo down with it, so every replay
+ * below is filtered through this. It is a `PRAGMA` per table per replay, which
+ * is nothing next to how rarely an undo happens, and it cannot go stale the way
+ * a cached column list could after a migration.
+ */
+async function columnsFor(
+  table: string,
+  seen: Map<string, Set<string>>,
+): Promise<Set<string>> {
+  const cached = seen.get(table);
+  if (cached) return cached;
+  const rows = await raw.query(`PRAGMA table_info(${table})`);
+  const names = new Set(rows.map((row) => String(row[1])));
+  seen.set(table, names);
+  return names;
+}
+
+/** The keys of a logged snapshot that are actually columns of that table. */
+function realColumns(
+  snapshot: Record<string, unknown>,
+  columns: Set<string>,
+  skip: readonly string[] = [],
+): string[] {
+  return Object.keys(snapshot).filter(
+    (key) => !skip.includes(key) && columns.has(columnName(key)),
+  );
+}
+
 function bindable(value: unknown): unknown {
   if (value === null || value === undefined) return null;
   if (typeof value === "boolean") return value ? 1 : 0;
@@ -173,16 +207,25 @@ function bindable(value: unknown): unknown {
  *   restore -> soft-delete again
  *   merge  -> handled by the merge repository, which knows how to re-point rows
  *
+ * Only real columns are written back. A repository logs the shape its callers
+ * see, and a contact's snapshot carries `companyName` while a deal's carries
+ * `stageName` — both joins. Writing one back raised "no such column:
+ * company_name" and failed the whole undo, so every key is checked against
+ * `PRAGMA table_info` first (`columnsFor`).
+ *
  * The undo itself is not logged: a batch is undone once, and re-logging would
  * make the trail ambiguous.
  */
 export async function undoBatch(batchId: string): Promise<void> {
   const entries = await listBatch(batchId);
   const statements: { sql: string; params: unknown[] }[] = [];
+  const seen = new Map<string, Set<string>>();
 
   for (const entry of [...entries].reverse()) {
+    if (entry.op === "merge") continue;
     const table = tableFor(entry.entityType);
     if (!table) continue;
+    const columns = await columnsFor(table, seen);
 
     if (entry.op === "create") {
       statements.push({
@@ -204,7 +247,7 @@ export async function undoBatch(batchId: string): Promise<void> {
     if (!before) continue;
 
     if (entry.op === "delete") {
-      const keys = Object.keys(before);
+      const keys = realColumns(before, columns);
       if (keys.length === 0) continue;
 
       // Two kinds of delete share one op. A soft delete logs only the columns
@@ -239,7 +282,7 @@ export async function undoBatch(batchId: string): Promise<void> {
     }
 
     if (entry.op === "update") {
-      const keys = Object.keys(before).filter((k) => k !== "id");
+      const keys = realColumns(before, columns, ["id"]);
       if (keys.length === 0) continue;
       statements.push({
         sql: `UPDATE ${table} SET ${keys
@@ -248,6 +291,89 @@ export async function undoBatch(batchId: string): Promise<void> {
         params: [...keys.map((k) => bindable(before[k])), entry.entityId],
       });
     }
+  }
+
+  if (statements.length > 0) {
+    await raw.batch(statements);
+  }
+}
+
+/**
+ * Re-apply every row change in a batch, oldest first — the exact inverse of
+ * `undoBatch`, so undo/redo is a round trip rather than an approximation.
+ *
+ *   create -> re-insert `after`         update -> write `after` forward
+ *   delete -> soft: write `after` back (that is what sets deleted_at);
+ *             hard: delete the row again
+ *   restore -> clear deleted_at again
+ *   merge  -> skipped, exactly as `undoBatch` skips it: a merge re-points rows
+ *             across several tables and only `merge.reverse(mergeId)` knows
+ *             how, so neither direction is replayed from the log.
+ *
+ * A purge is not redoable for the same reason it is not undoable: `purgeRow`
+ * logs no `before` and no `after`, so there is nothing to replay.
+ *
+ * The redo itself is not logged, for the same reason the undo is not: a batch
+ * is replayed against its own trail, and re-logging would make the trail
+ * ambiguous about what the owner actually did.
+ */
+export async function redoBatch(batchId: string): Promise<void> {
+  const entries = await listBatch(batchId);
+  const statements: { sql: string; params: unknown[] }[] = [];
+  const seen = new Map<string, Set<string>>();
+
+  for (const entry of entries) {
+    if (entry.op === "merge") continue;
+    const table = tableFor(entry.entityType);
+    if (!table) continue;
+    const columns = await columnsFor(table, seen);
+
+    if (entry.op === "restore") {
+      statements.push({
+        sql: `UPDATE ${table} SET deleted_at = NULL, updated_at = ? WHERE id = ?`,
+        params: [nowIso(), entry.entityId],
+      });
+      continue;
+    }
+
+    // A hard delete logs the whole row as `before` and nothing as `after`, so
+    // an absent `after` on a delete means "take the row out again". A soft
+    // delete logs `after: { deletedAt: <at> }` and falls through to the
+    // column write below, which is what re-sets deleted_at.
+    if (entry.op === "delete" && entry.after === null) {
+      statements.push({
+        sql: `DELETE FROM ${table} WHERE id = ?`,
+        params: [entry.entityId],
+      });
+      continue;
+    }
+
+    const after = entry.after;
+    if (!after) continue;
+    const keys = realColumns(after, columns);
+    if (keys.length === 0) continue;
+
+    // A create logs the whole row, `id` included, so redo puts it back the way
+    // undoing a hard delete does.
+    if (entry.op === "create") {
+      const cols = keys.map(columnName);
+      statements.push({
+        sql: `INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${cols
+          .map(() => "?")
+          .join(", ")})`,
+        params: keys.map((k) => bindable(after[k])),
+      });
+      continue;
+    }
+
+    const cols = keys.filter((k) => k !== "id" && k !== "updatedAt");
+    if (cols.length === 0) continue;
+    statements.push({
+      sql: `UPDATE ${table} SET ${cols
+        .map((k) => `${columnName(k)} = ?`)
+        .join(", ")}, updated_at = ? WHERE id = ?`,
+      params: [...cols.map((k) => bindable(after[k])), nowIso(), entry.entityId],
+    });
   }
 
   if (statements.length > 0) {

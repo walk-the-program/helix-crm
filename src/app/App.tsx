@@ -16,6 +16,7 @@ import { boot, runFeatureBoot, type BootResult } from "@/app/boot";
 import { queryClient } from "@/app/queryClient";
 import { AppErrorBoundary, BootFailure, BootingScreen } from "@/app/BootScreens";
 import { ShellRoot } from "@/app/Shell";
+import { installMenuBridge } from "@/app/menu";
 import { OnboardingFlow } from "@/features/onboarding";
 
 type State =
@@ -40,6 +41,11 @@ export function App() {
     started.current = true;
     start();
   }, [start]);
+
+  // The other half of the macOS menu bar (src/app/menu.ts). Installed outside
+  // the boot result on purpose: Help > Report a problem and the Window menu
+  // have to work on a screen that failed to open a database.
+  useEffect(() => installMenuBridge(), []);
 
   const inSetup =
     state.phase === "ready" && state.result.showOnboarding && !setupDone;

@@ -10,6 +10,7 @@ pub mod disk;
 pub mod error;
 pub mod files;
 pub mod leads;
+pub mod menu;
 pub mod secrets;
 
 use std::path::{Path, PathBuf};
@@ -100,6 +101,12 @@ pub fn run() {
             sweep_old_logs(&log_dir);
             app.handle().plugin(log_plugin(log_dir))?;
             tauri_plugin_log::log::info!("Helix {} starting", app.package_info().version);
+
+            // The application menu. It has to be set before the event loop
+            // starts so macOS never shows Tauri's generic default, and it is
+            // built here rather than in the chain above because it needs the
+            // handle (src-tauri/src/menu.rs).
+            menu::attach(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

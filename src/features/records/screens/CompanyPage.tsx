@@ -33,6 +33,7 @@ import {
 import {
   deleteWithUndo,
   invalidateRecords,
+  writeWithUndo,
   reportError,
 } from "@/features/records/lib/mutations";
 import { oneTap } from "@/lib/actions";
@@ -80,8 +81,16 @@ export function CompanyPage() {
     );
   }
 
+  const companyName = company.name;
+
+  // Inline edits autosave with no toast, so the undo stack is the only thing
+  // standing between the owner and a field they overwrote by accident. Each
+  // save is its own batch (design/apple-hig-review.md, finding 3).
   async function patch(values: companiesRepo.CompanyPatch) {
-    await companiesRepo.update(id, values);
+    await writeWithUndo({
+      label: `edited ${companyName}`,
+      write: (batchId) => companiesRepo.update(id, values, { batchId }).then(() => undefined),
+    });
     await invalidateRecords();
   }
 

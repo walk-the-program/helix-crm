@@ -26,6 +26,7 @@ import { feature as templates } from "@/features/templates";
 import { feature as help } from "@/features/help";
 import { feature as catalog } from "@/features/catalog";
 import { feature as invoices } from "@/features/invoices";
+import { undoCommands } from "@/app/undo";
 
 export const registry: FeatureModule[] = [
   today,
@@ -65,9 +66,20 @@ export function allNavProviders(): (() => FeatureNavSection[])[] {
     .filter((provider): provider is () => FeatureNavSection[] => Boolean(provider));
 }
 
+/**
+ * Commands that belong to the application rather than to any feature area.
+ *
+ * Undo and redo are the whole list and are likely to stay it. They cannot live
+ * in a feature: every feature's writes go on the same stack, and the shell,
+ * the macOS Edit menu and the command palette all have to reach them by id.
+ * They are listed first so a feature cannot shadow "undo" by accident —
+ * registry order breaks a tie (docs/CONTRACTS.md, "The keys the shell binds").
+ */
+const appCommands: FeatureCommand[] = undoCommands;
+
 /** Everything the command palette offers, and everything the shell binds. */
 export function allCommands(): FeatureCommand[] {
-  return registry.flatMap((f) => f.commands ?? []);
+  return [...appCommands, ...registry.flatMap((f) => f.commands ?? [])];
 }
 
 /**
@@ -91,6 +103,8 @@ export function allOverlays(): { id: FeatureId; node: ReactNode }[] {
 
 /** One command by id, looked up when it is needed rather than at mount. */
 export function findCommand(id: string): FeatureCommand | null {
+  const app = appCommands.find((command) => command.id === id);
+  if (app) return app;
   for (const feature of registry) {
     const found = (feature.commands ?? []).find((command) => command.id === id);
     if (found) return found;

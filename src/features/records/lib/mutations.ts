@@ -15,9 +15,16 @@
  * has nothing to re-insert (recorded in STATUS under "Contract changes
  * needed"). Restore is the exact inverse either way, and it is one statement
  * instead of a replay.
+ *
+ * Since the HIG pass every helper here also puts its batch on the application
+ * undo stack (`src/app/undo.ts`), so Cmd+Z still reverses the change after the
+ * toast has gone. The toast stays as the discoverable surface — it is how an
+ * owner learns undo exists — and the stack is what makes it durable
+ * (design/apple-hig-review.md, finding 3).
  */
 import { undoBatch } from "@/db/changeLog";
 import { qk, queryClient } from "@/app/queryClient";
+import { pushUndo } from "@/app/undo";
 import { toast } from "@/ui";
 import { newId } from "@/lib/ids";
 
@@ -70,6 +77,7 @@ export async function deleteWithUndo(options: {
   const batchId = newBatchId();
   await options.remove(batchId);
   await invalidateRecords();
+  pushUndo({ batchId, label: `deleted ${options.label}` });
 
   toast.undo(
     `Deleted ${options.label}`,
@@ -94,6 +102,7 @@ export async function deleteWithUndo(options: {
  * the batch inserted, which is what quick add needs.
  */
 export function offerUndoCreate(batchId: string, label: string): void {
+  pushUndo({ batchId, label: `added ${label}` });
   toast.undo(
     `Added ${label}`,
     () => {
@@ -109,4 +118,24 @@ export function offerUndoCreate(batchId: string, label: string): void {
     },
     { duration: UNDO_MS },
   );
+}
+
+/**
+ * A write that is reversible but has no toast: an inline field edit, a pipeline
+ * move — the things an owner does dozens of times an hour, where a toast every
+ * time would be noise but losing the change would be a defeat.
+ *
+ * `write` gets the batch id and must pass it through to the repository, which
+ * is the whole point: without it the change_log rows carry no `batch_id` and
+ * there is nothing for `undoBatch` to find. `label` is the past-tense phrase
+ * the undo toast will read back — "moved Retaining wall to Quoted" — so it is
+ * lower case and has no full stop.
+ */
+export async function writeWithUndo(options: {
+  label: string;
+  write: (batchId: string) => Promise<void>;
+}): Promise<void> {
+  const batchId = newBatchId();
+  await options.write(batchId);
+  pushUndo({ batchId, label: options.label });
 }
