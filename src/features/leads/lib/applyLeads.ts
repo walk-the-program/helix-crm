@@ -2,8 +2,12 @@
  * Writing one page of website leads into the workspace.
  *
  *   for each lead:
- *     deals.findByExternalId("<origin>:<lead id>")  -> found? skip, it is a re-poll
- *     contacts.findByEmailOrPhone(email, phone)     -> found? reuse, else create
+ *     no usable id?                                 -> drop it, count it invalid
+ *     already claimed earlier in THIS page          -> skip, one deal per id
+ *     deals.findByExternalId("<origin>:<lead id>")  -> found? it is a re-poll:
+ *       leave the deal alone, but a changed field writes one update activity
+ *     contacts.findByEmailOrPhone(email, phone)     -> found? reuse (and add
+ *       any new phone/email as a secondary), else create
  *     insert deal in the first stage, source Website, external_id set
  *     insert one immutable system activity holding the message
  *
@@ -17,9 +21,10 @@
  * queue behind the transaction that is already holding the lock and both would
  * wait forever. So everything inside the transaction is a statement builder -
  * `contacts.createStatements`, `deals.createStatements`,
- * `activities.systemStatement`, `changeLogStatement` - and only reads call
- * into the repositories. (`deals.createStatements` was added in wave 3; this
- * file used to build the deal and its first `deal_stage_events` row by hand.)
+ * `activities.systemStatement`, `changeLogStatement`, `contacts.
+ * contactPhoneStatement`/`contactEmailStatement` - and only reads call into
+ * the repositories. (`deals.createStatements` was added in wave 3; this file
+ * used to build the deal and its first `deal_stage_events` row by hand.)
  */
 import { raw } from "@/db/client";
 import { withTransaction } from "@/db/writeLock";
@@ -30,16 +35,33 @@ import * as deals from "@/db/repos/deals";
 import * as activities from "@/db/repos/activities";
 import * as sources from "@/db/repos/sources";
 import * as settings from "@/db/repos/settings";
-import { mapLead, WEBSITE_SOURCE } from "@/features/leads/lib/leadMapping";
+import { nowIso } from "@/lib/dates";
+import { normalizeEmail } from "@/lib/email";
+import { normalizePhone } from "@/lib/phone";
+import {
+  activityDetail,
+  hasUsableId,
+  LEAD_UPDATE_INTRO,
+  mapLead,
+  WEBSITE_SOURCE,
+  type MappedLead,
+} from "@/features/leads/lib/leadMapping";
 import type { Lead } from "@/features/leads/lib/types";
 
 export type ApplyResult = {
   /** Leads that became a new deal. */
   created: number;
-  /** Leads whose external_id was already on a deal: a re-poll. */
+  /** Leads whose external_id was already on a deal, or repeated on this page: a re-poll or a same-page duplicate. */
   skipped: number;
   /** Of the created ones, how many reused an existing contact. */
   contactsReused: number;
+  /**
+   * Leads dropped without becoming anything at all: no usable id, so there is
+   * nothing to key a deal on (CPO audit, F-LB-8). In production
+   * `leadsFetch.assertValidLeadPage` rejects a page before it reaches here,
+   * so this is a defensive count, not the normal path to zero.
+   */
+  invalid: number;
   /** The ids of the deals created, newest last. Used by tests and by Today. */
   dealIds: string[];
 };
@@ -110,6 +132,7 @@ export async function applyLeadPage(
     created: 0,
     skipped: 0,
     contactsReused: 0,
+    invalid: 0,
     dealIds: [],
   };
   if (leads.length === 0) return result;
@@ -117,14 +140,41 @@ export async function applyLeadPage(
   return withTransaction(async () => {
     const statements: Statement[] = [];
     let position = context.nextPosition;
+    // externalIdFor -> the deal id this page already created for it. Closes
+    // the gap `deals.findByExternalId` cannot: it only sees COMMITTED rows,
+    // so two leads sharing one id within the same page would otherwise both
+    // slip past it and both create a deal (CPO audit, F-LB-8).
+    const claimedThisPage = new Map<string, string>();
 
     for (const lead of leads) {
+      // No usable id, no external_id worth keying anything on. Belt and
+      // braces: `leadsFetch.assertValidLeadPage` already keeps a page this
+      // malformed out of production, but this file does not trust a caller
+      // it cannot see (CPO audit, F-LB-8).
+      if (!hasUsableId(lead.id)) {
+        result.invalid += 1;
+        continue;
+      }
+
       const mapped = mapLead(lead, siteOrigin);
 
-      // Re-poll: this lead is already a deal. Nothing to do, and nothing to
-      // update either - the owner may have edited the deal since.
-      if (await deals.findByExternalId(mapped.externalId)) {
+      // Same-page duplicate: another lead earlier in this page already
+      // claimed this external id. One deal per id, even when the site sent
+      // the same one twice in one response.
+      if (claimedThisPage.has(mapped.externalId)) {
         result.skipped += 1;
+        continue;
+      }
+
+      // Re-poll: this lead is already a deal. The deal itself is left alone
+      // - the owner may have edited it since - but a genuine site-side
+      // correction is not thrown away silently: one system activity records
+      // it, and only when something actually changed (CPO audit, F-LB-17).
+      const existingDeal = await deals.findByExternalId(mapped.externalId);
+      if (existingDeal) {
+        result.skipped += 1;
+        const update = await leadUpdateStatement(existingDeal, mapped);
+        if (update) statements.push(update);
         continue;
       }
 
@@ -135,6 +185,14 @@ export async function applyLeadPage(
       );
       if (contactId) {
         result.contactsReused += 1;
+        // The visitor is known, but this submission may carry a phone or
+        // email that is not on file yet - a second number, a work email
+        // instead of a personal one. That used to be dropped on the floor
+        // with no trace at all; now it is added as a secondary entry. Never
+        // overwrites or removes what is already there (CPO audit, F-LB-16).
+        statements.push(
+          ...(await secondaryContactStatements(contactId, mapped, context.region)),
+        );
       } else {
         const created = contacts.createStatements(
           {
@@ -204,6 +262,7 @@ export async function applyLeadPage(
         }),
       );
 
+      claimedThisPage.set(mapped.externalId, dealId);
       result.created += 1;
       result.dealIds.push(dealId);
     }
@@ -213,4 +272,83 @@ export async function applyLeadPage(
     }
     return result;
   }, "Saving website leads");
+}
+
+/**
+ * A returning visitor's phone or email that is not already on the matched
+ * contact. Added as a secondary entry - never primary, never a replacement -
+ * so nothing the contact already had is touched (CPO audit, F-LB-16).
+ *
+ * Reads only (`contacts.listPhones`/`listEmails`): this runs inside the same
+ * `withTransaction` as everything else in `applyLeadPage`, and the write lock
+ * is not reentrant, so the actual insert has to come back as a statement for
+ * the caller's own batch rather than a `contacts.addPhone`/`addEmail` call.
+ */
+async function secondaryContactStatements(
+  contactId: string,
+  mapped: MappedLead,
+  region: string,
+): Promise<Statement[]> {
+  const statements: Statement[] = [];
+
+  if (mapped.phone) {
+    const incoming = normalizePhone(mapped.phone, region);
+    const onFile = await contacts.listPhones(contactId);
+    const known = onFile.some((phone) =>
+      incoming.e164 !== null ? phone.e164 === incoming.e164 : phone.raw === mapped.phone,
+    );
+    if (!known) {
+      statements.push(
+        contacts.contactPhoneStatement(contactId, mapped.phone, "mobile", {
+          region,
+          isPrimary: false,
+        }),
+      );
+    }
+  }
+
+  if (mapped.email) {
+    const incomingLower = normalizeEmail(mapped.email).lower;
+    const onFile = await contacts.listEmails(contactId);
+    const known = onFile.some((email) => email.emailLower === incomingLower);
+    if (!known) {
+      statements.push(contacts.contactEmailStatement(contactId, mapped.email, "work", false));
+    }
+  }
+
+  return statements;
+}
+
+/**
+ * A re-poll of a lead already on file. The deal's own fields are never
+ * touched here - the owner may have edited them - but when the website's
+ * Service/Message/Page detail differs from what the deal's timeline already
+ * shows, one system activity records the correction, in the same voice as
+ * the original "Lead from the website." entry. An unchanged re-poll writes
+ * nothing at all (CPO audit, F-LB-17).
+ */
+async function leadUpdateStatement(
+  existingDeal: { id: string; contactId: string | null },
+  mapped: MappedLead,
+): Promise<Statement | null> {
+  const newDetail = activityDetail(mapped.activityBody);
+
+  const timeline = await activities.list({ dealId: existingDeal.id, kind: "system" });
+  const latestLeadActivity = timeline.rows.find(
+    (entry) =>
+      entry.body.startsWith("Lead from the website.") ||
+      entry.body.startsWith(LEAD_UPDATE_INTRO),
+  );
+  const oldDetail = latestLeadActivity ? activityDetail(latestLeadActivity.body) : "";
+
+  if (newDetail === oldDetail) return null;
+
+  const body = newDetail.length > 0 ? `${LEAD_UPDATE_INTRO}\n${newDetail}` : LEAD_UPDATE_INTRO;
+  const activity = activities.systemStatement({
+    body,
+    contactId: existingDeal.contactId,
+    dealId: existingDeal.id,
+    occurredAt: nowIso(),
+  });
+  return { sql: activity.sql, params: activity.params };
 }
