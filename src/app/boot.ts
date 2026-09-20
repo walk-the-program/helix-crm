@@ -19,6 +19,7 @@
  */
 import {
   beginDbTransition,
+  DbError,
   Fts5MissingError,
   DbOpenError,
   raw,
@@ -94,9 +95,23 @@ export async function openWorkspace(
       await raw.open(workspace.path);
     } catch (err) {
       if (err instanceof DbOpenError) throw err;
-      throw new DbOpenError(
-        err instanceof Error ? err.message : `Could not open ${workspace.path}.`,
-      );
+      /*
+       * Only a failure that actually came from the database pipe becomes a
+       * DbOpenError (F-LC-10).
+       *
+       * This used to wrap EVERYTHING, so a TypeError thrown before the pipe
+       * was even reachable — "Cannot read properties of undefined (reading
+       * 'invoke')" — arrived at a screen headed "Helix can't open your data"
+       * that told the owner another copy of Helix might have the file or the
+       * folder might not be writable. Both plausible, both wrong, and both
+       * sending him to look for a second Helix that was not running.
+       *
+       * Anything that is not a database error falls through to
+       * `BootErrorScreen`, which says "Helix could not start" and shows the
+       * detail without inventing a cause.
+       */
+      if (err instanceof DbError) throw new DbOpenError(err.message);
+      throw err;
     }
 
     const info = await raw.info();
@@ -122,7 +137,12 @@ export async function openWorkspace(
   }
 }
 
-/** Run the whole sequence. Throws DbOpenError, Fts5MissingError or MigrationError. */
+/**
+ * Run the whole sequence. Throws DbOpenError, Fts5MissingError or
+ * MigrationError for the three failures the error map names, and whatever it
+ * was handed for anything else — a cause we cannot name is shown as a cause we
+ * cannot name, not dressed up as one we can (F-LC-10).
+ */
 export async function boot(): Promise<BootResult> {
   installDriver();
 

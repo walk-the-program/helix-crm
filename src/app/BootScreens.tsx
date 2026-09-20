@@ -4,7 +4,7 @@
  * boundary. Each one names the problem in plain words, shows the path, and
  * never swallows the detail.
  */
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, DatabaseZap, HardDriveDownload } from "@/ui/icons";
 import { MigrationError } from "@/db/migrator";
 import { DbOpenError, Fts5MissingError } from "@/db/client";
@@ -44,6 +44,61 @@ function FullScreen({
   );
 }
 
+/**
+ * "Show the workspace folder", the one escape a boot screen can actually
+ * offer (F-LC-10).
+ *
+ * Before this, every boot failure had exactly one control — "Try again" — on
+ * a screen that had just failed, so an owner whose file would not open had
+ * nowhere to go but press it again. Opening the folder is the thing he needs:
+ * it is where the backups are, it is what he would attach to an email, and it
+ * is the one action that needs no database.
+ *
+ * The opener plugin is imported where it is used rather than at module load,
+ * so a browser build (the e2e harness) can render these screens without a
+ * Tauri runtime. A failure to open the folder is swallowed on purpose: this is
+ * the error screen, and an error inside it helps nobody.
+ */
+function ShowFolderButton({ path }: { path: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="secondary"
+      loading={busy}
+      onClick={() => {
+        setBusy(true);
+        void (async () => {
+          try {
+            const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+            await revealItemInDir(path);
+          } catch {
+            /* Nothing useful to say here, on this of all screens. */
+          } finally {
+            setBusy(false);
+          }
+        })();
+      }}
+    >
+      Show the workspace folder
+    </Button>
+  );
+}
+
+/** The row of escapes under a boot failure. */
+function Actions({ path, onRetry }: { path?: string; onRetry?: () => void }) {
+  if (!onRetry && !path) return null;
+  return (
+    <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
+      {onRetry ? (
+        <Button variant="primary" onClick={onRetry}>
+          Try again
+        </Button>
+      ) : null}
+      {path ? <ShowFolderButton path={path} /> : null}
+    </div>
+  );
+}
+
 function Detail({ children }: { children: ReactNode }) {
   return (
     <pre className="mt-[var(--space-4)] max-h-[220px] overflow-auto whitespace-pre-wrap bg-[var(--color-accent-soft)] p-[var(--space-3)] font-[family-name:var(--font-mono)] text-[length:var(--text-xs)] text-[var(--color-text-muted)]">
@@ -78,13 +133,7 @@ export function DbOpenErrorScreen({
       </p>
       {path ? <Detail>{path}</Detail> : null}
       <Detail>{error.message}</Detail>
-      {onRetry ? (
-        <div className="mt-[var(--space-4)]">
-          <Button variant="primary" onClick={onRetry}>
-            Try again
-          </Button>
-        </div>
-      ) : null}
+      <Actions path={path} onRetry={onRetry} />
     </FullScreen>
   );
 }
@@ -129,9 +178,11 @@ export function MigrationErrorScreen({ error }: { error: MigrationError }) {
 /** Whatever else went wrong at boot. */
 export function BootErrorScreen({
   error,
+  path,
   onRetry,
 }: {
   error: unknown;
+  path?: string;
   onRetry?: () => void;
 }) {
   const message = error instanceof Error ? error.message : String(error);
@@ -139,13 +190,7 @@ export function BootErrorScreen({
     <FullScreen icon={<AlertTriangle size={28} weight="regular" />} title="Helix could not start">
       <p className="m-0">Something failed before the first screen could load.</p>
       <Detail>{message}</Detail>
-      {onRetry ? (
-        <div className="mt-[var(--space-4)]">
-          <Button variant="primary" onClick={onRetry}>
-            Try again
-          </Button>
-        </div>
-      ) : null}
+      <Actions path={path} onRetry={onRetry} />
     </FullScreen>
   );
 }
@@ -164,7 +209,7 @@ export function BootFailure({
   if (error instanceof DbOpenError)
     return <DbOpenErrorScreen error={error} path={path} onRetry={onRetry} />;
   if (error instanceof MigrationError) return <MigrationErrorScreen error={error} />;
-  return <BootErrorScreen error={error} onRetry={onRetry} />;
+  return <BootErrorScreen error={error} path={path} onRetry={onRetry} />;
 }
 
 /* -------------------------------------------------------------------------- */
