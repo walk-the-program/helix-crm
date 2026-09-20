@@ -531,6 +531,7 @@ function ContactRow(props: {
       {...rowNav}
     >
       <div
+        data-testid="contact-row-name"
         className="min-w-0 flex-1 truncate text-[length:var(--text-base)] font-medium text-[var(--color-text)]"
         title={name}
       >

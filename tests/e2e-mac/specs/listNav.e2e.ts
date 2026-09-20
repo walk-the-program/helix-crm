@@ -49,9 +49,15 @@ async function waitForShell(page: Page): Promise<void> {
 
 /** The row names, top to bottom, as the virtualised list currently renders
  *  them (all three fit on screen without scrolling, so nothing is virtualised
- *  out of the DOM). */
+ *  out of the DOM).
+ *
+ *  Read from the name cell by its test id rather than from the row's whole
+ *  text: the row now also holds a company cell, a next-step cell and a phone
+ *  control that is itself a button, so both `allTextContents()` on the row and
+ *  a `getByRole("button")` sweep pick up more than the name (CPO pass,
+ *  F-LA-7). */
 async function visibleNames(page: Page): Promise<string[]> {
-  return contactsList(page).getByRole("button").allTextContents();
+  return contactsList(page).getByTestId("contact-row-name").allTextContents();
 }
 
 test.describe("contacts list: sort and keyboard", () => {
@@ -69,12 +75,10 @@ test.describe("contacts list: sort and keyboard", () => {
 
     await expect(header).toHaveAttribute("aria-sort", "ascending");
     await expect(sortSelect).toHaveText("Name A to Z");
-    // Every row also carries "No company" (the row's Company cell): match on
-    // the name being the row's leading text rather than the whole label.
     expect(await visibleNames(page)).toEqual([
-      "Alpha AndersonNo company",
-      "Bravo BrownNo company",
-      "Charlie ClarkNo company",
+      "Alpha Anderson",
+      "Bravo Brown",
+      "Charlie Clark",
     ]);
 
     await header.getByRole("button", { name: "Name" }).click();
@@ -82,9 +86,9 @@ test.describe("contacts list: sort and keyboard", () => {
     await expect(header).toHaveAttribute("aria-sort", "descending");
     await expect(sortSelect).toHaveText("Name Z to A");
     expect(await visibleNames(page)).toEqual([
-      "Charlie ClarkNo company",
-      "Bravo BrownNo company",
-      "Alpha AndersonNo company",
+      "Charlie Clark",
+      "Bravo Brown",
+      "Alpha Anderson",
     ]);
 
     // Reverses again on a second click, back to where it started.
