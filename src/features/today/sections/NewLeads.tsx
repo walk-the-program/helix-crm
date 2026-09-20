@@ -14,8 +14,8 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { Phone, PhoneCall } from "@/ui/icons";
-import { Badge, Button, toast } from "@/ui";
+import { Info, Phone, PhoneCall } from "@/ui/icons";
+import { Badge, Button, IconButton, Tooltip, toast } from "@/ui";
 import { Row, Section } from "@/features/today/components/Section";
 import {
   LogCallDialog,
@@ -67,7 +67,18 @@ export function NewLeadsSection() {
         id="new-leads"
         title="New leads"
         count={leads.length}
-        note={`Last ${NEW_LEAD_WINDOW_DAYS} days, nobody has called them yet`}
+        note={
+          <Tooltip
+            content={`Created in the last ${NEW_LEAD_WINDOW_DAYS} days, and nobody has called them yet.`}
+          >
+            <IconButton
+              label="What counts as a new lead"
+              variant="ghost"
+              size="sm"
+              icon={<Info size={16} weight="bold" aria-hidden="true" />}
+            />
+          </Tooltip>
+        }
         isLoading={isLoading}
         isEmpty={leads.length === 0}
         emptyInline={{ text: "No new leads waiting." }}

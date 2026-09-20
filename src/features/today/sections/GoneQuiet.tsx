@@ -15,8 +15,8 @@
 
 import { useState } from "react";
 import { Link } from "wouter";
-import { CalendarDots, PhoneCall } from "@/ui/icons";
-import { Badge, Button, toast } from "@/ui";
+import { CalendarDots, Info, PhoneCall } from "@/ui/icons";
+import { Badge, Button, IconButton, Tooltip, toast } from "@/ui";
 import { Row, Section } from "@/features/today/components/Section";
 import {
   LogCallDialog,
@@ -54,7 +54,18 @@ export function GoneQuietSection() {
         id="gone-quiet"
         title="Gone quiet"
         count={rows.length}
-        note={`Open ${vocabulary.lowerMany} with no activity past their stage's limit`}
+        note={
+          <Tooltip
+            content={`Open ${vocabulary.lowerMany} with no activity past their stage's limit.`}
+          >
+            <IconButton
+              label={`What counts as gone quiet, for a ${vocabulary.lower}`}
+              variant="ghost"
+              size="sm"
+              icon={<Info size={16} weight="bold" aria-hidden="true" />}
+            />
+          </Tooltip>
+        }
         isLoading={isLoading}
         isEmpty={rows.length === 0}
         emptyInline={{
@@ -136,7 +147,7 @@ export function GoneQuietSection() {
                               `${name} is off Today for another ${row.limitDays} days.`,
                             ),
                           onError: () =>
-                            toast.error("That deal could not be snoozed."),
+                            toast.error(`That ${vocabulary.lower} could not be snoozed.`),
                         },
                       )
                     }
