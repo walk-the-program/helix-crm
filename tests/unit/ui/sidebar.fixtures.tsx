@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { render } from "@testing-library/react";
 import type { RenderResult } from "@testing-library/react";
-import { Sidebar, SidebarSection, SidebarSeparator, NavItem, TooltipProvider } from "@/ui";
+import { Sidebar, SidebarSection, SidebarSeparator, NavItem, Topbar, TooltipProvider } from "@/ui";
 
 /** The sidebar as the shell mounts it: brand, two groups with a rule between
  *  them, a footer, and a width the fixture owns so a drag is observable. */
@@ -49,6 +49,18 @@ export function renderSidebar(props?: {
       initialWidth={props?.initialWidth}
       collapsed={props?.collapsed}
       onResizeEnd={props?.onResizeEnd}
+    />,
+  );
+}
+
+/** The top bar, with the macOS traffic-light spacer switchable. */
+export function renderTopbar(props?: { trafficLightInset?: boolean }): RenderResult {
+  return render(
+    <Topbar
+      dragRegion
+      trafficLightInset={props?.trafficLightInset}
+      left={<span>Today</span>}
+      right={<button type="button">Search</button>}
     />,
   );
 }

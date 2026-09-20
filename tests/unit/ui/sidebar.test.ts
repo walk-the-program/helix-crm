@@ -15,7 +15,7 @@ import {
   SIDEBAR_MIN_W,
 } from "@/ui/Nav";
 import { installRadixStubs } from "./radixSetup";
-import { renderSidebar } from "./sidebar.fixtures";
+import { renderSidebar, renderTopbar } from "./sidebar.fixtures";
 
 installRadixStubs();
 
@@ -137,5 +137,34 @@ describe("Sidebar", () => {
     const rule = screen.getByTestId("sidebar-separator");
     expect(rule.className).toContain("border-t");
     expect(rule.className).toContain("border-[var(--color-border)]");
+  });
+});
+
+describe("Topbar", () => {
+  it("buys the traffic lights their room when the sidebar is collapsed on macOS", () => {
+    // The lights reach about 78px in from the window's leading edge. At every
+    // sidebar width except the 48px rail they sit entirely over the sidebar's
+    // own header; collapsed, the top bar has to pay the difference or the
+    // sidebar-toggle button ends up underneath the close button.
+    renderTopbar({ trafficLightInset: true });
+    const bar = screen.getByTestId("topbar");
+    expect(bar.hasAttribute("data-traffic-light-inset")).toBe(true);
+    const spacer = bar.firstElementChild;
+    expect(spacer?.className).toContain("w-[calc(var(--titlebar-lights-w)-48px)]");
+  });
+
+  it("pays nothing when the sidebar is open, or on Windows", () => {
+    renderTopbar();
+    const bar = screen.getByTestId("topbar");
+    expect(bar.hasAttribute("data-traffic-light-inset")).toBe(false);
+    expect(bar.firstElementChild?.className ?? "").not.toContain("--titlebar-lights-w");
+  });
+
+  it("is the drag region itself, and the button inside it is not", () => {
+    renderTopbar();
+    expect(screen.getByTestId("topbar").hasAttribute("data-tauri-drag-region")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Search" }).hasAttribute("data-tauri-drag-region"),
+    ).toBe(false);
   });
 });

@@ -194,6 +194,14 @@
      them; it is paid only under [data-platform="macos"] (globals.css), and
      the Windows window, which keeps its native bar, never sees it.          */
   --titlebar-inset: 38px;
+  /* How far the traffic lights reach in from the window's leading edge,
+     measured on macOS 14 at the default window-button spacing: three 12px
+     buttons at 20px centres starting 20px in, plus a little air. The sidebar
+     is wider than this at every size EXCEPT collapsed (48px), which is why
+     the top bar pays the difference as a leading spacer when the sidebar is
+     collapsed on macOS (src/app/Shell.tsx). Without it, the toggle button
+     would sit underneath the close button.                                   */
+  --titlebar-lights-w: 78px;
   --row-h:      40px;    /* comfortable table / list row                      */
   --control-h:    32px;  /* button, input, select                             */
   --control-h-sm: 28px;  /* row-action button. The hit-target floor.          */

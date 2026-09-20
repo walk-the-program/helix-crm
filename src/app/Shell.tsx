@@ -636,6 +636,7 @@ export function Shell({ registry, workspace }: ShellProps) {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Topbar
             dragRegion={macOS}
+            trafficLightInset={macOS && sidebarCollapsed}
             left={
               <>
                 {/* The sidebar toggle, at the leading edge where every macOS

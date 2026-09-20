@@ -374,17 +374,31 @@ export function Topbar(props: {
   right?: ReactNode;
   /** macOS: let the window be dragged (and zoomed on a double-click) by the bar. */
   dragRegion?: boolean;
+  /**
+   * macOS with the sidebar collapsed: the traffic lights reach further in
+   * than the 48px rail, so the bar buys the difference as leading air. At
+   * every other sidebar width the lights sit entirely over the sidebar's own
+   * header and the bar pays nothing.
+   */
+  trafficLightInset?: boolean;
 }) {
   return (
     <div
       data-tauri-drag-region={props.dragRegion ? "" : undefined}
       data-testid="topbar"
+      data-traffic-light-inset={props.trafficLightInset ? "" : undefined}
       className={[
         "flex h-[var(--topbar-h)] w-full flex-none items-center justify-between",
         "border-b border-[var(--color-border)] bg-[var(--color-surface)]",
         "px-[var(--space-4)] gap-[var(--space-3)]",
       ].join(" ")}
     >
+      {props.trafficLightInset ? (
+        <span
+          aria-hidden="true"
+          className="flex-none w-[calc(var(--titlebar-lights-w)-48px)]"
+        />
+      ) : null}
       <div className="flex flex-none items-center gap-[var(--space-3)] min-w-0">{props.left}</div>
       <div className="flex-1 min-w-0">{props.children}</div>
       <div className="flex flex-none items-center gap-[var(--space-1)]">{props.right}</div>
