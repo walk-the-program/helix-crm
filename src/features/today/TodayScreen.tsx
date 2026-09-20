@@ -44,6 +44,7 @@ import { RecentActivitySection } from "@/features/today/sections/RecentActivity"
 import { ConnectSiteCard } from "@/features/today/sections/ConnectSite";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
 import { useTodayIsUnstarted } from "@/features/today/lib/useToday";
+import { useVocabulary } from "@/app/vocabulary";
 import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
 import { UnpaidInvoicesSection } from "@/features/invoices";
 import { PollNotice } from "@/features/leads";
@@ -168,6 +169,7 @@ function SampleDataNote() {
 
 /** The first-run screen: the three actions that put something on Today. */
 function FirstRun() {
+  const vocabulary = useVocabulary();
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
       <div className="max-w-[var(--content-max)]">
@@ -175,9 +177,9 @@ function FirstRun() {
           Nothing here yet, and that is the right place to start
         </h2>
         <p className="mt-[var(--space-2)] text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-          Today shows what is due, which leads nobody has called, and which
-          deals have gone quiet. Do one of these three things and it fills up on
-          its own.
+          Today shows what is due, which leads nobody has called, and which{" "}
+          {vocabulary.lowerMany} have gone quiet. Do one of these three things
+          and it fills up on its own.
         </p>
       </div>
 

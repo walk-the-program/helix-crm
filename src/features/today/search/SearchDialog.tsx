@@ -22,7 +22,14 @@ import { navigate } from "wouter/use-browser-location";
 import { MagnifyingGlass } from "@/ui/icons";
 import { qk } from "@/app/queryClient";
 import { openCommandPalette, PALETTE_SHORTCUT } from "@/app/CommandPalette";
-import { Kbd } from "@/ui";
+import {
+  Kbd,
+  OverlayPanel,
+  OverlayScrim,
+  overlayHeadingClass,
+  overlayRowClass,
+} from "@/ui";
+import { useVocabulary } from "@/app/vocabulary";
 import {
   GROUP_HEADINGS,
   recentRecords,
@@ -32,16 +39,6 @@ import {
 
 /** PLAN item 7's budget is 50 ms per query; 80 ms of debounce sits under a keystroke. */
 export const SEARCH_DEBOUNCE_MS = 80;
-
-/** The section-label style, hand-matched: cmdk owns the heading's markup, so
- *  this is passed as the `heading` node rather than through `className`. */
-function GroupHeading(props: { children: string }) {
-  return (
-    <span className="section-label block px-[var(--space-2)] py-[var(--space-1)]">
-      {props.children}
-    </span>
-  );
-}
 
 /** Debounce a value, so a fast typist fires one query rather than nine. */
 export function useDebounced<T>(value: T, delayMs: number): T {
@@ -60,7 +57,7 @@ function ResultItem(props: { row: SearchRow; onPick: (row: SearchRow) => void })
       value={`${row.entityType}:${row.entityId}`}
       keywords={[row.label, row.subtitle ?? ""]}
       onSelect={() => onPick(row)}
-      className="flex min-h-[var(--row-h)] cursor-default items-center gap-[var(--space-3)] px-[var(--space-3)] data-[selected=true]:bg-[var(--color-selected)]"
+      className={overlayRowClass}
     >
       <span className="min-w-0 flex-1">
         <span
@@ -87,6 +84,7 @@ export function SearchDialog(props: {
   onOpenChange: (open: boolean) => void;
 }) {
   const { open, onOpenChange } = props;
+  const vocabulary = useVocabulary();
   const [value, setValue] = useState("");
   const debounced = useDebounced(value, SEARCH_DEBOUNCE_MS);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -121,105 +119,105 @@ export function SearchDialog(props: {
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--color-overlay)] px-[var(--space-4)] pt-[14vh]"
-      data-testid="today-search"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onOpenChange(false);
-      }}
-    >
-      <Command
-        label="Search records"
-        shouldFilter={false}
-        loop
-        className="w-full max-w-[600px] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface-raised)] shadow-[var(--shadow-md)]"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onOpenChange(false);
-          }
-        }}
-      >
-        <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-3)]">
-          <MagnifyingGlass
-            size={18}
-            weight="regular"
-            aria-hidden="true"
-            className="flex-none text-[var(--color-text-faint)]"
-          />
-          <Command.Input
-            ref={inputRef}
-            autoFocus
-            value={value}
-            onValueChange={setValue}
-            placeholder="Search contacts, companies, deals and notes"
-            className="w-full border-0 bg-transparent text-[length:var(--text-lg)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
-          />
-        </div>
+    // Scrim, panel, row and group heading all come from the kit's shared
+    // floating layer (src/ui/Overlay.tsx) — the same one the command palette
+    // draws, so Cmd/Ctrl+K and Cmd/Ctrl+Shift+K put the same shape in the
+    // same place and differ only in what is inside them.
+    <OverlayScrim data-testid="today-search" onDismiss={() => onOpenChange(false)}>
+      <OverlayPanel>
+        <Command
+          label="Search records"
+          shouldFilter={false}
+          loop
+          className="w-full"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              onOpenChange(false);
+            }
+          }}
+        >
+          <div className="flex items-center gap-[var(--space-3)] border-b border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-3)]">
+            <MagnifyingGlass
+              size={18}
+              weight="regular"
+              aria-hidden="true"
+              className="flex-none text-[var(--color-text-faint)]"
+            />
+            <Command.Input
+              ref={inputRef}
+              autoFocus
+              value={value}
+              onValueChange={setValue}
+              placeholder={`Search contacts, companies, ${vocabulary.lowerMany} and notes`}
+              className="w-full border-0 bg-transparent text-[length:var(--text-lg)] text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
+            />
+          </div>
 
-        <Command.List className="max-h-[420px] overflow-y-auto p-[var(--space-2)]">
-          {trimmed.length === 0 ? (
-            <Command.Group heading={<GroupHeading>Recent</GroupHeading>}>
-              {(recent.data ?? []).map((row) => (
-                <ResultItem key={`${row.entityType}-${row.entityId}`} row={row} onPick={pick} />
-              ))}
-              {recent.isFetched && (recent.data ?? []).length === 0 ? (
-                <p className="px-[var(--space-3)] py-[var(--space-4)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  Nothing to show yet. Import a spreadsheet or add a contact and
-                  it will be findable from here.
-                </p>
-              ) : null}
-            </Command.Group>
-          ) : results.isFetching && !hasResults ? (
-            <p className="px-[var(--space-3)] py-[var(--space-5)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              Searching.
-            </p>
-          ) : !hasResults ? (
-            <div className="px-[var(--space-3)] py-[var(--space-5)]">
-              <p className="text-[length:var(--text-base)] text-[var(--color-text)]">
-                Nothing matches &ldquo;{trimmed}&rdquo;.
-              </p>
-              <p className="mt-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                Search looks at names, companies, phone numbers, email addresses
-                and the text of every note.
-              </p>
-            </div>
-          ) : (
-            groups.map((group) => (
-              <Command.Group
-                key={group.entityType}
-                heading={<GroupHeading>{GROUP_HEADINGS[group.entityType]}</GroupHeading>}
-              >
-                {group.rows.map((row) => (
+          <Command.List className="max-h-[420px] overflow-y-auto p-[var(--space-2)]">
+            {trimmed.length === 0 ? (
+              <Command.Group heading={<span className={overlayHeadingClass}>Recent</span>}>
+                {(recent.data ?? []).map((row) => (
                   <ResultItem key={`${row.entityType}-${row.entityId}`} row={row} onPick={pick} />
                 ))}
+                {recent.isFetched && (recent.data ?? []).length === 0 ? (
+                  <p className="px-[var(--space-3)] py-[var(--space-4)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                    Nothing to show yet. Import a spreadsheet or add a contact and
+                    it will be findable from here.
+                  </p>
+                ) : null}
               </Command.Group>
-            ))
-          )}
-        </Command.List>
+            ) : results.isFetching && !hasResults ? (
+              <p className="px-[var(--space-3)] py-[var(--space-5)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                Searching.
+              </p>
+            ) : !hasResults ? (
+              <div className="px-[var(--space-3)] py-[var(--space-5)]">
+                <p className="text-[length:var(--text-base)] text-[var(--color-text)]">
+                  Nothing matches &ldquo;{trimmed}&rdquo;.
+                </p>
+                <p className="mt-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                  Search looks at names, companies, phone numbers, email addresses
+                  and the text of every note.
+                </p>
+              </div>
+            ) : (
+              groups.map((group) => (
+                <Command.Group
+                  key={group.entityType}
+                  heading={<span className={overlayHeadingClass}>{GROUP_HEADINGS[group.entityType]}</span>}
+                >
+                  {group.rows.map((row) => (
+                    <ResultItem key={`${row.entityType}-${row.entityId}`} row={row} onPick={pick} />
+                  ))}
+                </Command.Group>
+              ))
+            )}
+          </Command.List>
 
-        {/*
-          The way back to the command list. Cmd/Ctrl+K reaches search, so the
-          palette needs a door that is visible from in here as well as its own
-          Cmd/Ctrl+Shift+K.
-        */}
-        <div className="flex items-center justify-between border-t border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-2)]">
-          <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
-            Searching contacts, companies, deals and notes
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              onOpenChange(false);
-              openCommandPalette();
-            }}
-            className="inline-flex items-center gap-[var(--space-2)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
-          >
-            Commands
-            <Kbd keys={PALETTE_SHORTCUT} />
-          </button>
-        </div>
-      </Command>
-    </div>
+          {/*
+            The way back to the command list. Cmd/Ctrl+K reaches search, so the
+            palette needs a door that is visible from in here as well as its own
+            Cmd/Ctrl+Shift+K.
+          */}
+          <div className="flex items-center justify-between border-t border-[var(--color-border)] px-[var(--space-4)] py-[var(--space-2)]">
+            <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+              Searching contacts, companies, {vocabulary.lowerMany} and notes
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenChange(false);
+                openCommandPalette();
+              }}
+              className="inline-flex items-center gap-[var(--space-2)] px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+            >
+              Commands
+              <Kbd keys={PALETTE_SHORTCUT} />
+            </button>
+          </div>
+        </Command>
+      </OverlayPanel>
+    </OverlayScrim>
   );
 }

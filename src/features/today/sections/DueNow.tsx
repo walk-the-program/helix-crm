@@ -32,6 +32,7 @@ import {
   type DueNowRow,
 } from "@/features/today/lib/useToday";
 import { openTel } from "@/lib/actions";
+import { useVocabulary } from "@/app/vocabulary";
 
 function RowActions({ row }: { row: DueNowRow }) {
   const complete = useCompleteTask();
@@ -140,6 +141,7 @@ function RowActions({ row }: { row: DueNowRow }) {
 }
 
 export function DueNowSection() {
+  const vocabulary = useVocabulary();
   const { data, isLoading } = useDueNow();
   const rows = data?.rows ?? [];
   const overdue = data?.overdueCount ?? 0;
@@ -163,8 +165,7 @@ export function DueNowSection() {
       isEmpty={rows.length === 0}
       empty={{
         title: "Nothing is due today",
-        description:
-          "Follow-ups you set on a contact, a company or a deal show up here on the day they are due, and stay until they are done.",
+        description: `Follow-ups you set on a contact, a company or a ${vocabulary.lower} show up here on the day they are due, and stay until they are done.`,
         action: (
           <Link
             href="/tasks"
