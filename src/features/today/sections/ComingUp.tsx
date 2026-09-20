@@ -108,14 +108,12 @@ export function ComingUpSection() {
       }
       isLoading={isLoading}
       isEmpty={rows.length === 0}
-      empty={{
-        title: "Nothing comes back around this week",
-        description:
-          "A reminder is work that repeats: a spring cleanup every year, a filter change every three months. Set one on a customer and it turns up here a week before it is due.",
+      emptyInline={{
+        text: "Nothing comes back around this week.",
         action: (
           <Link
             href="/recurring"
-            className="inline-flex h-[var(--control-h)] flex-none items-center justify-center border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-[var(--space-4)] text-[length:var(--text-base)] font-medium leading-[var(--leading-tight)] text-[var(--color-text)] no-underline hover:bg-[var(--color-hover)] hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
+            className="text-[var(--color-text)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
           >
             See every reminder
           </Link>

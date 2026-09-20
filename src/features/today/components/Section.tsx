@@ -31,10 +31,22 @@ export function SectionHeading(props: {
    * that are due. With nothing due the block is not drawn at all.
    */
   emphasis?: boolean;
+  /**
+   * The collapsed empty state: a short muted sentence appended to the same
+   * line as the heading, with an optional text link after it. Set only when
+   * the section is empty and asked to collapse to one line instead of a
+   * panel (see `Section.emptyInline`).
+   */
+  emptyInline?: { text: string; action?: ReactNode };
 }) {
-  const { id, title, count, note, action, emphasis } = props;
+  const { id, title, count, note, action, emphasis, emptyInline } = props;
   return (
-    <div className="mb-[var(--space-3)] flex flex-wrap items-baseline gap-[var(--space-3)]">
+    <div
+      className={[
+        emptyInline ? "" : "mb-[var(--space-3)]",
+        "flex flex-wrap items-baseline gap-[var(--space-3)]",
+      ].join(" ")}
+    >
       <h2 id={id}>
         {title}
       </h2>
@@ -52,6 +64,12 @@ export function SectionHeading(props: {
       {note ? (
         <span className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
           {note}
+        </span>
+      ) : null}
+      {emptyInline ? (
+        <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          · {emptyInline.text}
+          {emptyInline.action ? <> {emptyInline.action}</> : null}
         </span>
       ) : null}
       {action ? <div className="ml-auto self-center">{action}</div> : null}
@@ -79,11 +97,16 @@ export function Panel(props: { children: ReactNode; className?: string }) {
 }
 
 /**
- * One whole section: heading, then either the rows or its empty state.
+ * One whole section: heading, then either the rows, its empty state, or —
+ * when `emptyInline` is given — a single quiet line in place of a panel.
  *
- * The empty state is the kit's: a title, one sentence, and at most one action.
- * It still accepts an icon and deliberately does not draw one (DESIGN.md §9),
- * so the call sites here pass none.
+ * The full empty state is the kit's: a title, one sentence, and at most one
+ * action. It still accepts an icon and deliberately does not draw one
+ * (DESIGN.md §9), so the call sites here pass none. Today keeps that
+ * full-panel treatment only for the sections that still use `empty`; Coming
+ * up, New leads and Gone quiet collapse instead, because three of those
+ * panels stacked empty read as three failures rather than as "nothing is
+ * wrong here" (see the sections' own files).
  */
 export function Section(props: {
   id: string;
@@ -95,35 +118,46 @@ export function Section(props: {
   emphasis?: boolean;
   isLoading?: boolean;
   isEmpty: boolean;
-  empty: { title: string; description: ReactNode; action?: ReactNode };
+  /** The full panel empty state. Ignored once loading has resolved if `emptyInline` is set. */
+  empty?: { title: string; description: ReactNode; action?: ReactNode };
+  /**
+   * Collapses an empty, finished-loading section to one line: the heading,
+   * "·", a short muted sentence, and an optional inline text link — no panel
+   * at all. Takes priority over `empty` once loading has resolved.
+   */
+  emptyInline?: { text: string; action?: ReactNode };
   children: ReactNode;
 }) {
   const headingId = `today-${props.id}-heading`;
+  const collapsed = props.isEmpty && !props.isLoading && Boolean(props.emptyInline);
   return (
     <section aria-labelledby={headingId} data-today-section={props.id}>
       <SectionHeading
         id={headingId}
         title={props.title}
-        count={props.count}
-        note={props.note}
-        action={props.headerAction}
+        count={collapsed ? undefined : props.count}
+        note={collapsed ? undefined : props.note}
+        action={collapsed ? undefined : props.headerAction}
         emphasis={props.emphasis}
+        emptyInline={collapsed ? props.emptyInline : undefined}
       />
-      <Panel>
-        {props.isLoading ? (
-          <p className="px-[var(--space-4)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            Reading the database.
-          </p>
-        ) : props.isEmpty ? (
-          <EmptyState
-            title={props.empty.title}
-            description={props.empty.description}
-            action={props.empty.action}
-          />
-        ) : (
-          <ul className="m-0 list-none p-0">{props.children}</ul>
-        )}
-      </Panel>
+      {collapsed ? null : (
+        <Panel>
+          {props.isLoading ? (
+            <p className="px-[var(--space-4)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+              Reading the database.
+            </p>
+          ) : props.isEmpty ? (
+            <EmptyState
+              title={props.empty?.title ?? ""}
+              description={props.empty?.description}
+              action={props.empty?.action}
+            />
+          ) : (
+            <ul className="m-0 list-none p-0">{props.children}</ul>
+          )}
+        </Panel>
+      )}
     </section>
   );
 }

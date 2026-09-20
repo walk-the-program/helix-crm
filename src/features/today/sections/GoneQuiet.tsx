@@ -52,11 +52,7 @@ export function GoneQuietSection() {
         note="Open deals with no activity past their stage's limit"
         isLoading={isLoading}
         isEmpty={rows.length === 0}
-        empty={{
-          title: "Every open deal is moving",
-          description:
-            "A deal lands here when nothing has happened on it for longer than its stage allows. Change a stage's limit in Settings, or set it to zero to switch the rule off for that stage.",
-        }}
+        emptyInline={{ text: "Every open deal is moving." }}
       >
         {rows.map((row) => {
           const name = rowName(row);

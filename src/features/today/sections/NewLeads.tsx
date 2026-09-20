@@ -69,11 +69,7 @@ export function NewLeadsSection() {
         note={`Last ${NEW_LEAD_WINDOW_DAYS} days, nobody has called them yet`}
         isLoading={isLoading}
         isEmpty={leads.length === 0}
-        empty={{
-          title: "No new leads waiting",
-          description:
-            "A lead lands here when a deal is created and nobody has logged a call, an email or a note against it yet. Quote requests from a connected website arrive here on their own.",
-        }}
+        emptyInline={{ text: "No new leads waiting." }}
       >
         {leads.map((lead) => {
           const name = leadName(lead);
