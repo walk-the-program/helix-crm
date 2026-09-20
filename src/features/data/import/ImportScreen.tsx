@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Upload } from "@/ui/icons";
 import { Button, Card, CardBody, EmptyState, PageHeader, Spinner, toast } from "@/ui";
-import { ImportParseError, delimiterLabel, parseCsvText } from "@/lib/csv";
+import type { ImportParseError } from "@/lib/csv";
 import type { LoadedCsv } from "@/features/data/lib/filePick";
 import { applyMapping, type ColumnMapping, type MappedRow } from "@/features/data/lib/mapping";
 import {
@@ -199,6 +199,13 @@ export function ImportScreen() {
   const [view, setView] = useState<ResultView | null>(null);
   const [parseError, setParseError] = useState<ImportParseError | null>(null);
   const [emptyFile, setEmptyFile] = useState(false);
+  /**
+   * The human word for the file's delimiter ("comma", "semicolon"...),
+   * computed once in `onLoaded` alongside the dynamic `@/lib/csv` import
+   * rather than at render time, so the subtitle never has to call into that
+   * module directly.
+   */
+  const [delimiterWord, setDelimiterWord] = useState("");
   const headingRef = useRef<HTMLDivElement>(null);
   const hasMountedRef = useRef(false);
 
@@ -226,6 +233,7 @@ export function ImportScreen() {
     setView(null);
     setParseError(null);
     setEmptyFile(false);
+    setDelimiterWord("");
     setProgress(null);
     setPolicy("skip");
   }, []);
@@ -234,12 +242,17 @@ export function ImportScreen() {
     async (loaded: LoadedCsv) => {
       setParseError(null);
       setEmptyFile(false);
+      // papaparse (behind @/lib/csv) is only worth downloading once a file has
+      // actually been picked, so it is loaded here rather than at the top of
+      // this module.
+      const { parseCsvText, delimiterLabel, ImportParseError } = await import("@/lib/csv");
       try {
         const preview = parseCsvText(loaded.text, {
           delimiter: loaded.delimiter,
           limit: PREVIEW_ROWS,
         });
         setFile(loaded);
+        setDelimiterWord(delimiterLabel(loaded.delimiter));
         setHeaders(preview.headers);
         setSampleRows(preview.rows);
         setTotalPreviewed(preview.rowCount);
@@ -270,7 +283,8 @@ export function ImportScreen() {
     [isLegacy, type],
   );
 
-  const onError = useCallback((err: unknown) => {
+  const onError = useCallback(async (err: unknown) => {
+    const { ImportParseError } = await import("@/lib/csv");
     if (err instanceof ImportParseError) {
       setParseError(err);
       return;
@@ -360,7 +374,7 @@ export function ImportScreen() {
   }
 
   const subtitle = file
-    ? `${file.name} · ${delimiterLabel(file.delimiter)}-separated · ${file.encoding}${
+    ? `${file.name} · ${delimiterWord}-separated · ${file.encoding}${
         file.hadBom ? " with BOM" : ""
       }`
     : "Bring a spreadsheet or another CRM in.";

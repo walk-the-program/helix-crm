@@ -22,7 +22,7 @@ import { pauseTimers, withTransaction } from "@/db/writeLock";
 import { changeLogStatement } from "@/db/changeLog";
 import { newBatchId } from "@/lib/ids";
 import { nowIso } from "@/lib/dates";
-import { walkCsv, type Delimiter } from "@/lib/csv";
+import type { Delimiter } from "@/lib/csv";
 import {
   addressJsonFor,
   applyMapping,
@@ -138,12 +138,17 @@ export type ReadResult = {
  * Read the file into mapped rows. Raw cells are dropped as soon as a row is
  * mapped, except for rows that already look unimportable - those are the ones
  * the result screen offers to save back out as a CSV.
+ *
+ * papaparse (behind @/lib/csv's walkCsv) is loaded here, at the point of use,
+ * rather than at the top of the module: the import resolves once, before the
+ * parse starts, so the row-by-row `step` streaming below it is unaffected.
  */
-export function readMappedRows(
+export async function readMappedRows(
   text: string,
   mapping: ColumnMapping[],
   options: { delimiter?: Delimiter; region?: string; onProgress?: (n: number) => void } = {},
-): ReadResult {
+): Promise<ReadResult> {
+  const { walkCsv } = await import("@/lib/csv");
   const rows: MappedRow[] = [];
   const cellsByRow = new Map<number, string[]>();
   let seen = 0;
@@ -256,7 +261,7 @@ export async function runImport(options: ImportOptions): Promise<ImportResult> {
   const report = options.onProgress ?? (() => {});
 
   report({ phase: "reading", processed: 0, total: 0 });
-  const { headers, rows, cellsByRow } = readMappedRows(options.text, options.mapping, {
+  const { headers, rows, cellsByRow } = await readMappedRows(options.text, options.mapping, {
     delimiter: options.delimiter,
     region: options.region,
     onProgress: (n) => report({ phase: "reading", processed: n, total: 0 }),

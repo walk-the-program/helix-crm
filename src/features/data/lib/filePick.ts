@@ -15,7 +15,7 @@ import {
   readFileBytes,
   FileAccessError,
 } from "@/features/data/lib/fsBridge";
-import { sniffCsv, type CsvSniff } from "@/lib/csv";
+import type { CsvSniff } from "@/lib/csv";
 
 export type LoadedCsv = CsvSniff & {
   /** null when the bytes came from a browser File with no real path. */
@@ -29,7 +29,13 @@ export const CSV_FILTERS = [
   { name: "Spreadsheet", extensions: ["csv", "tsv", "txt"] },
 ];
 
-function loaded(name: string, path: string | null, bytes: Uint8Array): LoadedCsv {
+/**
+ * Papaparse (behind @/lib/csv's sniffCsv) is only worth downloading once the
+ * owner has actually chosen a file, so the sniff happens behind a dynamic
+ * import rather than one paid at boot for a screen that may never open.
+ */
+async function loaded(name: string, path: string | null, bytes: Uint8Array): Promise<LoadedCsv> {
+  const { sniffCsv } = await import("@/lib/csv");
   const sniffed = sniffCsv(bytes);
   return { ...sniffed, path, name, bytes: bytes.length };
 }

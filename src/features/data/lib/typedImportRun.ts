@@ -33,7 +33,7 @@ import { newBatchId, newId } from "@/lib/ids";
 import { nowIso, parseDateOnly, toIso } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { getAll as getAllSettings } from "@/db/repos/settings";
-import { walkCsv, type Delimiter } from "@/lib/csv";
+import type { Delimiter } from "@/lib/csv";
 import { splitFullName } from "@/features/data/lib/mapping";
 import {
   readDraftRow,
@@ -167,12 +167,18 @@ export type TypedReadResult = {
   cellsByRow: Map<number, string[]>;
 };
 
-export function readDraftRows(
+/**
+ * papaparse (behind @/lib/csv's walkCsv) is loaded here, at the point of use:
+ * the import resolves once, before the parse starts, so the row-by-row `step`
+ * streaming below it is unaffected.
+ */
+export async function readDraftRows(
   typeId: ImportTypeId,
   text: string,
   mapping: TypedColumnMapping[],
   options: { delimiter?: Delimiter; region?: string; onProgress?: (n: number) => void } = {},
-): TypedReadResult {
+): Promise<TypedReadResult> {
+  const { walkCsv } = await import("@/lib/csv");
   const type = importType(typeId);
   const rows: DraftRow[] = [];
   const cellsByRow = new Map<number, string[]>();
@@ -433,7 +439,7 @@ export async function runTypedImport(
   }
 
   report({ phase: "reading", processed: 0, total: 0 });
-  const { headers, rows, cellsByRow } = readDraftRows(typeId, options.text, options.mapping, {
+  const { headers, rows, cellsByRow } = await readDraftRows(typeId, options.text, options.mapping, {
     delimiter: options.delimiter,
     region: options.region,
     onProgress: (n) => report({ phase: "reading", processed: n, total: 0 }),

@@ -11,7 +11,6 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Buildings, Download, Kanban, Tag, Users } from "@/ui/icons";
 import { Button, Card, CardBody, CardRow, toast } from "@/ui";
-import { rowsToCsv } from "@/lib/csv";
 import { pickSavePath, writeTextFileAt } from "@/features/data/lib/fsBridge";
 import type { ResultView } from "@/features/data/lib/importResultView";
 
@@ -72,6 +71,7 @@ export function ResultStep(props: {
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (path === null) return;
+      const { rowsToCsv } = await import("@/lib/csv");
       await writeTextFileAt(path, rowsToCsv(headers, rows));
       toast.success(`Saved ${rows.length.toLocaleString()} skipped rows.`);
     } catch (err) {
@@ -96,6 +96,7 @@ export function ResultStep(props: {
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (path === null) return;
+      const { rowsToCsv } = await import("@/lib/csv");
       await writeTextFileAt(path, rowsToCsv(headers, rows));
       toast.success(`Saved ${rows.length.toLocaleString()} warnings.`);
     } catch (err) {
