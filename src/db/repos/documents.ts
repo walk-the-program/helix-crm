@@ -61,7 +61,16 @@ export const DOCUMENT_KINDS = ["quote", "invoice"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 export const QUOTE_STATUSES = ["draft", "sent", "accepted", "declined", "void"] as const;
-export const INVOICE_STATUSES = ["draft", "sent", "paid", "void"] as const;
+/**
+ * An invoice's five states. `partial` is the one the payments table added
+ * (PX-5): an invoice with money against it that does not yet cover the total.
+ * It is derived, never typed - `recomputeInvoiceStatus` writes it from the sum
+ * of the invoice's payments, so no screen can put an invoice into a state its
+ * payments do not justify. Quotes are unchanged; a quote never has payments.
+ */
+export const INVOICE_STATUSES = ["draft", "sent", "partial", "paid", "void"] as const;
+/** The published invoice status type (LR-PX contract 5). */
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export type DocumentStatus =
   | (typeof QUOTE_STATUSES)[number]
   | (typeof INVOICE_STATUSES)[number];
@@ -390,7 +399,7 @@ function whereFor(filter: DocumentFilter): { sql: string; params: unknown[] } {
     params.push(filter.status);
   }
   if (filter.unpaidOnly) {
-    clauses.push("d.kind = 'invoice' AND d.status IN ('draft', 'sent')");
+    clauses.push("d.kind = 'invoice' AND d.status IN ('draft', 'sent', 'partial')");
   }
   if (filter.dealId) {
     clauses.push("d.deal_id = ?");
@@ -1121,6 +1130,44 @@ export async function setPdfPath(id: string, pdfPath: string): Promise<void> {
 /* status                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/** What a listener is told when a document changes status. */
+export type DocumentStatusChange = {
+  document: Document;
+  from: DocumentStatus;
+  to: DocumentStatus;
+};
+
+export type DocumentStatusListener = (event: DocumentStatusChange) => Promise<void>;
+
+const statusListeners = new Set<DocumentStatusListener>();
+
+/**
+ * Be told when a document changes status (LR-PX contract 2).
+ *
+ * Listeners run inside the same write as the status change, in registration
+ * order, after the row and its timeline line are written and before the write
+ * lock is released - so a rule that creates a task ("this quote was sent, chase
+ * it on Friday") either lands with the status or not at all, and a listener
+ * that throws fails the whole write rather than leaving a half-applied rule.
+ *
+ * Registration is process-local and idempotent per listener function; the
+ * returned function removes it. Nothing here touches payments: this is the seam
+ * for automations, and the payment recompute is a direct call, not a listener.
+ */
+export function onDocumentStatusChanged(listener: DocumentStatusListener): () => void {
+  statusListeners.add(listener);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
+async function notifyStatusChanged(event: DocumentStatusChange): Promise<void> {
+  if (statusListeners.size === 0) return;
+  for (const listener of [...statusListeners]) {
+    await listener(event);
+  }
+}
+
 /** Every move the product allows, as data, so the rule is one table. */
 const TRANSITIONS: Record<string, Record<string, string[]>> = {
   quote: {
@@ -1132,7 +1179,13 @@ const TRANSITIONS: Record<string, Record<string, string[]>> = {
   },
   invoice: {
     draft: ["sent", "void"],
-    sent: ["paid", "void"],
+    // A sent invoice can take a payment, which lands it in `partial` or, when
+    // the payment covers the total, straight in `paid`. Both moves are written
+    // by `recomputeInvoiceStatus` rather than typed by anybody, and both are
+    // reversible, because deleting the payment has to be able to walk them
+    // back.
+    sent: ["partial", "paid", "void"],
+    partial: ["sent", "paid", "void"],
     // Paid is not the end of the road. Marking the wrong invoice paid, or
     // paying it on the wrong date, is the commonest mistake there is on this
     // screen, and before this it was unrecoverable: Collected, the deal strip,
@@ -1141,7 +1194,7 @@ const TRANSITIONS: Record<string, Record<string, string[]>> = {
     // back to `sent` clears the payment; voiding it writes the whole billing
     // off. Both are one confirmation and both leave a timeline line, so the
     // history still says what happened.
-    paid: ["sent", "void"],
+    paid: ["partial", "sent", "void"],
     void: [],
   },
 };
@@ -1206,6 +1259,11 @@ async function setStatus(
     await logWrite("document", id, "update", current.document, values);
     const next = await get(id);
     if (!next) throw new NotFoundError("document", id);
+    await notifyStatusChanged({
+      document: next.document,
+      from: current.document.status as DocumentStatus,
+      to: to as DocumentStatus,
+    });
     return next.document;
   }, label);
 }
@@ -1364,6 +1422,14 @@ export async function accept(
     const quote = await get(id);
     const invoice = invoiceId ? await get(invoiceId) : null;
     if (!quote) throw new NotFoundError("document", id);
+    // `accept` writes its own status rather than going through `setStatus`
+    // (it creates the invoice in the same transaction), so it announces the
+    // move itself - otherwise a rule watching for "accepted" would never fire.
+    await notifyStatusChanged({
+      document: quote.document,
+      from: current.document.status as DocumentStatus,
+      to: "accepted",
+    });
     return { quote: quote.document, invoice: invoice?.document ?? null };
   }, "Accepting the quote");
 }
