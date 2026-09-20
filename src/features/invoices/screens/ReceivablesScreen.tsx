@@ -17,7 +17,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
-  EmptyState,
   TBody,
   TD,
   TH,
@@ -56,10 +55,12 @@ export function ReceivablesScreen() {
           Reading the database.
         </p>
       ) : !rows || rows.length === 0 ? (
-        <EmptyState
-          title="Nothing outstanding"
-          description="Every invoice you have sent has been paid."
-        />
+        // AgingBlock above already says "Nothing owed to you right now" for
+        // this exact case - the outstanding list is empty precisely when the
+        // aging total is zero, since both read the same sent-and-unpaid set
+        // (src/db/repos/receivables.ts). A second empty state here would just
+        // repeat it (F-LB-11c).
+        null
       ) : (
         <Table>
           <THead>

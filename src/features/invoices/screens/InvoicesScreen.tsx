@@ -47,10 +47,12 @@ import { useDocuments, useInvoiceSettings, useOutstandingSummary } from "@/featu
 import {
   customerLabel,
   dueLabel,
+  hasAnyDocuments as computeHasAnyDocuments,
   isOverdue,
   statusLabel,
   statusTone,
   summarySentence,
+  unpaidEmptyCopy,
 } from "@/features/invoices/lib/format";
 
 type TabId = "unpaid" | "paid" | "quotes" | "all";
@@ -83,13 +85,26 @@ export function InvoicesScreen() {
   const rows = useMemo(() => sortDocuments(active.data?.rows ?? []), [active.data]);
   const filtered = Boolean(searchFilter);
 
+  // Every kind and every status counts here - a draft, a quote and a voided
+  // invoice all mean "this workspace has raised a document before" just as
+  // much as a paid one does. `all` already reads that unfiltered count for
+  // the All tab, so this reuses it rather than adding a second query. While
+  // it is still loading, assume documents exist (the pre-fix behaviour) so
+  // the page does not flash the first-invoice state on a workspace that
+  // actually has plenty of them.
+  const totalDocuments = all.data?.total;
+  const hasAnyDocuments = computeHasAnyDocuments(totalDocuments);
+
   return (
     <div className="flex flex-col">
       <PageHeader
         title="Invoices"
         actions={
           <Button
-            variant="secondary"
+            // With no invoice ever raised there is nothing for the money
+            // block below to show, so this is the screen's one flat primary
+            // block instead (F-LB-11a) - never both at once.
+            variant={hasAnyDocuments ? "secondary" : "primary"}
             iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
             onClick={() => navigate("/invoices/new")}
           >
@@ -98,18 +113,20 @@ export function InvoicesScreen() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-[var(--space-3)] pb-[var(--space-5)]">
-        {/* The one primary block on this screen (see the file comment): the
-            money outstanding, flat-filled, with the accent sticker shadow as
-            its single detail — the same treatment DealPage.tsx gives the
-            deal value. */}
-        <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
-          {formatMoney((summary ?? EMPTY_SUMMARY).outstandingCents, settings?.currency, settings?.locale)}
-        </span>
-        <span className="text-[length:var(--text-base)] text-[var(--color-text)]">
-          {summarySentence(summary ?? EMPTY_SUMMARY, settings?.currency, settings?.locale)}
-        </span>
-      </div>
+      {hasAnyDocuments ? (
+        <div className="flex flex-wrap items-center gap-[var(--space-3)] pb-[var(--space-5)]">
+          {/* The one primary block on this screen (see the file comment): the
+              money outstanding, flat-filled, with the accent sticker shadow as
+              its single detail — the same treatment DealPage.tsx gives the
+              deal value. */}
+          <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
+            {formatMoney((summary ?? EMPTY_SUMMARY).outstandingCents, settings?.currency, settings?.locale)}
+          </span>
+          <span className="text-[length:var(--text-base)] text-[var(--color-text)]">
+            {summarySentence(summary ?? EMPTY_SUMMARY, settings?.currency, settings?.locale)}
+          </span>
+        </div>
+      ) : null}
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as TabId)}>
         <TabsList>
@@ -136,15 +153,24 @@ export function InvoicesScreen() {
         <TabsContent value="unpaid">
           <DocumentTable
             rows={rows}
-            isLoading={unpaid.isLoading}
+            // Waits on the unfiltered document count too, so this tab never
+            // shows "nothing outstanding" (true only once invoices exist)
+            // before it has actually confirmed whether any do.
+            isLoading={unpaid.isLoading || totalDocuments === undefined}
             summable
             settings={settings}
             filtered={filtered}
             onClearSearch={() => setSearch("")}
             empty={
               <EmptyState
-                title="Nothing outstanding"
-                description="Every invoice you have sent has been paid."
+                {...unpaidEmptyCopy(hasAnyDocuments)}
+                action={
+                  hasAnyDocuments ? undefined : (
+                    <Button variant="secondary" onClick={() => navigate("/invoices/new")}>
+                      New invoice
+                    </Button>
+                  )
+                }
               />
             }
           />

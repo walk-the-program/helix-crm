@@ -101,7 +101,10 @@ export function AgingBlock() {
           </>
         )}
       </Card>
-      {collected ? (
+      {/* "Collected this month: $0.00 across 0 invoices" is not a fact worth
+          printing - it is silent, the same way the aging card above says
+          nothing at all rather than "Nothing owed: $0.00" (F-LB-11c). */}
+      {collected && collected.count > 0 ? (
         <p className="mt-[var(--space-2)] px-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
           Collected this month: {money(collected.cents)} across {collected.count}{" "}
           invoice{collected.count === 1 ? "" : "s"}.

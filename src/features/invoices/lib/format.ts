@@ -147,3 +147,35 @@ export function customerLabel(document: {
 export function pdfFileName(numberText: string): string {
   return `${numberText.replace(/[^A-Za-z0-9._-]+/g, "-")}.pdf`;
 }
+
+/* -------------------------------------------------------------------------- */
+/* F-LB-11: which empty state is true                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whether the workspace has ever raised a document - any kind, any status,
+ * including a draft, a quote or a void. `total` is the unfiltered count the
+ * Invoices screen's own "all documents" query already reads; `undefined`
+ * means that count has not loaded yet, and this assumes true rather than
+ * flashing the first-invoice state on a workspace that has plenty.
+ */
+export function hasAnyDocuments(total: number | undefined): boolean {
+  return total === undefined ? true : total > 0;
+}
+
+export const NOTHING_OUTSTANDING_TITLE = "Nothing outstanding";
+export const NOTHING_OUTSTANDING_DESCRIPTION = "Every invoice you have sent has been paid.";
+export const NO_INVOICES_YET_TITLE = "No invoices yet";
+export const NO_INVOICES_YET_DESCRIPTION =
+  "An invoice is the bill you send when the work is done. Raise one from a job, or start one here.";
+
+/**
+ * The words for the Unpaid tab's empty state. "Nothing outstanding" is only
+ * true once at least one invoice has existed to be paid; a workspace that has
+ * never raised one gets the first-invoice state instead (F-LB-11a/b).
+ */
+export function unpaidEmptyCopy(documentsExist: boolean): { title: string; description: string } {
+  return documentsExist
+    ? { title: NOTHING_OUTSTANDING_TITLE, description: NOTHING_OUTSTANDING_DESCRIPTION }
+    : { title: NO_INVOICES_YET_TITLE, description: NO_INVOICES_YET_DESCRIPTION };
+}
