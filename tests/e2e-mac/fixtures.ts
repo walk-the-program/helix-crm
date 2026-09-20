@@ -13,7 +13,8 @@
  *    backup as VACUUM INTO a .tmp then a rename.
  *
  * 2. Every other command. `plugin:dialog|*`, `plugin:fs|*`, `plugin:opener|*`,
- *    `plugin:log|*`, `secret_*`, `leads_fetch`, `copy_in` and `app_paths` are
+ *    `plugin:log|*`, `secret_*`, `leads_fetch`, `copy_in`, `app_paths`,
+ *    `recovery_key_reveal`, `workspace_adopt_backup` and `backup_mirror` are
  *    answered by a `__TAURI_INTERNALS__`-compatible invoke shim installed by
  *    the same init script, so `@tauri-apps/api` and the plugin packages work
  *    unmodified. A test steers them through `window.__helixE2E` and reads back
@@ -328,6 +329,29 @@ function installShim(seed: {
     leads: { leads: [] as unknown[], nextCursor: null as string | null },
     /** Keychain stand-in: "<workspaceId>:<kind>" -> value. */
     secrets: {} as Record<string, string>,
+    /**
+     * What `recovery_key_reveal` answers. A spec overrides the whole object
+     * via `state.recoveryKey = {...}` before opening the panel, the same
+     * pattern `state.leads` already uses for `leads_fetch`.
+     */
+    recoveryKey: {
+      key: "HLX1-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12-AB12",
+      fileText:
+        "Helix CRM recovery key\n======================\n\nHLX1-AB12-AB12-...\n",
+    } as { key: string; fileText: string },
+    /**
+     * `workspace_adopt_backup`'s answer. Set `adoptBackupError` to a plain
+     * `{code, message}` object to make it reject the way the real Rust
+     * command does (a rejected `AppResult<T>` is never an `Error`); leave it
+     * `null` (the default) for it to resolve with `adoptBackupResult`.
+     */
+    adoptBackupError: null as { code: string; message: string } | null,
+    adoptBackupResult: {
+      workspaceId: "e2e-adopted-workspace",
+      path: "/e2e/workspaces/e2e-adopted-workspace/helix.db",
+    } as { workspaceId: string; path: string },
+    /** `backup_mirror`'s answer. A spec overrides it to exercise the failed-files banner. */
+    mirrorResult: { path: "", copied: 0, removed: 0, failed: [] as string[] },
     /** In-memory files for plugin:fs. */
     files: { ...(seed.files ?? {}) } as Record<string, string>,
     /** Everything the app opened through the OS opener. */
@@ -592,6 +616,24 @@ function installShim(seed: {
       }
       case "app_paths":
         return { appData: state.appData, workspacesDir: state.workspacesDir };
+      case "recovery_key_reveal":
+        // `workspaceName`/`writtenAt` are display strings only (recovery.rs);
+        // the key itself comes from `state.recoveryKey`, steerable per spec.
+        return { key: state.recoveryKey.key, fileText: state.recoveryKey.fileText };
+      case "workspace_adopt_backup":
+        // A refused adopt rejects with a plain `{code, message}` object, the
+        // same shape every other AppError does over the real IPC boundary —
+        // never an Error instance — so a spec can prove the screen reads
+        // `.message` off it rather than printing "[object Object]".
+        if (state.adoptBackupError) return Promise.reject(state.adoptBackupError);
+        return { workspaceId: state.adoptBackupResult.workspaceId, path: state.adoptBackupResult.path };
+      case "backup_mirror":
+        return {
+          path: state.mirrorResult.path || String(a.destDir ?? ""),
+          copied: state.mirrorResult.copied,
+          removed: state.mirrorResult.removed,
+          failed: state.mirrorResult.failed,
+        };
       case "disk_encryption_status":
         // Diagnostics asks the OS whether FileVault or BitLocker is on. There
         // is no OS here, and `encrypted: null` is the command's own honest
