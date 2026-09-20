@@ -60,11 +60,6 @@ const KIND_OPTIONS: { value: TemplateKind; label: string }[] = [
   { value: "email", label: "Email" },
 ];
 
-/** Every field the editor can insert, spelled out once for the footnote. */
-const MERGE_FIELDS_FOOTNOTE = MERGE_FIELDS.map(
-  (field) => `{{${field}}} (${MERGE_FIELD_LABELS[field]})`,
-).join("  ·  ");
-
 /** The first ~70 characters of a body, flattened to one line for a row. */
 function bodyPreview(body: string): string {
   const flat = body.replace(/\s+/g, " ").trim();
@@ -532,7 +527,6 @@ export function TemplatesScreen() {
             templates={emailTemplates}
             emptyTitle="No email templates yet"
             emptyDescription="Add one for the email you send most - a quote, a thank you."
-            footnote={`Merge fields: ${MERGE_FIELDS_FOOTNOTE}`}
             onMove={(template, direction) => void move(emailTemplates, template, direction)}
             onEdit={openEdit}
             onDelete={setDeletingTemplate}
