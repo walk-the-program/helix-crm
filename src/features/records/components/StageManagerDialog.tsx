@@ -48,6 +48,7 @@ export function StageManagerDialog(props: {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [sweepCandidates, setSweepCandidates] = useState<Stage[] | null>(null);
   const [sweepMessage, setSweepMessage] = useState<string | null>(null);
+  const [followUpErrors, setFollowUpErrors] = useState<Record<string, string>>({});
 
   const { data: summary } = useStageSummary(pipelineId);
   const dealCountByStage = new Map((summary ?? []).map((row) => [row.stageId, row.dealCount]));
@@ -60,6 +61,7 @@ export function StageManagerDialog(props: {
       setDeleteError(null);
       setSweepCandidates(null);
       setSweepMessage(null);
+      setFollowUpErrors({});
     }
   }, [props.open]);
 
@@ -125,6 +127,55 @@ export function StageManagerDialog(props: {
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * The per-stage follow-up rule (LR-PX-C, PART 3): "After N days here,
+   * remind me to …". Both fields are read straight off the row's own DOM
+   * (the same uncontrolled, read-on-blur style the Name and Quiet days
+   * fields above already use in this dialog) so one function can validate
+   * the pair together, whichever of the two just lost focus.
+   *
+   * Empty days means no rule, full stop - `runStageEntered` in
+   * db/repos/automations.ts already treats `followUpDays === null` as "do
+   * nothing," so clearing the days field is always safe. The one state this
+   * refuses is days set with no title: a rule that cannot say anything is not
+   * a rule, it is a task with an empty title that would silently do nothing,
+   * so this is a refusal-with-a-message rather than a silent clear of the
+   * days - the owner just typed a number and deserves to know why it did not
+   * take, not to have it vanish.
+   */
+  function commitFollowUp(stage: Stage, row: HTMLElement | null) {
+    if (!row) return;
+    const daysEl = row.querySelector<HTMLInputElement>('[data-role="followup-days"]');
+    const titleEl = row.querySelector<HTMLInputElement>('[data-role="followup-title"]');
+    const daysRaw = (daysEl?.value ?? "").trim();
+    const titleRaw = (titleEl?.value ?? "").trim();
+    const parsedDays = daysRaw === "" ? NaN : Math.trunc(Number(daysRaw));
+    const nextDays = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : null;
+    const nextTitle = titleRaw.length > 0 ? titleRaw : null;
+
+    if (nextDays !== null && nextTitle === null) {
+      setFollowUpErrors((prev) => ({
+        ...prev,
+        [stage.id]: "Say what the reminder should say, or clear the days to turn this off.",
+      }));
+      return;
+    }
+
+    setFollowUpErrors((prev) => {
+      if (!(stage.id in prev)) return prev;
+      const next = { ...prev };
+      delete next[stage.id];
+      return next;
+    });
+
+    if (nextDays === stage.followUpDays && nextTitle === stage.followUpTitle) return;
+
+    void guard(
+      () => stagesRepo.update(stage.id, { followUpDays: nextDays, followUpTitle: nextTitle }),
+      "That follow-up did not save.",
+    );
   }
 
   async function openSweep() {
@@ -213,103 +264,143 @@ export function StageManagerDialog(props: {
           {ordered.map((stage, index) => (
             <li
               key={stage.id}
-              className="flex flex-wrap items-center gap-[var(--space-2)] border-b border-[var(--color-border)] pb-[var(--space-3)] last:border-0"
+              className="flex flex-col gap-[var(--space-2)] border-b border-[var(--color-border)] pb-[var(--space-3)] last:border-0"
             >
-              <div className="min-w-[180px] flex-1">
-                <Input
-                  id={`stage-name-${stage.id}`}
-                  aria-label={`Name of the ${stage.name} stage`}
-                  defaultValue={stage.name}
-                  onBlur={(event) => {
-                    const next = event.target.value.trim();
-                    if (next.length === 0 || next === stage.name) return;
-                    void guard(
-                      () => stagesRepo.update(stage.id, { name: next }),
-                      "That name did not save.",
-                    );
-                  }}
-                />
-              </div>
-
-              <div className="w-[160px]">
-                <div className="flex items-center gap-[var(--space-2)]">
-                  <span
-                    className="h-[7px] w-[7px] shrink-0"
-                    style={{ background: stage.color }}
-                    aria-hidden="true"
-                  />
-                  <Select
-                    id={`stage-colour-${stage.id}`}
-                    ariaLabel={`Colour for ${stage.name}`}
-                    value={stage.color}
-                    options={
-                      STAGE_RAMP.some((option) => option.value === stage.color)
-                        ? STAGE_RAMP
-                        : [...STAGE_RAMP, { value: stage.color, label: "Current colour" }]
-                    }
-                    onValueChange={(colour) =>
+              <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+                <div className="min-w-[180px] flex-1">
+                  <Input
+                    id={`stage-name-${stage.id}`}
+                    aria-label={`Name of the ${stage.name} stage`}
+                    defaultValue={stage.name}
+                    onBlur={(event) => {
+                      const next = event.target.value.trim();
+                      if (next.length === 0 || next === stage.name) return;
                       void guard(
-                        () => stagesRepo.update(stage.id, { color: colour }),
-                        "That colour did not save.",
-                      )
-                    }
+                        () => stagesRepo.update(stage.id, { name: next }),
+                        "That name did not save.",
+                      );
+                    }}
+                  />
+                </div>
+
+                <div className="w-[160px]">
+                  <div className="flex items-center gap-[var(--space-2)]">
+                    <span
+                      className="h-[7px] w-[7px] shrink-0"
+                      style={{ background: stage.color }}
+                      aria-hidden="true"
+                    />
+                    <Select
+                      id={`stage-colour-${stage.id}`}
+                      ariaLabel={`Colour for ${stage.name}`}
+                      value={stage.color}
+                      options={
+                        STAGE_RAMP.some((option) => option.value === stage.color)
+                          ? STAGE_RAMP
+                          : [...STAGE_RAMP, { value: stage.color, label: "Current colour" }]
+                      }
+                      onValueChange={(colour) =>
+                        void guard(
+                          () => stagesRepo.update(stage.id, { color: colour }),
+                          "That colour did not save.",
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="w-[110px]">
+                  <Input
+                    id={`stage-quiet-${stage.id}`}
+                    aria-label={`Quiet days for ${stage.name}`}
+                    type="number"
+                    min={0}
+                    defaultValue={stage.quietDays}
+                    onBlur={(event) => {
+                      const next = Number(event.target.value);
+                      if (!Number.isFinite(next) || next < 0 || next === stage.quietDays) return;
+                      void guard(
+                        () => stagesRepo.update(stage.id, { quietDays: Math.trunc(next) }),
+                        "That did not save.",
+                      );
+                    }}
+                  />
+                </div>
+
+                <div
+                  className="w-[70px] tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                  aria-label={`${dealCountByStage.get(stage.id) ?? 0} deals in ${stage.name}`}
+                >
+                  {dealCountByStage.get(stage.id) ?? 0}
+                </div>
+
+                <div className="flex items-center gap-[var(--space-1)]">
+                  <IconButton
+                    label={`Move ${stage.name} earlier`}
+                    size="sm"
+                    disabled={index === 0 || busy}
+                    icon={<ArrowUp size={16} weight="bold" aria-hidden="true" />}
+                    onClick={() => void move(stage, -1)}
+                  />
+                  <IconButton
+                    label={`Move ${stage.name} later`}
+                    size="sm"
+                    disabled={index === ordered.length - 1 || busy}
+                    icon={<ArrowDown size={16} weight="bold" aria-hidden="true" />}
+                    onClick={() => void move(stage, 1)}
+                  />
+                  <IconButton
+                    label={`Delete ${stage.name}`}
+                    size="sm"
+                    variant="danger"
+                    disabled={ordered.length <= 1 || busy}
+                    icon={<Trash2 size={16} weight="bold" aria-hidden="true" />}
+                    onClick={() => {
+                      setDeleting(stage);
+                      setMoveTarget("");
+                      setDeleteError(null);
+                    }}
                   />
                 </div>
               </div>
 
-              <div className="w-[110px]">
+              <div
+                className="flex w-full flex-wrap items-center gap-[var(--space-2)] pl-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                data-followup-row=""
+                data-testid={`stage-followup-${stage.id}`}
+              >
+                <span>After</span>
                 <Input
-                  id={`stage-quiet-${stage.id}`}
-                  aria-label={`Quiet days for ${stage.name}`}
+                  aria-label={`Days in ${stage.name} before the follow-up`}
                   type="number"
                   min={0}
-                  defaultValue={stage.quietDays}
-                  onBlur={(event) => {
-                    const next = Number(event.target.value);
-                    if (!Number.isFinite(next) || next < 0 || next === stage.quietDays) return;
-                    void guard(
-                      () => stagesRepo.update(stage.id, { quietDays: Math.trunc(next) }),
-                      "That did not save.",
-                    );
-                  }}
+                  className="w-16"
+                  data-role="followup-days"
+                  defaultValue={stage.followUpDays ?? ""}
+                  onBlur={(event) =>
+                    commitFollowUp(stage, event.currentTarget.closest<HTMLElement>("[data-followup-row]"))
+                  }
+                />
+                <span>days here, remind me to</span>
+                <Input
+                  aria-label={`What the ${stage.name} follow-up says`}
+                  placeholder="Call to check in"
+                  className="min-w-[200px] flex-1"
+                  data-role="followup-title"
+                  defaultValue={stage.followUpTitle ?? ""}
+                  onBlur={(event) =>
+                    commitFollowUp(stage, event.currentTarget.closest<HTMLElement>("[data-followup-row]"))
+                  }
                 />
               </div>
-
-              <div
-                className="w-[70px] tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-                aria-label={`${dealCountByStage.get(stage.id) ?? 0} deals in ${stage.name}`}
-              >
-                {dealCountByStage.get(stage.id) ?? 0}
-              </div>
-
-              <div className="flex items-center gap-[var(--space-1)]">
-                <IconButton
-                  label={`Move ${stage.name} earlier`}
-                  size="sm"
-                  disabled={index === 0 || busy}
-                  icon={<ArrowUp size={16} weight="bold" aria-hidden="true" />}
-                  onClick={() => void move(stage, -1)}
-                />
-                <IconButton
-                  label={`Move ${stage.name} later`}
-                  size="sm"
-                  disabled={index === ordered.length - 1 || busy}
-                  icon={<ArrowDown size={16} weight="bold" aria-hidden="true" />}
-                  onClick={() => void move(stage, 1)}
-                />
-                <IconButton
-                  label={`Delete ${stage.name}`}
-                  size="sm"
-                  variant="danger"
-                  disabled={ordered.length <= 1 || busy}
-                  icon={<Trash2 size={16} weight="bold" aria-hidden="true" />}
-                  onClick={() => {
-                    setDeleting(stage);
-                    setMoveTarget("");
-                    setDeleteError(null);
-                  }}
-                />
-              </div>
+              {followUpErrors[stage.id] ? (
+                <p
+                  role="alert"
+                  className="w-full pl-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-danger-ink)]"
+                >
+                  {followUpErrors[stage.id]}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

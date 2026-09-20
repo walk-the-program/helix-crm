@@ -14,6 +14,7 @@ import type { FeatureModule } from "@/app/feature";
 import { NAV_ORDER, lazyScreen } from "@/app/feature";
 import { BarChart3 } from "@/ui/icons";
 import { OverviewScreen } from "@/features/leads/screens/OverviewScreen";
+import { SourcesReportScreen } from "@/features/leads/screens/SourcesReportScreen";
 import { start as startPoller } from "@/features/leads/poller";
 
 /**
@@ -51,7 +52,13 @@ export { OverviewScreen } from "@/features/leads/screens/OverviewScreen";
  * still works, and the only symptom is a megabyte back on launch. Nothing
  * imports them today (checked). If something ever needs one, import the screen
  * module directly and think about what that does to the boot download.
+ *
+ * SourcesReportScreen (LR-PX-C) is the one exception: it draws no chart, so it
+ * carries none of the recharts weight the three above do, and it IS imported,
+ * statically, right below - see the doc comment on the screen itself for why
+ * that is the right call rather than a fourth `lazyScreen`.
  */
+export { SourcesReportScreen } from "@/features/leads/screens/SourcesReportScreen";
 export { ReportsFrame, ReportTabs, REPORT_TABS } from "@/features/leads/components/ReportsFrame";
 export type { ReportTabId } from "@/features/leads/components/ReportsFrame";
 export { usePollStatus } from "@/features/leads/hooks";
@@ -76,6 +83,7 @@ export const feature: FeatureModule = {
     { path: "/reports", element: <OverviewScreen /> },
     { path: "/reports/revenue", element: <RevenueScreenLazy /> },
     { path: "/reports/deals", element: <DealsReportScreenLazy /> },
+    { path: "/reports/sources", element: <SourcesReportScreen /> },
     { path: "/reports/people", element: <PeopleReportScreenLazy /> },
     // "/reports/receivables" is the invoices feature's own route; the tab
     // strip links to it and the sidebar keeps Reports lit on every path

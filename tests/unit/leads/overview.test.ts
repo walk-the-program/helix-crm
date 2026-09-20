@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * OverviewScreen (/reports): the four report groups, their links, and the
+ * OverviewScreen (/reports): the five report groups, their links, and the
  * null / zero-divisor cases that must render "—" rather than 0, "NaN%" or
  * "null" (round 3, criterion 15).
  *
@@ -88,7 +88,7 @@ function loaded(data: OverviewBundle) {
 }
 
 describe("OverviewScreen", () => {
-  it("renders all four groups, each linking to its own report tab", () => {
+  it("renders all five groups, each linking to its own report tab", () => {
     loaded(bundle());
     renderOverview();
 
@@ -96,6 +96,12 @@ describe("OverviewScreen", () => {
     // assertion below is itself proof each of these exists exactly once.
     screen.getByRole("heading", { name: "Revenue" });
     screen.getByRole("heading", { name: "Deals" });
+    // The Sources group (LR-PX-C) queries sourcePerformance itself, which has
+    // no database behind it in this render - same as the vocabulary read the
+    // doc comment on overview.fixtures.tsx already calls out - so it falls
+    // back to its own "nothing yet" line rather than a figure. The heading
+    // and the link to the full report render regardless.
+    screen.getByRole("heading", { name: "Sources" });
     screen.getByRole("heading", { name: "Contacts and companies" });
     screen.getByRole("heading", { name: "Open pipeline" });
 
@@ -107,9 +113,15 @@ describe("OverviewScreen", () => {
     const links = screen.getAllByRole("link", { name: "See the detail" });
     const hrefs = links.map((link) => link.getAttribute("href")).sort();
     // Revenue -> /reports/revenue, Deals and Open pipeline -> /reports/deals,
-    // Contacts and companies -> /reports/people.
+    // Sources -> /reports/sources, Contacts and companies -> /reports/people.
     expect(hrefs).toEqual(
-      ["/reports/deals", "/reports/deals", "/reports/people", "/reports/revenue"].sort(),
+      [
+        "/reports/deals",
+        "/reports/deals",
+        "/reports/people",
+        "/reports/revenue",
+        "/reports/sources",
+      ].sort(),
     );
   });
 

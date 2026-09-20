@@ -23,6 +23,7 @@ import { BackupsScreen } from "@/features/data";
 import { OverviewScreen } from "@/features/settings/components/OverviewScreen";
 import { WorkspaceScreen } from "@/features/settings/components/WorkspaceScreen";
 import { VocabularyScreen } from "@/features/settings/components/VocabularyScreen";
+import { AutomationsScreen } from "@/features/settings/components/AutomationsScreen";
 import { TagsScreen } from "@/features/settings/components/TagsScreen";
 import { FieldsScreen } from "@/features/settings/components/FieldsScreen";
 import { AppearanceScreen } from "@/features/settings/components/AppearanceScreen";
@@ -36,6 +37,7 @@ import {
   toggleTheme,
   workspacePicker,
 } from "@/features/settings/components/SettingsHost";
+import { startAutomations } from "@/features/settings/lib/automationBoot";
 
 export const feature: FeatureModule = {
   id: "settings",
@@ -43,6 +45,7 @@ export const feature: FeatureModule = {
     { path: "/settings", element: <OverviewScreen /> },
     { path: "/settings/workspace", element: <WorkspaceScreen /> },
     { path: "/settings/vocabulary", element: <VocabularyScreen /> },
+    { path: "/settings/automations", element: <AutomationsScreen /> },
     { path: "/settings/tags", element: <TagsScreen /> },
     { path: "/settings/fields", element: <FieldsScreen /> },
     { path: "/settings/appearance", element: <AppearanceScreen /> },
@@ -120,6 +123,14 @@ export const feature: FeatureModule = {
    * instead, and the shell binds mod+, and "?" from the commands above.
    */
   overlays: () => <SettingsHost />,
+  async onBoot() {
+    // A failure here must never take the app down; boot.ts already catches
+    // it (runFeatureBoot), the same guard the leads feature's onBoot relies
+    // on for its own poller. startAutomations() additionally catches its own
+    // daily-sweep failure internally, so only a truly unexpected error (the
+    // status-hook registration itself) would ever reach boot.ts's catch.
+    await startAutomations();
+  },
 };
 
 export default feature;

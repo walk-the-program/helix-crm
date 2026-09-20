@@ -18,6 +18,7 @@
  */
 import type { IconType } from "@/ui/icons";
 import {
+  Alarm,
   ArrowsClockwise,
   Article,
   Buildings,
@@ -141,6 +142,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: ArrowsClockwise,
     group: "records",
     external: true,
+  },
+  {
+    id: "automations",
+    title: "Automations",
+    description: "Switch Helix's follow-up tasks on and off, and word them yourself.",
+    to: "/settings/automations",
+    icon: Alarm,
+    group: "records",
   },
   {
     id: "services",

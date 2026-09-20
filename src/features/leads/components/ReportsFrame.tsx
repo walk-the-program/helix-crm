@@ -27,15 +27,21 @@ import { useVocabulary } from "@/app/vocabulary";
 import { PeriodPicker } from "@/features/leads/components/PeriodPicker";
 import type { Period } from "@/lib/periods";
 
-export type ReportTabId = "overview" | "revenue" | "deals" | "people" | "receivables";
+export type ReportTabId = "overview" | "revenue" | "deals" | "sources" | "people" | "receivables";
 
 /**
- * The five views, in the order the owner reads them: the summary, then the
- * money, then the work, then the people, then who owes.
+ * The six views, in the order the owner reads them: the summary, then the
+ * money, then the work, where that work came from, then the people, then who
+ * owes.
  *
  * Receivables is the invoices feature's screen at its own route. It is listed
- * here because it is one of the five reports as far as the owner is concerned,
+ * here because it is one of the reports as far as the owner is concerned,
  * and the sidebar keeps Reports lit on every path under /reports.
+ *
+ * Sources (LR-PX-C) sits right after Deals and before Contacts and companies:
+ * it answers "which lead source pays", which is a question about the work in
+ * Deals, not about the people in the next tab - the owner reads it as the
+ * second half of the same thought.
  *
  * The Deals tab's label is the ONLY one the workspace renames: a landscaping
  * setup calls them jobs everywhere else in the product and this tab strip was
@@ -47,11 +53,12 @@ export const REPORT_TABS: { id: ReportTabId; label: string; to: string }[] = [
   { id: "overview", label: "Overview", to: "/reports" },
   { id: "revenue", label: "Revenue", to: "/reports/revenue" },
   { id: "deals", label: "Deals", to: "/reports/deals" },
+  { id: "sources", label: "Sources", to: "/reports/sources" },
   { id: "people", label: "Contacts and companies", to: "/reports/people" },
   { id: "receivables", label: "Receivables", to: "/reports/receivables" },
 ];
 
-/** The five tabs with the Deals one named the way this workspace names them. */
+/** The six tabs with the Deals one named the way this workspace names them. */
 export function useReportTabs(): typeof REPORT_TABS {
   const vocabulary = useVocabulary();
   return REPORT_TABS.map((tab) =>

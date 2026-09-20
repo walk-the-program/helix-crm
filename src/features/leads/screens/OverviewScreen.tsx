@@ -21,12 +21,14 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, Spinner } from "@/ui";
 import { useFormats } from "@/app/formats";
 import { periodFor } from "@/lib/periods";
 import type { Period } from "@/lib/periods";
 import { useOverview } from "@/features/leads/lib/reportKeys";
 import type { OverviewBundle } from "@/db/repos/reports";
+import { sourcePerformance } from "@/db/repos/sourceReport";
 import { ReportsFrame } from "@/features/leads/components/ReportsFrame";
 
 function formatPercent(rate: number | null): string {
@@ -186,6 +188,46 @@ function OpenPipelineGroup(props: { openByStage: OverviewBundle["openByStage"] }
 }
 
 /* -------------------------------------------------------------------------- */
+/* the best-paying source (LR-PX-C)                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "See which lead source actually pays," one figure at a time: the source
+ * with the most won value in this period, and what it won. Queried under the
+ * same `["reports", "sources", ...]` key SourcesReportScreen uses, so
+ * following the link to the full report is warm from cache rather than a
+ * second wait.
+ */
+function SourcesGroup(props: { period: Period }) {
+  const { period } = props;
+  const formats = useFormats();
+  const query = useQuery({
+    queryKey: ["reports", "sources", period.from, period.to] as const,
+    queryFn: () => sourcePerformance(period),
+  });
+  const top = query.data?.[0];
+
+  return (
+    <GroupCard title="Sources" href="/reports/sources">
+      {top ? (
+        <div className="flex flex-wrap items-end gap-[var(--space-8)]">
+          <Figure label="Best source" value={top.sourceName} sizeClass="text-[length:var(--text-2xl)]" />
+          <Figure
+            label="Won value"
+            value={formats.moneyOrDash(top.wonValueCents)}
+            sizeClass="text-[length:var(--text-2xl)]"
+          />
+        </div>
+      ) : (
+        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          No leads with a source yet.
+        </p>
+      )}
+    </GroupCard>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* the page                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -206,8 +248,8 @@ function isNothingYet(data: OverviewBundle): boolean {
   return noDeals && noPeople && noMoney;
 }
 
-function OverviewContent(props: { data: OverviewBundle }) {
-  const { data } = props;
+function OverviewContent(props: { data: OverviewBundle; period: Period }) {
+  const { data, period } = props;
   const formats = useFormats();
 
   if (isNothingYet(data)) {
@@ -245,6 +287,8 @@ function OverviewContent(props: { data: OverviewBundle }) {
           <MiniFigure label="Median days to win" value={formatDays(deals.medianDaysToWin)} />
         </div>
       </GroupCard>
+
+      <SourcesGroup period={period} />
 
       <GroupCard title="Contacts and companies" href="/reports/people">
         <div className="flex flex-wrap gap-[var(--space-6)]">
@@ -292,7 +336,7 @@ export function OverviewScreen() {
           }
         />
       ) : query.data ? (
-        <OverviewContent data={query.data} />
+        <OverviewContent data={query.data} period={period} />
       ) : null}
     </ReportsFrame>
   );
