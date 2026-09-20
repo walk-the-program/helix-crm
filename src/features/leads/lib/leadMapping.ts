@@ -14,6 +14,21 @@ import type { Lead } from "@/features/leads/lib/types";
 export const WEBSITE_SOURCE = "Website";
 
 /**
+ * True when `value` is an id worth keying a deal on: a string with something
+ * in it. `Lead.id` is typed as `string`, but nothing at the wire enforces
+ * that - and an id of `undefined`, `null` or `""` used to flow straight into
+ * `externalIdFor`, where every id-less lead landed on the same
+ * `"<origin>:undefined"` bucket and swallowed each other (CPO audit, F-LB-8).
+ * The site contract's shape guard (`leadsFetch.assertValidLeadPage`) is what
+ * keeps such a lead out of a real poll; this is the same rule, kept here so
+ * `applyLeadPage` can check it again on its own rather than trusting a caller
+ * it cannot see.
+ */
+export function hasUsableId(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
  * The idempotency key. One deal per lead per site: a repeated poll finds the
  * row and skips it, so re-polling is free.
  */
@@ -91,6 +106,28 @@ export function systemActivityBody(lead: Lead): string {
   if (message.length > 0) lines.push(`Message: ${message}`);
   if (pageUrl.length > 0) lines.push(`Page: ${pageUrl}`);
   return lines.join("\n");
+}
+
+/**
+ * The system activity's first line on a re-poll that changed something. The
+ * ONLY line an unaffected re-poll never writes (CPO audit, F-LB-17): a re-poll
+ * whose lead is byte-for-byte what is already on file writes nothing, so this
+ * string appearing on a deal's timeline always means the website actually
+ * sent something new.
+ */
+export const LEAD_UPDATE_INTRO = "Your website sent an update to this lead.";
+
+/**
+ * Everything after a system activity's first line: the Service/Message/Page
+ * detail, or "" when there was none. Both the original "Lead from the
+ * website." entry and a later "Your website sent an update" one share this
+ * shape, so slicing either the same way and comparing the result is how a
+ * re-poll tells "nothing changed" from "the site corrected something"
+ * (F-LB-17) without having to parse the intro line back out.
+ */
+export function activityDetail(body: string): string {
+  const breakAt = body.indexOf("\n");
+  return breakAt === -1 ? "" : body.slice(breakAt + 1);
 }
 
 export type MappedLead = {

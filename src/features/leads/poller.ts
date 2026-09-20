@@ -34,7 +34,11 @@ import {
   statusFromError,
 } from "@/features/leads/lib/backoff";
 import { applyLeadPage, prepareApply } from "@/features/leads/lib/applyLeads";
-import { invokeLeadsFetch, MAX_PAGE } from "@/features/leads/lib/leadsFetch";
+import {
+  assertValidLeadPage,
+  invokeLeadsFetch,
+  MAX_PAGE,
+} from "@/features/leads/lib/leadsFetch";
 import { pollLog } from "@/features/leads/lib/log";
 import {
   currentWorkspaceId,
@@ -129,10 +133,18 @@ export type TickOutcome = {
   created: number;
   skipped: number;
   pages: number;
+  /** Leads a page carried with no usable id - dropped, never a deal (F-LB-8). */
+  invalid: number;
   error?: PollError;
 };
 
-const EMPTY_OUTCOME: TickOutcome = { ran: false, created: 0, skipped: 0, pages: 0 };
+const EMPTY_OUTCOME: TickOutcome = {
+  ran: false,
+  created: 0,
+  skipped: 0,
+  pages: 0,
+  invalid: 0,
+};
 
 /**
  * One poll. Safe to call at any time: it refuses to overlap itself, refuses
@@ -175,6 +187,7 @@ export async function tick(
   let created = 0;
   let skipped = 0;
   let pages = 0;
+  let invalid = 0;
 
   try {
     const context = await prepareApply();
@@ -195,6 +208,12 @@ export async function tick(
       const page = await fetchLeads(cursor, pageSize);
       pages += 1;
 
+      // Checked before anything else touches this page: a malformed shape
+      // must not advance the cursor or be reported as a success (CPO audit,
+      // F-LB-1). Thrown here, it falls straight into the catch below and
+      // through the same failure path a network or auth error takes.
+      assertValidLeadPage(page);
+
       publish({ phase: "applying" });
       const applied = await applyLeadPage(page.leads, origin, {
         ...context,
@@ -203,6 +222,7 @@ export async function tick(
       });
       created += applied.created;
       skipped += applied.skipped;
+      invalid += applied.invalid;
 
       // The cursor is saved after every page, so an interrupted run resumes
       // instead of re-reading from the beginning.
@@ -229,12 +249,12 @@ export async function tick(
     });
     if (created > 0) invalidateAffectedQueries();
     pollLog.info(
-      `poll end (${trigger}) pages=${pages} created=${created} skipped=${skipped}`,
+      `poll end (${trigger}) pages=${pages} created=${created} skipped=${skipped} invalid=${invalid}`,
     );
-    return { ran: true, created, skipped, pages };
+    return { ran: true, created, skipped, pages, invalid };
   } catch (err) {
     const error = await recordFailure(err, syncKey);
-    return { ran: true, created, skipped, pages, error };
+    return { ran: true, created, skipped, pages, invalid, error };
   } finally {
     running = false;
     if (status.phase !== "stopped") rescheduleAfterTick();
@@ -278,7 +298,7 @@ function invalidateAffectedQueries(): void {
  */
 async function recordFailure(err: unknown, syncKey: string): Promise<PollError> {
   const stat = statusFromError(err);
-  const raw = err instanceof Error ? err.message : String(err);
+  const raw = messageFrom(err);
 
   if (isAuthStatus(stat)) {
     const error: PollError = {
@@ -318,6 +338,25 @@ async function recordFailure(err: unknown, syncKey: string): Promise<PollError> 
     `LeadPollNetworkError (${consecutiveFailures}/${FAILURES_BEFORE_BANNER}): ${raw}`,
   );
   return error;
+}
+
+/**
+ * The readable text out of whatever a rejected `invoke()` carries.
+ *
+ * Tauri v2 rejects a command with a plain `{ code, message }` object, not an
+ * `Error` (docs/CONTRACTS.md's binding facts for this task) - so
+ * `err instanceof Error` was false for the one shape this poller sees the
+ * most, and `String(err)` on a plain object gives "[object Object]". Settings
+ * → Website was showing "LeadPollAuthError: HTTP 401 - [object Object]"
+ * instead of the site's real answer (CPO audit, F-LB-6).
+ */
+function messageFrom(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return String(err);
 }
 
 async function saveError(syncKey: string, message: string): Promise<void> {
