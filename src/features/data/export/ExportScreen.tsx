@@ -104,8 +104,9 @@ export function ExportScreen() {
                       Everything, as one file
                     </span>
                     <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                      One .zip containing a CSV for every entity — contacts, companies, deals,
-                      tasks and activities — plus a full JSON dump of the whole workspace.
+                      One .zip with a CSV for every table in your workspace — contacts and
+                      companies, deals, invoices and quotes, services, tags and custom fields
+                      among them — plus one JSON file that is the complete copy.
                     </span>
                   </div>
                   <Button
