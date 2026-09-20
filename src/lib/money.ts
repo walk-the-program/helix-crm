@@ -27,6 +27,9 @@ export function formatMoneyCompact(cents: number, currency?: string, locale?: st
       style: "currency",
       currency: currency ?? DEFAULT_CURRENCY,
       notation: "compact",
+      // Pinned on both ends: ICU otherwise clamps the currency default of two
+      // decimals down to one and prints "$120.0K" on some Node builds.
+      minimumFractionDigits: 0,
       maximumFractionDigits: 1,
     }).format(amount);
   } catch {

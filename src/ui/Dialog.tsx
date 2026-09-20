@@ -99,6 +99,9 @@ const FOCUS_FALLBACK = "[data-dialog-focus-fallback]";
  * places focus itself.
  */
 function returnFocus() {
+  // The timer below can outlive its document: a test environment that tears
+  // the DOM down while a dialog is unmounting, for one.
+  if (typeof document === "undefined") return;
   const active = document.activeElement;
   if (active && active !== document.body && document.contains(active)) return;
   const fallback =
