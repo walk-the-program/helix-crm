@@ -211,6 +211,41 @@ export function useWorkspaceIsEmpty() {
   });
 }
 
+/** How many deals are open, for the sections that have to say so honestly. */
+export function useOpenDealCount() {
+  return useQuery({
+    queryKey: [...qk.today(), "open-deal-count"] as const,
+    queryFn: async () => (await dealsRepo.list({ openOnly: true }, { limit: 1 })).total,
+  });
+}
+
+/**
+ * Whether Today still has nothing to show — which is not the same question as
+ * whether the workspace is empty.
+ *
+ * `workspaceIsEmpty` is true until the first row of any kind exists, so saving
+ * one contact flipped Today from the three starter cards to six empty panels:
+ * "Nothing is due today", "Coming up - nothing", "no new leads", "Every open
+ * deal is moving". The owner did the thing the screen asked and got a blanker
+ * screen than before, with no link to the person he had just created (CPO
+ * audit, F-LA-6). A workspace of contacts and nothing else still needs the
+ * starter cards, so the test is whether anything Today actually reports on
+ * exists yet: a task, an open deal, or a logged activity.
+ */
+export function useTodayIsUnstarted() {
+  return useQuery({
+    queryKey: [...qk.today(), "unstarted"] as const,
+    queryFn: async () => {
+      const [tasks, deals, activities] = await Promise.all([
+        tasksRepo.list({}, { limit: 1 }),
+        dealsRepo.list({ openOnly: true }, { limit: 1 }),
+        activitiesRepo.list({}, { limit: 1 }),
+      ]);
+      return tasks.total === 0 && deals.total === 0 && activities.total === 0;
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The mutations Today's rows fire
 // ---------------------------------------------------------------------------

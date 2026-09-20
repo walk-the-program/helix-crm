@@ -9,9 +9,16 @@
  * plus full-strength ink is the whole of the emphasis — there is no attention
  * colour on this screen (§5).
  *
- * A brand-new workspace gets a different screen entirely. Four empty panels
- * stacked up is not a first impression, it is a failure. That screen shows the
- * three things that fill Today and nothing else, with one primary block on it.
+ * A workspace that has not started yet gets a different screen entirely. Four
+ * empty panels stacked up is not a first impression, it is a failure. That
+ * screen shows the three things that fill Today and nothing else, with one
+ * primary block on it.
+ *
+ * "Has not started" is deliberately not "has no rows": saving one contact used
+ * to flip this screen to the empty panels, so the owner did what the card asked
+ * and got a blanker screen than before (CPO audit, F-LA-6). The starter cards
+ * stay until something Today reports on exists - a task, an open job, or a
+ * logged activity.
  *
  * Under both of those sits the one row that only a workspace which took "Show
  * me an example" during setup ever sees: the way back out of the sample data.
@@ -35,7 +42,7 @@ import { GoneQuietSection } from "@/features/today/sections/GoneQuiet";
 import { RecentActivitySection } from "@/features/today/sections/RecentActivity";
 import { ConnectSiteCard } from "@/features/today/sections/ConnectSite";
 import { openSearch, SEARCH_SHORTCUT } from "@/features/today/search/overlay";
-import { useWorkspaceIsEmpty } from "@/features/today/lib/useToday";
+import { useTodayIsUnstarted } from "@/features/today/lib/useToday";
 import { RemoveSampleDataButton, useHasSampleData } from "@/features/onboarding";
 import { UnpaidInvoicesSection } from "@/features/invoices";
 
@@ -203,7 +210,7 @@ function FirstRun() {
 }
 
 export function TodayScreen() {
-  const { data: isEmpty, isLoading } = useWorkspaceIsEmpty();
+  const { data: isEmpty, isLoading } = useTodayIsUnstarted();
 
   return (
     <div className="flex flex-col">

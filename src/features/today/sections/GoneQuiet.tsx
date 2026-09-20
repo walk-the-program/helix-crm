@@ -28,7 +28,9 @@ import {
   useSnoozeQuietDeal,
   type QuietRow,
 } from "@/features/today/lib/useToday";
+import { useOpenDealCount } from "@/features/today/lib/useToday";
 import { formatMoney } from "@/lib/money";
+import { useVocabulary } from "@/app/vocabulary";
 
 function rowName(row: QuietRow): string {
   const contact = `${row.deal.contactFirstName ?? ""} ${row.deal.contactLastName ?? ""}`.trim();
@@ -36,7 +38,9 @@ function rowName(row: QuietRow): string {
 }
 
 export function GoneQuietSection() {
+  const vocabulary = useVocabulary();
   const { data, isLoading } = useGoneQuiet();
+  const { data: openCount } = useOpenDealCount();
   const logCall = useLogCall();
   const snooze = useSnoozeQuietDeal();
   const [target, setTarget] = useState<LogCallTarget | null>(null);
@@ -49,10 +53,18 @@ export function GoneQuietSection() {
         id="gone-quiet"
         title="Gone quiet"
         count={rows.length}
-        note="Open deals with no activity past their stage's limit"
+        note={`Open ${vocabulary.lowerMany} with no activity past their stage's limit`}
         isLoading={isLoading}
         isEmpty={rows.length === 0}
-        emptyInline={{ text: "Every open deal is moving." }}
+        emptyInline={{
+          // "Every open job is moving" is vacuously true on a workspace with
+          // no jobs, and reads as a report about work that does not exist
+          // (CPO audit, F-LA-6).
+          text:
+            openCount === 0
+              ? `No open ${vocabulary.lowerMany} yet.`
+              : `Every open ${vocabulary.lower} is moving.`,
+        }}
       >
         {rows.map((row) => {
           const name = rowName(row);
