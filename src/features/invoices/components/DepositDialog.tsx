@@ -120,7 +120,7 @@ export function DepositDialog(props: {
               value={choice}
               onValueChange={setChoice}
               options={PERCENT_OPTIONS}
-              ariaLabel="How much up front"
+              aria-label="How much up front"
             />
           </Field>
 

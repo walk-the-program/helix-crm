@@ -112,7 +112,7 @@ export function MarkPaidDialog(props: {
               value={method}
               onValueChange={setMethod}
               options={PAYMENT_METHODS}
-              ariaLabel="How it was paid"
+              aria-label="How it was paid"
             />
           </Field>
 

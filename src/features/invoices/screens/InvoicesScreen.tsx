@@ -42,6 +42,7 @@ import {
 } from "@/ui";
 import type { Document } from "@/db/repos/documents";
 import { useFormats } from "@/app/formats";
+import { useVocabulary } from "@/app/vocabulary";
 import { useDocuments, useOutstandingSummary } from "@/features/invoices/lib/hooks";
 import {
   customerLabel,
@@ -70,6 +71,7 @@ export function InvoicesScreen() {
   const [search, setSearch] = useState("");
 
   const formats = useFormats();
+  const vocabulary = useVocabulary();
   const { data: summary } = useOutstandingSummary();
 
   const searchFilter = search.trim().length > 0 ? search.trim() : undefined;
@@ -161,7 +163,7 @@ export function InvoicesScreen() {
             onClearSearch={() => setSearch("")}
             empty={
               <EmptyState
-                {...unpaidEmptyCopy(hasAnyDocuments)}
+                {...unpaidEmptyCopy(hasAnyDocuments, vocabulary.lower)}
                 action={
                   hasAnyDocuments ? undefined : (
                     <Button variant="secondary" onClick={() => navigate("/invoices/new")}>
@@ -200,7 +202,7 @@ export function InvoicesScreen() {
             empty={
               <EmptyState
                 title="No quotes yet"
-                description="Raise one from a deal, or start a blank one here."
+                description={`Raise one from a ${vocabulary.lower}, or start a blank one here.`}
                 action={
                   <Button variant="secondary" onClick={() => navigate("/invoices/new")}>
                     New quote
@@ -221,7 +223,7 @@ export function InvoicesScreen() {
             empty={
               <EmptyState
                 title="No invoices yet"
-                description="Create your first invoice, or raise one from a deal."
+                description={`Create your first invoice, or raise one from a ${vocabulary.lower}.`}
                 action={
                   <Button variant="secondary" onClick={() => navigate("/invoices/new")}>
                     New invoice
@@ -310,10 +312,15 @@ function DocumentTable(props: {
     <Table>
       <THead>
         <TR>
-          <TH className="w-[16%]">Number</TH>
-          <TH className="w-[28%]">Customer</TH>
-          <TH className="w-[12%]">Status</TH>
-          <TH className="w-[12%]">Issued</TH>
+          {/* "INV-2026-0002" was truncating to "INV-2026…" at the 1024px
+              floor, hiding the one thing the owner scans for first on this
+              table (rule 1). Status gives up the width it does not need -
+              a badge word ("Sent", "Paid") never needed 12% - and Number
+              takes it. */}
+          <TH className="w-[22%] min-w-[132px]">Number</TH>
+          <TH className="w-[26%]">Customer</TH>
+          <TH className="w-[9%]">Status</TH>
+          <TH className="w-[11%]">Issued</TH>
           <TH className="w-[16%]">Due</TH>
           <TH className="w-[16%]" align="right">Amount</TH>
         </TR>

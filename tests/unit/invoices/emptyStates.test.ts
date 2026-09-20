@@ -6,8 +6,8 @@
 import { describe, it, expect } from "vitest";
 import {
   hasAnyDocuments,
-  NO_INVOICES_YET_DESCRIPTION,
   NO_INVOICES_YET_TITLE,
+  noInvoicesYetDescription,
   NOTHING_OUTSTANDING_DESCRIPTION,
   NOTHING_OUTSTANDING_TITLE,
   unpaidEmptyCopy,
@@ -30,16 +30,22 @@ describe("hasAnyDocuments", () => {
 
 describe("unpaidEmptyCopy", () => {
   it("a workspace that has never raised a document gets the first-invoice state (F-LB-11a)", () => {
-    expect(unpaidEmptyCopy(false)).toEqual({
+    expect(unpaidEmptyCopy(false, "deal")).toEqual({
       title: NO_INVOICES_YET_TITLE,
-      description: NO_INVOICES_YET_DESCRIPTION,
+      description: noInvoicesYetDescription("deal"),
     });
   });
 
   it("a workspace with invoices but none unpaid gets the honest 'all paid' sentence (F-LB-11b)", () => {
-    expect(unpaidEmptyCopy(true)).toEqual({
+    expect(unpaidEmptyCopy(true, "deal")).toEqual({
       title: NOTHING_OUTSTANDING_TITLE,
       description: NOTHING_OUTSTANDING_DESCRIPTION,
     });
+  });
+
+  it("names the workspace's own word for the concept (F-LB-D22) rather than always saying 'job'", () => {
+    expect(unpaidEmptyCopy(false, "job").description).toContain("from a job");
+    expect(unpaidEmptyCopy(false, "quote").description).toContain("from a quote");
+    expect(unpaidEmptyCopy(false, "deal").description).toContain("from a deal");
   });
 });

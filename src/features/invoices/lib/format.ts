@@ -174,18 +174,31 @@ export function hasAnyDocuments(total: number | undefined): boolean {
 export const NOTHING_OUTSTANDING_TITLE = "Nothing outstanding";
 export const NOTHING_OUTSTANDING_DESCRIPTION = "Every invoice you have sent has been paid.";
 export const NO_INVOICES_YET_TITLE = "No invoices yet";
-export const NO_INVOICES_YET_DESCRIPTION =
-  "An invoice is the bill you send when the work is done. Raise one from a job, or start one here.";
+
+/**
+ * "Raise one from a job" / "...a deal" / "...a quote" - whichever word the
+ * workspace has chosen for its `deals` table (F-LB-D22). The sentence used to
+ * say "job" unconditionally, which was wrong the moment a workspace kept the
+ * default "Deals" vocabulary or switched to "Quotes": the one screen that
+ * introduces the concept named it differently from the sidebar that sent the
+ * owner there.
+ */
+export function noInvoicesYetDescription(vocabularyLower: string): string {
+  return `An invoice is the bill you send when the work is done. Raise one from a ${vocabularyLower}, or start one here.`;
+}
 
 /**
  * The words for the Unpaid tab's empty state. "Nothing outstanding" is only
  * true once at least one invoice has existed to be paid; a workspace that has
  * never raised one gets the first-invoice state instead (F-LB-11a/b).
  */
-export function unpaidEmptyCopy(documentsExist: boolean): { title: string; description: string } {
+export function unpaidEmptyCopy(
+  documentsExist: boolean,
+  vocabularyLower: string,
+): { title: string; description: string } {
   return documentsExist
     ? { title: NOTHING_OUTSTANDING_TITLE, description: NOTHING_OUTSTANDING_DESCRIPTION }
-    : { title: NO_INVOICES_YET_TITLE, description: NO_INVOICES_YET_DESCRIPTION };
+    : { title: NO_INVOICES_YET_TITLE, description: noInvoicesYetDescription(vocabularyLower) };
 }
 
 /* -------------------------------------------------------------------------- */

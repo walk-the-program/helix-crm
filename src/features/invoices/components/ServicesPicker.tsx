@@ -176,7 +176,7 @@ export function ServicesPicker(props: {
                       <Checkbox
                         checked={checked}
                         onCheckedChange={(next) => toggle(product, next)}
-                        ariaLabel={product.name}
+                        aria-label={product.name}
                       />
                       <span className="flex-1 truncate text-[length:var(--text-base)] text-[var(--color-text)]">
                         {product.name}

@@ -166,13 +166,6 @@ function lineCents(line: DraftLine): number {
 
 const numericCell = "money text-right";
 
-/**
- * A totals label spans Description, Qty, Unit and Tax so its figure lands
- * under Amount. Four in both modes: the editable table's sixth column is the
- * remove button, which gets its own empty cell after the figure.
- */
-const TOTALS_LABEL_SPAN = 4;
-
 export function DocumentLines(props: {
   lines: DraftLine[];
   onChange?: (lines: DraftLine[]) => void;
@@ -208,6 +201,24 @@ export function DocumentLines(props: {
     formatMoney(cents, currency, locale),
   );
 
+  // The TAX column is a control while the owner is drafting - he needs
+  // somewhere to tick a line taxable before a rate even exists - but on a
+  // locked, sent document it is read-only, and a column of identical "Yes" (or
+  // a $0.00 tax row underneath a column that says every line is taxed) is
+  // noise a rule-1 table should not spend a whole column on. `renderDocument.ts`
+  // already draws the PDF this way: a per-line taxability note appears only
+  // when the document actually mixes taxable and non-taxable lines, and the
+  // totals' own tax row carries it otherwise. The freed width goes back to
+  // Description, which was truncating real service names at 1024px.
+  const showTaxColumn = editable || mixedTax;
+  /**
+   * The totals label spans every column left of Amount so its figure lands
+   * under Amount. Description, Qty, Unit, and Tax when it is showing; the
+   * editable table's extra column is the remove button, which gets its own
+   * empty cell after the figure.
+   */
+  const totalsLabelSpan = showTaxColumn ? 4 : 3;
+
   function patch(key: string, values: Partial<DraftLine>) {
     onChange?.(lines.map((line) => (line.key === key ? { ...line, ...values } : line)));
   }
@@ -222,10 +233,10 @@ export function DocumentLines(props: {
                 was collapsing to the width of the word "Description" - which
                 is what left the two inputs in it too narrow to read what you
                 had typed. */}
-            <TH className="w-[40%]">Description</TH>
+            <TH className={showTaxColumn ? "w-[40%]" : "w-[52%]"}>Description</TH>
             <TH className="w-[72px] min-w-[72px] text-right">Qty</TH>
             <TH className="w-[120px] min-w-[112px] text-right">Unit</TH>
-            <TH className="w-[72px] text-center">Tax</TH>
+            {showTaxColumn ? <TH className="w-[72px] text-center">Tax</TH> : null}
             <TH className="w-[120px] min-w-[104px] text-right">Amount</TH>
             {editable ? <TH className="w-[var(--control-h)]" /> : null}
           </TR>
@@ -235,6 +246,14 @@ export function DocumentLines(props: {
             <TR key={line.key}>
               <TD className={editable ? "h-auto py-[var(--space-3)] align-top" : undefined}>
                 {editable ? (
+                  // The description is the line; the detail is a note about
+                  // it. Two identically-bordered boxes this close together
+                  // used to read as one field wearing a seam - especially in
+                  // compact, where --space-2 is 6px - so only the primary
+                  // input keeps the full field border. The detail row drops
+                  // its border and sits in tertiary ink, closer to a caption
+                  // under the description than a second field beside it
+                  // (round 3 criterion 10: clear separation between the two).
                   <div className="flex flex-col gap-[var(--space-2)]">
                     <Input
                       aria-label="Description"
@@ -246,6 +265,7 @@ export function DocumentLines(props: {
                       aria-label="Detail"
                       value={line.description}
                       placeholder="Detail, if it needs any"
+                      className="border-transparent bg-transparent px-0 text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface)] hover:px-[var(--space-3)] focus-visible:border-[var(--color-border-strong)] focus-visible:bg-[var(--color-surface)] focus-visible:px-[var(--space-3)]"
                       onChange={(event) =>
                         patch(line.key, { description: event.target.value })
                       }
@@ -300,21 +320,23 @@ export function DocumentLines(props: {
                   formatMoney(parseMoneyToCents(line.unit) ?? 0, currency, locale)
                 )}
               </TD>
-              <TD className={editable ? "h-auto py-[var(--space-3)] text-center align-top" : "text-center"}>
-                {editable ? (
-                  <Checkbox
-                    checked={line.taxable}
-                    onCheckedChange={(checked) =>
-                      patch(line.key, { taxable: checked === true })
-                    }
-                    aria-label={`Charge tax on ${line.name || "this line"}`}
-                  />
-                ) : line.taxable ? (
-                  "Yes"
-                ) : (
-                  <span className="text-[var(--color-text-faint)]">No</span>
-                )}
-              </TD>
+              {showTaxColumn ? (
+                <TD className={editable ? "h-auto py-[var(--space-3)] text-center align-top" : "text-center"}>
+                  {editable ? (
+                    <Checkbox
+                      checked={line.taxable}
+                      onCheckedChange={(checked) =>
+                        patch(line.key, { taxable: checked === true })
+                      }
+                      aria-label={`Charge tax on ${line.name || "this line"}`}
+                    />
+                  ) : line.taxable ? (
+                    "Yes"
+                  ) : (
+                    <span className="text-[var(--color-text-faint)]">No</span>
+                  )}
+                </TD>
+              ) : null}
               <TD
                 className={
                   editable ? `${numericCell} h-auto py-[var(--space-3)] align-top` : numericCell
@@ -338,7 +360,7 @@ export function DocumentLines(props: {
         </TBody>
         <TFoot>
           <TR>
-            <TD colSpan={TOTALS_LABEL_SPAN} className="text-right">
+            <TD colSpan={totalsLabelSpan} className="text-right">
               Subtotal
             </TD>
             <TD className={numericCell}>
@@ -348,7 +370,7 @@ export function DocumentLines(props: {
           </TR>
           {taxRow.show ? (
             <TR>
-              <TD colSpan={TOTALS_LABEL_SPAN} className="text-right">
+              <TD colSpan={totalsLabelSpan} className="text-right">
                 {taxRow.label}
               </TD>
               <TD className={numericCell}>
@@ -358,7 +380,7 @@ export function DocumentLines(props: {
             </TR>
           ) : null}
           <TR>
-            <TD colSpan={TOTALS_LABEL_SPAN} className="text-right font-semibold text-[var(--color-text)]">
+            <TD colSpan={totalsLabelSpan} className="text-right font-semibold text-[var(--color-text)]">
               Total
             </TD>
             <TD className={`${numericCell} font-semibold text-[var(--color-text)]`}>

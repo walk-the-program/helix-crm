@@ -208,6 +208,7 @@ export function NewDocumentScreen() {
   /** The deal this document will belong to, creating one if it has to. */
   async function resolveDealId(): Promise<string | null> {
     if (dealId) return dealId;
+    // Left literal ("job") to match the Job field above - see F-LB-D21.
     setDealError("Pick the job this belongs to, or start a new one.");
     return null;
   }
@@ -330,23 +331,18 @@ export function NewDocumentScreen() {
 
       <div className="grid grid-cols-1 gap-[var(--space-6)] xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-[var(--space-6)]">
+          {/*
+            Customer, then job, then dates - what the owner already knows,
+            in the order he knows it. Kind used to open the form, ahead of
+            even the customer, but it is a two-value switch he almost never
+            touches (invoice is the default nine times out of ten) while the
+            customer and the job are the two facts he actually came in with.
+            It now rides alongside the dates it governs - Due only exists
+            because this is an invoice, Valid until only because it is a
+            quote - demoted to the same row as the fields its value decides,
+            rather than gating the whole form above them (F-LB-D20).
+          */}
           <FormRow>
-            <div className="w-[200px]">
-              <label
-                htmlFor="doc-kind"
-                className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-              >
-                Kind
-              </label>
-              <Select
-                id="doc-kind"
-                ariaLabel="Kind"
-                value={kind}
-                options={KIND_OPTIONS}
-                onValueChange={(value) => setKind(value as "invoice" | "quote")}
-              />
-            </div>
-
             <div className="grid grid-cols-2 gap-[var(--space-4)]">
               <Field label="Contact">
                 <ContactPicker
@@ -376,6 +372,21 @@ export function NewDocumentScreen() {
               </Field>
             </div>
 
+            {/*
+              F-LB-D21 (deferred): this field's label, placeholder, empty
+              text and "New job" create-row are hardcoded rather than
+              `useVocabulary()`-driven like DealPage.tsx's own breadcrumb.
+              The workspace's default vocabulary is "Deals", so the honest
+              fix is `vocabulary.one` / `vocabulary.lower` throughout - but
+              tests/e2e-mac/specs/invoices.e2e.ts (outside this task's
+              ownership) drives this exact combobox by
+              `getByRole("combobox", { name: "Job" })` and matches
+              `New job` by regex in two places, on a workspace that never
+              sets the vocabulary setting. Renaming the field would fail
+              that frozen regression spec. Reported to lead-money rather
+              than silently left inconsistent or silently fixed by editing
+              a file outside this packet's writable paths.
+            */}
             <Field
               label="Job"
               error={dealError ?? undefined}
@@ -405,7 +416,23 @@ export function NewDocumentScreen() {
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-[var(--space-4)]">
+            <div className="grid grid-cols-[140px_minmax(0,1fr)_minmax(0,1fr)] gap-[var(--space-4)]">
+              <div>
+                <label
+                  htmlFor="doc-kind"
+                  className="block text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                >
+                  Kind
+                </label>
+                <Select
+                  id="doc-kind"
+                  aria-label="Kind"
+                  value={kind}
+                  options={KIND_OPTIONS}
+                  onValueChange={(value) => setKind(value as "invoice" | "quote")}
+                />
+              </div>
+
               <Field label="Issued">
                 <DatePicker
                   aria-label="Issued"
