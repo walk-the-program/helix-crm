@@ -71,6 +71,20 @@ export const BATCH_ROWS = 500;
 /** How many skipped rows are kept for the "save skipped rows" CSV. */
 export const MAX_SKIPPED_KEPT = 5_000;
 
+/**
+ * The read phase (`readMappedRows` below, and `readDraftRows` in
+ * `typedImportRun.ts`) keeps every mapped row in memory before the write
+ * transaction even opens - only the module doc's "100k rows fit" comment
+ * enforced that, nothing in code did. A CSV with, say, a million rows (an
+ * honest export from another CRM, or a hostile one) would build a
+ * million-entry array with no ceiling and no warning, which is the kind of
+ * file size that turns "the import screen is slow" into "the app ran out of
+ * memory." LR-SEC packet item 4: this is the enforcement point, so this is
+ * where the limit lives. 250,000 is comfortably above the stated working set
+ * and comfortably below where a modest machine starts to hurt.
+ */
+export const MAX_IMPORT_ROWS = 250_000;
+
 export class ImportWriteError extends Error {
   readonly cause: unknown;
   readonly rowNumber: number | null;
@@ -79,6 +93,18 @@ export class ImportWriteError extends Error {
     this.name = "ImportWriteError";
     this.cause = cause;
     this.rowNumber = rowNumber;
+  }
+}
+
+/** Thrown by the read phase when a file has more data rows than Helix will hold in memory at once. */
+export class ImportRowLimitError extends Error {
+  readonly rowLimit: number;
+  constructor(rowLimit: number) {
+    super(
+      `This file has more than ${rowLimit.toLocaleString()} rows. Split it into smaller files and import them one at a time.`,
+    );
+    this.name = "ImportRowLimitError";
+    this.rowLimit = rowLimit;
   }
 }
 
@@ -157,6 +183,7 @@ export async function readMappedRows(
     text,
     { delimiter: options.delimiter },
     (cells, rowNumber) => {
+      if (seen >= MAX_IMPORT_ROWS) throw new ImportRowLimitError(MAX_IMPORT_ROWS);
       const mapped = applyMapping(cells, mapping, rowNumber, { region: options.region });
       rows.push(mapped);
       if (!mapped.importable && cellsByRow.size < MAX_SKIPPED_KEPT) {

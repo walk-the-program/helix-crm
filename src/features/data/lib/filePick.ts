@@ -30,11 +30,39 @@ export const CSV_FILTERS = [
 ];
 
 /**
+ * `readFileBytes`/`file.arrayBuffer()` load the whole file into memory with
+ * no cap of their own, and `sniffCsv` immediately runs a full UTF-8 decode
+ * attempt over it (twice: once to detect the encoding, once for real) before
+ * a single row is parsed. Nothing upstream of this module checked the file's
+ * size at all (LR-SEC packet item 4). 100 MB is generous for a CSV export -
+ * the fixtures this screen is built against top out at a fraction of that -
+ * and it is refused before the decode, not after.
+ */
+export const MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024;
+
+export class ImportFileTooLargeError extends Error {
+  readonly bytes: number;
+  readonly limit: number;
+  constructor(bytes: number, limit: number) {
+    const mb = (n: number) => (n / (1024 * 1024)).toFixed(0);
+    super(
+      `That file is ${mb(bytes)} MB. Helix can import files up to ${mb(limit)} MB - split this one into smaller files and import them one at a time.`,
+    );
+    this.name = "ImportFileTooLargeError";
+    this.bytes = bytes;
+    this.limit = limit;
+  }
+}
+
+/**
  * Papaparse (behind @/lib/csv's sniffCsv) is only worth downloading once the
  * owner has actually chosen a file, so the sniff happens behind a dynamic
  * import rather than one paid at boot for a screen that may never open.
  */
 async function loaded(name: string, path: string | null, bytes: Uint8Array): Promise<LoadedCsv> {
+  if (bytes.length > MAX_IMPORT_FILE_BYTES) {
+    throw new ImportFileTooLargeError(bytes.length, MAX_IMPORT_FILE_BYTES);
+  }
   const { sniffCsv } = await import("@/lib/csv");
   const sniffed = sniffCsv(bytes);
   return { ...sniffed, path, name, bytes: bytes.length };

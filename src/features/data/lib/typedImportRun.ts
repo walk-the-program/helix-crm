@@ -59,7 +59,9 @@ import { tagCreateStatement, tagLinkStatement } from "@/db/repos/tags";
 import { systemStatement } from "@/db/repos/activities";
 import {
   BATCH_ROWS,
+  ImportRowLimitError,
   ImportWriteError,
+  MAX_IMPORT_ROWS,
   MAX_SKIPPED_KEPT,
   type DedupePolicy,
   type ImportProgress,
@@ -185,6 +187,7 @@ export async function readDraftRows(
   let seen = 0;
 
   const { headers } = walkCsv(text, { delimiter: options.delimiter }, (cells, rowNumber) => {
+    if (seen >= MAX_IMPORT_ROWS) throw new ImportRowLimitError(MAX_IMPORT_ROWS);
     const row = readDraftRow(type, cells, mapping, rowNumber, { region: options.region });
     rows.push(row);
     if (!row.importable && cellsByRow.size < MAX_SKIPPED_KEPT) {
