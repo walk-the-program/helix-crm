@@ -59,6 +59,22 @@ const SETTINGS = {
   // starter templates" flag. It is a settings key rather than a row count so
   // that Trash can purge a deleted starter without the seed putting it back.
   "templates.seededAt": { schema: z.string().nullable(), default: null },
+  // What goes on a quote or an invoice, and how they are numbered (D20). The
+  // catalog agent registers them here so the invoices agent finds them typed
+  // rather than reaching for getRaw/setRaw; the dots are part of the stored key,
+  // the same way the business.* keys above are.
+  //
+  // A tax rate in basis points (1% = 100) keeps an 8.25% rate an integer, so no
+  // float ever touches money. The default is 0: most of the trades this is for
+  // do not charge tax on labour, and a wrong number on an invoice is worse than
+  // no number.
+  "business.address": { schema: z.string(), default: "" },
+  "business.taxId": { schema: z.string(), default: "" },
+  "business.paymentInstructions": { schema: z.string(), default: "" },
+  "invoices.prefix": { schema: z.string(), default: "INV" },
+  "quotes.prefix": { schema: z.string(), default: "QUO" },
+  "invoices.taxRateBp": { schema: z.number().int().min(0).max(100_000), default: 0 },
+  "invoices.dueDays": { schema: z.number().int().min(0).max(365), default: 14 },
 };
 
 export type SettingKey = keyof typeof SETTINGS;
