@@ -36,7 +36,7 @@ import {
 } from "@/ui";
 import { computeTotals } from "@/db/repos/documents";
 import type { TotalsInput } from "@/db/repos/documents";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { addDaysToDateString, todayLocal } from "@/lib/dates";
 import {
   useCreateDealForDocument,
@@ -67,6 +67,7 @@ const DEFAULT_VALID_DAYS = 30;
 export function NewDocumentScreen() {
   const [, navigate] = useLocation();
   const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
   const createDocument = useCreateDocument();
   const createDeal = useCreateDealForDocument();
 
@@ -170,9 +171,9 @@ export function NewDocumentScreen() {
       (customerDeals ?? []).map((deal) => ({
         id: deal.id,
         label: deal.title,
-        detail: `${deal.stageName} · ${formatMoney(deal.valueCents, deal.currency, settings?.locale)}`,
+        detail: `${deal.stageName} · ${formats.money(deal.valueCents, deal.currency)}`,
       })),
-    [customerDeals, settings?.locale],
+    [customerDeals, formats],
   );
 
   const totals = useMemo(() => {
@@ -192,9 +193,9 @@ export function NewDocumentScreen() {
       })),
     );
     return taxRowLabel(summary, totals.taxCents, settings ? formatTaxRate(settings.taxRateBp) : "", (cents) =>
-      formatMoney(cents, settings?.currency, settings?.locale),
+      formats.money(cents),
     );
-  }, [lines, totals.taxCents, settings]);
+  }, [lines, totals.taxCents, settings, formats]);
 
   /** The deal this document will belong to, creating one if it has to. */
   async function resolveDealId(): Promise<string | null> {
@@ -443,8 +444,8 @@ export function NewDocumentScreen() {
               onChange={changeLines}
               editable
               taxRateBp={settings?.taxRateBp ?? 0}
-              currency={settings?.currency}
-              locale={settings?.locale}
+              currency={formats.currency}
+              locale={formats.locale}
             />
           </div>
 
@@ -476,14 +477,14 @@ export function NewDocumentScreen() {
             <div className="flex items-center justify-between text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
               <span>Subtotal</span>
               <span className="money">
-                {formatMoney(totals.subtotalCents, settings?.currency, settings?.locale)}
+                {formats.money(totals.subtotalCents)}
               </span>
             </div>
             {taxRow.show ? (
               <div className="flex items-center justify-between text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
                 <span>{taxRow.label}</span>
                 <span className="money">
-                  {formatMoney(totals.taxCents, settings?.currency, settings?.locale)}
+                  {formats.money(totals.taxCents)}
                 </span>
               </div>
             ) : null}
@@ -496,7 +497,7 @@ export function NewDocumentScreen() {
                 Total
               </span>
               <span className="money text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
-                {formatMoney(totals.totalCents, settings?.currency, settings?.locale)}
+                {formats.money(totals.totalCents)}
               </span>
             </div>
           </div>

@@ -36,7 +36,7 @@ import {
   formatMoneyTrim,
   parseMoneyToCents,
 } from "@/lib/money";
-import { formatDateDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { invalidateDealMoney, useDealItems } from "@/features/catalog/lib/dealItemHooks";
 import { CUSTOM_LINE_ID, diffServiceSelection } from "@/features/catalog/lib/servicePicker";
 import { NewServiceDialog } from "@/features/catalog/components/NewServiceDialog";
@@ -404,6 +404,7 @@ export function DealServicesPanel(props: {
   recurringEndedOn: string | null;
 }) {
   const { dealId, currency, isWon, recurringStartedOn, recurringEndedOn } = props;
+  const formats = useFormats();
   const { data: items } = useDealItems(dealId);
   const [addingCustom, setAddingCustom] = useState(false);
   const [newServiceOpen, setNewServiceOpen] = useState(false);
@@ -539,9 +540,9 @@ export function DealServicesPanel(props: {
               <div className="mt-[var(--space-3)] flex flex-wrap items-center justify-between gap-[var(--space-2)]">
                 <span className="tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
                   {recurringEndedOn
-                    ? `Recurring ended ${formatDateDisplay(recurringEndedOn)}`
+                    ? `Recurring ended ${formats.date(recurringEndedOn)}`
                     : recurringStartedOn
-                      ? `Recurring since ${formatDateDisplay(recurringStartedOn)}`
+                      ? `Recurring since ${formats.date(recurringStartedOn)}`
                       : "Recurring has not started yet"}
                 </span>
                 {recurringEndedOn ? (

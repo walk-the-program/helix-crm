@@ -21,9 +21,9 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardGroupLabel, CardRow, toast } from "@/ui";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { todayLocal } from "@/lib/dates";
-import { iqk, useInvoiceSettings } from "@/features/invoices/lib/hooks";
+import { iqk } from "@/features/invoices/lib/hooks";
 import * as receivables from "@/db/repos/receivables";
 import type { AgingBucket } from "@/db/repos/receivables";
 import { agingCsv } from "@/features/invoices/lib/format";
@@ -52,10 +52,11 @@ function useAging() {
 
 export function AgingBlock() {
   const { data, isLoading } = useAging();
-  const { data: settings } = useInvoiceSettings();
   // A workspace set to GBP must not be shown dollars. formatMoney falls back
-  // to USD when it is handed nothing, which is the wrong answer here.
-  const money = (cents: number) => formatMoney(cents, settings?.currency, settings?.locale);
+  // to USD when it is handed nothing, which is the wrong answer here - so
+  // this reads the workspace's own currency and locale through useFormats().
+  const formats = useFormats();
+  const money = (cents: number) => formats.money(cents);
 
   const aging = data?.aging;
   const collected = data?.collected;

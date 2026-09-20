@@ -25,7 +25,8 @@ import {
   YAxis,
 } from "recharts";
 import { EmptyState, Spinner } from "@/ui";
-import { centsToDecimalString, formatMoney } from "@/lib/money";
+import { centsToDecimalString } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { formatBucket, periodFor } from "@/lib/periods";
 import type { Period } from "@/lib/periods";
 import { toCsv, usePeopleReport } from "@/features/leads/lib/reportKeys";
@@ -351,6 +352,7 @@ function CompanyCell(props: { row: TopCompanyRow }) {
 
 function TopCompaniesCard(props: { rows: TopCompanyRow[] }) {
   const { rows } = props;
+  const formats = useFormats();
   const empty = rows.length === 0;
 
   const data = rows.map((row) => ({
@@ -359,7 +361,7 @@ function TopCompaniesCard(props: { rows: TopCompanyRow[] }) {
   }));
 
   const ariaLabel = `Top companies by won value: ${rows
-    .map((row) => `${row.name} ${formatMoney(row.wonValueCents)}`)
+    .map((row) => `${row.name} ${formats.money(row.wonValueCents)}`)
     .join(", ")}`;
 
   const columns: DataTableColumn<TopCompanyRow>[] = [
@@ -369,14 +371,14 @@ function TopCompaniesCard(props: { rows: TopCompanyRow[] }) {
       key: "wonValue",
       header: "Won value",
       numeric: true,
-      render: (row) => formatMoney(row.wonValueCents),
+      render: (row) => formats.money(row.wonValueCents),
     },
     { key: "openCount", header: "Open", numeric: true, render: (row) => row.openCount },
     {
       key: "openValue",
       header: "Open value",
       numeric: true,
-      render: (row) => formatMoney(row.openValueCents),
+      render: (row) => formats.money(row.openValueCents),
     },
   ];
 
@@ -416,7 +418,7 @@ function TopCompaniesCard(props: { rows: TopCompanyRow[] }) {
             <Tooltip
               cursor={CHART_CURSOR_FILL}
               content={(tooltipProps) => (
-                <ChartTooltipContent {...tooltipProps} formatValue={(value) => formatMoney(value)} />
+                <ChartTooltipContent {...tooltipProps} formatValue={(value) => formats.money(value)} />
               )}
             />
             <Bar
@@ -430,7 +432,7 @@ function TopCompaniesCard(props: { rows: TopCompanyRow[] }) {
               <LabelList
                 dataKey="value"
                 position="right"
-                formatter={(value) => formatMoney(Number(value))}
+                formatter={(value) => formats.money(Number(value))}
                 style={CHART_LABEL_STYLE}
               />
             </Bar>

@@ -31,10 +31,9 @@ import { Line, LabelList, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "wouter";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, Spinner } from "@/ui";
 import { AgingBlock } from "@/features/invoices";
-import { formatDateDisplay } from "@/lib/dates";
 import { formatBucket, periodFor } from "@/lib/periods";
 import type { Period } from "@/lib/periods";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { useRevenue, useRevenueMoney } from "@/features/leads/lib/reportKeys";
 import type { RevenueBundle, RevenueMoney } from "@/db/repos/reports";
 import { NO_DEAL_ROW_ID } from "@/db/repos/money";
@@ -119,6 +118,7 @@ export function RevenueScreen() {
  */
 function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
   const { money, period } = props;
+  const formats = useFormats();
   const { totals } = money;
 
   const columns: DataTableColumn<PerDealMoneyRow>[] = [
@@ -158,20 +158,20 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
       key: "quoted",
       header: "Quoted",
       numeric: true,
-      render: (row) => formatMoney(row.quotedCents),
+      render: (row) => formats.money(row.quotedCents),
     },
-    { key: "won", header: "Won", numeric: true, render: (row) => formatMoney(row.wonCents) },
+    { key: "won", header: "Won", numeric: true, render: (row) => formats.money(row.wonCents) },
     {
       key: "invoiced",
       header: "Invoiced",
       numeric: true,
-      render: (row) => formatMoney(row.invoicedCents),
+      render: (row) => formats.money(row.invoicedCents),
     },
     {
       key: "collected",
       header: "Collected",
       numeric: true,
-      render: (row) => formatMoney(row.collectedCents),
+      render: (row) => formats.money(row.collectedCents),
     },
   ];
 
@@ -191,27 +191,27 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
         <div className="flex flex-wrap gap-[var(--space-10)]">
           <HeadlineFigure
             label="Quoted"
-            value={formatMoney(totals.quotedCents)}
+            value={formats.money(totals.quotedCents)}
             sizeClass="text-[length:var(--text-xl)]"
           />
           <HeadlineFigure
             label="Won"
-            value={formatMoney(totals.wonCents)}
+            value={formats.money(totals.wonCents)}
             sizeClass="text-[length:var(--text-xl)]"
           />
           <HeadlineFigure
             label="Invoiced"
-            value={formatMoney(totals.invoicedCents)}
+            value={formats.money(totals.invoicedCents)}
             sizeClass="text-[length:var(--text-xl)]"
           />
           <HeadlineFigure
             label="Collected"
-            value={formatMoney(totals.collectedCents)}
+            value={formats.money(totals.collectedCents)}
             sizeClass="text-[length:var(--text-xl)]"
           />
           <HeadlineFigure
             label="Still owed on it"
-            value={formatMoney(totals.outstandingCents)}
+            value={formats.money(totals.outstandingCents)}
             sizeClass="text-[length:var(--text-xl)]"
             muted
           />
@@ -268,8 +268,8 @@ function HeadlineFigure(props: { label: string; value: string; sizeClass: string
  * wrong, and a deal ending its recurring line on schedule is not that. Zero
  * churn is still zero, not "-$0.00".
  */
-function formatChurned(cents: number): string {
-  return cents === 0 ? formatMoney(0) : `-${formatMoney(cents)}`;
+function formatChurned(cents: number, money: (cents: number) => string): string {
+  return cents === 0 ? money(0) : `-${money(cents)}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -282,7 +282,7 @@ function formatChurned(cents: number): string {
  * points return null - `RenderableText` allows it - rather than crowding
  * twelve months of numbers along one line.
  */
-function edgeLabel(count: number) {
+function edgeLabel(count: number, money: (cents: number) => string) {
   // recharts hands a label renderer numbers or strings depending on the axis,
   // so the two coordinates are read as `unknown` and coerced once here rather
   // than trusted.
@@ -295,7 +295,7 @@ function edgeLabel(count: number) {
     const isFirst = index === 0;
     return (
       <text x={x} y={y - 10} textAnchor={isFirst ? "start" : "end"} style={CHART_LABEL_STYLE}>
-        {formatMoney(Number(value))}
+        {money(Number(value))}
       </text>
     );
   };
@@ -323,8 +323,9 @@ function edgeDot(count: number) {
 
 function MrrChart(props: { byMonth: RevenueBundle["byMonth"]; mrrCents: number }) {
   const { byMonth, mrrCents } = props;
+  const formats = useFormats();
   const data = byMonth.map((point) => ({ bucket: point.bucket, mrrCents: point.mrrCents }));
-  const ariaLabel = `Monthly recurring revenue over the last twelve months, now ${formatMoney(mrrCents)} a month`;
+  const ariaLabel = `Monthly recurring revenue over the last twelve months, now ${formats.money(mrrCents)} a month`;
 
   return (
     <ChartFigure ariaLabel={ariaLabel} height={260}>
@@ -340,7 +341,7 @@ function MrrChart(props: { byMonth: RevenueBundle["byMonth"]; mrrCents: number }
         <Tooltip
           cursor={CHART_CURSOR_FILL}
           content={(tooltipProps) => (
-            <ChartTooltipContent {...tooltipProps} formatValue={(value) => formatMoney(value)} />
+            <ChartTooltipContent {...tooltipProps} formatValue={(value) => formats.money(value)} />
           )}
         />
         <Line
@@ -352,7 +353,7 @@ function MrrChart(props: { byMonth: RevenueBundle["byMonth"]; mrrCents: number }
           dot={edgeDot(data.length)}
           isAnimationActive={CHART_ANIMATION_ACTIVE}
         >
-          <LabelList dataKey="mrrCents" content={edgeLabel(data.length)} />
+          <LabelList dataKey="mrrCents" content={edgeLabel(data.length, formats.money)} />
         </Line>
       </LineChart>
     </ChartFigure>
@@ -390,6 +391,7 @@ function RevenueContent(props: {
   period: Period;
 }) {
   const { data, money, period } = props;
+  const formats = useFormats();
   // The whole page stands down only when there is no money of either kind to
   // show. Upfront revenue with nothing recurring is a real state - a trade
   // that has not sold a plan yet - and hiding this quarter's won work behind
@@ -419,12 +421,12 @@ function RevenueContent(props: {
   const columns: DataTableColumn<RecurringDealRow>[] = [
     { key: "deal", header: "Deal", render: (row) => <DealCell row={row} /> },
     { key: "customer", header: "Customer", render: (row) => customerName(row) },
-    { key: "started", header: "Started", render: (row) => formatDateDisplay(row.startedOn) },
+    { key: "started", header: "Started", render: (row) => formats.date(row.startedOn) },
     {
       key: "monthly",
       header: "Monthly",
       numeric: true,
-      render: (row) => formatMoney(row.monthlyCents),
+      render: (row) => formats.money(row.monthlyCents),
     },
   ];
 
@@ -433,22 +435,22 @@ function RevenueContent(props: {
       <div className="flex flex-wrap items-end gap-[var(--space-10)]">
         <HeadlineFigure
           label="Monthly recurring revenue"
-          value={formatMoney(data.mrrCents)}
+          value={formats.money(data.mrrCents)}
           sizeClass="text-[length:var(--text-3xl)]"
         />
         <HeadlineFigure
           label="A year of that"
-          value={formatMoney(data.arrCents)}
+          value={formats.money(data.arrCents)}
           sizeClass="text-[length:var(--text-2xl)]"
         />
         <HeadlineFigure
           label="New this month"
-          value={formatMoney(data.newMrrCents)}
+          value={formats.money(data.newMrrCents)}
           sizeClass="text-[length:var(--text-xl)]"
         />
         <HeadlineFigure
           label="Churned this month"
-          value={formatChurned(data.churnedMrrCents)}
+          value={formatChurned(data.churnedMrrCents, formats.money)}
           sizeClass="text-[length:var(--text-xl)]"
           muted
         />
@@ -475,17 +477,17 @@ function RevenueContent(props: {
           <div className="flex flex-wrap gap-[var(--space-10)]">
             <HeadlineFigure
               label="This month"
-              value={formatMoney(data.upfrontMonthCents)}
+              value={formats.money(data.upfrontMonthCents)}
               sizeClass="text-[length:var(--text-2xl)]"
             />
             <HeadlineFigure
               label="This quarter"
-              value={formatMoney(data.upfrontQuarterCents)}
+              value={formats.money(data.upfrontQuarterCents)}
               sizeClass="text-[length:var(--text-2xl)]"
             />
             <HeadlineFigure
               label="This year"
-              value={formatMoney(data.upfrontYearCents)}
+              value={formats.money(data.upfrontYearCents)}
               sizeClass="text-[length:var(--text-2xl)]"
             />
           </div>

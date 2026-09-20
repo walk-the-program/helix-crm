@@ -33,7 +33,7 @@ import {
   toast,
 } from "@/ui";
 import * as leadSync from "@/db/repos/leadSync";
-import { formatDateTimeDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { PollBanner } from "@/features/leads/components/PollBanner";
 import { usePollStatus, leadKeys } from "@/features/leads/hooks";
 import {
@@ -56,6 +56,7 @@ type TestResult =
 
 export function SiteConnectionScreen() {
   const queryClient = useQueryClient();
+  const formats = useFormats();
   const status = usePollStatus();
 
   const connection = useQuery({
@@ -128,7 +129,7 @@ export function SiteConnectionScreen() {
         ok: true,
         message:
           page.leads.length > 0
-            ? `Connected. The oldest lead waiting is from ${formatDateTimeDisplay(page.leads[0].createdAt)}.`
+            ? `Connected. The oldest lead waiting is from ${formats.dateTime(page.leads[0].createdAt)}.`
             : "Connected. There are no new leads waiting right now.",
       });
     },
@@ -295,7 +296,7 @@ export function SiteConnectionScreen() {
                   data-testid="site-last-polled"
                   className="tabular-nums text-[var(--color-text)]"
                 >
-                  {lastPolledAt ? formatDateTimeDisplay(lastPolledAt) : "Not yet"}
+                  {lastPolledAt ? formats.dateTime(lastPolledAt) : "Not yet"}
                 </span>
               </CardRow>
               <CardRow>

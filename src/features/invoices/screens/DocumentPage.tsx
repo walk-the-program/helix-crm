@@ -35,8 +35,7 @@ import {
   toast,
 } from "@/ui";
 import { canTransition, get as getDocument } from "@/db/repos/documents";
-import { formatMoney } from "@/lib/money";
-import { formatDateDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import {
   customerLabel,
   dueLabel,
@@ -94,6 +93,7 @@ export function DocumentPage() {
   const [, navigate] = useLocation();
   const { data, isLoading } = useDocument(id);
   const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
 
   const document = data?.document ?? null;
   const items = data?.items;
@@ -152,7 +152,7 @@ export function DocumentPage() {
 
   const isQuote = document.kind === "quote";
   const noun = isQuote ? "quote" : "invoice";
-  const money = (cents: number) => formatMoney(cents, settings.currency, settings.locale);
+  const money = (cents: number) => formats.money(cents);
 
   async function saveLines() {
     const next = toNewItems(lines);
@@ -436,8 +436,8 @@ export function DocumentPage() {
               onChange={setLines}
               editable={Boolean(editable)}
               taxRateBp={document.taxRateBp}
-              currency={settings.currency}
-              locale={settings.locale}
+              currency={formats.currency}
+              locale={formats.locale}
             />
             {editable ? (
               <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-3)]">
@@ -506,22 +506,22 @@ export function DocumentPage() {
                 })}
               </DetailRow>
               <DetailRow label="Issued">
-                {formatDateDisplay(document.issuedOn) || "Not yet"}
+                {formats.date(document.issuedOn) || "Not yet"}
               </DetailRow>
               {isQuote ? (
                 <DetailRow label="Valid until">
-                  {formatDateDisplay(document.validUntil) || "No end date"}
+                  {formats.date(document.validUntil) || "No end date"}
                 </DetailRow>
               ) : (
                 <DetailRow label="Due">
                   {document.dueOn
-                    ? `${formatDateDisplay(document.dueOn)} · ${dueLabel(document.dueOn)}`
+                    ? `${formats.date(document.dueOn)} · ${dueLabel(document.dueOn)}`
                     : "No due date"}
                 </DetailRow>
               )}
               {document.paidOn ? (
                 <DetailRow label="Paid">
-                  {formatDateDisplay(document.paidOn)}
+                  {formats.date(document.paidOn)}
                   {document.paidMethod ? ` · ${document.paidMethod}` : ""}
                 </DetailRow>
               ) : null}
@@ -558,8 +558,8 @@ export function DocumentPage() {
         onOpenChange={setPaying}
         number={document.number}
         totalCents={document.totalCents}
-        currency={settings.currency}
-        locale={settings.locale}
+        currency={formats.currency}
+        locale={formats.locale}
         onConfirm={async (values) => {
           await markPaid.mutateAsync({
             id,

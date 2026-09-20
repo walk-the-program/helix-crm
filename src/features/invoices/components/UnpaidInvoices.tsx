@@ -29,10 +29,9 @@ import { Link, useLocation } from "wouter";
 import { CheckCircle } from "@/ui/icons";
 import { Badge, Button, toast } from "@/ui";
 import { Row, Section } from "@/features/today/components/Section";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { todayLocal } from "@/lib/dates";
 import {
-  useInvoiceSettings,
   useMarkPaid,
   useOutstandingSummary,
   useUnpaidInvoices,
@@ -112,7 +111,7 @@ function DraftsLine() {
 
 export function UnpaidInvoicesSection() {
   const { data, isLoading } = useUnpaidInvoices();
-  const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
   const rows = data ?? [];
 
   // The drafts line sits outside `Section` rather than inside it: Section puts
@@ -148,11 +147,7 @@ export function UnpaidInvoicesSection() {
               titleText={name}
               subtitle={subtitle}
               subtitleText={subtitle}
-              money={formatMoney(
-                row.document.totalCents,
-                settings?.currency,
-                settings?.locale,
-              )}
+              money={formats.money(row.document.totalCents)}
               actions={<RowActions row={row} />}
             />
           );

@@ -22,7 +22,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, Spinner } from "@/ui";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { periodFor } from "@/lib/periods";
 import type { Period } from "@/lib/periods";
 import { useOverview } from "@/features/leads/lib/reportKeys";
@@ -37,8 +37,8 @@ function formatDays(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(1)} days`;
 }
 
-function formatMoneyOrDash(cents: number | null): string {
-  return cents === null ? "—" : formatMoney(cents);
+function formatMoneyOrDash(cents: number | null, money: (cents: number) => string): string {
+  return cents === null ? "—" : money(cents);
 }
 
 function formatShare(withDeal: number, total: number): string {
@@ -127,12 +127,13 @@ function GroupCard(props: { title: string; href: string; linkLabel?: string; chi
 
 function StageBar(props: { name: string; count: number; valueCents: number; color: string; share: number }) {
   const { name, count, valueCents, color, share } = props;
+  const formats = useFormats();
   return (
     <div className="flex flex-col gap-[var(--space-1)]">
       <div className="flex items-baseline justify-between gap-[var(--space-3)]">
         <span className="text-[length:var(--text-sm)] text-[var(--color-text)]">{name}</span>
         <span className="tabular shrink-0 text-[length:var(--text-caption)] text-[var(--color-text-muted)]">
-          {count} · {formatMoney(valueCents)}
+          {count} · {formats.money(valueCents)}
         </span>
       </div>
       <div className="h-[var(--space-2)] w-full bg-[var(--color-hover)]">
@@ -144,6 +145,7 @@ function StageBar(props: { name: string; count: number; valueCents: number; colo
 
 function OpenPipelineGroup(props: { openByStage: OverviewBundle["openByStage"] }) {
   const { openByStage } = props;
+  const formats = useFormats();
   const totalCount = openByStage.reduce((sum, row) => sum + row.openDeals, 0);
   const totalValueCents = openByStage.reduce((sum, row) => sum + row.openValueCents, 0);
 
@@ -153,7 +155,7 @@ function OpenPipelineGroup(props: { openByStage: OverviewBundle["openByStage"] }
         <Figure label="Open deals" value={String(totalCount)} sizeClass="text-[length:var(--text-2xl)]" />
         <Figure
           label="Open value"
-          value={formatMoney(totalValueCents)}
+          value={formats.money(totalValueCents)}
           sizeClass="text-[length:var(--text-2xl)]"
         />
       </div>
@@ -198,6 +200,7 @@ function isNothingYet(data: OverviewBundle): boolean {
 
 function OverviewContent(props: { data: OverviewBundle }) {
   const { data } = props;
+  const formats = useFormats();
 
   if (isNothingYet(data)) {
     return (
@@ -214,15 +217,15 @@ function OverviewContent(props: { data: OverviewBundle }) {
     <div className="grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-2">
       <GroupCard title="Revenue" href="/reports/revenue">
         <div className="flex flex-wrap items-end gap-[var(--space-8)]">
-          <Figure label="Monthly recurring revenue" value={formatMoney(data.mrrCents)} sizeClass="text-[length:var(--text-2xl)]" />
-          <Figure label="A year of that" value={formatMoney(data.arrCents)} sizeClass="text-[length:var(--text-xl)]" />
+          <Figure label="Monthly recurring revenue" value={formats.money(data.mrrCents)} sizeClass="text-[length:var(--text-2xl)]" />
+          <Figure label="A year of that" value={formats.money(data.arrCents)} sizeClass="text-[length:var(--text-xl)]" />
         </div>
         <div className="flex flex-wrap gap-[var(--space-6)]">
-          <MiniFigure label="Quoted" value={formatMoney(money.quotedCents)} />
-          <MiniFigure label="Won" value={formatMoney(money.wonCents)} />
-          <MiniFigure label="Invoiced" value={formatMoney(money.invoicedCents)} />
-          <MiniFigure label="Collected" value={formatMoney(money.collectedCents)} />
-          <MiniFigure label="Outstanding" value={formatMoney(money.outstandingCents)} />
+          <MiniFigure label="Quoted" value={formats.money(money.quotedCents)} />
+          <MiniFigure label="Won" value={formats.money(money.wonCents)} />
+          <MiniFigure label="Invoiced" value={formats.money(money.invoicedCents)} />
+          <MiniFigure label="Collected" value={formats.money(money.collectedCents)} />
+          <MiniFigure label="Outstanding" value={formats.money(money.outstandingCents)} />
         </div>
       </GroupCard>
 
@@ -230,7 +233,7 @@ function OverviewContent(props: { data: OverviewBundle }) {
         <div className="flex flex-wrap gap-[var(--space-6)]">
           <MiniFigure label="New deals" value={String(deals.newCount)} />
           <MiniFigure label="Won rate" value={formatPercent(deals.wonRate)} />
-          <MiniFigure label="Average won value" value={formatMoneyOrDash(deals.averageWonCents)} />
+          <MiniFigure label="Average won value" value={formatMoneyOrDash(deals.averageWonCents, formats.money)} />
           <MiniFigure label="Median days to win" value={formatDays(deals.medianDaysToWin)} />
         </div>
       </GroupCard>

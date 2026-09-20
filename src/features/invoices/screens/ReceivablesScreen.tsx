@@ -32,12 +32,11 @@ import {
   Table,
   toast,
 } from "@/ui";
-import { formatMoney } from "@/lib/money";
-import { formatDateDisplay, todayLocal } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
+import { todayLocal } from "@/lib/dates";
 import * as receivables from "@/db/repos/receivables";
 import { ReportsFrame } from "@/features/leads";
 import { AgingBlock } from "@/features/invoices/components/AgingBlock";
-import { useInvoiceSettings } from "@/features/invoices/lib/hooks";
 import { receivablesCsv } from "@/features/invoices/lib/format";
 
 function useOutstandingList() {
@@ -49,12 +48,12 @@ function useOutstandingList() {
 
 export function ReceivablesScreen() {
   const { data: rows, isLoading } = useOutstandingList();
-  const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
 
   async function handleCopyCsv() {
     if (!rows) return;
     try {
-      await navigator.clipboard.writeText(receivablesCsv(rows));
+      await navigator.clipboard.writeText(receivablesCsv(rows, formats.locale));
       toast.success("Copied the report to the clipboard");
     } catch {
       toast.error("The clipboard refused it.");
@@ -114,12 +113,12 @@ export function ReceivablesScreen() {
                       {row.customer}
                     </span>
                   </TD>
-                  <TD className="tabular whitespace-nowrap">{formatDateDisplay(row.dueOn)}</TD>
+                  <TD className="tabular whitespace-nowrap">{formats.date(row.dueOn)}</TD>
                   <TD align="right" className="tabular">
                     {row.daysOverdue > 0 ? row.daysOverdue : "—"}
                   </TD>
                   <TD align="right" className="money">
-                    {formatMoney(row.totalCents, settings?.currency, settings?.locale)}
+                    {formats.money(row.totalCents)}
                   </TD>
                 </TR>
               ))}

@@ -217,13 +217,13 @@ export function agingCsv(
  * own em dash for a row that is not yet late, and "Amount" is a plain decimal
  * rather than a formatted currency string, so it pastes as a number.
  */
-export function receivablesCsv(rows: ReceivableRow[]): string {
+export function receivablesCsv(rows: ReceivableRow[], locale?: string): string {
   return toCsv(
     ["Number", "Customer", "Due", "Days over", "Amount"],
     rows.map((row) => [
       row.number,
       row.customer,
-      formatDateDisplay(row.dueOn),
+      formatDateDisplay(row.dueOn, locale),
       row.daysOverdue > 0 ? row.daysOverdue : "—",
       centsToDecimalString(row.totalCents),
     ]),

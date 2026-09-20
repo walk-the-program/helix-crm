@@ -41,9 +41,8 @@ import {
   Table,
 } from "@/ui";
 import type { Document } from "@/db/repos/documents";
-import { formatMoney } from "@/lib/money";
-import { formatDateDisplay } from "@/lib/dates";
-import { useDocuments, useInvoiceSettings, useOutstandingSummary } from "@/features/invoices/lib/hooks";
+import { useFormats } from "@/app/formats";
+import { useDocuments, useOutstandingSummary } from "@/features/invoices/lib/hooks";
 import {
   customerLabel,
   dueLabel,
@@ -70,7 +69,7 @@ export function InvoicesScreen() {
   const [tab, setTab] = useState<TabId>("unpaid");
   const [search, setSearch] = useState("");
 
-  const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
   const { data: summary } = useOutstandingSummary();
 
   const searchFilter = search.trim().length > 0 ? search.trim() : undefined;
@@ -120,10 +119,10 @@ export function InvoicesScreen() {
               its single detail — the same treatment DealPage.tsx gives the
               deal value. */}
           <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
-            {formatMoney((summary ?? EMPTY_SUMMARY).outstandingCents, settings?.currency, settings?.locale)}
+            {formats.money((summary ?? EMPTY_SUMMARY).outstandingCents)}
           </span>
           <span className="text-[length:var(--text-base)] text-[var(--color-text)]">
-            {summarySentence(summary ?? EMPTY_SUMMARY, settings?.currency, settings?.locale)}
+            {summarySentence(summary ?? EMPTY_SUMMARY, formats.currency, formats.locale)}
           </span>
         </div>
       ) : null}
@@ -158,7 +157,6 @@ export function InvoicesScreen() {
             // before it has actually confirmed whether any do.
             isLoading={unpaid.isLoading || totalDocuments === undefined}
             summable
-            settings={settings}
             filtered={filtered}
             onClearSearch={() => setSearch("")}
             empty={
@@ -181,7 +179,6 @@ export function InvoicesScreen() {
             rows={rows}
             isLoading={paid.isLoading}
             summable
-            settings={settings}
             filtered={filtered}
             onClearSearch={() => setSearch("")}
             empty={
@@ -198,7 +195,6 @@ export function InvoicesScreen() {
             rows={rows}
             isLoading={quotes.isLoading}
             summable
-            settings={settings}
             filtered={filtered}
             onClearSearch={() => setSearch("")}
             empty={
@@ -220,7 +216,6 @@ export function InvoicesScreen() {
             rows={rows}
             isLoading={all.isLoading}
             summable={false}
-            settings={settings}
             filtered={filtered}
             onClearSearch={() => setSearch("")}
             empty={
@@ -268,7 +263,6 @@ function sortDocuments(rows: Document[]): Document[] {
 function DocumentTable(props: {
   rows: Document[];
   isLoading: boolean;
-  settings: { currency: string; locale: string } | undefined;
   filtered: boolean;
   onClearSearch: () => void;
   empty: ReactNode;
@@ -282,7 +276,8 @@ function DocumentTable(props: {
    */
   summable: boolean;
 }) {
-  const { rows, isLoading, settings, filtered, onClearSearch, empty, summable } = props;
+  const { rows, isLoading, filtered, onClearSearch, empty, summable } = props;
+  const formats = useFormats();
 
   if (isLoading) {
     return (
@@ -344,16 +339,16 @@ function DocumentTable(props: {
               <TD>
                 <Badge tone={statusTone(row.status)}>{statusLabel(row.status)}</Badge>
               </TD>
-              <TD className="tabular whitespace-nowrap">{formatDateDisplay(row.issuedOn)}</TD>
+              <TD className="tabular whitespace-nowrap">{formats.date(row.issuedOn)}</TD>
               <TD className="tabular whitespace-nowrap">
                 {overdue ? (
                   <span className="font-medium text-[var(--color-text)]">{dueLabel(row.dueOn)}</span>
                 ) : (
-                  formatDateDisplay(row.dueOn)
+                  formats.date(row.dueOn)
                 )}
               </TD>
               <TD align="right" className="money">
-                {formatMoney(row.totalCents, settings?.currency, settings?.locale)}
+                {formats.money(row.totalCents)}
               </TD>
             </TR>
           );
@@ -367,7 +362,7 @@ function DocumentTable(props: {
             </span>
           </TD>
           <TD align="right" className="money">
-            {summable ? formatMoney(totalCents, settings?.currency, settings?.locale) : null}
+            {summable ? formats.money(totalCents) : null}
           </TD>
         </TR>
       </TFoot>

@@ -36,9 +36,8 @@ import {
 } from "@/ui";
 import * as products from "@/db/repos/products";
 import type { Product } from "@/db/repos/products";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import { intervalLabel } from "@/features/invoices/lib/format";
-import { useInvoiceSettings } from "@/features/invoices/lib/hooks";
 import { productToPickedService } from "@/features/invoices/lib/newService";
 import type { PickedService } from "@/features/invoices/lib/newService";
 import { NewServiceDialog } from "@/features/catalog";
@@ -67,7 +66,7 @@ export function ServicesPicker(props: {
   const { open, onOpenChange, onAdd, onCustomLine } = props;
   const queryClient = useQueryClient();
   // A price list in the wrong currency is worse than no price list.
-  const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Map<string, SelectedEntry>>(new Map());
@@ -183,7 +182,7 @@ export function ServicesPicker(props: {
                         {product.name}
                       </span>
                       <span className="flex-none whitespace-nowrap text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                        {formatMoney(product.unitPriceCents, settings?.currency, settings?.locale)}
+                        {formats.money(product.unitPriceCents)}
                         {product.kind === "recurring"
                           ? ` ${intervalLabel(product.kind, product.interval)}`
                           : ""}
