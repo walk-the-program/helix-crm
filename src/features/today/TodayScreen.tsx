@@ -67,6 +67,7 @@ import { Button, Kbd, PageHeader } from "@/ui";
 import { allCommands } from "@/app/registry";
 import { useFormats } from "@/app/formats";
 import { DueNowSection } from "@/features/today/sections/DueNow";
+import { TodaySchedule } from "@/features/today/sections/TodaySchedule";
 import { ComingUpSection } from "@/features/today/sections/ComingUp";
 import { WeekSummaryLine } from "@/features/today/sections/WeekSummary";
 import { NewLeadsSection } from "@/features/today/sections/NewLeads";
@@ -141,6 +142,16 @@ function TodayPanels() {
           then it says it at the top, where the owner is already looking. */}
       <PollNotice />
       <DueNowSection />
+      {/*
+       * Directly after Due now, before Coming up: Due now is every open
+       * promise regardless of time of day, and this section answers the very
+       * next question - what order does he actually leave the house in - so
+       * it belongs beside the day's own work rather than down with the
+       * season's (Coming up) or the informational sections under it. Renders
+       * nothing when nothing today has a time on it, so it never adds a row
+       * to the page on a day with no visits.
+       */}
+      <TodaySchedule />
       <ComingUpSection />
       <UnpaidInvoicesSection />
       <NewLeadsSection />

@@ -3,6 +3,13 @@
  * a record's TaskRail. All the state a row needs comes from `task` and the
  * already-resolved `chips`; every write goes through `@/db/repos/tasks`,
  * followed by `invalidateRecords()` and the caller's `onChanged`.
+ *
+ * A task with a time is a visit, and a visit's length and place ride along
+ * quietly under the title, in the same ink the record chips already use -
+ * the due label above stays the one thing in full weight, because "when" is
+ * still the row's first job. "Edit time and place" opens the same dialog a
+ * brand-new visit does (`openVisitDialog`), so there is exactly one form for
+ * putting a time and a place on a task, not a second one grown here.
  */
 import { useState } from "react";
 import type { ReactElement } from "react";
@@ -12,6 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
   IconButton,
 } from "@/ui";
@@ -27,6 +35,9 @@ import {
   AddToCalendarButton,
   calendarDescription,
 } from "@/features/records/components/AddToCalendarButton";
+import { durationLabel } from "@/features/schedule/lib/labels";
+import { openVisitDialog } from "@/features/schedule/lib/visitDialog";
+import { taskEndAt } from "@/features/schedule/lib/visit";
 
 export function TaskRow(props: {
   task: Task;
@@ -123,6 +134,17 @@ export function TaskRow(props: {
             ))}
           </div>
         ) : null}
+
+        {/* A plain task has neither of these, so nothing prints here at all -
+            no "null", no dangling " · " (DESIGN.md: must keep working for a
+            task with none of the new fields set). */}
+        {!compact && (task.durationMinutes || task.place) ? (
+          <div className="mt-[var(--space-1)] truncate text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+            {[task.durationMinutes ? durationLabel(task.durationMinutes) : null, task.place]
+              .filter((part): part is string => Boolean(part))
+              .join(" · ")}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-[var(--space-2)]">
@@ -158,12 +180,14 @@ export function TaskRow(props: {
               summary: task.title,
               dateOnly: task.dueAt ? null : task.dueOn,
               startAt: task.dueAt,
+              endAt: taskEndAt(task),
               description: calendarDescription({
                 chips,
                 contactId: task.contactId,
                 companyId: task.companyId,
                 dealId: task.dealId,
               }),
+              location: task.place,
               contactId: task.contactId,
               companyId: task.companyId,
             }}
@@ -174,7 +198,7 @@ export function TaskRow(props: {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <IconButton
-                label="Snooze"
+                label="More actions"
                 icon={<Clock size={16} weight="bold" aria-hidden="true" />}
                 disabled={snoozePending}
               />
@@ -182,6 +206,10 @@ export function TaskRow(props: {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => void snooze("tomorrow")}>Tomorrow</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void snooze("next-week")}>Next week</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => openVisitDialog({ taskId: task.id })}>
+                Edit time and place
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}

@@ -3,6 +3,12 @@
  * record's TaskRail (contactId/companyId/dealId pre-filled). Enter in the
  * title saves; the form clears and keeps focus in the title so several tasks
  * can be added back to back.
+ *
+ * Place and duration ride along beside the due date and time rather than
+ * growing a second form: a task with no time is not somewhere the owner has
+ * to be, so it has no length and no site either, and both fields only appear
+ * once a time is actually picked (a task that only ever gets a date stays
+ * exactly the two fields it always was).
  */
 import { useId, useRef, useState } from "react";
 import type { ReactElement } from "react";
@@ -11,6 +17,15 @@ import { Button, DatePicker, Field, Input, TimePicker } from "@/ui";
 import * as tasksRepo from "@/db/repos/tasks";
 import { dueFromForm } from "@/features/records/lib/taskGroups";
 import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
+
+/** A whole, positive number of minutes, or null for anything else the owner
+ *  might type mid-edit (blank, a stray letter, zero). */
+function parseDurationMinutes(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null;
+  const n = Number.parseInt(trimmed, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export function TaskComposer(props: {
   contactId?: string;
@@ -33,8 +48,12 @@ export function TaskComposer(props: {
   const [title, setTitle] = useState("");
   const [dueOn, setDueOn] = useState("");
   const [dueTime, setDueTime] = useState("");
+  const [place, setPlace] = useState("");
+  const [duration, setDuration] = useState("");
   const [error, setError] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+
+  const hasTime = dueOn.trim().length > 0 && dueTime.trim().length > 0;
 
   async function save() {
     const trimmed = title.trim();
@@ -47,6 +66,7 @@ export function TaskComposer(props: {
     setSaving(true);
     try {
       const due = dueFromForm(dueOn, dueTime);
+      const hasDueAt = Boolean(due.dueAt);
       await tasksRepo.create({
         title: trimmed,
         dueOn: due.dueOn,
@@ -54,11 +74,15 @@ export function TaskComposer(props: {
         contactId: contactId ?? null,
         companyId: companyId ?? null,
         dealId: dealId ?? null,
+        place: hasDueAt && place.trim().length > 0 ? place.trim() : null,
+        durationMinutes: hasDueAt ? parseDurationMinutes(duration) : null,
       });
       await invalidateRecords();
       setTitle("");
       setDueOn("");
       setDueTime("");
+      setPlace("");
+      setDuration("");
       titleRef.current?.focus();
       onCreated?.();
     } catch (err) {
@@ -114,6 +138,36 @@ export function TaskComposer(props: {
             />
           </Field>
         </div>
+
+        {/* A time is what turns a task into a visit: no time, no length and
+            no site to speak of, so both fields wait for one (DESIGN.md, one
+            wrapped row rather than a form). */}
+        {hasTime ? (
+          <>
+            <div className="w-[200px] shrink-0">
+              <Field label="Place">
+                <Input
+                  value={place}
+                  placeholder="Where it happens"
+                  onChange={(event) => setPlace(event.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div className="w-[110px] shrink-0">
+              <Field label="Duration">
+                <Input
+                  type="number"
+                  min={1}
+                  className="tabular"
+                  placeholder="Minutes"
+                  value={duration}
+                  onChange={(event) => setDuration(event.target.value)}
+                />
+              </Field>
+            </div>
+          </>
+        ) : null}
 
         <Button
           variant={emphasis}
