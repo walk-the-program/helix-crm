@@ -305,7 +305,7 @@ function SourcesCard(props: { rows: PeopleSourceRow[] }) {
               content={(tooltipProps) => (
                 <ChartTooltipContent
                   {...tooltipProps}
-                  formatValue={(value) => `${value} ${value === 1 ? "person" : "people"}`}
+                  formatValue={(value) => `${value} added`}
                 />
               )}
             />

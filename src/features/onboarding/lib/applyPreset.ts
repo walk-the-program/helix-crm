@@ -17,14 +17,25 @@
  * why `planBatch` is deliberately not used — it moves every non-insert to the
  * end, and that would delete the stages this function had just inserted).
  *
- * "Replaced" needs a caveat, and it is the one thing worth reading twice. On the
- * first run the workspace is empty, so replacing stages is a delete and an
- * insert and nothing moves. But the flow is reopenable from "/setup", and by
- * then the workspace may be full. `deals.stage_id` is ON DELETE RESTRICT, so
- * deleting a stage under a live deal is not merely rude, it fails. So when the
- * workspace already holds records this becomes additive: existing stages and
- * sources stay exactly as they are and only genuinely new ones are appended.
- * Nothing the owner has data in is ever thrown away by a setup screen.
+ * "Replaced" needs a caveat, and it is the one thing worth reading twice.
+ *
+ * Stages are replaced by what they HOLD, not by whether the workspace is new.
+ * A landscaper who picked his trade after clicking around for ten minutes used
+ * to end up with the six default stages and the seven landscaping ones stacked
+ * on top of each other, which is nobody's pipeline. So every stage that holds
+ * nothing - no deal, live or in the trash, and no stage history - is deleted
+ * and the preset's stages take its place; a stage that holds work is kept,
+ * moved below the new ones, and named in the result so the screen can tell the
+ * owner what it left alone. `deals.stage_id` and
+ * `deal_stage_events.to_stage_id` are both ON DELETE RESTRICT, so "holds
+ * nothing" is measured against both tables rather than guessed: the delete
+ * would fail loudly otherwise, mid-transaction, on somebody's first run.
+ *
+ * Sources and custom fields keep the older, gentler rule. On the first run the
+ * workspace is empty, so replacing them is a delete and an insert and nothing
+ * moves; once the workspace holds records it is additive, and only genuinely
+ * new ones are appended. Nothing the owner has data in is ever thrown away by
+ * a setup screen.
  *
  * The price list does not follow that additive rule; it follows a stricter one.
  * A service is seeded only when the workspace is genuinely new (`replace` is
@@ -222,10 +233,41 @@ export type ApplyResult = {
   /** False when the workspace was already in use and this ran additively. */
   replaced: boolean;
   stagesCreated: number;
+  /** Empty stages that were cleared out to make room for the preset's. */
+  stagesRemoved: number;
+  /**
+   * Stages that were kept because they still hold work, by name, so the screen
+   * can say which ones it left alone instead of the owner finding them later.
+   */
+  stagesKept: string[];
   sourcesCreated: number;
   fieldsCreated: number;
   servicesCreated: number;
 };
+
+/**
+ * Which stages can be deleted: the ones nothing points at.
+ *
+ * Both counts include soft-deleted rows on purpose. A deal in the trash still
+ * holds its `stage_id`, and SQLite's RESTRICT does not care that the owner
+ * considers it deleted - the DELETE fails either way, so a stage under a
+ * trashed deal is not empty for this purpose.
+ */
+async function emptyStageIds(pipelineId: string): Promise<Set<string>> {
+  const rows = await raw.query(
+    `SELECT s.id AS s_id,
+            (SELECT count(*) FROM deals d WHERE d.stage_id = s.id)               AS deal_rows,
+            (SELECT count(*) FROM deal_stage_events e WHERE e.to_stage_id = s.id) AS event_rows
+     FROM stages s
+     WHERE s.pipeline_id = ? AND s.deleted_at IS NULL`,
+    [pipelineId],
+  );
+  const empty = new Set<string>();
+  for (const row of rows) {
+    if (Number(row[1]) === 0 && Number(row[2]) === 0) empty.add(String(row[0]));
+  }
+  return empty;
+}
 
 export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
   const plan = cleanPlan(input);
@@ -249,6 +291,8 @@ export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
     const result: ApplyResult = {
       replaced: replace,
       stagesCreated: 0,
+      stagesRemoved: 0,
+      stagesKept: [],
       sourcesCreated: 0,
       fieldsCreated: 0,
       servicesCreated: 0,
@@ -256,25 +300,29 @@ export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
 
     /* -- stages ------------------------------------------------------------ */
 
-    if (replace) {
-      for (const stage of liveStages) {
-        statements.push({ sql: `DELETE FROM stages WHERE id = ?`, params: [stage.id] });
-        changes.push(
-          changeLogStatement({
-            entityType: "stage",
-            entityId: stage.id,
-            op: "delete",
-            before: stage,
-            batchId,
-          }),
-        );
-      }
-    }
+    const empty = await emptyStageIds(pipeline.id);
+    const keptStages = liveStages.filter((stage) => !empty.has(stage.id));
 
-    const existingStageNames = new Set(
-      replace ? [] : liveStages.map((s) => s.name.trim().toLowerCase()),
-    );
-    let position = replace ? 0 : liveStages.length;
+    for (const stage of liveStages) {
+      if (!empty.has(stage.id)) continue;
+      statements.push({ sql: `DELETE FROM stages WHERE id = ?`, params: [stage.id] });
+      changes.push(
+        changeLogStatement({
+          entityType: "stage",
+          entityId: stage.id,
+          op: "delete",
+          before: stage,
+          batchId,
+        }),
+      );
+      result.stagesRemoved += 1;
+    }
+    result.stagesKept = keptStages.map((stage) => stage.name);
+
+    // A stage that holds work keeps its name, its flags and its history; the
+    // preset does not get to insert a second stage by the same name over it.
+    const existingStageNames = new Set(keptStages.map((s) => s.name.trim().toLowerCase()));
+    let position = 0;
     let openIndex = 0;
     for (const stage of plan.stages) {
       if (!stage.isWon && !stage.isLost) openIndex += 1;
@@ -303,6 +351,31 @@ export async function applyPlan(input: SetupPlan): Promise<ApplyResult> {
       );
       position += 1;
       result.stagesCreated += 1;
+    }
+
+    // The kept stages fall in below the preset's, in the order they were
+    // already in. Positions are rewritten rather than left alone so the board
+    // and every stage picker read one continuous pipeline order.
+    for (const stage of keptStages) {
+      if (stage.position === position) {
+        position += 1;
+        continue;
+      }
+      statements.push({
+        sql: `UPDATE stages SET position = ?, updated_at = ? WHERE id = ?`,
+        params: [position, new Date().toISOString(), stage.id],
+      });
+      changes.push(
+        changeLogStatement({
+          entityType: "stage",
+          entityId: stage.id,
+          op: "update",
+          before: stage,
+          after: { ...stage, position },
+          batchId,
+        }),
+      );
+      position += 1;
     }
 
     /* -- sources ----------------------------------------------------------- */

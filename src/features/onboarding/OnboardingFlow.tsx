@@ -153,8 +153,19 @@ export function OnboardingFlow({
     setApplyError(null);
     void (async () => {
       try {
-        await applyPlan(plan);
+        const result = await applyPlan(plan);
         await queryClient.invalidateQueries();
+        // Stages holding work are never thrown away, so say which ones stayed
+        // rather than letting the owner find two pipelines' worth of stages on
+        // the board and wonder which of them he asked for.
+        if (result.stagesKept.length > 0) {
+          const kept = result.stagesKept.join(", ");
+          toast.success(
+            `Set up. ${kept} ${result.stagesKept.length === 1 ? "was" : "were"} kept: ${
+              result.stagesKept.length === 1 ? "it still holds" : "they still hold"
+            } work.`,
+          );
+        }
         setStep(3);
       } catch (err) {
         setApplyError(

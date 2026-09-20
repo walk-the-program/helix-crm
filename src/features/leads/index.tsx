@@ -13,12 +13,16 @@
 import type { FeatureModule } from "@/app/feature";
 import { NAV_ORDER } from "@/app/feature";
 import { BarChart3 } from "@/ui/icons";
+import { OverviewScreen } from "@/features/leads/screens/OverviewScreen";
 import { DealsReportScreen } from "@/features/leads/screens/DealsReportScreen";
+import { PeopleReportScreen } from "@/features/leads/screens/PeopleReportScreen";
 import { RevenueScreen } from "@/features/leads/screens/RevenueScreen";
 import { start as startPoller } from "@/features/leads/poller";
 
 export { SiteConnectionScreen } from "@/features/leads/screens/SiteConnectionScreen";
+export { OverviewScreen } from "@/features/leads/screens/OverviewScreen";
 export { DealsReportScreen } from "@/features/leads/screens/DealsReportScreen";
+export { PeopleReportScreen } from "@/features/leads/screens/PeopleReportScreen";
 export { ReportsFrame, ReportTabs, REPORT_TABS } from "@/features/leads/components/ReportsFrame";
 export type { ReportTabId } from "@/features/leads/components/ReportsFrame";
 export { RevenueScreen } from "@/features/leads/screens/RevenueScreen";
@@ -35,10 +39,13 @@ export type { PollStatus } from "@/features/leads/lib/types";
 export const feature: FeatureModule = {
   id: "leads",
   routes: [
-    // TEMPORARY: /reports becomes the Overview page when it lands.
-    { path: "/reports", element: <DealsReportScreen /> },
+    { path: "/reports", element: <OverviewScreen /> },
     { path: "/reports/revenue", element: <RevenueScreen /> },
     { path: "/reports/deals", element: <DealsReportScreen /> },
+    { path: "/reports/people", element: <PeopleReportScreen /> },
+    // "/reports/receivables" is the invoices feature's own route; the tab
+    // strip links to it and the sidebar keeps Reports lit on every path
+    // under /reports.
   ],
   nav: [
     { label: "Reports", to: "/reports", icon: BarChart3, order: NAV_ORDER.reports },
