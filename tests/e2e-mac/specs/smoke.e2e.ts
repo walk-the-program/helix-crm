@@ -684,6 +684,44 @@ test("compact density reaches a table, a dialog and the board", async ({ page, h
   expect(sheetRow!, "the dialog honours compact too").toBeLessThan(comfortable * 2);
 });
 
+/**
+ * Where the keyboard goes when a dialog opened from a shortcut closes.
+ *
+ * Radix returns focus to whatever held it when the dialog opened, which is the
+ * right answer for a dialog opened from a button and no answer at all for one
+ * opened from a key: "?" is pressed while nothing is focused, so the restore
+ * target is `document.body` and the next Tab starts again from the first
+ * sidebar link instead of resuming where the owner was. `DialogContent` sends
+ * focus to the shell's main region in that case (src/ui/Dialog.tsx), anchored
+ * on `data-dialog-focus-fallback` in Shell.tsx.
+ *
+ * Moved here from lead-platform's phase-two design spec, which is deleted.
+ */
+test("closing a dialog opened from a shortcut leaves the keyboard in the app, not on the body", async ({
+  page,
+  helix,
+}) => {
+  void helix;
+  await bootApp(page);
+
+  await page.keyboard.press("Shift+Slash");
+  await expect(page.getByTestId("shortcuts-sheet")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("shortcuts-sheet")).toBeHidden();
+
+  // Radix restores asynchronously, and the kit's fallback runs one tick after.
+  await page.waitForTimeout(300);
+  const landed = await page.evaluate(() => {
+    const active = document.activeElement as HTMLElement | null;
+    return {
+      tag: active?.tagName ?? "NONE",
+      isFallback: Boolean(active?.hasAttribute("data-dialog-focus-fallback")),
+    };
+  });
+  expect(landed.tag, "focus did not fall back to the document body").not.toBe("BODY");
+  expect(landed.isFallback, "focus landed on the shell's main region").toBe(true);
+});
+
 test("a dialog taller than a 700px window scrolls inside, with its footer visible", async ({
   page,
   helix,
