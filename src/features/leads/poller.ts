@@ -37,6 +37,8 @@ import { applyLeadPage, prepareApply } from "@/features/leads/lib/applyLeads";
 import {
   assertValidLeadPage,
   invokeLeadsFetch,
+  isStalledCursor,
+  LeadShapeError,
   MAX_PAGE,
 } from "@/features/leads/lib/leadsFetch";
 import { pollLog } from "@/features/leads/lib/log";
@@ -214,6 +216,18 @@ export async function tick(
       // through the same failure path a network or auth error takes.
       assertValidLeadPage(page);
 
+      // A site whose `nextCursor` echoes the cursor it was just asked with
+      // will never reach the end this way - paging on unconditionally would
+      // spin this tick forever (LR-SEC-W1 item 4). Caught before this page
+      // is applied, so the failure path below is exactly the one every other
+      // hostile shape takes: nothing from this page is saved, and the
+      // cursor already on file is untouched.
+      if (isStalledCursor(cursor, page.nextCursor)) {
+        throw new LeadShapeError(
+          "Your website answered with the same page marker it was just asked for and never reached the end of the list. Nothing was saved; check the site's cursor handling.",
+        );
+      }
+
       publish({ phase: "applying" });
       const applied = await applyLeadPage(page.leads, origin, {
         ...context,
@@ -315,8 +329,15 @@ async function recordFailure(err: unknown, syncKey: string): Promise<PollError> 
       consecutiveFailures: 0,
       nextPollAt: null,
     });
-    await saveError(syncKey, `LeadPollAuthError: HTTP ${stat} - ${raw}`);
-    pollLog.error(`LeadPollAuthError HTTP ${stat}: ${raw}`);
+    // Never the site's own response body here, even redacted (Rust already
+    // withholds it for 401/403 - see leads.rs `fetch_page_with_limits`).
+    // Plenty of frameworks echo the rejected credential straight back, and
+    // this status alone is enough for the owner to act on: check the token
+    // in Settings. `lead_sync.last_error` and helix.log (plaintext, and
+    // exactly what Diagnostics invites the owner to send to support) must
+    // never carry it (LR-SEC-W1 item 9, 2026-09-20).
+    await saveError(syncKey, `LeadPollAuthError: HTTP ${stat}`);
+    pollLog.error(`LeadPollAuthError HTTP ${stat}`);
     return error;
   }
 
@@ -332,10 +353,21 @@ async function recordFailure(err: unknown, syncKey: string): Promise<PollError> 
     consecutiveFailures,
     bannerVisible: visible,
   });
+  // `raw` (the Rust HTTP_STATUS detail, or a transport message) is kept in
+  // `saveError` on purpose: `lead_sync.last_error` lives inside the
+  // SQLCipher-encrypted database and surfaces in Settings -> Website, which
+  // is exactly where an owner debugging their own broken site needs the
+  // site's answer. It is left OUT of pollLog: the token in it is already
+  // redacted (leads.rs), but the rest of a non-auth detail is still
+  // arbitrary third-party text - a framework 500 can serialise the row it
+  // choked on, which can be a customer's name or email - and helix.log is
+  // plaintext on disk, exactly what Diagnostics invites the owner to send to
+  // support. The log's job is to record that a poll failed and how often,
+  // not to quote the far end (LR-SEC-W1 item 9 correction, 2026-09-20).
   await saveError(syncKey, `LeadPollNetworkError: ${raw}`);
   const level = visible ? "error" : "warn";
   pollLog[level](
-    `LeadPollNetworkError (${consecutiveFailures}/${FAILURES_BEFORE_BANNER}): ${raw}`,
+    `LeadPollNetworkError (${consecutiveFailures}/${FAILURES_BEFORE_BANNER})`,
   );
   return error;
 }

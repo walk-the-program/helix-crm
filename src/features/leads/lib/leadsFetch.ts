@@ -76,6 +76,21 @@ export function assertValidLeadPage(page: LeadPage): void {
   }
 }
 
+/**
+ * True when a page's `nextCursor` is exactly the cursor it was just asked
+ * with. A site that answers this way is never going to reach the end
+ * paging forward: continuing would spin the poller's tick forever, hammering
+ * the site and blocking every later poll behind it (LR-SEC-W1 item 4, the
+ * hostile-200 "nextCursor never changes" case). A null `nextCursor` means
+ * "caught up" and is never a stall.
+ */
+export function isStalledCursor(
+  requestedCursor: string | null,
+  nextCursor: string | null,
+): boolean {
+  return nextCursor !== null && nextCursor === requestedCursor;
+}
+
 /** The contract caps `limit` at 200 and the Rust side clamps to 1..=200. */
 export const MAX_PAGE = 200;
 

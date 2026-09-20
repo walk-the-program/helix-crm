@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   assertValidLeadPage,
   clampLimit,
+  isStalledCursor,
   LeadShapeError,
   LeadsFetchError,
   httpLeadsFetch,
@@ -213,4 +214,28 @@ describe("leadsFetch", () => {
     });
   });
 
+  describe("isStalledCursor (LR-SEC-W1 item 4)", () => {
+    it("is stalled when nextCursor echoes the cursor it was just asked with", () => {
+      expect(isStalledCursor("abc", "abc")).toBe(true);
+    });
+
+    it("is not stalled when nextCursor moves forward", () => {
+      expect(isStalledCursor("abc", "def")).toBe(false);
+    });
+
+    it("is not stalled when nextCursor is null - that means caught up", () => {
+      expect(isStalledCursor("abc", null)).toBe(false);
+    });
+
+    it("is not stalled on the very first page, where the requested cursor is null", () => {
+      // A null request answered with a null nextCursor means "there was
+      // nothing at all", not a stall - both sides being null must not match
+      // the stall rule the same way two equal strings would.
+      expect(isStalledCursor(null, null)).toBe(false);
+    });
+
+    it("is not stalled when a null cursor is answered with a real one", () => {
+      expect(isStalledCursor(null, "abc")).toBe(false);
+    });
+  });
 });
