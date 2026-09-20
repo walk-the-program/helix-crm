@@ -269,6 +269,19 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 | 23:1x | discovery walk `cpoWalk.e2e.ts` on 4220 | 2 passed; 87 captures; zero page/console errors |
 | 23:51 | `835a797` feat(money): Quoted is the deal's value; openCents (lead-money, inspected by Fable) | typecheck clean; vitest 1796 passed / 2 skipped (+7 repo tests: table sums to headline for NULL-deal and trashed-deal) |
 
+| 00:2x | Lead A implementation return (`docs/rounds/cpo-returns/lead-a-records-impl.md`): 32 commits, all verified on main; typecheck clean; vitest 2019 passed / 3 skipped; records+today+depth+listNav e2e 43 passed on 4232. Fable inspected `05a9168`, `52eef7c`, `b0e0099`. | accepted; follow-up CPO-LA-3 (merged-away pages, shared DealsCard) sent |
+| 00:32 | `vitest.config.ts` now collects `*.test.tsx` (Fable). `tests/unit/catalog/NewServiceDialog.test.tsx`, never collected since `2441fc9`, runs and fails 1 of 5 (`selectOptions` on a Radix Select) | fix assigned to lead-money |
+
+| 00:4x | Lead A follow-up CPO-LA-3 (`docs/rounds/cpo-returns/lead-a-followup-3.md`): `ab4a665` merged-away records name their survivor and offer no Restore (`trash.mergedInto`, reversed merges excluded); `13d4ed3` CompanyPage on the shared DealsCard; audit specs gone. typecheck clean; 271 tests in area; records+today e2e 31 passed on 4231. Fable inspected `ab4a665`. | accepted; Lead A finished |
+
+Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
+with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
+into `c0bd452 test(leads): …` (content correct, attribution wrong, left as is), then ran
+`git reset f7ad4ae` to "fix" it and dropped three later commits: `e4f345b` (re-landed
+identical as `2bf1c3d`), `ebcfd10` (re-landed inside `4d22ae4`), `1d60b25` (re-landed by
+lead-records on instruction). Nothing lost. Standing rules issued to every agent: commit
+only with `git commit -m "…" -- <paths>`; never reset or rewrite shared history.
+
 Notes from `835a797`: `dealItems.recompute` never cleared `recurring_started_on`; MRR is
 already stage-gated in `reports.recurringDeals`, so R12 matters for
 `invoiceSchedules.ensureForWonDeal` (a re-won deal would back-bill from the old date), and
