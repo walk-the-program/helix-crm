@@ -78,9 +78,17 @@ export function ExportScreen() {
 
   return (
     <div className="flex flex-col">
+      {/*
+        The subtitle describes what is on the screen, so it goes away when
+        nothing is: "Export any list as CSV" above "Nothing to export yet" is a
+        page contradicting itself, and the empty state's own sentence is the
+        true one (phase-two design direction, rule 6).
+      */}
       <PageHeader
         title="Export"
-        subtitle="This data is yours to take. Export any list as CSV, or everything at once."
+        subtitle={
+          isEmpty ? undefined : "This data is yours to take. Export any list as CSV, or everything at once."
+        }
       />
       <div className="flex flex-col gap-[var(--space-6)]">
         {isEmpty ? (
@@ -103,10 +111,16 @@ export function ExportScreen() {
                     <span className="font-medium text-[var(--color-text)]">
                       Everything, as one file
                     </span>
+                    {/*
+                      Three lines listing the tables was a standing explanation
+                      of a button (rule 3). One line says the thing that
+                      actually decides it — everything, nothing left out — and
+                      the full list is in the zip itself, where it can be read
+                      rather than remembered.
+                    */}
                     <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                      One .zip with a CSV for every table in your workspace — contacts and
-                      companies, deals, invoices and quotes, services, tags and custom fields
-                      among them — plus one JSON file that is the complete copy.
+                      One .zip holding a CSV of every table, plus a JSON file that is the
+                      complete copy.
                     </span>
                   </div>
                   <Button
