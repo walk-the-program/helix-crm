@@ -14,7 +14,7 @@
 import type { ReactElement } from "react";
 import { Link } from "wouter";
 import { Badge, Card, CardGroupLabel, CardRow } from "@/ui";
-import { formatMoney } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 
 export type DealsCardRow = {
   id: string;
@@ -29,6 +29,7 @@ export function DealsCard(props: {
   deals: DealsCardRow[];
   emptyText: string;
 }): ReactElement {
+  const formats = useFormats();
   return (
     <div>
       <CardGroupLabel className="flex items-baseline gap-[var(--space-2)]">
@@ -56,7 +57,7 @@ export function DealsCard(props: {
                 <span className="flex shrink-0 items-center gap-[var(--space-3)]">
                   <Badge>{deal.stageName}</Badge>
                   <span className="money text-[length:var(--text-base)] text-[var(--color-text)]">
-                    {formatMoney(deal.valueCents, deal.currency)}
+                    {formats.money(deal.valueCents, deal.currency)}
                   </span>
                 </span>
               </Link>

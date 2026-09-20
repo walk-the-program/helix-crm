@@ -20,10 +20,10 @@ import {
 } from "@/ui";
 import * as companiesRepo from "@/db/repos/companies";
 import { contactName } from "@/db/repos/contacts";
-import { formatMoney } from "@/lib/money";
 import { formatPhone } from "@/lib/phone";
 import { todayLocal } from "@/lib/dates";
 import { useVocabulary } from "@/app/vocabulary";
+import { useFormats } from "@/app/formats";
 import {
   useCompany,
   useCompanyCounts,
@@ -54,6 +54,7 @@ export function CompanyPage() {
   const { id = "" } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const { data: company, isLoading } = useCompany(id);
   const { data: money } = useCustomerMoney({ companyId: id });
   const { data: counts } = useCompanyCounts(id);
@@ -454,7 +455,7 @@ function DealsCard(props: {
                 <span className="flex shrink-0 items-center gap-[var(--space-3)]">
                   <Badge>{deal.stageName}</Badge>
                   <span className="money text-[length:var(--text-base)] text-[var(--color-text)]">
-                    {formatMoney(deal.valueCents, deal.currency)}
+                    {formats.money(deal.valueCents, deal.currency)}
                   </span>
                 </span>
               </Link>

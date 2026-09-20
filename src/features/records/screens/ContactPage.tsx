@@ -51,6 +51,7 @@ import { SummarizeButton } from "@/features/ai";
 import { useContact, useCustomerMoney, useDeals, useTasks } from "@/features/records/lib/hooks";
 import * as dealsRepo from "@/db/repos/deals";
 import { useVocabulary } from "@/app/vocabulary";
+import { useFormats } from "@/app/formats";
 import {
   deleteWithUndo,
   invalidateRecords,
@@ -97,6 +98,7 @@ export function ContactPage() {
   const { data: money } = useCustomerMoney({ contactId: id });
   const { data: openTasks } = useTasks({ contactId: id, openOnly: true }, 20);
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const { data: openDeals } = useDeals({ contactId: id, openOnly: true }, 200);
   const { data: closedDeals } = useDeals({ contactId: id, closedOnly: true }, 200);
   const [composing, setComposing] = useState<ActivityKind | null>(null);
@@ -295,7 +297,7 @@ export function ContactPage() {
             <span className="text-[var(--color-text)]">
               {nextTask.title}{" "}
               <span className="tabular text-[var(--color-text-muted)]">
-                · {dueLabel(nextTask)}
+                · {dueLabel(nextTask, undefined, formats.locale)}
               </span>
             </span>
           ) : (

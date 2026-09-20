@@ -34,13 +34,12 @@ import {
 } from "@/ui";
 import { qk } from "@/app/queryClient";
 import { useVocabulary } from "@/app/vocabulary";
+import { useFormats } from "@/app/formats";
 import * as trash from "@/db/repos/trash";
 import type { TrashEntityType, TrashItem } from "@/db/repos/trash";
 import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
 import {
   addDaysToDateString,
-  formatDateDisplay,
-  formatDateTimeDisplay,
   formatRelative,
   todayLocal,
   toLocalDateString,
@@ -153,6 +152,7 @@ function TrashTypeTable(props: {
   lowerPlural: string;
 }): ReactElement | null {
   const { entityType, lowerPlural } = props;
+  const formats = useFormats();
   const listQuery = useQuery({
     queryKey: qk.trash(entityType),
     queryFn: () => trash.list(entityType),
@@ -283,13 +283,13 @@ function TrashTypeTable(props: {
                 </TD>
                 <TD
                   className="tabular"
-                  title={formatDateTimeDisplay(item.deletedAt)}
+                  title={formats.dateTime(item.deletedAt)}
                 >
                   {formatRelative(item.deletedAt)}
                 </TD>
                 <TD className="tabular">
                   <div className="flex items-center gap-[var(--space-2)]">
-                    {formatDateDisplay(purgeDateOnly)}
+                    {formats.date(purgeDateOnly)}
                     {purgingSoon ? <Badge tone="warning">Purging soon</Badge> : null}
                   </div>
                 </TD>

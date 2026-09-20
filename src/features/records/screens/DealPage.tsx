@@ -30,12 +30,13 @@ import {
 import * as dealsRepo from "@/db/repos/deals";
 import { contactName } from "@/db/repos/contacts";
 import { useVocabulary } from "@/app/vocabulary";
+import { useFormats } from "@/app/formats";
 import {
   centsToDecimalString,
   formatMoneyTrim,
   parseMoneyToCents,
 } from "@/lib/money";
-import { formatDateDisplay, formatRelative } from "@/lib/dates";
+import { formatRelative } from "@/lib/dates";
 import { toDateInputValue } from "@/lib/periods";
 import {
   useContact,
@@ -78,6 +79,7 @@ export function DealPage() {
   const { id = "" } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const { data: deal, isLoading } = useDeal(id);
   const { data: pipeline } = usePipeline();
   const { data: stages } = useStages(pipeline?.id);
@@ -238,10 +240,12 @@ export function DealPage() {
           </span>
         </div>
 
-        {/* The two AI actions, together and out of the header. Each renders its
-            own disabled reason; the cluster shows the first one only, because
-            the same sentence twice in a row is noise. */}
-        <div className="flex flex-wrap items-center gap-[var(--space-2)] [&>*:not(:first-child)_[data-testid=ai-disabled-reason]]:hidden">
+        {/* The two AI actions, together and out of the header. The cluster used
+            to hide every disabled reason but the first with a descendant
+            selector, because an off module narrated itself twice. An off module
+            renders nothing now (lead-platform, b2aed5e), so the row is just a
+            row. */}
+        <div className="flex flex-wrap items-center gap-[var(--space-2)]">
           <DraftFollowUpButton dealId={id} email={primaryEmail?.emailLower ?? null} />
           <SummarizeButton entityType="deal" entityId={id} />
         </div>
@@ -252,7 +256,7 @@ export function DealPage() {
             <span className="text-[var(--color-text)]">
               {nextTask.title}{" "}
               <span className="tabular text-[var(--color-text-muted)]">
-                · {dueLabel(nextTask)}
+                · {dueLabel(nextTask, undefined, formats.locale)}
               </span>
             </span>
           ) : (
@@ -378,7 +382,7 @@ export function DealPage() {
                     </span>
                     <div className="flex items-baseline justify-between gap-[var(--space-3)]">
                       <p className="tabular m-0 text-[length:var(--text-base)] text-[var(--color-text)]">
-                        {deal.closedAt ? formatDateDisplay(deal.closedAt) : "Not recorded"}
+                        {deal.closedAt ? formats.date(deal.closedAt) : "Not recorded"}
                       </p>
                       <Button
                         size="sm"

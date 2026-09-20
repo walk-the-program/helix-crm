@@ -28,7 +28,8 @@ import {
   invalidateRecords,
   reportError,
 } from "@/features/records/lib/mutations";
-import { formatDateTimeDisplay, formatRelative } from "@/lib/dates";
+import { formatRelative } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { AddToCalendarButton } from "@/features/records/components/AddToCalendarButton";
 
 const USER_KINDS: { kind: ActivityKind; label: string }[] = [
@@ -371,6 +372,7 @@ function TimelineRow(props: {
   onDelete: () => void;
 }) {
   const { entry, onEdit, onDelete } = props;
+  const formats = useFormats();
   const system = entry.isSystem;
 
   return (
@@ -403,7 +405,7 @@ function TimelineRow(props: {
             >
               {KIND_LABEL[entry.kind]}
             </span>
-            <Tooltip content={formatDateTimeDisplay(entry.occurredAt)}>
+            <Tooltip content={formats.dateTime(entry.occurredAt)}>
               <time
                 dateTime={entry.occurredAt}
                 className="tabular text-[length:var(--text-xs)] text-[var(--color-text-faint)]"

@@ -19,6 +19,7 @@ import { cn } from "@/ui/cn";
 import * as tasksRepo from "@/db/repos/tasks";
 import type { Task } from "@/db/repos/tasks";
 import { isOverdue } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { dueLabel } from "@/features/records/lib/taskGroups";
 import { deleteWithUndo, invalidateRecords, reportError } from "@/features/records/lib/mutations";
 import { RecordChip, type RecordChipTarget } from "@/features/records/components/RecordChip";
@@ -35,6 +36,7 @@ export function TaskRow(props: {
   onChanged?: () => void;
 }): ReactElement {
   const { task, chips, reference, compact, onChanged } = props;
+  const formats = useFormats();
   const [checkPending, setCheckPending] = useState(false);
   const [snoozePending, setSnoozePending] = useState(false);
 
@@ -132,7 +134,7 @@ export function TaskRow(props: {
             overdue ? "font-medium text-[var(--color-text)]" : "text-[var(--color-text-muted)]",
           )}
         >
-          {dueLabel(task, reference)}
+          {dueLabel(task, reference, formats.locale)}
         </span>
       </div>
 

@@ -24,9 +24,9 @@ import {
   TR,
 } from "@/ui";
 import { useVocabulary } from "@/app/vocabulary";
-import { formatBreakdown, formatMoney, formatMoneyTrim, formatMonthly } from "@/lib/money";
+import { useFormats } from "@/app/formats";
+import { formatBreakdown, formatMoneyTrim, formatMonthly } from "@/lib/money";
 import { upfrontCents } from "@/db/repos/dealItems";
-import { formatDateDisplay } from "@/lib/dates";
 import {
   useBoard,
   useDeals,
@@ -65,6 +65,7 @@ const FILTER_DEFAULTS = {
 export function PipelineScreen() {
   const [, navigate] = useLocation();
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const [view, setView] = useState<"board" | "list">("board");
   const [creating, setCreating] = useState(false);
   const [managingStages, setManagingStages] = useState(false);
@@ -113,10 +114,10 @@ export function PipelineScreen() {
     const map = new Map<string, string>();
     for (const task of openTasks?.rows ?? []) {
       if (!task.dealId || map.has(task.dealId)) continue;
-      map.set(task.dealId, `${task.title} · ${dueLabel(task)}`);
+      map.set(task.dealId, `${task.title} · ${dueLabel(task, undefined, formats.locale)}`);
     }
     return map;
-  }, [openTasks]);
+  }, [openTasks, formats.locale]);
 
   /**
    * The headline counts OPEN work only.
@@ -315,12 +316,12 @@ export function PipelineScreen() {
                           ? formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
                               currency: deal.currency,
                             })
-                          : formatMoney(deal.valueCents, deal.currency)}
+                          : formats.money(deal.valueCents, deal.currency)}
                       </span>
                     </TD>
                     <TD muted>
                       <span className="tabular">
-                        {deal.expectedOn ? formatDateDisplay(deal.expectedOn) : "—"}
+                        {deal.expectedOn ? formats.date(deal.expectedOn) : "—"}
                       </span>
                     </TD>
                   </TR>
