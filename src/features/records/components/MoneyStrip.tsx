@@ -13,6 +13,7 @@
  * inherits it rather than adding a second (docs/DESIGN.md §6).
  */
 import { formatBreakdown, formatMoneyTrim } from "@/lib/money";
+import { useFormats } from "@/app/formats";
 import type { MoneyTotals } from "@/db/repos/money";
 
 export type MoneyFigure = {
@@ -25,7 +26,20 @@ export type MoneyFigure = {
   testId?: string;
 };
 
-export function MoneyStrip(props: { figures: MoneyFigure[]; testId?: string }) {
+export function MoneyStrip(props: {
+  figures: MoneyFigure[];
+  testId?: string;
+  /** The record's own currency; the workspace's is the fallback. */
+  currency?: string;
+}) {
+  // `formatMoneyTrim` used to be called here with no currency and no locale at
+  // all, so the most prominent money in the product - the deal page's four
+  // figures - printed US dollars in a CAD workspace whatever the settings
+  // said. `Formats` has no trimming variant, so the trim stays and the
+  // workspace's currency and locale are handed to it.
+  const formats = useFormats();
+  const currency = props.currency ?? formats.currency;
+  const money = (cents: number) => formatMoneyTrim(cents, currency, formats.locale);
   return (
     <div
       data-testid={props.testId ?? "money-strip"}
@@ -41,14 +55,14 @@ export function MoneyStrip(props: { figures: MoneyFigure[]; testId?: string }) {
               data-testid={figure.testId}
               className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]"
             >
-              {formatMoneyTrim(figure.cents)}
+              {money(figure.cents)}
             </span>
           ) : (
             <span
               data-testid={figure.testId}
               className="money text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-text)]"
             >
-              {formatMoneyTrim(figure.cents)}
+              {money(figure.cents)}
             </span>
           )}
           {figure.note ? (
@@ -92,6 +106,7 @@ export function DealMoneyStrip(props: {
   return (
     <MoneyStrip
       testId="deal-money"
+      currency={props.currency}
       figures={[
         {
           label: props.isWon ? "Won" : "Quoted",
