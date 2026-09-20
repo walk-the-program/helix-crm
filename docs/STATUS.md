@@ -4190,3 +4190,176 @@ The Create contact dialog's spacing is fixed in the three record dialogs by
 stepping the gap above the footer one size past the gap between two fields, and
 an e2e assertion measures it rather than trusting the token. The rule belongs
 in `DialogFooter` so every dialog in the product gets it, not only these three.
+
+---
+
+## 2026-09-20 — Round 3, L1: shell, component kit, OS seams
+
+Walker's first-use notes on 0.1.0, everything that is chrome rather than a
+feature. Criteria 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 19, 21, 23 and 27.
+
+### Did
+
+**The three picker primitives** (`ac8f5e8`), committed first so L3 and L4 could
+start migrating. `Combobox`/`MultiCombobox`, `DatePicker` and `TimePicker` in
+`src/ui`, with the round-3 signatures, the fixed test ids, unit tests and a
+Pickers section in the component gallery.
+
+`Combobox` is the ARIA combobox pattern rather than a dressed-up `Select`: a
+search input owns the query, a listbox owns the options, and
+`aria-activedescendant` joins them so the keyboard never leaves the field. It
+takes a fixed array or an async search function, debounced at 140ms and guarded
+against an out-of-order answer. It is deliberately not built on cmdk, which is
+already in the bundle: cmdk's own scorer would re-filter a database result set
+and hide rows the query matched on a column the row does not print, like a
+phone number. The popover is collision-aware and capped at
+`--radix-popover-content-available-height` — that is the actual defect, since a
+`Select` of four hundred contacts ran off the bottom of the screen.
+
+`DatePicker` is local `YYYY-MM-DD` throughout with no UTC round trip anywhere,
+which is how a picker saves the 18th for someone who chose the 19th. Roving
+tabindex, arrows, Home/End, PageUp/PageDown; `min`/`max` disable days and every
+step walks past a disabled run rather than parking on one.
+
+`TimePicker` exports `parseTimeInput` and tests it on its own: "9", "9a", "930",
+"0930", "9:30 pm" and "21:30" all land on the same 24-hour `HH:MM`, and "2400"
+or "9:75" land on nothing. Display goes through the browser locale, so AM/PM is
+never hard-coded.
+
+Two Sonnet children wrote `DatePicker` and `TimePicker` against full packets; I
+wrote `Combobox` and read both diffs line by line before accepting. One
+deviation worth recording: the plan's literal `): JSX.Element` annotation does
+not compile under this repo's TypeScript, so `DatePicker` returns
+`ReactElement`, the house convention (`Field.tsx`). The call signature is
+unchanged.
+
+**The shell** (`17d6401`).
+
+- *The lockup is plain* (1, 19). `--shadow-sticker` resolves to `none`, `Brand`
+  draws the mark with no square, no hairline and no shadow, and the sidebar no
+  longer sets a `--sticker-gap`. The `sticker` prop is kept and ignored so no
+  call site had to change on the same commit.
+- *No purple or blue text* (2). `--color-link` and `--color-accent-ink` are the
+  heading ink in both themes, and `a` carries a permanent underline that hover
+  thickens rather than adds. Every feature that spells
+  `text-[var(--color-link)]` was fixed by the token, with no edit to
+  `src/features`. `--color-focus` keeps the brand secondary: a ring is not text.
+- *The window drags* (5). `core:window:allow-start-dragging` and the two
+  toggle-maximize permissions were missing from the capability file, so the
+  markup was right all along and the IPC call behind `data-tauri-drag-region`
+  was being refused.
+- *One click each way* (6). `nextTheme` is now a toggle, and from Auto it goes
+  to the opposite of the *resolved* appearance. One function, so the toolbar
+  button, the View menu's "Toggle theme" and the palette cannot disagree — and
+  because `SettingsHost` already called `nextTheme`, the View menu got the fix
+  without an edit outside my paths.
+- *The sidebar resizes and collapses* (7). A drag edge between 200 and 360px
+  with arrow-key, Home and End support, and a 48px icon rail with a tooltip per
+  row. Both live in `helix.json` under `sidebar.width` / `sidebar.collapsed`,
+  clamped on read as well as on write. `onResize` repaints; `onResizeEnd`
+  writes the file once rather than two hundred times during a drag. A
+  `toggle-sidebar` command and mod+\ drive it.
+- *The footer is live* (8). `writeRegistry` publishes to `subscribeToRegistry`
+  and the shell listens, so a rename in Settings reaches the footer without a
+  relaunch.
+- *Dialog spacing* (10). `DialogContent` hoists a top-level `DialogFooter` out
+  of the scroll box and renders it as a flex sibling below, so the body owns a
+  real `pb-[var(--space-6)]`. Sticky could not deliver that: a sticky footer
+  occupies its flow position and overlays whatever passes it, which is why the
+  Create contact email field read as touching the buttons.
+- *The sidebar is grouped* (21, 23). `NAV_GROUPS` keys on the route, not on a
+  number, because four features spell their order as a literal and are owned by
+  other agents this round. `NAV_ORDER` stays as the name features import and
+  the two agree. A route the groups do not name still appears, in its own
+  group, placed by its number.
+- *One scroller per column* (27). `html` and `body` are `overflow: hidden` and
+  `#root` is fixed to the viewport, so the document itself can never scroll.
+  That was the single cause of all three symptoms on a tall deal page. The
+  sidebar's header is pinned and always reserves the macOS title-bar inset.
+
+**The Keychain** (`e3ac227`). A workspace keeps ONE keychain item,
+`<workspaceId>:bundle`, holding a JSON object of kind to value, read at most
+once per process. macOS authorises a keychain item per binary identity, so an
+unsigned build prompts once per DISTINCT item it reads; deferring the second
+read moves that prompt, it does not remove it. Old per-kind items are folded in
+lazily on first read and deleted only after the bundle write returns Ok —
+losing a dbkey makes a workspace unreadable for good, so that order is not
+negotiable. `db.rs` is untouched.
+
+Boot-time reads, audited: exactly one, `db_key` from `db_open`. The site token
+is already behind an origin check in `siteConnection.ts`; the AI key is read by
+`useAi` and the settings screen, never at boot. Signing is the real cure and is
+still TODO E5 — a signed build keeps one code identity across versions, so the
+ACL the owner approves once stays approved and the prompt disappears rather
+than being reduced to one.
+
+**Then** (`0064394`, `6cd9270`, `832412f`): DESIGN.md revision 3.1 and an
+appended "Round 3 shell, kit and OS seams" section in CONTRACTS.md; Badge's
+three brand tones label their tint in plain ink; the collapsed sidebar buys the
+macOS traffic lights their room in the top bar (they reach about 78px in and
+the rail is 48px, so the toggle button would have sat under the close button);
+and `defaultOpen` on `Combobox` and `DatePicker` so the gallery can photograph
+them open.
+
+**Two bugs the e2e found** (`13c38cf`, `c9f8821`), both fixed in app code
+rather than tested around.
+
+`updateRegistry` read the cached registry and wrote a whole-file copy with no
+serialisation, so two writes issued inside a frame — End then Home on the drag
+handle — both read the same state and whichever `writeTextFile` landed second
+won. It queues on a promise chain now, with the read inside the queued section
+so a change function always sees what the previous one wrote, and the chain
+keeps moving after a rejection so one failed write cannot wedge every setting
+for the session.
+
+The DatePicker lost a click on a leading or trailing day. The visible month was
+derived from the focused date, so a mousedown on one of those cells fired
+`onFocus`, changed the month, rebuilt the grid and moved that button's node —
+all between mousedown and mouseup — leaving the browser nothing to pair the two
+into a click. The month is its own state now and only moves on a deliberate
+navigation; plain focus moves the roving tab stop and nothing else.
+
+**The proof** (`706b389`). Twelve new e2e tests across the two shell specs and
+ten screenshots at 1280 in both themes.
+
+### Verification
+
+`cargo build` clean and `cargo test` 49 passed (11 in `secrets`, six of them
+new: the single item, the legacy fold-in including `db_key` finding an existing
+key rather than minting a new one, the cache, a partial delete, and a garbled
+bundle).
+
+`npx tsc --noEmit` clean across the project.
+
+`npx vitest run` 1787 passed, 2 skipped, 126 files — 247 of them in
+`tests/unit/{app,ui}`, which is where this round's additions live: nav
+grouping, the sidebar clamp/resize/collapse/pinning, the traffic-light inset,
+helix.json persistence and the write queue, the registry bus, the theme toggle,
+the hoisted dialog footer, the plain lockup, and the three primitives.
+
+`E2E_PORT=4211 E2E_OUT=dist-r3l1 npx playwright test -c
+tests/e2e-mac/playwright.config.ts tests/e2e-mac/specs/smoke.e2e.ts
+tests/e2e-mac/specs/settings.e2e.ts` — **24 passed, 0 failed** (1.2m), run by
+the lead as well as by the child that wrote it. `dist-r3l1` deleted.
+
+Ten screenshots in `design/round3/`: `sidebar`, `sidebar-collapsed`, `tasks`
+with the date picker open, `dialog-combobox` with a list open, and
+`scroll-tall` at 1280x700 with the macOS layout on, each in light and dark. I
+looked at all of them against docs/DESIGN.md: no purple or blue text anywhere,
+no outline behind the mark, the hairline grouping reads correctly collapsed and
+expanded, the TimePicker is correctly disabled until a date is chosen, the
+dialog's last field keeps its air above the action bar, and nothing sits under
+the traffic lights.
+
+### Two things for other owners
+
+The `dialog-combobox` shots are not near the bottom of the viewport the way the
+packet asked: a dialog is vertically centred by design, so there is no call
+site that puts one there. The collision behaviour itself is covered by the
+Combobox unit test, which asserts on the authored cap and `avoidCollisions`.
+
+The one-scroller e2e uses 60 tasks rather than contacts. The Contacts screen is
+virtualised and owns its own scroll box, so it can prove nothing about
+`<main>`; the Tasks list below its virtualisation threshold is a plain mounted
+list and genuinely overflows. Worth knowing before anyone writes another
+scroll assertion against a list screen.

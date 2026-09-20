@@ -798,6 +798,7 @@ export function Combobox(props: {
   multiple?: false; disabled?: boolean; "aria-label"?: string; autoFocus?: boolean;
   selectedItem?: ComboboxItem | null;       // added: the chosen record, for the async form
   clearable?: boolean; id?: string; className?: string;   // added
+  defaultOpen?: boolean;                    // added: mount with the list open
 }): JSX.Element;
 
 export function MultiCombobox(props: {
@@ -806,7 +807,7 @@ export function MultiCombobox(props: {
   onCreate?: (q: string) => void | Promise<void>; createLabel?: (q: string) => string;
   disabled?: boolean; "aria-label"?: string;
   summaryLabel?: (count: number) => string; // added: default "3 chosen"
-  id?: string; className?: string;
+  id?: string; className?: string; defaultOpen?: boolean;
 }): JSX.Element;
 
 // src/ui/DatePicker.tsx — value is YYYY-MM-DD LOCAL; null clears.
@@ -814,7 +815,7 @@ export function DatePicker(props: {
   value: string | null; onChange: (v: string | null) => void;
   min?: string; max?: string; placeholder?: string; disabled?: boolean;
   "aria-label"?: string; clearable?: boolean;
-  id?: string; className?: string; locale?: string;   // added
+  id?: string; className?: string; locale?: string; defaultOpen?: boolean;   // added
   "aria-describedby"?: string; "aria-invalid"?: boolean;   // added, wired by Field
 }): ReactElement;
 
