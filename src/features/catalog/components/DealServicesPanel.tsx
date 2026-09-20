@@ -23,9 +23,8 @@
  * secondary button.
  */
 import { useMemo, useState } from "react";
-import { Check, Package, Plus, Trash, X } from "@/ui/icons";
+import { Check, Plus, Trash, X } from "@/ui/icons";
 import {
-  Badge,
   Button,
   Card,
   CardGroupLabel,
@@ -320,8 +319,6 @@ function ServiceRow(props: { item: DealItem; currency: string }) {
     }
   }
 
-  const discounted = item.actualUnitCents < item.suggestedUnitCents;
-
   return (
     <div
       data-testid="deal-service-row"
@@ -388,8 +385,6 @@ function ServiceRow(props: { item: DealItem; currency: string }) {
         />
       </div>
 
-      {discounted ? <Badge tone="neutral">Discounted</Badge> : null}
-
       <IconButton
         label={`Remove ${item.name}`}
         onClick={() => void removeLine()}
@@ -450,8 +445,10 @@ export function DealServicesPanel(props: {
 
       <Card>
         {lines.length === 0 && !addingCustom ? (
-          <div className="flex items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-5)]">
-            <Package size={18} weight="regular" aria-hidden="true" className="text-[var(--color-text-disabled)]" />
+          <div className="px-[var(--space-4)] py-[var(--space-5)]">
+            {/* No glyph: DESIGN.md keeps a spot illustration out of an empty
+                state, and one sentence is the whole of what this one has to
+                say. */}
             <p className="text-[length:var(--text-base)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
               Nothing priced yet. Add a service and the value works itself out.
             </p>

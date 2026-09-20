@@ -1,10 +1,11 @@
 /**
  * Settings > Services: the price list a deal's line items are built from.
  *
- * Two grouped inset lists, one-time services then recurring ones, the same
- * shape `TemplatesScreen` uses for text messages and emails - the reference
- * for this exact kind of settings-owned, reorderable, create/edit/delete
- * list. Reorder is buttons that move a row up and down rather than
+ * Three grouped inset lists - charged once, every month, every year - which
+ * are the same three answers the dialog asks for, so a row can never
+ * contradict the label above it. The shape is `TemplatesScreen`'s: the
+ * reference for this exact kind of settings-owned, reorderable,
+ * create/edit/delete list. Reorder is buttons that move a row up and down rather than
  * drag-and-drop, because `TemplatesScreen` does it that way and a catalog is
  * no longer a list than a set of templates.
  *
@@ -31,16 +32,15 @@ import {
   DropdownMenuTrigger,
   EmptyState,
   IconButton,
-  PageHeader,
   toast,
 } from "@/ui";
 import { CaretDown, ICON_SIZE_SM, ICON_WEIGHT_STRONG } from "@/ui/icons";
 import {
   SettingsGroup,
   SettingsLoading,
-  SettingsNav,
+  SettingsScreenFrame,
 } from "@/features/settings/components/SettingsLayout";
-import { formatMoney } from "@/lib/money";
+import { formatMoneyTrim } from "@/lib/money";
 import {
   useDeleteOrDeactivateService,
   useReorderServices,
@@ -48,7 +48,7 @@ import {
   useUpdateService,
 } from "@/features/catalog/lib/hooks";
 import { ServiceDialog } from "@/features/catalog/components/ServiceDialog";
-import type { Product, ProductKind } from "@/db/repos/products";
+import type { Product } from "@/db/repos/products";
 
 /** Active first (each in `position` order), inactive trailing (also in
  * `position` order) - the sort the whole screen treats as canonical. */
@@ -59,8 +59,16 @@ function sortForDisplay(products: Product[]): Product[] {
   });
 }
 
+/**
+ * "$150", "$150/mo", "$1,200/yr".
+ *
+ * `formatMoneyTrim` rather than `formatMoney`: a price list is written in
+ * round numbers, and ".00" on every row is noise the owner reads past. It is
+ * the same formatter the deal page's breakdown uses, so a service costs the
+ * same number of characters wherever it is quoted.
+ */
 function priceLabel(service: Product): string {
-  const amount = formatMoney(service.unitPriceCents);
+  const amount = formatMoneyTrim(service.unitPriceCents);
   if (service.kind === "one_time") return amount;
   return service.interval === "year" ? `${amount}/yr` : `${amount}/mo`;
 }
@@ -148,9 +156,19 @@ function ServiceRow(props: {
 /* Group (one kind)                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The group a service belongs in, which is the same three answers the dialog
+ * asks for. Two groups would file a yearly plan under "every month", and a
+ * section label the rows contradict is worse than no label.
+ */
+function groupOf(service: Product): "one_time" | "month" | "year" {
+  if (service.kind === "one_time") return "one_time";
+  return service.interval === "year" ? "year" : "month";
+}
+
 function ServiceGroup(props: {
   label: string;
-  kind: ProductKind;
+  kind: string;
   services: Product[];
   onMove: (service: Product, list: Product[], direction: -1 | 1) => void;
   onEdit: (service: Product) => void;
@@ -186,8 +204,9 @@ function ServiceGroup(props: {
 export function ServicesScreen() {
   const servicesQuery = useServices();
   const services = servicesQuery.data ?? [];
-  const oneTimeServices = sortForDisplay(services.filter((s) => s.kind === "one_time"));
-  const recurringServices = sortForDisplay(services.filter((s) => s.kind === "recurring"));
+  const oneTimeServices = sortForDisplay(services.filter((s) => groupOf(s) === "one_time"));
+  const monthlyServices = sortForDisplay(services.filter((s) => groupOf(s) === "month"));
+  const yearlyServices = sortForDisplay(services.filter((s) => groupOf(s) === "year"));
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingService, setEditingService] = useState<Product | null>(null);
@@ -229,54 +248,51 @@ export function ServicesScreen() {
     }
   }
 
+  // One primary button on the screen, and no more (DESIGN.md §5): the header
+  // carries it while there is a list, and the empty state carries it while
+  // there is not. Rendering both at once is the bug that rule names.
   const addServiceButton = (
     <Button variant="primary" data-testid="service-new" onClick={openCreate}>
       Add a service
     </Button>
   );
+  const empty = !servicesQuery.isLoading && services.length === 0;
+
+  const groups: { label: string; kind: string; services: Product[] }[] = [
+    { label: "Charged once", kind: "one_time", services: oneTimeServices },
+    { label: "Every month", kind: "month", services: monthlyServices },
+    { label: "Every year", kind: "year", services: yearlyServices },
+  ];
 
   return (
-    <div className="flex gap-[var(--space-6)]" data-testid="services-screen">
-      <SettingsNav />
-      <div className="min-w-0 flex-1 max-w-3xl">
-        <PageHeader
-          title="Services"
-          subtitle="What you sell, and the price you usually charge."
-          actions={addServiceButton}
+    <SettingsScreenFrame
+      title="Services"
+      subtitle="What you sell, and the price you usually charge."
+      testId="services-screen"
+      actions={empty ? undefined : addServiceButton}
+    >
+      {servicesQuery.isLoading ? (
+        <SettingsLoading>Reading the database.</SettingsLoading>
+      ) : empty ? (
+        <EmptyState
+          title="No services yet"
+          description="Add the things you sell so a deal can be priced in two clicks."
+          action={addServiceButton}
         />
-        <div className="flex flex-col gap-[var(--space-6)]">
-          {servicesQuery.isLoading ? (
-            <SettingsLoading>Reading the database.</SettingsLoading>
-          ) : services.length === 0 ? (
-            <EmptyState
-              title="No services yet"
-              description="Add the things you sell so a deal can be priced in two clicks."
-              action={addServiceButton}
-            />
-          ) : (
-            <>
-              <ServiceGroup
-                label="Charged once"
-                kind="one_time"
-                services={oneTimeServices}
-                onMove={(service, list, direction) => void move(service, list, direction)}
-                onEdit={openEdit}
-                onToggleActive={(service) => void toggleActive(service)}
-                onDelete={setDeletingService}
-              />
-              <ServiceGroup
-                label="Charged every month"
-                kind="recurring"
-                services={recurringServices}
-                onMove={(service, list, direction) => void move(service, list, direction)}
-                onEdit={openEdit}
-                onToggleActive={(service) => void toggleActive(service)}
-                onDelete={setDeletingService}
-              />
-            </>
-          )}
-        </div>
-      </div>
+      ) : (
+        groups.map((group) => (
+          <ServiceGroup
+            key={group.kind}
+            label={group.label}
+            kind={group.kind}
+            services={group.services}
+            onMove={(service, list, direction) => void move(service, list, direction)}
+            onEdit={openEdit}
+            onToggleActive={(service) => void toggleActive(service)}
+            onDelete={setDeletingService}
+          />
+        ))
+      )}
 
       <ServiceDialog open={editorOpen} onOpenChange={setEditorOpen} service={editingService} />
 
@@ -304,6 +320,6 @@ export function ServicesScreen() {
           }
         }}
       />
-    </div>
+    </SettingsScreenFrame>
   );
 }
