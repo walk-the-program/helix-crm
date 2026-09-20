@@ -6,6 +6,9 @@ import {
   dealTitleFor,
   systemActivityBody,
   mapLead,
+  hasUsableId,
+  activityDetail,
+  LEAD_UPDATE_INTRO,
 } from "@/features/leads/lib/leadMapping";
 import type { Lead } from "@/features/leads/lib/types";
 
@@ -168,6 +171,48 @@ describe("leadMapping", () => {
       const message = "Line one\nLine two\n\nLine four";
       const body = systemActivityBody(makeLead({ message }));
       expect(body).toContain(`Message: ${message}`);
+    });
+  });
+
+  describe("hasUsableId (F-LB-1 / F-LB-8)", () => {
+    it("accepts a non-blank string", () => {
+      expect(hasUsableId("lead-42")).toBe(true);
+      expect(hasUsableId("  lead-42  ")).toBe(true);
+    });
+
+    it("rejects a blank or whitespace-only string", () => {
+      expect(hasUsableId("")).toBe(false);
+      expect(hasUsableId("   ")).toBe(false);
+    });
+
+    it("rejects anything that is not a string", () => {
+      expect(hasUsableId(undefined)).toBe(false);
+      expect(hasUsableId(null)).toBe(false);
+      expect(hasUsableId(42)).toBe(false);
+      expect(hasUsableId({})).toBe(false);
+    });
+  });
+
+  describe("activityDetail (F-LB-17)", () => {
+    it("returns everything after the first line", () => {
+      expect(activityDetail("Lead from the website.\nService: Lawn care")).toBe(
+        "Service: Lawn care",
+      );
+    });
+
+    it("returns '' when the body is a single line", () => {
+      expect(activityDetail("Lead from the website.")).toBe("");
+    });
+
+    it("keeps multi-line detail (a message with its own newlines) intact", () => {
+      const body = "Lead from the website.\nMessage: line one\nline two\nPage: https://x.com";
+      expect(activityDetail(body)).toBe("Message: line one\nline two\nPage: https://x.com");
+    });
+
+    it("treats the original intro and the update intro the same way", () => {
+      const original = activityDetail(`Lead from the website.\nService: Lawn care`);
+      const update = activityDetail(`${LEAD_UPDATE_INTRO}\nService: Lawn care`);
+      expect(original).toBe(update);
     });
   });
 

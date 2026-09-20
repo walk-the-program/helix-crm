@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
+  assertValidLeadPage,
   clampLimit,
+  LeadShapeError,
   LeadsFetchError,
   httpLeadsFetch,
   MAX_PAGE,
 } from "@/features/leads/lib/leadsFetch";
-import type { LeadPage } from "@/features/leads/lib/types";
+import type { Lead, LeadPage } from "@/features/leads/lib/types";
 
 const EMPTY_PAGE: LeadPage = { leads: [], nextCursor: null };
 
@@ -146,4 +148,69 @@ describe("leadsFetch", () => {
       expect(result.nextCursor).toBe("opaque-cursor");
     });
   });
+
+  describe("assertValidLeadPage (F-LB-1)", () => {
+    function lead(overrides: Partial<Lead> = {}): Lead {
+      return {
+        id: "lead-1",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        name: "Bob",
+        email: "bob@example.com",
+        phone: null,
+        service: null,
+        message: null,
+        pageUrl: null,
+        ...overrides,
+      };
+    }
+
+    it("accepts a normal page unchanged", () => {
+      const page: LeadPage = { leads: [lead(), lead({ id: "lead-2" })], nextCursor: "abc" };
+      expect(() => assertValidLeadPage(page)).not.toThrow();
+    });
+
+    it("accepts an empty page", () => {
+      expect(() => assertValidLeadPage({ leads: [], nextCursor: null })).not.toThrow();
+    });
+
+    it("rejects a page whose `leads` is not an array, the string-iterated-as-leads bug", () => {
+      const page = { leads: "not-an-array", nextCursor: null } as unknown as LeadPage;
+      expect(() => assertValidLeadPage(page)).toThrow(LeadShapeError);
+    });
+
+    it("rejects a page whose `leads` is missing entirely", () => {
+      const page = {} as unknown as LeadPage;
+      expect(() => assertValidLeadPage(page)).toThrow(LeadShapeError);
+    });
+
+    it("rejects a page containing a lead with no `id` at all", () => {
+      const page = {
+        leads: [{ name: "No Id" } as unknown as Lead],
+        nextCursor: null,
+      };
+      expect(() => assertValidLeadPage(page)).toThrow(LeadShapeError);
+    });
+
+    it("rejects a page containing a lead whose `id` is a blank string", () => {
+      const page: LeadPage = { leads: [lead({ id: "  " })], nextCursor: null };
+      expect(() => assertValidLeadPage(page)).toThrow(LeadShapeError);
+    });
+
+    it("rejects a page where only one of several leads lacks an id - the whole page, not just that lead", () => {
+      const page = {
+        leads: [lead({ id: "lead-1" }), { name: "No Id" } as unknown as Lead],
+        nextCursor: null,
+      };
+      expect(() => assertValidLeadPage(page)).toThrow(LeadShapeError);
+    });
+
+    it("says how many leads had no id", () => {
+      const page = {
+        leads: [{} as unknown as Lead, {} as unknown as Lead, lead()],
+        nextCursor: null,
+      };
+      expect(() => assertValidLeadPage(page)).toThrow(/2 leads with no id/);
+    });
+  });
+
 });
