@@ -64,7 +64,25 @@ const REGIONS = [
   { value: "NZ", label: "New Zealand (+64)" },
 ];
 
-const SAMPLE_PHONE = "8015550147";
+/**
+ * A real, valid sample number per phone region (F-LC-16).
+ *
+ * The hint used to parse one US number ("8015550147") against whichever
+ * region the owner picked. `normalizePhone` never rejects a number — an
+ * unparseable one keeps its raw digits and answers `e164: null` — so a US
+ * number parsed as a UK one fell through to that raw-digits fallback, and the
+ * hint told a United Kingdom owner that Helix stores phone numbers as a bare
+ * unformatted string, which it never does. Each region gets its own number
+ * that is actually valid there, so the hint always shows what normalising
+ * really produces.
+ */
+const SAMPLE_PHONE_BY_REGION: Record<string, { typed: string; digits: string }> = {
+  US: { typed: "(801) 555-0147", digits: "8015550147" },
+  CA: { typed: "(514) 555-0123", digits: "5145550123" },
+  GB: { typed: "07911 123456", digits: "7911123456" },
+  AU: { typed: "0412 345 678", digits: "412345678" },
+  NZ: { typed: "021 123 4567", digits: "211234567" },
+};
 
 export function WorkspaceScreen() {
   const client = useQueryClient();
@@ -158,8 +176,8 @@ export function WorkspaceScreen() {
 
   const sampleMoney = formatMoney(1245000, data.currency, data.locale);
   const sampleDate = formatDateDisplay("2026-03-14", data.locale);
-  const samplePhone =
-    normalizePhone(SAMPLE_PHONE, data.defaultRegion).e164 ?? SAMPLE_PHONE;
+  const phoneSample = SAMPLE_PHONE_BY_REGION[data.defaultRegion] ?? SAMPLE_PHONE_BY_REGION.US;
+  const samplePhoneE164 = normalizePhone(phoneSample.digits, data.defaultRegion).e164;
 
   return (
     <SettingsScreenFrame
@@ -282,7 +300,11 @@ export function WorkspaceScreen() {
         </SettingsRow>
         <SettingsRow
           label="Phone region"
-          hint={`A number typed as (801) 555-0147 is stored as ${samplePhone}.`}
+          hint={
+            samplePhoneE164
+              ? `A number typed as ${phoneSample.typed} is stored as ${samplePhoneE164}.`
+              : "Numbers are stored the way you type them until they can be read as a phone number."
+          }
           field
         >
           <Select

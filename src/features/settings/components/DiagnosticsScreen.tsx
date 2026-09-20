@@ -23,7 +23,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ClipboardCopy, FolderOpen, ICON_SIZE_SM, ICON_WEIGHT_STRONG } from "@/ui/icons";
 import { Badge, Button, toast } from "@/ui";
 import { useWriteState } from "@/app/hooks";
-import { formatDateTimeDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
+import { isTauri } from "@/app/appSettings";
 import {
   SettingsGroup,
   SettingsLoading,
@@ -148,6 +149,7 @@ export function DiagnosticsScreen() {
     staleTime: 0,
   });
   const write = useWriteState();
+  const formats = useFormats();
 
   async function onCopyLog() {
     const result = await copyLog();
@@ -210,8 +212,20 @@ export function DiagnosticsScreen() {
                 "Idle"
               )}
             </SettingsValueRow>
+            {/* F-LC-15: `keychainAvailable()` reads "the call did not
+                throw" as "the keychain is present", which is only reliable
+                inside a real desktop build. Outside Tauri — the e2e harness
+                and every unit test, both plain better-sqlite3 with no Rust
+                side at all — the call always throws and always resolves to
+                `false`, which used to render as the definitive "No keychain
+                on this machine" instead of "cannot tell", unlike
+                `WorkspaceEncryption` and `DiskEncryptionValue` above, which
+                already say Unknown in exactly that situation. `isTauri()` is
+                the same environment check those two are built on. */}
             <SettingsValueRow label="Key storage">
-              {data.keychain ? (
+              {!isTauri() ? (
+                <Unknown>Unknown</Unknown>
+              ) : data.keychain ? (
                 <Badge tone="success">Keychain available</Badge>
               ) : (
                 <Badge tone="warning">No keychain on this machine</Badge>
@@ -250,7 +264,7 @@ export function DiagnosticsScreen() {
                   {data.migration.version}{" "}
                   <span className="text-[var(--color-text-muted)]">
                     ({data.migration.count} applied,{" "}
-                    {formatDateTimeDisplay(data.migration.appliedAt)})
+                    {formats.dateTime(data.migration.appliedAt)})
                   </span>
                 </span>
               ) : (
@@ -259,7 +273,7 @@ export function DiagnosticsScreen() {
             </SettingsValueRow>
             <SettingsValueRow label="Last backup">
               {data.lastBackupAt ? (
-                formatDateTimeDisplay(data.lastBackupAt)
+                formats.dateTime(data.lastBackupAt)
               ) : (
                 <Unknown>No backup has run yet</Unknown>
               )}
@@ -292,7 +306,7 @@ export function DiagnosticsScreen() {
             </SettingsValueRow>
             <SettingsValueRow label="Last checked">
               {data.lastPolledAt ? (
-                formatDateTimeDisplay(data.lastPolledAt)
+                formats.dateTime(data.lastPolledAt)
               ) : (
                 <Unknown>Never</Unknown>
               )}
