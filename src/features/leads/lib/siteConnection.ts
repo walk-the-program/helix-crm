@@ -9,6 +9,7 @@
  * loopback, which is how `tools/fake-site` is reached in development.
  */
 import * as settings from "@/db/repos/settings";
+import * as leadSync from "@/db/repos/leadSync";
 import { readRegistry } from "@/app/appSettings";
 import { normaliseOrigin } from "@/features/leads/lib/leadMapping";
 
@@ -111,11 +112,70 @@ export function setSecretStore(store: SecretStore): void {
   secretStore = store;
 }
 
+/**
+ * The literal placeholder that ships in every ClearPath template's
+ * `.env.example`. A client who copies the wrong line out of that file pastes
+ * this, gets a 401, and reads "check that you copied all of it" - which is
+ * true and useless. Naming it is worth four lines (LR-REV, F-REV-8).
+ */
+const TOKEN_PLACEHOLDERS = [
+  "replace-with-a-long-random-string",
+  "a-long-random-string",
+];
+
+export type TokenCheck =
+  | { ok: true; token: string }
+  | { ok: false; message: string };
+
+/**
+ * Clean up what was actually pasted before it goes near the keychain.
+ *
+ * The token is generated with `openssl rand -base64 32`, so it never contains
+ * whitespace - but it is handed over in an email or a message, and what lands
+ * in the box is routinely the whole environment line (`CRM_API_TOKEN=abc...`),
+ * the value in quotes, or a value a mail client wrapped across two lines. All
+ * three used to be saved verbatim and then rejected by the site as a wrong
+ * token, sending the owner and Walker looking for the wrong problem.
+ */
+export function cleanToken(input: string): string {
+  let value = input.trim();
+  value = value.replace(/^CRM_API_TOKEN\s*=\s*/i, "");
+  value = value.trim();
+  // Strip one matching pair of surrounding quotes, not every quote: a quote
+  // is not a base64 character, but stripping them blindly would corrupt a
+  // token Walker chose to generate some other way.
+  const first = value[0];
+  if ((first === '"' || first === "'") && value.endsWith(first) && value.length > 1) {
+    value = value.slice(1, -1);
+  }
+  // A wrapped paste. Base64 has no whitespace, so anything left is the mail
+  // client's, not the token's.
+  return value.replace(/\s+/g, "");
+}
+
+/** Clean it, then refuse the two values that can only be mistakes. */
+export function checkToken(input: string): TokenCheck {
+  const token = cleanToken(input);
+  if (token.length === 0) {
+    return { ok: false, message: "Paste the token from your website." };
+  }
+  if (TOKEN_PLACEHOLDERS.includes(token.toLowerCase())) {
+    return {
+      ok: false,
+      message:
+        "That is the example token from the website's settings file, not a real one. Ask ClearPath for the token itself.",
+    };
+  }
+  return { ok: true, token };
+}
+
 /** Store the token in the OS keychain. The value never touches SQLite. */
 export async function setSiteToken(value: string): Promise<void> {
   const workspaceId = await currentWorkspaceId();
   if (!workspaceId) throw new Error("No workspace is open.");
-  await secretStore.set(workspaceId, value);
+  const checked = checkToken(value);
+  if (!checked.ok) throw new Error(checked.message);
+  await secretStore.set(workspaceId, checked.token);
 }
 
 /** True when a token is stored. The value itself is never shown in the UI. */
@@ -152,11 +212,51 @@ export async function readSiteConnection(): Promise<SiteConnection> {
   return { siteOrigin, hasToken, connected: Boolean(siteOrigin && hasToken) };
 }
 
-export async function saveSiteOrigin(origin: string): Promise<string> {
+/**
+ * Save the address, and decide what the change means for the leads already on
+ * file.
+ *
+ * A lead's idempotency key is `<normalised origin>:<lead id>`
+ * (`leadMapping.externalIdFor`), and `lead_sync` is keyed on the origin too.
+ * So changing the address is, to everything downstream, a different website:
+ * the cursor starts at null and every historical lead comes back with an
+ * external id Helix has never seen, which turns the owner's entire pipeline
+ * into a second copy of itself. That is the wrong answer for the change a
+ * ClearPath client actually makes - staging to live, or apex to www - and the
+ * right one for a genuinely different site (LR-REV, F-REV-11).
+ *
+ * Helix cannot tell those apart, so the screen asks and passes the answer
+ * here. `carryCursorFrom` means "same website, new address": the old site's
+ * cursor moves to the new key, so the site resumes where it stopped and no
+ * lead is ever read a second time. Omitting it reads the new site from the
+ * beginning, which is what a genuinely new site needs.
+ */
+export async function saveSiteOrigin(
+  origin: string,
+  options: { carryCursorFrom?: string | null } = {},
+): Promise<string> {
   const checked = checkOrigin(origin);
   if (!checked.ok) throw new Error(checked.message);
+  const from = options.carryCursorFrom?.trim();
+  if (from && normaliseOrigin(from) !== normaliseOrigin(checked.origin)) {
+    await carryCursor(normaliseOrigin(from), normaliseOrigin(checked.origin));
+  }
   await settings.set("siteOrigin", checked.origin);
   return checked.origin;
+}
+
+/**
+ * Move the old address's place-in-the-list to the new one, and only when the
+ * new one has none of its own - re-pointing at an address Helix already knows
+ * must not rewind it.
+ */
+async function carryCursor(fromKey: string, toKey: string): Promise<void> {
+  const previous = await leadSync.get(fromKey);
+  if (!previous?.cursor) return;
+  const existing = await leadSync.get(toKey);
+  if (existing?.cursor) return;
+  await leadSync.ensure(toKey);
+  await leadSync.saveCursor(toKey, previous.cursor);
 }
 
 /**

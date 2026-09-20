@@ -30,6 +30,7 @@ import {
   FormRow,
   Input,
   PageHeader,
+  Select,
   toast,
 } from "@/ui";
 import * as leadSync from "@/db/repos/leadSync";
@@ -38,12 +39,17 @@ import { PollBanner } from "@/features/leads/components/PollBanner";
 import { usePollStatus, leadKeys } from "@/features/leads/hooks";
 import {
   checkOrigin,
+  checkToken,
   disconnectSite,
   readSiteConnection,
   saveSiteOrigin,
   setSiteToken,
   syncKeyFor,
 } from "@/features/leads/lib/siteConnection";
+import {
+  describeStoredPollError,
+  storedPollErrorDetail,
+} from "@/features/leads/lib/pollMessages";
 import { invokeLeadsFetch } from "@/features/leads/lib/leadsFetch";
 import { POLL_INTERVAL_MS, refresh, tick } from "@/features/leads/poller";
 import { statusFromError, isAuthStatus } from "@/features/leads/lib/backoff";
@@ -53,6 +59,14 @@ const POLL_MINUTES = POLL_INTERVAL_MS / 60_000;
 type TestResult =
   | { ok: true; message: string }
   | { ok: false; message: string };
+
+/** So `save`'s error handler knows which of the two fields to point at. */
+class TokenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TokenError";
+  }
+}
 
 export function SiteConnectionScreen() {
   const queryClient = useQueryClient();
@@ -76,6 +90,14 @@ export function SiteConnectionScreen() {
   const [origin, setOrigin] = useState("");
   const [originError, setOriginError] = useState<string | undefined>();
   const [token, setToken] = useState("");
+  const [tokenError, setTokenError] = useState<string | undefined>();
+  /**
+   * What a changed address means. Helix cannot tell a domain move from a
+   * different website, and the two need opposite handling, so it asks - and
+   * defaults to the one a ClearPath client actually does (staging to live,
+   * apex to www). See `saveSiteOrigin`.
+   */
+  const [addressChange, setAddressChange] = useState<"same" | "different">("same");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
@@ -94,24 +116,39 @@ export function SiteConnectionScreen() {
 
   const save = useMutation({
     mutationFn: async () => {
+      // Both halves are checked before either is written. Validating the
+      // address, saving it, and only then rejecting the token left a
+      // half-saved connection behind - an address on file with no token,
+      // which reads as "Not connected" without saying why (LR-REV, F-REV-8).
       const checked = checkOrigin(origin);
       if (!checked.ok) throw new Error(checked.message);
-      await saveSiteOrigin(checked.origin);
       // An empty box means "leave the stored token alone", which is how the
-      // owner changes only the address without retyping a 40-character key.
-      if (token.trim().length > 0) await setSiteToken(token.trim());
+      // owner changes only the address without retyping a 44-character key.
+      const typed = token.trim().length > 0 ? checkToken(token) : null;
+      if (typed && !typed.ok) throw new TokenError(typed.message);
+
+      await saveSiteOrigin(checked.origin, {
+        carryCursorFrom:
+          storedOrigin && addressChange === "same" ? storedOrigin : null,
+      });
+      if (typed?.ok) await setSiteToken(typed.token);
       return checked.origin;
     },
     onSuccess: async () => {
       setToken("");
       setTestResult(null);
       setOriginError(undefined);
+      setTokenError(undefined);
+      setAddressChange("same");
       toast.success("Website connection saved");
       await reloadAll();
     },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
-      setOriginError(message);
+      // A bad token is a bad token, not a bad address: putting its message
+      // under the address field sent the owner to fix the wrong box.
+      if (err instanceof TokenError) setTokenError(message);
+      else setOriginError(message);
       toast.error(message);
     },
   });
@@ -129,7 +166,11 @@ export function SiteConnectionScreen() {
         ok: true,
         message:
           page.leads.length > 0
-            ? `Connected. The oldest lead waiting is from ${formats.dateTime(page.leads[0].createdAt)}.`
+            ? // Asking for one lead from the beginning returns the site's
+              // OLDEST lead, which is almost always one Helix already has.
+              // Calling it "waiting" read as though leads were stuck
+              // (LR-REV, F-REV-7).
+              `Connected. Your website answered; its oldest lead is from ${formats.dateTime(page.leads[0].createdAt)}.`
             : "Connected. There are no new leads waiting right now.",
       });
     },
@@ -171,13 +212,41 @@ export function SiteConnectionScreen() {
       setToken("");
       setTouched(false);
       setTestResult(null);
+      setTokenError(undefined);
       toast.success("Website disconnected. Your leads stay where they are.");
       await reloadAll();
+    },
+    onError: (err: unknown) => {
+      // Usually the keychain refusing to delete. Before this the dialog just
+      // sat there and the owner had no idea it had failed (LR-REV, F-REV-9).
+      setConfirmingDisconnect(false);
+      toast.error(
+        `Helix could not disconnect your website. ${err instanceof Error ? err.message : String(err)}`,
+      );
     },
   });
 
   const connected = connection.data?.connected ?? false;
   const hasToken = connection.data?.hasToken ?? false;
+  /**
+   * "Test connection" goes through `leads_fetch`, which reads the SAVED
+   * address and the SAVED token out of the keychain - it cannot see what is
+   * in these two boxes. So an owner who pasted a freshly rotated token and
+   * pressed Test was told his old token still worked, or still failed, and
+   * either way learned nothing about the one he had just typed (LR-REV,
+   * F-REV-3). Rather than quietly saving on his behalf from a button that
+   * does not say so, the button waits for Save and says why.
+   */
+  const typedOrigin = origin.trim().replace(/\/+$/, "");
+  const unsavedEdits = token.trim().length > 0 || (touched && typedOrigin !== (storedOrigin ?? ""));
+  /**
+   * The owner is pointing Helix somewhere else. Saving this used to silently
+   * re-read the new address from the beginning, and because a lead's
+   * idempotency key carries the origin, every lead already on file came back
+   * as a second job (LR-REV, F-REV-11).
+   */
+  const addressChanged =
+    Boolean(storedOrigin) && typedOrigin.length > 0 && typedOrigin !== storedOrigin;
   const lastPolledAt = sync.data?.lastPolledAt ?? status.lastPolledAt;
   const lastError = sync.data?.lastError ?? null;
 
@@ -224,6 +293,7 @@ export function SiteConnectionScreen() {
 
                 <Field
                   label="Token"
+                  error={tokenError}
                   hint={
                     hasToken
                       ? "A token is already saved. Leave this empty to keep it, or paste a new one to replace it."
@@ -236,9 +306,34 @@ export function SiteConnectionScreen() {
                     placeholder={hasToken ? "Saved" : "Paste the token"}
                     autoComplete="off"
                     spellCheck={false}
-                    onChange={(event) => setToken(event.target.value)}
+                    onChange={(event) => {
+                      setToken(event.target.value);
+                      setTokenError(undefined);
+                    }}
                   />
                 </Field>
+
+                {addressChanged ? (
+                  <Field
+                    label="This address is"
+                    hint="Helix keeps one place-in-the-list per address, so it has to be told which of these you mean."
+                  >
+                    <Select
+                      value={addressChange}
+                      onValueChange={(value) =>
+                        setAddressChange(value as "same" | "different")
+                      }
+                      ariaLabel="This address is"
+                      options={[
+                        {
+                          value: "same",
+                          label: "The same website, at a new address",
+                        },
+                        { value: "different", label: "A different website" },
+                      ]}
+                    />
+                  </Field>
+                ) : null}
 
                 <div className="flex flex-wrap items-center gap-[var(--space-2)]">
                   <Button
@@ -254,12 +349,22 @@ export function SiteConnectionScreen() {
                     onClick={() => test.mutate()}
                     loading={test.isPending}
                     loadingLabel="Testing…"
-                    disabled={!connected}
+                    disabled={!connected || unsavedEdits}
                     iconLeft={<Globe size={16} weight="bold" aria-hidden="true" />}
                   >
                     Test connection
                   </Button>
                 </div>
+
+                {connected && unsavedEdits ? (
+                  <p
+                    data-testid="site-test-needs-save"
+                    className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                  >
+                    Save first. Test connection checks the address and token
+                    Helix has saved, not what is typed above.
+                  </p>
+                ) : null}
 
                 {testResult ? (
                   <p
@@ -306,7 +411,30 @@ export function SiteConnectionScreen() {
                 <span className="text-[var(--color-text-muted)]">Last result</span>
                 <span className="text-right text-[var(--color-text)]">
                   {lastError ? (
-                    <span className="text-[var(--color-danger-ink)]">{lastError}</span>
+                    /* `lead_sync.last_error` is stored in Helix's own words
+                       ("LeadPollAuthError: HTTP 401") because Diagnostics and
+                       support read it raw. It used to be printed here exactly
+                       as stored, so an owner whose token had been rotated read
+                       an exception class name on his own screen (LR-REV,
+                       F-REV-4). He reads the sentence; the stored line stays
+                       underneath in muted type, which is what Walker asks for
+                       over the phone. */
+                    <span className="flex flex-col items-end gap-[var(--space-1)]">
+                      <span
+                        data-testid="site-last-error"
+                        className="text-[var(--color-danger-ink)]"
+                      >
+                        {describeStoredPollError(lastError)}
+                      </span>
+                      {storedPollErrorDetail(lastError) ? (
+                        <span
+                          data-testid="site-last-error-detail"
+                          className="text-[length:var(--text-xs)] text-[var(--color-text-muted)]"
+                        >
+                          {storedPollErrorDetail(lastError)}
+                        </span>
+                      ) : null}
+                    </span>
                   ) : lastPolledAt ? (
                     "Everything came through."
                   ) : (
@@ -369,6 +497,14 @@ function describeFetchError(err: unknown): string {
   const status = statusFromError(err);
   if (isAuthStatus(status)) {
     return "Your website turned the token down. Check that you copied all of it.";
+  }
+  if (status === 404) {
+    // Not "try again in a minute": a 404 is a site deployed without the lead
+    // endpoint, and no amount of waiting changes that (LR-REV, F-REV-1).
+    return "Your website has no lead connection on it yet. Ask ClearPath to switch it on.";
+  }
+  if (status === 400) {
+    return "Your website could not read where Helix left off. Press Poll now; Helix will start again from your first lead.";
   }
   if (status !== null) {
     return `Your website answered with an error (${status}). Try again in a minute.`;
