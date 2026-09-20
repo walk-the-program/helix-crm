@@ -144,13 +144,6 @@ export function BackupsScreen() {
           </div>
         ) : null}
 
-        <p className="max-w-[var(--content-max)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          Helix backs up after opening, unless one has run in the last hour, and every 6 hours
-          after that. It keeps every backup from the last 24 hours, then one per day for 30
-          days, and removes the rest. Backups cover the database only — attachments are plain
-          files stored beside it and are not included.
-        </p>
-
         {backupsQuery.isLoading ? (
           <div className="flex justify-center py-[var(--space-10)]">
             <Spinner label="Loading backups" />
@@ -158,7 +151,7 @@ export function BackupsScreen() {
         ) : files.length === 0 ? (
           <EmptyState
             title="No backups yet"
-            description="Helix will back up automatically, or you can start one now."
+            description="The first one is written the next time you open Helix, or start one now."
             action={
               <Button
                 variant="primary"
