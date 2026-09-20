@@ -253,6 +253,47 @@ export async function remove(
   }, "Deleting a stage");
 }
 
+/**
+ * Empty stages the "Remove empty stages" sweep is allowed to touch: no deals,
+ * and not won or not lost. A won/lost stage is a property the money model and
+ * `reopen` depend on existing, so an empty one is never a cleanup candidate -
+ * only a person deleting it by hand (with a target for the deals, if any)
+ * gets to make that call.
+ *
+ * If literally every stage in the pipeline qualifies (no won/lost stage
+ * exists and nothing holds a deal), the first one in position order is kept
+ * so the sweep can never leave the pipeline with zero stages.
+ */
+export async function emptyRemovableCandidates(pipelineId: string): Promise<Stage[]> {
+  const all = await list(pipelineId);
+  const counts = await summary(pipelineId);
+  const dealCountById = new Map(counts.map((c) => [c.stageId, c.dealCount]));
+  const candidates = all.filter(
+    (stage) =>
+      !stage.isWon && !stage.isLost && (dealCountById.get(stage.id) ?? 0) === 0,
+  );
+  if (candidates.length > 0 && candidates.length === all.length) {
+    return candidates.slice(1);
+  }
+  return candidates;
+}
+
+/**
+ * Delete every stage `emptyRemovableCandidates` names. Each is already empty,
+ * so `remove` needs no target stage for any of them. Returns what it removed,
+ * for the confirm dialog to name.
+ */
+export async function removeEmpty(
+  pipelineId: string,
+  options: { batchId?: string } = {},
+): Promise<Stage[]> {
+  const candidates = await emptyRemovableCandidates(pipelineId);
+  for (const stage of candidates) {
+    await remove(stage.id, undefined, options);
+  }
+  return candidates;
+}
+
 export async function restore(
   id: string,
   options: { batchId?: string } = {},

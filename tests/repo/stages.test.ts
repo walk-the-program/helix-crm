@@ -42,6 +42,21 @@ describe("stages: list and create", () => {
   });
 });
 
+describe("stages: list orders by position, not insertion order", () => {
+  it("sorts by position even when stages were created in a different order", async () => {
+    h = await createHarness();
+    const pipeline = await pipelines.create({ name: "Out of order pipeline" });
+    // Inserted A, B, C but given positions that scramble that order.
+    const a = await stages.create({ pipelineId: pipeline.id, name: "A", position: 5 });
+    const b = await stages.create({ pipelineId: pipeline.id, name: "B", position: 1 });
+    const c = await stages.create({ pipelineId: pipeline.id, name: "C", position: 3 });
+
+    const list = await stages.list(pipeline.id);
+    expect(list.map((s) => s.id)).toEqual([b.id, c.id, a.id]);
+    expect(list.map((s) => s.position)).toEqual([1, 3, 5]);
+  });
+});
+
 describe("stages: reorder", () => {
   it("rewrites positions to 0..n-1 in the given order", async () => {
     h = await createHarness();
@@ -129,5 +144,58 @@ describe("stages: remove (StageInUseError)", () => {
       [a],
     );
     expect(rows.map((r) => String(r[0]))).toContain("delete");
+  });
+});
+
+describe("stages: emptyRemovableCandidates / removeEmpty", () => {
+  it("names only the empty, non-won, non-lost stages, in position order", async () => {
+    h = await createHarness();
+    const pipeline = await pipelines.create({ name: "Sweep pipeline" });
+    const empty1 = await stages.create({ pipelineId: pipeline.id, name: "Empty 1" });
+    const holding = await stages.create({ pipelineId: pipeline.id, name: "Holding" });
+    const empty2 = await stages.create({ pipelineId: pipeline.id, name: "Empty 2" });
+    const won = await stages.create({ pipelineId: pipeline.id, name: "Won", isWon: true });
+    const lost = await stages.create({ pipelineId: pipeline.id, name: "Lost", isLost: true });
+    await deals.create({ title: "In use", stageId: holding.id });
+
+    const candidates = await stages.emptyRemovableCandidates(pipeline.id);
+    expect(candidates.map((s) => s.id)).toEqual([empty1.id, empty2.id]);
+
+    const removed = await stages.removeEmpty(pipeline.id);
+    expect(removed.map((s) => s.id)).toEqual([empty1.id, empty2.id]);
+
+    const remaining = await stages.list(pipeline.id);
+    expect(remaining.map((s) => s.id).sort()).toEqual([holding.id, lost.id, won.id].sort());
+    // The stage holding a deal survives the sweep untouched.
+    expect((await stages.getOrThrow(holding.id)).deletedAt).toBeNull();
+  });
+
+  it("never sweeps a pipeline down to zero stages", async () => {
+    h = await createHarness();
+    const pipeline = await pipelines.create({ name: "All empty pipeline" });
+    const a = await stages.create({ pipelineId: pipeline.id, name: "A" });
+    const b = await stages.create({ pipelineId: pipeline.id, name: "B" });
+
+    // Neither stage is won/lost and neither holds a deal: sweeping "all of
+    // them" would leave the pipeline with none, so the first is kept.
+    const candidates = await stages.emptyRemovableCandidates(pipeline.id);
+    expect(candidates.map((s) => s.id)).toEqual([b.id]);
+
+    await stages.removeEmpty(pipeline.id);
+    const remaining = await stages.list(pipeline.id);
+    expect(remaining.map((s) => s.id)).toEqual([a.id]);
+  });
+
+  it("leaves everything alone when there is nothing to sweep", async () => {
+    h = await createHarness();
+    const { pipelineId, a, b, c } = await makePipelineWithStages();
+    await deals.create({ title: "D1", stageId: a });
+    await deals.create({ title: "D2", stageId: b });
+    await deals.create({ title: "D3", stageId: c });
+
+    const candidates = await stages.emptyRemovableCandidates(pipelineId);
+    expect(candidates).toEqual([]);
+    await stages.removeEmpty(pipelineId);
+    expect((await stages.list(pipelineId)).length).toBe(3);
   });
 });

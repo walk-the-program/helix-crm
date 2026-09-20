@@ -23,6 +23,7 @@ import {
 } from "@/ui";
 import * as stagesRepo from "@/db/repos/stages";
 import type { Stage } from "@/db/repos/stages";
+import { useStageSummary } from "@/features/records/lib/hooks";
 import { invalidateRecords, reportError } from "@/features/records/lib/mutations";
 
 /** The ramp DESIGN.md §5 fixes. Stage colour is a token, never a hex. */
@@ -45,6 +46,11 @@ export function StageManagerDialog(props: {
   const [deleting, setDeleting] = useState<Stage | null>(null);
   const [moveTarget, setMoveTarget] = useState<string>("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [sweepCandidates, setSweepCandidates] = useState<Stage[] | null>(null);
+  const [sweepMessage, setSweepMessage] = useState<string | null>(null);
+
+  const { data: summary } = useStageSummary(pipelineId);
+  const dealCountByStage = new Map((summary ?? []).map((row) => [row.stageId, row.dealCount]));
 
   useEffect(() => {
     if (!props.open) {
@@ -52,6 +58,8 @@ export function StageManagerDialog(props: {
       setNameError(null);
       setDeleting(null);
       setDeleteError(null);
+      setSweepCandidates(null);
+      setSweepMessage(null);
     }
   }, [props.open]);
 
@@ -119,6 +127,29 @@ export function StageManagerDialog(props: {
     }
   }
 
+  async function openSweep() {
+    setSweepMessage(null);
+    const candidates = await stagesRepo.emptyRemovableCandidates(pipelineId);
+    if (candidates.length === 0) {
+      setSweepMessage("No empty stages to remove.");
+      return;
+    }
+    setSweepCandidates(candidates);
+  }
+
+  async function confirmSweep() {
+    setBusy(true);
+    try {
+      await stagesRepo.removeEmpty(pipelineId);
+      await invalidateRecords();
+      setSweepCandidates(null);
+    } catch (err) {
+      reportError(err, "Those stages could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const ordered = [...stages].sort((a, b) => a.position - b.position);
 
   return (
@@ -132,6 +163,41 @@ export function StageManagerDialog(props: {
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex flex-wrap items-start justify-between gap-[var(--space-2)]">
+          <Button variant="secondary" size="sm" loading={busy} onClick={() => void openSweep()}>
+            Remove empty stages
+          </Button>
+          {sweepMessage ? (
+            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+              {sweepMessage}
+            </p>
+          ) : null}
+        </div>
+
+        {sweepCandidates ? (
+          <div className="border border-[var(--color-danger)] bg-[var(--color-danger-soft)] p-[var(--space-4)]">
+            <p className="text-[length:var(--text-base)] text-[var(--color-danger-ink)]">
+              Remove{" "}
+              {sweepCandidates.map((stage, i) => (
+                <span key={stage.id}>
+                  {i > 0 ? (i === sweepCandidates.length - 1 ? " and " : ", ") : ""}
+                  <strong>{stage.name}</strong>
+                </span>
+              ))}
+              ? {sweepCandidates.length === 1 ? "It is empty." : "They are empty."} Won
+              and lost stages are never swept, even when empty.
+            </p>
+            <div className="mt-[var(--space-3)] flex items-center gap-[var(--space-2)]">
+              <Button variant="secondary" onClick={() => setSweepCandidates(null)}>
+                Keep them
+              </Button>
+              <Button variant="danger" loading={busy} onClick={() => void confirmSweep()}>
+                Remove {sweepCandidates.length === 1 ? "stage" : "stages"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div
           aria-hidden="true"
           className="section-label flex flex-wrap items-end gap-[var(--space-2)] pb-[var(--space-2)]"
@@ -139,6 +205,7 @@ export function StageManagerDialog(props: {
           <span className="min-w-[180px] flex-1">Name</span>
           <span className="w-[160px]">Colour</span>
           <span className="w-[110px]">Quiet days</span>
+          <span className="w-[70px]">Deals</span>
           <span className="w-[108px]" />
         </div>
 
@@ -206,6 +273,13 @@ export function StageManagerDialog(props: {
                     );
                   }}
                 />
+              </div>
+
+              <div
+                className="w-[70px] tabular text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+                aria-label={`${dealCountByStage.get(stage.id) ?? 0} deals in ${stage.name}`}
+              >
+                {dealCountByStage.get(stage.id) ?? 0}
               </div>
 
               <div className="flex items-center gap-[var(--space-1)]">
