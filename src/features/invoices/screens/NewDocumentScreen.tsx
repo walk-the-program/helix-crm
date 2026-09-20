@@ -50,6 +50,7 @@ import { formatTaxRate } from "@/features/invoices/lib/settings";
 import { summarizeTaxLines, taxRowLabel } from "@/features/invoices/lib/taxLabel";
 import {
   DocumentLines,
+  blankLine,
   fromDealItems,
   toNewItems,
   type DraftLine,
@@ -102,6 +103,7 @@ export function NewDocumentScreen() {
   const { data: customerDeals } = useCustomerDeals(contactId, companyId);
   const { data: dealLines } = useDealLines(dealId);
   const syncDealLines = useSyncDealLines();
+  const customerChosen = Boolean(contactId || companyId);
 
   // Due date defaults to issued plus the workspace's payment terms, and stays
   // in sync with the issue date until the owner picks his own.
@@ -145,7 +147,11 @@ export function NewDocumentScreen() {
     if (linesTouched || !dealId || !dealLines) return;
     const selection = kind === "quote" ? "all" : "one_time";
     const filled = fromDealItems(dealLines, selection);
-    setLines(filled);
+    // A job with nothing priced on it still needs somewhere to type. The rule
+    // is "no empty row before a customer is chosen", not "no empty row ever" -
+    // once the owner has picked the job he is invoicing, an editor with no row
+    // in it is a dead end with an extra click in front of it.
+    setLines(filled.length > 0 ? filled : [blankLine()]);
     setKeptDealLineIds(
       dealLines
         .filter((item) => selection === "all" || item.kind === "recurring")
@@ -153,13 +159,15 @@ export function NewDocumentScreen() {
     );
   }, [dealId, dealLines, kind, linesTouched]);
 
-  // Dropping the deal drops what it filled in, unless the owner has since made
-  // the lines his own.
+  // Naming the customer is the point at which there is something to price, so
+  // that is when the first row appears. Dropping the deal again drops what it
+  // filled in, but keeps that row - unless the owner has made the lines his
+  // own, in which case nothing here touches them.
   useEffect(() => {
     if (dealId || linesTouched) return;
-    setLines([]);
+    setLines(customerChosen ? [blankLine()] : []);
     setKeptDealLineIds([]);
-  }, [dealId, linesTouched]);
+  }, [dealId, linesTouched, customerChosen]);
 
   function changeLines(next: DraftLine[]) {
     setLinesTouched(true);
@@ -305,8 +313,6 @@ export function NewDocumentScreen() {
       setSaving(false);
     }
   }
-
-  const customerChosen = Boolean(contactId || companyId);
 
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
