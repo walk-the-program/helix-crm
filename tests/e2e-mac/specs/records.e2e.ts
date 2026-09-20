@@ -955,3 +955,154 @@ test.describe("records screens", () => {
     await shootTo("records-deal-services-picker");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* CPO pass regressions (2026-09-20)                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One test per finding from the CPO audit that only the real UI can hold.
+ * Each one failed before the fix it names; the comment says what it looked
+ * like, because a regression test whose reason is lost gets deleted by the
+ * next person who finds it slow.
+ */
+test.describe("records: CPO regressions", () => {
+  /**
+   * F-LA-1. `save()` set React state and nothing checked it, so a second
+   * Enter arriving before the re-render created a second row. The audit walk
+   * produced two identical $2,500 deals from two keypresses.
+   */
+  test("two fast Enters in quick add create one record, not two", async ({ page, helix }) => {
+    await page.goto("/");
+    await openQuickAdd(page);
+    const dialog = quickAddDialog(page);
+    await dialog.getByRole("tab", { name: "Deal", exact: true }).click();
+    const titleField = dialog.getByLabel("Title");
+    await titleField.fill("Double submit probe");
+    // Both keydowns in ONE task, which is the race the guard exists for: a
+    // second Enter that lands before React has re-rendered `saving`. Sending
+    // them as two Playwright presses cannot reproduce it - the first press
+    // detaches the input, and the second would just wait for it.
+    await titleField.evaluate((el) => {
+      const fire = () =>
+        el.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+      fire();
+      fire();
+    });
+    await expect(dialog).toBeHidden();
+    await page.waitForTimeout(1200);
+
+    const rows = helix.bridge.query(
+      "SELECT id FROM deals WHERE title = ? AND deleted_at IS NULL",
+      ["Double submit probe"],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  /**
+   * F-LA-2. The board's subtitle totalled every column `deals.board()`
+   * returns — won and lost included — and called the result "open". The
+   * landscaping sample read "10 open" for 7 open deals.
+   */
+  test("the pipeline headline counts open deals only", async ({ page, helix }) => {
+    await page.goto("/");
+    await quickAddDeal(page, "Still open");
+    await quickAddDeal(page, "Already won");
+
+    const wonStage = helix.bridge.query(
+      "SELECT id FROM stages WHERE is_won = 1 AND deleted_at IS NULL LIMIT 1",
+      [],
+    );
+    expect(wonStage.length).toBe(1);
+    helix.bridge.execute("UPDATE deals SET stage_id = ?, closed_at = ? WHERE title = ?", [
+      String(wonStage[0][0]),
+      new Date().toISOString(),
+      "Already won",
+    ]);
+
+    await page.goto("/pipeline");
+    await page.reload();
+    await expect(page.getByTestId("pipeline-total")).toHaveText(/^1 open/);
+    // The won deal is still ON the board — its column is a drop target — it
+    // just is not counted as open.
+    await expect(page.getByTestId("deal-card").filter({ hasText: "Already won" })).toBeVisible();
+  });
+
+  /**
+   * F-LA-5. A contact page had a timeline, tasks, reminders and ten field
+   * groups and no jobs on it, so the only route to a person's work was the
+   * board.
+   */
+  test("the contact page lists the person's jobs", async ({ page, helix }) => {
+    await page.goto("/");
+    await quickAddContact(page, "Priya Raghunathan", { phone: "(801) 555-0120" });
+
+    const contact = helix.bridge.query("SELECT id FROM contacts LIMIT 1", []);
+    const stage = helix.bridge.query(
+      "SELECT id FROM stages WHERE is_won = 0 AND is_lost = 0 AND deleted_at IS NULL LIMIT 1",
+      [],
+    );
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO deals (id, created_at, updated_at, title, value_cents, currency, stage_id,
+         stage_entered_at, position, contact_id, one_time_cents, recurring_monthly_cents,
+         suggested_total_cents)
+       VALUES ('deal-cp-1', ?, ?, 'Full front yard redesign', 1480000, 'USD', ?, ?, 0, ?, 0, 0, 0)`,
+      [now, now, String(stage[0][0]), now, String(contact[0][0])],
+    );
+
+    await page.goto(`/contacts/${String(contact[0][0])}`);
+    await page.reload();
+    await expect(page.getByRole("link", { name: /Full front yard redesign/ })).toBeVisible();
+  });
+
+  /**
+   * F-LA-3 and F-LA-10. The strip read "Quoted $0" on a won deal because it
+   * summed quote documents, and the "Won on" row told the owner to "change it
+   * by moving the stage again" — which the stage picker cannot do.
+   */
+  test("a won deal shows what it was won for, and its date can be corrected", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await quickAddDeal(page, "Weed control, 600 feet of fence line");
+    const deal = helix.bridge.query("SELECT id FROM deals LIMIT 1", []);
+    const dealId = String(deal[0][0]);
+    const wonStage = helix.bridge.query(
+      "SELECT id FROM stages WHERE is_won = 1 AND deleted_at IS NULL LIMIT 1",
+      [],
+    );
+    helix.bridge.execute(
+      "UPDATE deals SET value_cents = 145000, stage_id = ?, closed_at = ? WHERE id = ?",
+      [String(wonStage[0][0]), "2026-09-10T12:00:00.000Z", dealId],
+    );
+
+    await page.goto(`/deals/${dealId}`);
+    await page.reload();
+    const strip = page.getByTestId("deal-money");
+    await expect(strip).toContainText("Won");
+    await expect(page.getByTestId("deal-value")).toHaveText("$1,450");
+
+    // Correcting the date writes closed_at without a second stage event.
+    const eventsBefore = helix.bridge.query(
+      "SELECT count(*) FROM deal_stage_events WHERE deal_id = ?",
+      [dealId],
+    )[0][0];
+    await page.getByRole("button", { name: "Change the date" }).click();
+    await expect(page.getByTestId("dialog-body").getByTestId("date-picker")).toBeVisible();
+    await page.getByRole("button", { name: "Save the date" }).click();
+    await page.waitForTimeout(800);
+    const eventsAfter = helix.bridge.query(
+      "SELECT count(*) FROM deal_stage_events WHERE deal_id = ?",
+      [dealId],
+    )[0][0];
+    expect(Number(eventsAfter)).toBe(Number(eventsBefore));
+    // The deal is still won: correcting a date must not reopen anything.
+    expect(
+      helix.bridge.query("SELECT closed_at FROM deals WHERE id = ?", [dealId])[0][0],
+    ).not.toBeNull();
+  });
+});

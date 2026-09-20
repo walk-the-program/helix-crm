@@ -563,3 +563,70 @@ test.describe("search", () => {
     await expect(search).toHaveCount(0);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* CPO pass regressions (2026-09-20)                                           */
+/* -------------------------------------------------------------------------- */
+
+test.describe("today: CPO regressions", () => {
+  /**
+   * F-LA-6. Today branched on "does this workspace hold any row", so saving
+   * one contact swapped the three starter cards for six empty panels — the
+   * owner did what the screen asked and got a blanker screen, with no link to
+   * the person he had just created. The starter cards now stay until a task,
+   * an open deal or an activity exists.
+   */
+  test("the starter cards survive the first contact, and go when work exists", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();
+
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name)
+       VALUES ('c-first', ?, ?, 'Brent', 'Hendrickson')`,
+      [now, now],
+    );
+    await page.reload();
+    await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();
+
+    // A promise to keep is what Today is for, so one task retires the cards.
+    helix.bridge.execute(
+      `INSERT INTO tasks (id, created_at, updated_at, title, contact_id)
+       VALUES ('t-first', ?, ?, 'Call Brent back', 'c-first')`,
+      [now, now],
+    );
+    await page.reload();
+    await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeHidden();
+    await expect(page.getByText("Due now")).toBeVisible();
+  });
+
+  /**
+   * F-LA-6, the second half: "Every open deal is moving" is a report about
+   * work that does not exist when the workspace has no open deals.
+   */
+  test("gone quiet does not claim every deal is moving when there are none", async ({
+    page,
+    helix,
+  }) => {
+    // The first goto is what runs the migrations, and the heading is how we
+    // know they finished: inserting before that is "no such table: contacts".
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name)
+       VALUES ('c-gq', ?, ?, 'Marla', 'Quintero')`,
+      [now, now],
+    );
+    helix.bridge.execute(
+      `INSERT INTO tasks (id, created_at, updated_at, title, contact_id)
+       VALUES ('t-gq', ?, ?, 'Call Marla', 'c-gq')`,
+      [now, now],
+    );
+    await page.reload();
+    await expect(page.getByText(/No open .* yet\./)).toBeVisible();
+  });
+});
