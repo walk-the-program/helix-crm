@@ -282,6 +282,9 @@ export function Combobox(props: {
   clearable?: boolean;
   id?: string;
   className?: string;
+  /** Mount with the list already open. For the component gallery and for a
+   *  picker that IS the screen; not a controlled `open`. */
+  defaultOpen?: boolean;
 }) {
   const {
     value,
@@ -297,10 +300,11 @@ export function Combobox(props: {
     clearable,
     id,
     className,
+    defaultOpen,
   } = props;
   const ariaLabel = props["aria-label"];
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -560,6 +564,8 @@ export function MultiCombobox(props: {
   summaryLabel?: (count: number) => string;
   id?: string;
   className?: string;
+  /** Mount with the list already open. See `Combobox`. */
+  defaultOpen?: boolean;
 }) {
   const {
     values,
@@ -573,10 +579,11 @@ export function MultiCombobox(props: {
     summaryLabel = (count) => `${count} chosen`,
     id,
     className,
+    defaultOpen,
   } = props;
   const ariaLabel = props["aria-label"];
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);

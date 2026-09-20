@@ -1346,11 +1346,13 @@ function buildPickerSection(): Section {
   });
 
   const comboOpen = mountOverlay(
-    <Combobox value="c1" onChange={() => {}} items={PICKER_CONTACTS} aria-label="Contact" />,
-    (container) => {
-      const trigger = container.querySelector<HTMLElement>("[data-testid='combobox']");
-      trigger?.click();
-    },
+    <Combobox
+      value="c1"
+      defaultOpen
+      onChange={() => {}}
+      items={PICKER_CONTACTS}
+      aria-label="Contact"
+    />,
   );
   if (comboOpen.trim()) {
     specimens.push({ id: "combobox.open", label: "Combobox, list open", html: comboOpen, overlay: true });
@@ -1370,11 +1372,13 @@ function buildPickerSection(): Section {
   });
 
   const dateOpen = mountOverlay(
-    <DatePicker value="2026-09-19" onChange={() => {}} aria-label="Due date" locale="en-GB" />,
-    (container) => {
-      const trigger = container.querySelector<HTMLElement>("[data-testid='date-picker']");
-      trigger?.click();
-    },
+    <DatePicker
+      value="2026-09-19"
+      defaultOpen
+      onChange={() => {}}
+      aria-label="Due date"
+      locale="en-GB"
+    />,
   );
   if (dateOpen.trim()) {
     specimens.push({ id: "datepicker.open", label: "DatePicker, calendar open", html: dateOpen, overlay: true });

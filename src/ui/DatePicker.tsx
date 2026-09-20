@@ -280,6 +280,9 @@ export function DatePicker(props: {
   /** Overrides the browser's own locale for week-start and month/weekday
    *  formatting - mainly for tests, which cannot assume a fixed locale. */
   locale?: string;
+  /** Mount with the calendar already open. For the component gallery; not a
+   *  controlled `open`. */
+  defaultOpen?: boolean;
 }): ReactElement {
   const {
     value,
@@ -292,12 +295,13 @@ export function DatePicker(props: {
     id,
     className,
     locale,
+    defaultOpen,
   } = props;
   const ariaLabel = props["aria-label"];
   const ariaDescribedBy = props["aria-describedby"];
   const ariaInvalid = props["aria-invalid"];
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(defaultOpen));
   const [focusedDate, setFocusedDate] = useState<string>(() => defaultFocusDate(value, min, max));
   const contentRef = useRef<HTMLDivElement>(null);
 
