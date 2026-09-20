@@ -194,6 +194,17 @@ short line. R17 shortcuts sheet derived from allCommands. R18 PDF fonts stay the
 guide's embedded faces (documented exception, deferred). R19 route-level lazy() to phase
 two. Packet CPO-LC-IMPL rev 2 sent 00:3x.
 
+### 4.3 Phase-two findings (design pass; product problems it exposed carry F-P2-*)
+
+| id | sev | class | finding (evidence) | decision | owner | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F-P2-LB-1 | high | defect | The deal page contradicted itself: money strip "Won $0" above a services panel and Identity card reading $2,560; `invalidateDealMoney` (catalog/lib/dealItemHooks.ts) invalidated every key except `["money"]`, the one the strip reads. Hidden while Quoted came from quote documents; exposed by D1. A reload fixed it, so every navigating test passed. | fixed `2eaa0ff`, pinned in revenue.e2e.ts with a test that never reloads | lead-money | implemented |
+| F-P2-LB-2 | medium | defect | Repository validation messages cannot follow the vocabulary ("A document belongs to a deal.") because the pure table lives in src/app, which src/db never imports. | move the pure table to src/lib/vocabulary.ts (lead-platform), then repos read `settings.get("vocabulary")` + `vocabularyFor` (lead-money) | lead-platform → lead-money | in progress |
+| F-P2-LB-3 | medium | defect | "Send" reappeared on a paid invoice after F-LB-4 made paid → sent legal (`canSend` asked `canTransition`); pressing it would re-send the PDF and overwrite a live `paid_on`. | Send is a draft action | lead-money | implemented |
+| F-P2-LB-4 | low | usability | A draft offered both Void and Delete (two red buttons, different consequences); paid invoices read "Due in 14 days"; "Paid · bank" echoed a stored value; the TAX column said "Yes" on every line while the rate was 0. | draft offers Delete only; due line hidden once paid; method labels; tax column follows `hasMixedTaxability` | lead-money (+W2) | implemented |
+
+Further phase-two findings are appended from each lead's return.
+
 ## 5. Decisions
 
 ### 5.1 Product decisions (phase one)
