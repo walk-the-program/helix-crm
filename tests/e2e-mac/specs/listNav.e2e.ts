@@ -136,3 +136,114 @@ test.describe("contacts list: sort and keyboard", () => {
     await expect(page.getByRole("heading", { name: "Bravo Brown", level: 1 })).toBeVisible();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* The guard that was missing (phase two)                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every contact is reachable.
+ *
+ * The two tests above seed THREE contacts, which is fewer than a viewport
+ * holds, so they pass under every broken arrangement of the list's height —
+ * and one such arrangement shipped: `VirtualList fit` against a content-height
+ * panel settled the scroller at roughly one screen of rows and never grew, so
+ * a 16-contact workspace rendered 10 rows, showed no scrollbar, and still said
+ * "16 of 16 people" in its own header. A list that silently hides records is
+ * the worst thing this product can do, and nothing here caught it.
+ *
+ * What these two hold, and why each matters:
+ *  - the rendered count equals the header's own count, so the screen cannot
+ *    contradict itself;
+ *  - with more rows than fit, scrolling reaches the last one, in both
+ *    densities — compact changes the row height, which is what feeds the
+ *    virtualiser's arithmetic, so it is a genuinely different case.
+ */
+function seedMany(bridge: HelixHarness["bridge"], count: number): string[] {
+  const names: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const last = `Row${String(i).padStart(3, "0")}`;
+    names.push(`Person ${last}`);
+    bridge.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at)
+       VALUES (?, 'Person', ?, ?, ?)`,
+      [`c-many-${i}`, last, "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"],
+    );
+  }
+  return names;
+}
+
+/** Set the density AFTER navigation and prove it stuck: the shell re-applies
+ *  appearance from helix.json when it mounts, so an attribute set before a
+ *  goto is silently reverted (src/app/appSettings.ts). */
+async function setDensity(page: Page, density: "comfortable" | "compact"): Promise<void> {
+  await page.evaluate((d) => document.documentElement.setAttribute("data-density", d), density);
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-density"))).toBe(
+    density,
+  );
+}
+
+test.describe("contacts list: every row is reachable", () => {
+  test.use({ viewport: { width: 1280, height: 820 } });
+
+  test("the rendered rows match the header's own count", async ({ page, helix }) => {
+    await page.goto("/");
+    await waitForShell(page);
+    seedMany(helix.bridge, 16);
+    await page.goto("/contacts");
+    await expect(page.getByText("16 of 16 people")).toBeVisible();
+    await expect(page.getByTestId("contact-row-name")).toHaveCount(16);
+  });
+
+  for (const density of ["comfortable", "compact"] as const) {
+    test(`40 contacts: the last one can be scrolled to in ${density}`, async ({ page, helix }) => {
+      await page.goto("/");
+      await waitForShell(page);
+      seedMany(helix.bridge, 40);
+      await page.goto("/contacts");
+      await expect(page.getByText("40 of 40 people")).toBeVisible();
+      await setDensity(page, density);
+
+      // A virtualised row does not exist in the DOM until the scroller reaches
+      // it, so waiting on the locator is waiting forever. Drive the scroller
+      // instead, which is also what the owner does.
+      // The kit marks the `fit` scroller with `data-fit` (src/ui/VirtualList.tsx).
+      const scroller = page.locator("[data-fit]");
+      const reach = async (text: string, to: "top" | "bottom") => {
+        for (let i = 0; i < 40; i += 1) {
+          if ((await page.getByTestId("contact-row-name").filter({ hasText: text }).count()) > 0) {
+            return true;
+          }
+          await scroller.evaluate(
+            (el, dir) => {
+              el.scrollTop = dir === "bottom" ? el.scrollTop + el.clientHeight : 0;
+            },
+            to,
+          );
+          await page.waitForTimeout(120);
+        }
+        return false;
+      };
+
+      // The list must actually be scrollable: a scroller no taller than its
+      // content is the shape that silently hid rows before.
+      const metrics = await scroller.evaluate((el) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }));
+      expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+
+      expect(await reach("Person Row039", "bottom")).toBe(true);
+      await expect(
+        page.getByTestId("contact-row-name").filter({ hasText: "Person Row039" }),
+      ).toBeVisible();
+
+      // And the first is still reachable on the way back.
+      expect(await reach("Person Row000", "top")).toBe(true);
+      await expect(
+        page.getByTestId("contact-row-name").filter({ hasText: "Person Row000" }),
+      ).toBeVisible();
+    });
+  }
+});
