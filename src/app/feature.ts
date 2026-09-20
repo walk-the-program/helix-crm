@@ -6,6 +6,7 @@
  * renders routes, sidebar items and the command palette from them. No feature
  * ever edits the registry.
  */
+import { lazy } from "react";
 import type { ComponentType, ReactNode } from "react";
 
 export type FeatureId =
@@ -192,4 +193,41 @@ export function navGroupPosition(to: string): { group: number; index: number } |
     if (index !== -1) return { group, index };
   }
   return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Route-level code splitting                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Declare a routed screen that is only downloaded when someone opens it.
+ *
+ * The app ships as one JavaScript chunk, and most of its weight belongs to a
+ * handful of screens: the reports draw with a charting library and the invoice
+ * PDF is rendered by a PDF library, neither of which the owner touches on the
+ * way to Today. Splitting them off is a `React.lazy` at the route, and the
+ * only reason it was not already one is the boilerplate — `lazy()` wants a
+ * module whose `default` is the component, and every screen in this codebase
+ * is a named export. So this writes that once:
+ *
+ *     const RevenueScreen = lazyScreen(
+ *       () => import("@/features/leads/screens/RevenueScreen"),
+ *       (m) => m.RevenueScreen,
+ *     );
+ *     // ...
+ *     { path: "/reports/revenue", element: <RevenueScreen /> }
+ *
+ * The `Suspense` boundary is the shell's, one for the whole route switch
+ * (src/app/Shell.tsx), so a feature never declares its own fallback and two
+ * features cannot disagree about what a loading screen looks like.
+ *
+ * Only use it for a screen the owner reaches by choosing to: a lazy route on
+ * the boot path would trade a smaller download for a blank frame on launch,
+ * which is the wrong side of that bargain.
+ */
+export function lazyScreen<M>(
+  load: () => Promise<M>,
+  pick: (module: M) => ComponentType<Record<string, never>>,
+): ComponentType<Record<string, never>> {
+  return lazy(async () => ({ default: pick(await load()) }));
 }

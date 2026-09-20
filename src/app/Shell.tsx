@@ -27,7 +27,7 @@
  *    is where a dialog that has to exist on every screen belongs — instead of a
  *    second React root on `<body>` with the providers rebuilt around it.
  */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Route, Router, Switch, useLocation } from "wouter";
 import { cn } from "@/ui/cn";
 import { Toaster } from "sonner";
@@ -75,6 +75,7 @@ import {
   SidebarSection,
   SidebarSeparator,
   SIDEBAR_DEFAULT_W,
+  Spinner,
   Topbar,
   Tooltip,
   TooltipProvider,
@@ -750,16 +751,35 @@ export function Shell({ registry, workspace }: ShellProps) {
             data-dialog-focus-fallback=""
             className="min-h-0 min-w-0 flex-1 overflow-y-auto px-[var(--space-7)] py-[var(--space-6)]"
           >
-            <Switch>
-              {routes.map((route) => (
-                <Route key={route.path} path={route.path}>
-                  {route.element}
+            {/*
+              One Suspense boundary for every route, so a feature that splits a
+              heavy screen off with `lazyScreen` (src/app/feature.ts) never has
+              to invent its own loading screen and two features cannot disagree
+              about what one looks like.
+
+              The fallback is a spinner in the content column and nothing else:
+              a skeleton that guesses at the shape of a screen it has not
+              downloaded yet is a lie that flickers. Nothing on the boot path is
+              lazy, so this never shows on launch.
+            */}
+            <Suspense
+              fallback={
+                <div className="flex min-h-[40vh] items-center justify-center">
+                  <Spinner size={24} label="Opening" />
+                </div>
+              }
+            >
+              <Switch>
+                {routes.map((route) => (
+                  <Route key={route.path} path={route.path}>
+                    {route.element}
+                  </Route>
+                ))}
+                <Route>
+                  <NotFound />
                 </Route>
-              ))}
-              <Route>
-                <NotFound />
-              </Route>
-            </Switch>
+              </Switch>
+            </Suspense>
           </main>
         </div>
       </div>
