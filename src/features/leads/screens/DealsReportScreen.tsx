@@ -367,6 +367,7 @@ function TrendCard(props: {
 function PipelineCard(props: { rows: PipelineStageRow[] }) {
   const { rows } = props;
   const formats = useFormats();
+  const vocabulary = useVocabulary();
   const empty = rows.length === 0 || rows.every((row) => row.openDeals === 0);
 
   const data = rows.map((row) => ({
@@ -401,10 +402,10 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
   return (
     <ReportCard
       title="Pipeline value by stage"
-      description="Open deals right now, by stage."
+      description={`Open ${vocabulary.lowerMany} right now, by stage.`}
       empty={empty}
       emptyTitle="Nothing in the pipeline yet"
-      emptyDescription="Open deals show up here with what they are worth."
+      emptyDescription={`Open ${vocabulary.lowerMany} show up here with what they are worth.`}
       csv={csv}
       chart={
         // The category is the stage, so each bar carries its own stage colour.
@@ -666,6 +667,7 @@ function WonLostCard(props: {
 function SourcesCard(props: { rows: SourceRow[] }) {
   const { rows } = props;
   const formats = useFormats();
+  const vocabulary = useVocabulary();
   const empty = rows.length === 0;
 
   const data = rows.map((row) => ({
@@ -707,10 +709,10 @@ function SourcesCard(props: { rows: SourceRow[] }) {
   return (
     <ReportCard
       title="Leads by source"
-      description="Where the deals created in this period came from."
+      description={`Where the ${vocabulary.lowerMany} created in this period came from.`}
       empty={empty}
       emptyTitle="No leads yet"
-      emptyDescription="Where deals come from shows up here once leads start arriving."
+      emptyDescription={`Where ${vocabulary.lowerMany} come from shows up here once leads start arriving.`}
       csv={csv}
       chart={
         <ChartFigure ariaLabel={ariaLabel} height={barChartHeight(rows.length)}>
@@ -757,6 +759,7 @@ function SourcesCard(props: { rows: SourceRow[] }) {
 
 function ConversionCard(props: { rows: ConversionRow[] }) {
   const { rows } = props;
+  const vocabulary = useVocabulary();
   const empty = rows.length === 0;
 
   // A pair nobody entered has no rate to draw - it stays in the table as
@@ -790,10 +793,10 @@ function ConversionCard(props: { rows: ConversionRow[] }) {
   return (
     <ReportCard
       title="Conversion between stages"
-      description="Of the deals that entered a stage in this period, how many moved to the next one."
+      description={`Of the ${vocabulary.lowerMany} that entered a stage in this period, how many moved to the next one.`}
       empty={empty}
       emptyTitle="No stage moves yet"
-      emptyDescription="Conversion between stages shows up here once deals start moving."
+      emptyDescription={`Conversion between stages shows up here once ${vocabulary.lowerMany} start moving.`}
       csv={csv}
       chart={
         <ChartFigure ariaLabel={ariaLabel} height={barChartHeight(chartRows.length)}>
@@ -924,6 +927,7 @@ function DwellMiniChart(props: {
 
 function DwellCard(props: { rows: DwellRow[] }) {
   const { rows } = props;
+  const vocabulary = useVocabulary();
   const hasAnyData = rows.some((row) => row.averageDays !== null || row.currentAverageDays !== null);
   const empty = rows.length === 0 || !hasAnyData;
 
@@ -966,16 +970,16 @@ function DwellCard(props: { rows: DwellRow[] }) {
   return (
     <ReportCard
       title="Average days in stage"
-      description="How long a stage visit takes, and how long today's open deals have been waiting."
+      description={`How long a stage visit takes, and how long today's open ${vocabulary.lowerMany} have been waiting.`}
       empty={empty}
       emptyTitle="No stage history yet"
-      emptyDescription="How long deals sit in each stage shows up here once some have finished, or some are waiting."
+      emptyDescription={`How long ${vocabulary.lowerMany} sit in each stage shows up here once some have finished, or some are waiting.`}
       csv={csv}
       chart={
         <div className="grid grid-cols-1 gap-[var(--space-6)] lg:grid-cols-2">
           <DwellMiniChart title="Time in stage (finished)" rows={rows} valueKey="averageDays" />
           <DwellMiniChart
-            title="Open deals waiting now"
+            title={`Open ${vocabulary.lowerMany} waiting now`}
             rows={rows}
             valueKey="currentAverageDays"
           />

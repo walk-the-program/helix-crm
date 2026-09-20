@@ -11,21 +11,49 @@
  * behind it still live in this folder, which is the feature that owns them.
  */
 import type { FeatureModule } from "@/app/feature";
-import { NAV_ORDER } from "@/app/feature";
+import { NAV_ORDER, lazyScreen } from "@/app/feature";
 import { BarChart3 } from "@/ui/icons";
 import { OverviewScreen } from "@/features/leads/screens/OverviewScreen";
-import { DealsReportScreen } from "@/features/leads/screens/DealsReportScreen";
-import { PeopleReportScreen } from "@/features/leads/screens/PeopleReportScreen";
-import { RevenueScreen } from "@/features/leads/screens/RevenueScreen";
 import { start as startPoller } from "@/features/leads/poller";
+
+/**
+ * The three chart-bearing reports load when the owner asks for them.
+ *
+ * recharts is the single heaviest thing in the bundle and `components/charts.tsx`
+ * is reachable from these three screens and nowhere else - checked, not assumed:
+ * nothing under Today, the board or the records screens imports either. Overview
+ * stays static because it is the /reports landing route and draws its stage bars
+ * with plain elements, so it costs nothing to keep and a blank frame to defer.
+ *
+ * The Suspense boundary is the shell's, one for the whole route switch, so
+ * nothing here declares a fallback.
+ */
+const RevenueScreenLazy = lazyScreen(
+  () => import("@/features/leads/screens/RevenueScreen"),
+  (m) => m.RevenueScreen,
+);
+const DealsReportScreenLazy = lazyScreen(
+  () => import("@/features/leads/screens/DealsReportScreen"),
+  (m) => m.DealsReportScreen,
+);
+const PeopleReportScreenLazy = lazyScreen(
+  () => import("@/features/leads/screens/PeopleReportScreen"),
+  (m) => m.PeopleReportScreen,
+);
 
 export { SiteConnectionScreen } from "@/features/leads/screens/SiteConnectionScreen";
 export { OverviewScreen } from "@/features/leads/screens/OverviewScreen";
-export { DealsReportScreen } from "@/features/leads/screens/DealsReportScreen";
-export { PeopleReportScreen } from "@/features/leads/screens/PeopleReportScreen";
+/*
+ * RevenueScreen, DealsReportScreen and PeopleReportScreen are deliberately NOT
+ * re-exported here. A static re-export from this file would pull all three -
+ * and recharts behind them - straight back into the main chunk, undoing the
+ * split above, and it would do it silently: the build still succeeds, the app
+ * still works, and the only symptom is a megabyte back on launch. Nothing
+ * imports them today (checked). If something ever needs one, import the screen
+ * module directly and think about what that does to the boot download.
+ */
 export { ReportsFrame, ReportTabs, REPORT_TABS } from "@/features/leads/components/ReportsFrame";
 export type { ReportTabId } from "@/features/leads/components/ReportsFrame";
-export { RevenueScreen } from "@/features/leads/screens/RevenueScreen";
 export { usePollStatus } from "@/features/leads/hooks";
 export { PollBanner } from "@/features/leads/components/PollBanner";
 /**
@@ -46,9 +74,9 @@ export const feature: FeatureModule = {
   id: "leads",
   routes: [
     { path: "/reports", element: <OverviewScreen /> },
-    { path: "/reports/revenue", element: <RevenueScreen /> },
-    { path: "/reports/deals", element: <DealsReportScreen /> },
-    { path: "/reports/people", element: <PeopleReportScreen /> },
+    { path: "/reports/revenue", element: <RevenueScreenLazy /> },
+    { path: "/reports/deals", element: <DealsReportScreenLazy /> },
+    { path: "/reports/people", element: <PeopleReportScreenLazy /> },
     // "/reports/receivables" is the invoices feature's own route; the tab
     // strip links to it and the sidebar keeps Reports lit on every path
     // under /reports.

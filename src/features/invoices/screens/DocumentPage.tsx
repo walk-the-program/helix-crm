@@ -82,7 +82,6 @@ import { MarkPaidDialog, PAYMENT_METHODS } from "@/features/invoices/components/
 function paymentMethodLabel(value: string): string {
   return PAYMENT_METHODS.find((method) => method.value === value)?.label ?? value;
 }
-import { saveDocumentPdf } from "@/features/invoices/lib/pdfFile";
 
 /**
  * A label/value row. `CardRow` is a bare flex row with a hairline under it, so
@@ -189,6 +188,11 @@ export function DocumentPage() {
     // what was actually stored, not what was on screen a moment ago.
     const fresh = await getDocument(document.id);
     if (!fresh) return null;
+    // pdf-lib and the four embedded brand faces behind this module are the
+    // second-heaviest thing in the bundle, and nothing needs them until the
+    // owner asks for a PDF. Imported here, at the only call site, rather than
+    // at the top of a screen that mounts whenever a document is opened.
+    const { saveDocumentPdf } = await import("@/features/invoices/lib/pdfFile");
     const result = await saveDocumentPdf(fresh.document, fresh.items, settings, {
       openAfter,
     });

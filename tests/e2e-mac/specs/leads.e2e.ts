@@ -772,7 +772,12 @@ test.describe("reports", () => {
     await expect(
       page.getByRole("heading", { name: "Pipeline value by stage", exact: true }),
     ).toBeVisible();
-    await expect(page.getByText("Nothing in the pipeline yet")).toBeVisible();
+    // A section-level empty is one muted sentence, no heading: the kit's
+    // EmptyState variant="quiet" renders the description and drops the title,
+    // so the sentence is what the owner reads and what this asserts.
+    await expect(
+      page.getByText("Open deals show up here with what they are worth."),
+    ).toBeVisible();
     await expect(page.getByRole("img")).toHaveCount(0);
   });
 });
