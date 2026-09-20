@@ -472,8 +472,22 @@
   --color-surface:        #1E1E1E;   /* one step lighter                      */
   --color-surface-raised: #282828;   /* genuinely lighter here                */
   --color-sidebar:        #191919;
-  --color-hover:          #242424;
-  --color-selected:       #2A2D2E;   /* the primary at 10% over the surface   */
+
+  /* Hover used to be #242424 against this #1E1E1E surface: a six-value jump
+     per channel that measures 1.07:1, imperceptible on a laptop in daylight
+     (apple-hig-review.md finding 13). Raised to clear the 1.4:1 floor the
+     review asked for. --color-selected moves up with it, by the same recipe
+     as before - the primary mixed over the surface, just at roughly 21%
+     instead of 10% - so a persistently selected row still reads brighter
+     than a merely-hovered one instead of the two states trading places.
+       #383838 on #1E1E1E ............ 1.42:1   (hover on the surface)
+       #373D41 on #1E1E1E ............ 1.51:1   (selected on the surface)
+       #373D41 on #383838 ............ 1.06:1   (selected on hover)
+     Neither fill got so bright that text sitting on it suffers: see the
+     tertiary-ink line in the ink comment below, which is what actually
+     capped how far selected could move.                                    */
+  --color-hover:          #383838;
+  --color-selected:       #373D41;
   --color-overlay:        rgba(0, 0, 0, 0.60);
 
   /* Hairlines from the neutral light at low alpha, the mirror of the light
@@ -490,15 +504,16 @@
      #FAFAFF on #1E1E1E ........... 16.02:1  AAA
      #FAFAFF on #282828 ........... 14.17:1  AAA
      #FAFAFF on #191919 ........... 16.90:1  AAA
-     #FAFAFF on #242424 ........... 14.92:1  AAA
-     #FAFAFF on #2A2D2E ........... 13.34:1  AAA
+     #FAFAFF on #383838 ........... 11.27:1  AAA   (hover)
+     #FAFAFF on #373D41 ........... 10.59:1  AAA   (selected)
      #B4B5BE on #141414 ............ 9.03:1  AAA
      #B4B5BE on #1E1E1E ............ 8.17:1  AAA
      #B4B5BE on #282828 ............ 7.23:1  AAA
      #A6A7B1 on #141414 ............ 7.71:1  AAA
      #A6A7B1 on #1E1E1E ............ 6.97:1  AAA
      #A6A7B1 on #282828 ............ 6.17:1  AAA
-     #A6A7B1 on #2A2D2E ............ 5.80:1  AAA   <- worst text pair, dark   */
+     #A6A7B1 on #383838 ............ 4.90:1  AA
+     #A6A7B1 on #373D41 ............ 4.61:1  AA    <- worst text pair, dark   */
   --color-heading:    #FAFAFF;
   --color-text:       #FAFAFF;
   --color-text-muted: #B4B5BE;

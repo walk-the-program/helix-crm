@@ -108,10 +108,46 @@ body {
   font-synthesis-weight: none;
 }
 
-/* A desktop app is not a document. Text selection is opt-in on content, and
-   the window chrome does not rubber-band or drag-select.                     */
+/* A desktop app is not a document, but a CRM record is not a document either
+   - it is data an owner drags a finger across and pastes into a text message
+   or an invoice all day, and that was broken: this file used to set
+   `user-select: none` on body and re-open it only for
+   `input, textarea, [contenteditable], [data-selectable], .selectable`, and
+   the last two hooks were never once used anywhere in the product, so every
+   phone number, address, note and table cell was unselectable
+   (apple-hig-review.md finding 4).
+
+   The policy now runs the other way: selection is ON by default everywhere
+   text can appear, and the chrome opts back OUT - the sidebar (nav rows,
+   section labels, the workspace footer) and any other nav landmark, plus
+   every clickable control wherever it sits, so a double-click on a button or
+   a nav row activates it instead of highlighting its own label. The
+   `[data-tauri-drag-region]` rule above already turns selection off for
+   anything the window can be dragged by and is unchanged.                    */
 body {
   overscroll-behavior: none;
+}
+
+/* The sidebar and any nav landmark are chrome: picking one up is a click, not
+   a selection. `aside[aria-label="Sidebar"]` and `nav` are the real elements
+   Nav.tsx renders (see its `Sidebar` and the `<nav aria-label="Main">` inside
+   it) rather than an invented class, so this holds even for a nav this file
+   doesn't know about yet, like the settings sub-nav or the import stepper.   */
+aside[aria-label="Sidebar"],
+nav {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* A button (or anything acting as one) is a control, not a sentence, and a
+   <label> is a click target for the input it names - none of the three
+   should highlight their own text on a double-click, wherever they sit. This
+   is what keeps a row-action button selectable-proof inside an otherwise
+   selectable table cell, without touching the cell's own text.               */
+button,
+[role="button"],
+label {
   cursor: default;
   user-select: none;
   -webkit-user-select: none;
@@ -119,9 +155,7 @@ body {
 
 input,
 textarea,
-[contenteditable],
-[data-selectable],
-.selectable {
+[contenteditable] {
   user-select: text;
   -webkit-user-select: text;
   cursor: auto;
