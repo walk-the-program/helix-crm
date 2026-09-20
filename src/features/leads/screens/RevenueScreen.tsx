@@ -35,10 +35,13 @@ import { centsToDecimalString } from "@/lib/money";
 import { formatBucket, periodFor } from "@/lib/periods";
 import type { Period } from "@/lib/periods";
 import { useFormats } from "@/app/formats";
+import { useQuery } from "@tanstack/react-query";
 import { toCsv, useRevenue, useRevenueMoney } from "@/features/leads/lib/reportKeys";
 import type { RevenueBundle, RevenueMoney } from "@/db/repos/reports";
 import { NO_DEAL_ROW_ID } from "@/db/repos/money";
 import type { PerDealMoneyRow } from "@/db/repos/money";
+import * as money from "@/db/repos/money";
+import { methodLabel } from "@/db/repos/payments";
 
 /**
  * What the catch-all row is, in the one place it is explained. Kept short
@@ -218,7 +221,8 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
           <CardTitle>{period.label}</CardTitle>
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             Quoted, won, invoiced and collected each fall on their own day, so a month can
-            collect more than it billed, or win what it quoted last month.
+            collect more than it billed, or win what it quoted last month. Collected counts the
+            day each payment arrived, not the day the invoice was raised or marked paid.
           </p>
         </div>
         {money.perDeal.length > 0 ? (
@@ -265,6 +269,80 @@ function MoneyBlock(props: { money: RevenueMoney; period: Period }) {
       ) : (
         <DataTable columns={columns} rows={money.perDeal} getRowKey={(row) => row.dealId} />
       )}
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Payments by method                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How the money came in this period, ordered biggest first. `money.method`
+ * is the raw column value (`cash`, `check`, ...) grouped in SQL, so it goes
+ * through the same `methodLabel` a payment row on an invoice does before it
+ * reaches the page -- a report is not the place to teach the owner the
+ * database's own words.
+ *
+ * Omitted entirely when the period took in nothing: an empty $0.00 table is
+ * a state this workspace is not in (D3 / F-LB-11c), matching every other
+ * quiet empty state on this page.
+ */
+function usePaymentsByMethod(period: Period) {
+  return useQuery({
+    queryKey: ["reports", "revenue", "paymentsByMethod", period.from, period.to],
+    queryFn: () => money.paymentsByMethod(period.from, period.to),
+  });
+}
+
+function PaymentsByMethodCard(props: { period: Period }) {
+  const { period } = props;
+  const formats = useFormats();
+  const query = usePaymentsByMethod(period);
+  const rows = query.data ? [...query.data].sort((a, b) => b.cents - a.cents) : [];
+
+  if (query.isPending || rows.length === 0) return null;
+
+  async function handleCopyCsv() {
+    const csv = toCsv(
+      ["Method", "Count", "Amount"],
+      rows.map((row) => [methodLabel(row.method), row.count, centsToDecimalString(row.cents)]),
+    );
+    try {
+      await navigator.clipboard.writeText(csv);
+      toast.success("Copied the report to the clipboard");
+    } catch {
+      toast.error("The clipboard refused it.");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
+        <CardTitle>Payments by method</CardTitle>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={handleCopyCsv}>
+          Copy as CSV
+        </Button>
+      </CardHeader>
+      <DataTable
+        columns={[
+          { key: "method", header: "Method", render: (row) => methodLabel(row.method) },
+          {
+            key: "count",
+            header: "Count",
+            numeric: true,
+            render: (row) => String(row.count),
+          },
+          {
+            key: "amount",
+            header: "Amount",
+            numeric: true,
+            render: (row) => formats.money(row.cents),
+          },
+        ]}
+        rows={rows}
+        getRowKey={(row) => row.method}
+      />
     </Card>
   );
 }
@@ -512,6 +590,7 @@ function RevenueContent(props: {
       </div>
 
       {money ? <MoneyBlock money={money} period={period} /> : null}
+      <PaymentsByMethodCard period={period} />
 
       {noRecurring ? null : (
         <Card>

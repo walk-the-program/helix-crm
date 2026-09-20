@@ -53,6 +53,11 @@ export function ReceivablesScreen() {
   async function handleCopyCsv() {
     if (!rows) return;
     try {
+      // KNOWN GAP (LR-PX-A W3, reported to the lead): the table above now
+      // shows the BALANCE, but `receivablesCsv` in lib/format.ts still
+      // prints `row.totalCents` under "Amount" -- that file is W2's, so the
+      // column cannot be changed here. See this task's return for the exact
+      // column change requested.
       await navigator.clipboard.writeText(receivablesCsv(rows, formats.locale));
       toast.success("Copied the report to the clipboard");
     } catch {
@@ -93,7 +98,7 @@ export function ReceivablesScreen() {
                 <TH className="w-[34%]">Customer</TH>
                 <TH className="w-[16%]">Due</TH>
                 <TH className="w-[14%]" align="right">Days over</TH>
-                <TH className="w-[20%]" align="right">Amount</TH>
+                <TH className="w-[20%]" align="right">Balance</TH>
               </TR>
             </THead>
             <TBody>
@@ -112,13 +117,23 @@ export function ReceivablesScreen() {
                     <span className="block truncate" title={row.customer}>
                       {row.customer}
                     </span>
+                    {/* A quiet caption, not a badge: DESIGN.md reserves colour
+                        for something that means an outcome, and a partial
+                        invoice is neither an alarm nor a status pill, it is a
+                        fact worth one line under the name (docs/DESIGN.md
+                        §5 "What has no colour"). */}
+                    {row.status === "partial" ? (
+                      <span className="block text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+                        Partially paid
+                      </span>
+                    ) : null}
                   </TD>
                   <TD className="tabular whitespace-nowrap">{formats.date(row.dueOn)}</TD>
                   <TD align="right" className="tabular">
                     {row.daysOverdue > 0 ? row.daysOverdue : "—"}
                   </TD>
                   <TD align="right" className="money">
-                    {formats.money(row.totalCents)}
+                    {formats.money(row.balanceCents)}
                   </TD>
                 </TR>
               ))}

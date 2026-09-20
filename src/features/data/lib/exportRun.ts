@@ -13,6 +13,7 @@
 import { raw } from "@/db/client";
 import { todayLocal } from "@/lib/dates";
 import { centsToDecimalString } from "@/lib/money";
+import { methodLabel } from "@/db/repos/payments";
 import { pickSavePath, writeBytesAt, writeTextFileAt } from "@/features/data/lib/fsBridge";
 import { toCsvFromObjects, type CsvCell } from "@/features/data/lib/exportCsv";
 
@@ -23,7 +24,8 @@ export type ExportEntity =
   | "tasks"
   | "activities"
   | "services"
-  | "invoices";
+  | "invoices"
+  | "payments";
 
 export const EXPORT_ENTITIES: readonly ExportEntity[] = [
   "contacts",
@@ -33,6 +35,7 @@ export const EXPORT_ENTITIES: readonly ExportEntity[] = [
   "activities",
   "services",
   "invoices",
+  "payments",
 ];
 
 const ENTITY_LABELS: Record<ExportEntity, string> = {
@@ -43,6 +46,7 @@ const ENTITY_LABELS: Record<ExportEntity, string> = {
   activities: "Activities",
   services: "Services",
   invoices: "Invoices",
+  payments: "Payments",
 };
 
 export function entityLabel(entity: ExportEntity): string {
@@ -680,6 +684,64 @@ async function documentItemsRows(): Promise<{ headers: Header[]; rows: Row[] }> 
   return { headers, rows };
 }
 
+/**
+ * Payments (LR-PX-A W3): live payments only, and only where the invoice
+ * behind it is live -- an invoice in the Trash is not money the owner can
+ * point to, so its payments do not appear here either, matching every other
+ * builder's `deleted_at IS NULL` rule.
+ *
+ * "Customer" is one column (company, else the contact, else blank) rather
+ * than the separate Contact/Company pair `documentsRowsCore` uses, because a
+ * payment is read off the invoice it settles and one name is what answers
+ * "who paid this" - matching `receivables.ts`'s own `customerFor`. "Deal"
+ * names the job the same way `documentsRowsCore`'s own column does.
+ */
+async function paymentsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
+  const headers = headersFor([
+    "Date Paid",
+    "Invoice Number",
+    "Customer",
+    "Deal",
+    "Amount",
+    "Method",
+    "Reference",
+    "Note",
+    "Recorded",
+  ]);
+
+  const mainRows = await raw.query(
+    `SELECT p.paid_on AS p_paid_on, d.number AS d_number,
+            co.name AS co_name, c.first_name AS c_first_name, c.last_name AS c_last_name,
+            dl.title AS dl_title, p.amount_cents AS p_amount_cents, p.method AS p_method,
+            p.reference AS p_reference, p.note AS p_note, p.created_at AS p_created_at
+     FROM payments p
+     JOIN documents d ON d.id = p.document_id
+     LEFT JOIN contacts c ON c.id = d.contact_id
+     LEFT JOIN companies co ON co.id = d.company_id
+     LEFT JOIN deals dl ON dl.id = p.deal_id
+     WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL
+     ORDER BY p.paid_on ASC, p.created_at ASC`,
+  );
+
+  const rows = mainRows.map((r): Row => {
+    const companyName = str(r[2]);
+    const customer = companyName.length > 0 ? companyName : fullName(r[3], r[4]);
+    return {
+      "Date Paid": str(r[0]),
+      "Invoice Number": str(r[1]),
+      Customer: customer,
+      Deal: str(r[5]),
+      Amount: centsToDecimalString(Number(r[6] ?? 0)),
+      Method: methodLabel(str(r[7])),
+      Reference: str(r[8]),
+      Note: str(r[9]),
+      Recorded: str(r[10]),
+    };
+  });
+
+  return { headers, rows };
+}
+
 async function tagsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
   const headers = headersFor(["Name", "Color", "Created At"]);
 
@@ -898,6 +960,8 @@ async function rowsFor(entity: ExportEntity): Promise<{ headers: Header[]; rows:
       return productsRows();
     case "invoices":
       return invoicesRows();
+    case "payments":
+      return paymentsRows();
   }
 }
 
@@ -933,6 +997,7 @@ const ZIP_ENTRIES: readonly ZipEntry[] = [
   { fileName: "documents.csv", jsonKey: "documents", build: documentsRows },
   { fileName: "document_items.csv", jsonKey: "documentItems", build: documentItemsRows },
   { fileName: "services.csv", jsonKey: "services", build: productsRows },
+  { fileName: "payments.csv", jsonKey: "payments", build: paymentsRows },
   { fileName: "tags.csv", jsonKey: "tags", build: tagsRows },
   { fileName: "tag_links.csv", jsonKey: "tagLinks", build: tagLinksRows },
   { fileName: "custom_fields.csv", jsonKey: "customFields", build: customFieldsRows },
@@ -971,6 +1036,7 @@ const COUNT_SQL_FOR: Record<ExportEntity, string> = {
   activities: `SELECT count(*) AS row_count FROM activities WHERE deleted_at IS NULL`,
   services: `SELECT count(*) AS row_count FROM products WHERE deleted_at IS NULL`,
   invoices: `SELECT count(*) AS row_count FROM documents WHERE deleted_at IS NULL AND kind = 'invoice'`,
+  payments: `SELECT count(*) AS row_count FROM payments p JOIN documents d ON d.id = p.document_id WHERE p.deleted_at IS NULL AND d.deleted_at IS NULL`,
 };
 
 export async function exportCounts(): Promise<Record<ExportEntity, number>> {
