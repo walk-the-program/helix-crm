@@ -566,8 +566,6 @@ export type RemoveResult = { removed: number };
  * and the FTS triggers take the search rows out on the way.
  */
 export async function removeSampleData(): Promise<RemoveResult> {
-  const batchId = newBatchId();
-
   return withTransaction(async () => {
     const tag = await tagsRepo.findByName(SAMPLE_TAG);
     if (!tag) return { removed: 0 };
@@ -588,8 +586,17 @@ export async function removeSampleData(): Promise<RemoveResult> {
     }
 
     const statements: Statement[] = [];
-    const changes: Statement[] = [];
     let removed = 0;
+
+    // Every id this removal is about to touch, tagged or not (a document and
+    // its line items are never tagged - nothing in the product tags a
+    // document - so they are named by the sample deal they belong to
+    // instead). Read before anything is deleted: `change_log.entity_id`
+    // carries no foreign key, so it is the one place a purge does not clean
+    // itself up for free, and "no sample-derived survivor in the change log"
+    // means the CREATE entries this same data wrote when it was loaded, not
+    // only whatever this function itself might add.
+    const allSampleIds: string[] = [tag.id, ...[...byType.values()].flat()];
 
     /*
      * The money first (R9).
@@ -608,6 +615,18 @@ export async function removeSampleData(): Promise<RemoveResult> {
     const sampleDealIds = byType.get("deal") ?? [];
     if (sampleDealIds.length > 0) {
       const holes = sampleDealIds.map(() => "?").join(", ");
+
+      const documentRows = await raw.query(
+        `SELECT id FROM documents WHERE deal_id IN (${holes})`,
+        [...sampleDealIds],
+      );
+      allSampleIds.push(...documentRows.map((r) => String(r[0])));
+      const dealItemRows = await raw.query(
+        `SELECT id FROM deal_items WHERE deal_id IN (${holes})`,
+        [...sampleDealIds],
+      );
+      allSampleIds.push(...dealItemRows.map((r) => String(r[0])));
+
       statements.push({
         sql: `DELETE FROM document_items
               WHERE document_id IN (SELECT id FROM documents WHERE deal_id IN (${holes}))`,
@@ -637,6 +656,11 @@ export async function removeSampleData(): Promise<RemoveResult> {
        * OWNER wrote against a sample deal is his, and Settings promises him
        * that "Everything you added yourself stays where it is".
        */
+      const systemActivityRows = await raw.query(
+        `SELECT id FROM activities WHERE is_system = 1 AND deal_id IN (${holes})`,
+        [...sampleDealIds],
+      );
+      allSampleIds.push(...systemActivityRows.map((r) => String(r[0])));
       statements.push({
         sql: `DELETE FROM activities WHERE is_system = 1 AND deal_id IN (${holes})`,
         params: [...sampleDealIds],
@@ -658,21 +682,30 @@ export async function removeSampleData(): Promise<RemoveResult> {
           sql: `DELETE FROM ${TABLE_FOR[entityType]} WHERE id = ?`,
           params: [id],
         });
-        changes.push(
-          changeLogStatement({ entityType, entityId: id, op: "delete", batchId }),
-        );
         removed += 1;
       }
     }
 
     statements.push({ sql: `DELETE FROM tag_links WHERE tag_id = ?`, params: [tag.id] });
     statements.push({ sql: `DELETE FROM tags WHERE id = ?`, params: [tag.id] });
-    changes.push(
-      changeLogStatement({ entityType: "tag", entityId: tag.id, op: "delete", batchId }),
-    );
     statements.push(settingStatement(KEYS.sampleLoadedAt, null));
 
-    await raw.batch([...statements, ...changes]);
+    // The change log itself: `change_log.entity_id` carries no foreign key,
+    // so nothing above cleaned it up for free. Without this, the CREATE (and
+    // any UPDATE) entries `loadSampleData` and the money phase wrote when the
+    // example first loaded sat there forever, naming ids that no longer
+    // resolve to anything - a purge that still left a trail. No new "delete"
+    // entries are written to replace them: a demo that no longer exists has
+    // nothing left worth logging either way.
+    if (allSampleIds.length > 0) {
+      const holes = allSampleIds.map(() => "?").join(", ");
+      statements.push({
+        sql: `DELETE FROM change_log WHERE entity_id IN (${holes})`,
+        params: [...allSampleIds],
+      });
+    }
+
+    await raw.batch(statements);
     return { removed };
   }, "Removing the example");
 }
