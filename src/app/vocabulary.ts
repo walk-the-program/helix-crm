@@ -1,56 +1,22 @@
 /**
- * Vocabulary: the database always says `deals` and `stages`; the labels on
- * screen come from settings.vocabulary, which the owner sets to Deals, Jobs or
- * Quotes. This is labels only - nothing in the schema changes.
+ * Vocabulary, the React side: the hook and the non-hook read.
+ *
+ * The table itself moved to src/lib/vocabulary.ts, which is pure — no React,
+ * no database — so a repository can use it too. src/db never imports src/app,
+ * and that rule meant a validation message could only ever say "deal" to an
+ * owner who calls them jobs. Everything the table exports is re-exported here,
+ * so every existing `from "@/app/vocabulary"` import keeps working unchanged.
+ *
+ * This is labels only. The database always says `deals` and `stages`; nothing
+ * in the schema changes.
  */
 import { useQuery } from "@tanstack/react-query";
 import * as settings from "@/db/repos/settings";
 import { qk } from "@/app/queryClient";
+import { vocabularyFor, type Vocabulary } from "@/lib/vocabulary";
 
-export type VocabularyKey = "deals" | "jobs" | "quotes";
-
-export type Vocabulary = {
-  key: VocabularyKey;
-  one: string;
-  many: string;
-  /** "New job", "New quote", "New deal" */
-  newOne: string;
-  lower: string;
-  lowerMany: string;
-};
-
-const TABLE: Record<VocabularyKey, Vocabulary> = {
-  deals: {
-    key: "deals",
-    one: "Deal",
-    many: "Deals",
-    newOne: "New deal",
-    lower: "deal",
-    lowerMany: "deals",
-  },
-  jobs: {
-    key: "jobs",
-    one: "Job",
-    many: "Jobs",
-    newOne: "New job",
-    lower: "job",
-    lowerMany: "jobs",
-  },
-  quotes: {
-    key: "quotes",
-    one: "Quote",
-    many: "Quotes",
-    newOne: "New quote",
-    lower: "quote",
-    lowerMany: "quotes",
-  },
-};
-
-export const DEFAULT_VOCABULARY: Vocabulary = TABLE.deals;
-
-export function vocabularyFor(key: VocabularyKey): Vocabulary {
-  return TABLE[key] ?? DEFAULT_VOCABULARY;
-}
+export type { Vocabulary, VocabularyKey } from "@/lib/vocabulary";
+export { DEFAULT_VOCABULARY, vocabularyFor } from "@/lib/vocabulary";
 
 /** Read the workspace's vocabulary. Falls back to Deals while loading. */
 export function useVocabulary(): Vocabulary {
