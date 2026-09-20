@@ -7,7 +7,7 @@
  * force, so the reports underneath never render against a range nobody chose.
  */
 import { useState } from "react";
-import { Field, Input, Select } from "@/ui";
+import { DatePicker, Field, Select } from "@/ui";
 import type { SelectOption } from "@/ui";
 import { customPeriod, periodFor, toDateInputValue } from "@/lib/periods";
 import type { Period, PeriodId } from "@/lib/periods";
@@ -79,19 +79,19 @@ export function PeriodPicker(props: { value: Period; onChange: (period: Period) 
       {mode === "custom" ? (
         <div className="flex flex-wrap items-start gap-[var(--space-3)]">
           <Field label="From" error={error ?? undefined}>
-            <Input
-              type="date"
-              value={fromInput}
+            <DatePicker
+              value={fromInput || null}
               max={toInput || undefined}
-              onChange={(event) => handleDateChange("from", event.target.value)}
+              aria-label="From"
+              onChange={(next) => handleDateChange("from", next ?? "")}
             />
           </Field>
           <Field label="To">
-            <Input
-              type="date"
-              value={toInput}
+            <DatePicker
+              value={toInput || null}
               min={fromInput || undefined}
-              onChange={(event) => handleDateChange("to", event.target.value)}
+              aria-label="To"
+              onChange={(next) => handleDateChange("to", next ?? "")}
             />
           </Field>
         </div>
