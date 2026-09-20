@@ -354,6 +354,48 @@ test.describe("revenue", () => {
  * against the DERIVED figures the screen must agree with - the whole point of
  * this finding is that the screen and the underlying money used to disagree.
  */
+test.describe("revenue: the deal page agrees with itself (CDQO pin)", () => {
+  test("pricing a deal updates its money strip without a reload", async ({ page, helix }) => {
+    // The design walk found the deal page contradicting itself: the strip read
+    // "Won $0" above a services panel that said $2,560, because
+    // invalidateDealMoney - the function named after invalidating the money -
+    // did not invalidate the ["money"] key the strip reads. A reload fixed it,
+    // which is the worst kind of bug: right in every test that navigates, wrong
+    // for the owner who is looking at it.
+    await page.goto("/settings/services");
+    await waitForShell(page);
+    await addServiceThroughSettings(page, {
+      name: "Retaining wall",
+      charge: "One time",
+      price: "2200",
+    });
+
+    await page.goto("/");
+    const dealTitle = "North boundary retaining wall";
+    await quickAddDeal(page, dealTitle);
+    const [[dealId]] = helix.bridge.query("SELECT id FROM deals WHERE title = ?", [dealTitle]);
+
+    await page.goto(`/deals/${String(dealId)}`);
+    await waitForShell(page);
+
+    // Before pricing, the deal is worth nothing and the strip says so.
+    const strip = page.getByTestId("deal-money");
+    await expect(strip.getByTestId("deal-value")).toContainText("$0");
+
+    await page.getByLabel("Add services").click();
+    await page
+      .locator('[data-testid="combobox-option"]')
+      .filter({ hasText: "Retaining wall" })
+      .first()
+      .click();
+    await page.keyboard.press("Escape");
+
+    // No reload anywhere in this test: the strip has to catch up on its own.
+    await expect(strip.getByTestId("deal-value")).toContainText("$2,200");
+    await expect(page.getByTestId("totals-actual")).toContainText("$2,200");
+  });
+});
+
 test.describe("revenue: audited findings (round 4 pin)", () => {
   test("F-LB-2/3/15: Quoted is the deal's own value, and a document whose deal is gone still counts, in its own row", async ({
     page,
