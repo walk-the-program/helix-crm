@@ -44,6 +44,8 @@ export function VirtualList<T>(props: {
   renderRow: (item: T, index: number, nav?: RowNavProps) => ReactNode;
   className?: string;
   getKey?: (item: T, index: number) => string | number;
+  "aria-label"?: string;
+  /** @deprecated Use `aria-label`. */
   ariaLabel?: string;
   /** When set, Up/Down/Home/End move a roving tabIndex between rows and the
    *  row that holds it is scrolled to by index rather than by
@@ -52,8 +54,8 @@ export function VirtualList<T>(props: {
    *  element in the row should hold keyboard focus. */
   keyboardNav?: VirtualListKeyboardNav<T>;
 }) {
-  const { items, estimateSize, overscan = 8, renderRow, className, getKey, ariaLabel, keyboardNav } =
-    props;
+  const { items, estimateSize, overscan = 8, renderRow, className, getKey, keyboardNav } = props;
+  const ariaLabel = props["aria-label"] ?? props.ariaLabel;
   const parentRef = useRef<HTMLDivElement | null>(null);
 
   const rowHeight = useMemo(

@@ -5,7 +5,7 @@ import { focusRing, quietTransition } from "@/ui/styles";
 
 /**
  * The box people see is 16px. The thing they can hit is --control-h-sm
- * (32px comfortable, 28px compact), which is the hit-target floor in
+ * (28px comfortable, 24px compact), which is the hit-target floor in
  * docs/DESIGN.md section 7 — a bare 18px box is not clickable by a
  * two-finger typist with a trackpad.
  *
@@ -18,11 +18,14 @@ export function Checkbox(props: {
   onCheckedChange: (c: boolean) => void;
   disabled?: boolean;
   id?: string;
+  "aria-label"?: string;
+  /** @deprecated Use `aria-label`. */
   ariaLabel?: string;
   tone?: "default" | "success";
   className?: string;
 }) {
-  const { checked, onCheckedChange, disabled, id, ariaLabel, tone = "default", className } = props;
+  const { checked, onCheckedChange, disabled, id, tone = "default", className } = props;
+  const ariaLabel = props["aria-label"] ?? props.ariaLabel;
 
   const filled =
     tone === "success"
@@ -68,9 +71,9 @@ export function Checkbox(props: {
       >
         <RadixCheckbox.Indicator className="inline-flex items-center justify-center">
           {checked === "indeterminate" ? (
-            <Minus size={12} weight="bold" aria-hidden="true" />
+            <Minus size={14} weight="bold" aria-hidden="true" />
           ) : (
-            <Check size={12} weight="bold" aria-hidden="true" />
+            <Check size={14} weight="bold" aria-hidden="true" />
           )}
         </RadixCheckbox.Indicator>
       </span>

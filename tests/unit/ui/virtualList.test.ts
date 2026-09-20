@@ -62,6 +62,43 @@ afterEach(() => {
   cleanup();
 });
 
+/**
+ * The kit's one accessible-label prop is `aria-label`; `ariaLabel` is a
+ * deprecated alias kept so no existing caller breaks (docs/DESIGN.md,
+ * round-3 CDQO pass). The suite above already renders with `ariaLabel` and
+ * checks it reaches the list (proving the deprecated alias still works);
+ * this block adds the other two legs of the same contract.
+ */
+describe("VirtualList aria-label", () => {
+  it("aria-label sets the list's accessible name", () => {
+    const items = makeItems(10);
+    render(
+      React.createElement(VirtualList<Row>, {
+        items,
+        estimateSize: ESTIMATE_SIZE,
+        renderRow: (item: Row) => React.createElement("span", null, item.label),
+        "aria-label": "Companies",
+      }),
+    );
+    expect(screen.getByRole("list", { name: "Companies" })).toBeTruthy();
+  });
+
+  it("aria-label wins when both are passed", () => {
+    const items = makeItems(10);
+    render(
+      React.createElement(VirtualList<Row>, {
+        items,
+        estimateSize: ESTIMATE_SIZE,
+        renderRow: (item: Row) => React.createElement("span", null, item.label),
+        "aria-label": "New name",
+        ariaLabel: "Old name",
+      }),
+    );
+    expect(screen.getByRole("list", { name: "New name" })).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Old name" })).toBeNull();
+  });
+});
+
 describe("VirtualList", () => {
   it("renders only a small window of rows out of 10,000, with the first item present and the last absent", () => {
     const items = makeItems(10000);

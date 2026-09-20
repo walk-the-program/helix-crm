@@ -4,7 +4,7 @@ import { focusRing, quietTransform, quietTransition } from "@/ui/styles";
 
 /**
  * A 38x22 track inside a --control-h-sm hit target, so the switch clears the
- * 32/28px floor without drawing a 32px-tall pill.
+ * 28/24px floor without drawing a 32px-tall pill.
  *
  * "On" is ink, not the accent. A setting that is switched on is not asking for
  * the owner's attention, and the accent means exactly one thing
@@ -15,10 +15,13 @@ export function Switch(props: {
   onCheckedChange: (c: boolean) => void;
   disabled?: boolean;
   id?: string;
+  "aria-label"?: string;
+  /** @deprecated Use `aria-label`. */
   ariaLabel?: string;
   className?: string;
 }) {
-  const { checked, onCheckedChange, disabled, id, ariaLabel, className } = props;
+  const { checked, onCheckedChange, disabled, id, className } = props;
+  const ariaLabel = props["aria-label"] ?? props.ariaLabel;
 
   return (
     <RadixSwitch.Root

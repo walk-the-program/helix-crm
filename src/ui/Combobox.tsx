@@ -171,13 +171,13 @@ function SearchField(props: {
   onValueChange: (v: string) => void;
   onKeyDown: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
   placeholder: string;
-  ariaLabel?: string;
+  "aria-label"?: string;
   inputRef: RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div className="flex flex-none items-center gap-[var(--space-2)] border-b border-[var(--color-border)] px-[var(--space-3)]">
       <MagnifyingGlass
-        size={14}
+        size={16}
         weight="bold"
         aria-hidden="true"
         className="flex-none text-[var(--color-text-faint)]"
@@ -193,7 +193,7 @@ function SearchField(props: {
         aria-autocomplete="list"
         autoComplete="off"
         spellCheck={false}
-        aria-label={props.ariaLabel ?? props.placeholder}
+        aria-label={props["aria-label"] ?? props.placeholder}
         value={props.value}
         onChange={(e) => props.onValueChange(e.target.value)}
         onKeyDown={props.onKeyDown}
@@ -526,7 +526,7 @@ export function Combobox(props: {
               }}
               className="flex flex-none items-center text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
             >
-              <X size={12} weight="bold" aria-hidden="true" />
+              <X size={14} weight="bold" aria-hidden="true" />
             </span>
           ) : null}
           <CaretUpDown
@@ -558,7 +558,7 @@ export function Combobox(props: {
             onValueChange={setQuery}
             onKeyDown={onKeyDown}
             placeholder={placeholder}
-            ariaLabel={ariaLabel}
+            aria-label={ariaLabel}
             inputRef={inputRef}
           />
           <div
@@ -813,7 +813,7 @@ export function MultiCombobox(props: {
             onValueChange={setQuery}
             onKeyDown={onKeyDown}
             placeholder={placeholder}
-            ariaLabel={ariaLabel}
+            aria-label={ariaLabel}
             inputRef={inputRef}
           />
           <div

@@ -31,6 +31,8 @@ export function Select(props: {
   invalid?: boolean;
   id?: string;
   className?: string;
+  "aria-label"?: string;
+  /** @deprecated Use `aria-label`. */
   ariaLabel?: string;
   /**
    * Wired by `Field` when it wraps this control (it clones its child and
@@ -43,8 +45,8 @@ export function Select(props: {
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
 }) {
-  const { value, onValueChange, options, placeholder, disabled, invalid, id, className, ariaLabel } =
-    props;
+  const { value, onValueChange, options, placeholder, disabled, invalid, id, className } = props;
+  const ariaLabel = props["aria-label"] ?? props.ariaLabel;
   const ariaDescribedBy = props["aria-describedby"];
   const isInvalid = invalid || props["aria-invalid"] === true;
 
@@ -88,7 +90,7 @@ export function Select(props: {
           )}
         >
           <RadixSelect.ScrollUpButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
-            <CaretUp size={14} weight="bold" aria-hidden="true" />
+            <CaretUp size={16} weight="bold" aria-hidden="true" />
           </RadixSelect.ScrollUpButton>
           <RadixSelect.Viewport className="p-[var(--space-1)]">
             {options.map((option) => (
@@ -112,7 +114,7 @@ export function Select(props: {
             ))}
           </RadixSelect.Viewport>
           <RadixSelect.ScrollDownButton className="flex items-center justify-center h-[var(--space-6)] text-[var(--color-text-muted)]">
-            <CaretDown size={14} weight="bold" aria-hidden="true" />
+            <CaretDown size={16} weight="bold" aria-hidden="true" />
           </RadixSelect.ScrollDownButton>
         </RadixSelect.Content>
       </RadixSelect.Portal>
