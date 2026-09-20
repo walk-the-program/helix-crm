@@ -92,10 +92,40 @@ function addressText(addressJson: string | null): string {
   return formatAddressLines(parseAddress(addressJson)).join("\n");
 }
 
+/**
+ * LR-SEC packet item 8: `renderDocument`'s text wrapper (src/features/
+ * invoices/pdf/renderDocument.ts, `wrapText`) falls back to a character-by-
+ * character loop whenever a "word" (a run with no whitespace) does not fit
+ * the column width on its own - it re-measures the whole run-so-far with
+ * `font.widthOfTextAtSize` on every character, which is quadratic in the
+ * length of that run. Measured directly against pdf-lib: a single unbroken
+ * 5,000-character run wraps in ~0.4s, 20,000 in ~6s, 50,000 in ~41s - so a
+ * multi-hundred-KB note or line-item description with no spaces (a pasted
+ * base64 blob, a URL, a wall of digits) would hang PDF generation on the
+ * main thread for minutes to hours rather than crash cleanly.
+ *
+ * `renderDocument.ts` lives outside this worker's writable paths (`src/
+ * features/invoices/lib/**` only), so the fix lives at this boundary
+ * instead: every free-text field is capped before it ever reaches the
+ * renderer. 10,000 characters is far beyond any real invoice note or line
+ * description (the pathological all-one-word case is the only way to reach
+ * multiple seconds at that length) while stopping the quadratic blow-up cold.
+ */
+const MAX_PDF_TEXT_CHARS = 10_000;
+
+function capPdfText(value: string): string;
+function capPdfText(value: string | null): string | null;
+function capPdfText(value: string | null): string | null {
+  if (value === null) return null;
+  return value.length > MAX_PDF_TEXT_CHARS
+    ? `${value.slice(0, MAX_PDF_TEXT_CHARS)}…`
+    : value;
+}
+
 function toRenderLines(items: DocumentItem[]): RenderLine[] {
   return items.map((item) => ({
-    name: item.name,
-    description: item.description,
+    name: capPdfText(item.name),
+    description: capPdfText(item.description),
     qty: item.qty,
     unitCents: item.unitCents,
     taxable: item.taxable,
@@ -110,6 +140,7 @@ export async function buildRenderInput(
   items: DocumentItem[],
   settings: InvoiceSettings,
 ): Promise<RenderInput> {
+  const customer = await customerFor(document);
   return {
     kind: document.kind === "quote" ? "quote" : "invoice",
     number: document.number,
@@ -117,22 +148,29 @@ export async function buildRenderInput(
     dueOn: document.dueOn,
     validUntil: document.validUntil,
     business: {
-      name: settings.businessName,
-      address: settings.businessAddress,
-      phone: settings.ownerPhone,
-      email: settings.ownerEmail,
-      taxId: settings.businessTaxId,
+      name: capPdfText(settings.businessName),
+      address: capPdfText(settings.businessAddress),
+      phone: capPdfText(settings.ownerPhone),
+      email: capPdfText(settings.ownerEmail),
+      taxId: capPdfText(settings.businessTaxId),
     },
-    customer: await customerFor(document),
+    customer: {
+      name: capPdfText(customer.name),
+      company: capPdfText(customer.company),
+      email: capPdfText(customer.email),
+      phone: capPdfText(customer.phone),
+      address: capPdfText(customer.address),
+    },
     lines: toRenderLines(items),
     subtotalCents: document.subtotalCents,
     taxRateBp: document.taxRateBp,
     taxCents: document.taxCents,
     totalCents: document.totalCents,
     currency: settings.currency,
-    notes: document.notes,
-    paymentInstructions:
+    notes: capPdfText(document.notes),
+    paymentInstructions: capPdfText(
       document.paymentInstructions || settings.paymentInstructions || null,
+    ),
   };
 }
 
