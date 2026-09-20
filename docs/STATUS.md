@@ -4331,7 +4331,8 @@ bundle).
 
 `npx tsc --noEmit` clean across the project.
 
-`npx vitest run` 1787 passed, 2 skipped, 126 files — 247 of them in
+`npx vitest run` 1789 passed, 2 skipped, 0 failed across 126 files — 247 of
+them in
 `tests/unit/{app,ui}`, which is where this round's additions live: nav
 grouping, the sidebar clamp/resize/collapse/pinning, the traffic-light inset,
 helix.json persistence and the write queue, the registry bus, the theme toggle,
