@@ -1,6 +1,11 @@
 /**
- * Website leads, end to end: connecting a site, polling it, and the five
- * report cards that read what the poller wrote.
+ * Website leads, end to end: connecting a site, polling it, the reports tab
+ * strip, and the five report cards that read what the poller wrote.
+ *
+ * Round 3 moved those five cards from /reports to /reports/deals - all five
+ * are about deals - and made /reports an overview with a tab strip every
+ * report page wears. The strip is what this spec proves hardest: Walker could
+ * reach Revenue and not get back off it.
  *
  * Run it on this agent's own port and build folder:
  *   E2E_PORT=4184 E2E_OUT=dist-leads npx playwright test \
@@ -22,6 +27,10 @@ import type { Locator, Page } from "@playwright/test";
 
 const SCREENS = fileURLToPath(new URL("../.cache/screens/brand-b/", import.meta.url));
 mkdirSync(SCREENS, { recursive: true });
+
+/** Round 3's review shots, which a person looks at rather than a test. */
+const ROUND3 = fileURLToPath(new URL("../../../design/round3/", import.meta.url));
+mkdirSync(ROUND3, { recursive: true });
 
 const SITE_ORIGIN = "https://sorensenlandscaping.com";
 const TOKEN = "test-token-123";
@@ -296,7 +305,8 @@ async function bootThenSeedReports(page: Page, helix: HelixHarness): Promise<voi
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
   seedReportHistory(helix);
-  await page.goto("/reports");
+  // The five cards live on the Deals tab now; /reports is the overview.
+  await page.goto("/reports/deals");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -555,13 +565,134 @@ test.describe("reports", () => {
     page,
     helix: _helix,
   }) => {
-    await page.goto("/reports");
+    await page.goto("/reports/deals");
 
     await expect(
       page.getByRole("heading", { name: "Pipeline value by stage", exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Nothing in the pipeline yet")).toBeVisible();
     await expect(page.getByRole("img")).toHaveCount(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* C2. the tab strip: no dead ends                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Walker's bug, in his words: "When I click the reports button in the top
+ * right next to this month, it just takes me to a screen that I can't get out
+ * of."
+ *
+ * So these tests are about getting out. Every tab is reachable from every
+ * other tab's strip, the sidebar keeps Reports lit the whole time, and the
+ * period control - the thing sitting next to that old button - changes the
+ * numbers without moving the page.
+ */
+const TABS = [
+  { label: "Overview", path: "/reports", heading: "Reports" },
+  { label: "Revenue", path: "/reports/revenue", heading: "Revenue" },
+  { label: "Deals", path: "/reports/deals", heading: "Deals" },
+  {
+    label: "Contacts and companies",
+    path: "/reports/people",
+    heading: "Contacts and companies",
+  },
+  { label: "Receivables", path: "/reports/receivables", heading: "Receivables" },
+] as const;
+
+test.describe("the reports tab strip", () => {
+  test("every tab opens from the strip and leads back to the others", async ({ page, helix }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await bootThenSeedReports(page, helix);
+
+    for (const tab of TABS) {
+      // Always start from a page that carries the strip, so this walks the
+      // strip rather than the address bar.
+      await page.goto("/reports");
+      await expect(page.getByTestId("reports-tabs")).toBeVisible();
+      await page.getByTestId("reports-tabs").getByRole("tab", { name: tab.label }).click();
+
+      await expect(page).toHaveURL(new RegExp(`${tab.path}$`));
+      await expect(page.getByRole("heading", { name: tab.heading, exact: true, level: 1 }))
+        .toBeVisible();
+
+      // Wherever the owner lands, Reports is still the lit sidebar item and
+      // the way back is one click, never a browser Back.
+      const sidebarReports = page.getByTestId("sidebar-nav").getByRole("link", { name: "Reports" });
+      await expect(sidebarReports).toHaveAttribute("aria-current", "page");
+      await sidebarReports.click();
+      await expect(page.getByRole("heading", { name: "Reports", exact: true, level: 1 }))
+        .toBeVisible();
+    }
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
+  test("the four tabs this feature owns show the strip with their own tab selected", async ({
+    page,
+    helix,
+  }) => {
+    await bootThenSeedReports(page, helix);
+
+    for (const tab of TABS.filter((candidate) => candidate.label !== "Receivables")) {
+      await page.goto(tab.path);
+      const strip = page.getByTestId("reports-tabs");
+      await expect(strip).toBeVisible();
+      await expect(strip.getByRole("tab", { name: tab.label })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      // All five are offered from every page: no report is a cul-de-sac.
+      for (const other of TABS) {
+        await expect(strip.getByRole("tab", { name: other.label })).toBeVisible();
+      }
+    }
+  });
+
+  test("changing the period re-reads the numbers and stays on the page", async ({
+    page,
+    helix,
+  }) => {
+    await bootThenSeedReports(page, helix);
+    await expect(page.getByRole("heading", { name: "Deals", exact: true, level: 1 })).toBeVisible();
+
+    await page.getByRole("combobox", { name: "Report period" }).click();
+    await page.getByRole("option", { name: "This year" }).click();
+
+    await expect(page).toHaveURL(/\/reports\/deals$/);
+    await expect(page.getByRole("heading", { name: "Deals", exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByTestId("reports-tabs")).toBeVisible();
+    // The seeded history is all in the current month, so a year-wide range
+    // still holds it: the page re-read rather than emptied.
+    await expect(page.getByRole("heading", { name: "Won and lost", exact: true })).toBeVisible();
+  });
+
+  test("the Deals report shows the won rate, the average win and the time to win", async ({
+    page,
+    helix,
+  }) => {
+    await bootThenSeedReports(page, helix);
+
+    // One won and one lost closed this month: 50.0%.
+    await expect(page.getByText("Won rate", { exact: true })).toBeVisible();
+    await expect(page.getByText("50.0%", { exact: true })).toBeVisible();
+    await expect(page.getByText("1 of 2 closed", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "New deals", exact: true })).toBeVisible();
+  });
+
+  test("the Contacts and companies report renders its own cards", async ({ page, helix }) => {
+    await bootThenSeedReports(page, helix);
+    await page.goto("/reports/people");
+
+    await expect(
+      page.getByRole("heading", { name: "Contacts and companies", exact: true, level: 1 }),
+    ).toBeVisible();
+    for (const card of ["New contacts and companies", "Where they came from", "Top companies"]) {
+      await expect(page.getByRole("heading", { name: card, exact: true })).toBeVisible();
+    }
   });
 });
 
@@ -629,7 +760,8 @@ test.describe("screenshots", () => {
     await connectSite(page);
     await shootBoth(page, "site-connected");
 
-    // Reports: five cards, charts first.
+    // Reports: five cards, charts first. bootThenSeedReports lands on the
+    // Deals tab, which is where they live.
     await bootThenSeedReports(page, helix);
     await expect(
       page.getByRole("heading", { name: "Pipeline value by stage", exact: true }),
@@ -646,5 +778,28 @@ test.describe("screenshots", () => {
       await expect(card.getByRole("table")).toBeVisible();
     }
     await shootBoth(page, "reports-tables", { fullPage: true });
+  });
+
+  /**
+   * One shot per report tab, light and dark, into design/round3/ for the
+   * round's review. Receivables belongs to the invoices feature and is
+   * photographed here anyway: it is the fifth tab as far as the owner is
+   * concerned, and the review is about what he sees.
+   */
+  test("captures every report tab for the round-3 review", async ({ page, helix }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await bootThenSeedReports(page, helix);
+
+    for (const tab of TABS) {
+      await page.goto(tab.path);
+      await expect(page.getByRole("heading", { name: tab.heading, exact: true, level: 1 }))
+        .toBeVisible();
+      const name = tab.path === "/reports" ? "overview" : tab.path.split("/").pop()!;
+      for (const theme of ["light", "dark"] as const) {
+        await switchTheme(page, theme);
+        await page.screenshot({ path: `${ROUND3}reports-${name}-${theme}.png`, fullPage: true });
+      }
+      await switchTheme(page, "light");
+    }
   });
 });
