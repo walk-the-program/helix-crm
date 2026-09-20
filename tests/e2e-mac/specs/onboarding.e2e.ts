@@ -335,6 +335,10 @@ test.describe("first run", () => {
     await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation")).toBeVisible();
 
+    // LR-6: skipping setup is still a fresh workspace, and the recovery-key
+    // card does not care which of the two ways out of onboarding got here.
+    await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
+
     const skipped = helix.bridge.query(
       "SELECT value_json FROM settings WHERE key = 'onboarding.skippedAt'",
       [],
@@ -344,11 +348,108 @@ test.describe("first run", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Your business", level: 1 })).toHaveCount(0);
+    // Still unconfirmed, so it survives the reload too.
+    await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
 
     // And it is still reachable on purpose.
     await page.goto("/setup");
     await expect(page.getByRole("heading", { name: "Your business", level: 1 })).toBeVisible();
     await expect(page.getByRole("navigation")).toBeVisible();
+
+    expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
+  });
+
+  /**
+   * LR-6 (F-OPS-1's second half): a fresh workspace cannot reach a steady
+   * state without the owner having seen the recovery key and confirmed they
+   * kept it. `RecoveryKeyPanel` in Settings > Backups is not enough on its
+   * own — a client may never open Settings — so this proves the card on
+   * Today itself: not in the DOM before it is asked for, the confirm control
+   * gated on an actual reveal-and-keep, one primary block while it is
+   * showing, and gone for good — through a reload — once confirmed.
+   */
+  test("the recovery-key card owns Today until the key is revealed and kept, then never returns", async ({
+    page,
+    helix,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Your business", level: 1 })).toBeVisible();
+    await page.getByLabel("What is the business called?").fill("Alpine Ridge Landscape");
+    await page.getByRole("button", { name: "Landscaping", exact: true }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(
+      page.getByRole("heading", { name: "How you'll track work", level: 1 }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Use this setup" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Bring your customers in", level: 1 }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Start empty" }).click();
+
+    /* -- a completed setup, a still-empty workspace, and the card on top -- */
+
+    await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Save your recovery key" })).toBeVisible();
+    // FirstRun is still underneath it - completing setup with "Start empty"
+    // leaves the workspace with no rows at all.
+    await expect(page.getByRole("heading", { name: /Nothing here yet/ })).toBeVisible();
+
+    // Not in the DOM before it is asked for.
+    await expect(page.getByTestId("today-recovery-key")).toHaveCount(0);
+
+    // The card owns the screen's one primary block while it is showing, so
+    // "Import a CSV" reads as the secondary (white) treatment underneath it.
+    const importLink = page.getByRole("link", { name: "Import a CSV" });
+    // The secondary treatment carries the hairline border the primary one
+    // never does; checked by class rather than a computed colour so it does
+    // not depend on which theme this run happens to be in.
+    await expect(importLink).toHaveClass(/border-\[var\(--color-border-strong\)\]/);
+
+    const confirm = page.getByRole("button", { name: "I have saved it" });
+    await expect(confirm).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Show recovery key" }).click();
+    const keyEl = page.getByTestId("today-recovery-key");
+    await expect(keyEl).toBeVisible();
+    await expect(keyEl).not.toHaveText("");
+
+    // Revealed, but nothing kept yet: still disabled.
+    await expect(confirm).toBeDisabled();
+
+    // "Save to a file" through the same stubbed dialog backups.e2e.ts uses.
+    await page.evaluate((path) => {
+      const state = (
+        window as unknown as { __helixE2E: { dialogQueue: (string | null)[] } }
+      ).__helixE2E;
+      state.dialogQueue.push(path);
+    }, "/e2e/recovery/alpine-ridge-key.txt");
+    await page.getByRole("button", { name: "Save to a file" }).click();
+    await expect(page.getByText("Recovery key saved.")).toBeVisible();
+
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+
+    /* -- gone for good, even across a reload ------------------------------ */
+
+    await expect(page.getByRole("heading", { name: "Save your recovery key" })).toHaveCount(0);
+    // The card is gone, so "Import a CSV" is the screen's one primary block
+    // again: the accent fill, no hairline border.
+    await expect(importLink).toHaveClass(/bg-\[var\(--color-accent\)\]/);
+    await expect(importLink).not.toHaveClass(/border-\[var\(--color-border-strong\)\]/);
+
+    const confirmedRow = helix.bridge.query(
+      "SELECT value_json FROM settings WHERE key = 'recoveryKey.confirmedAt'",
+      [],
+    );
+    expect(confirmedRow).toHaveLength(1);
+    expect(JSON.parse(String(confirmedRow[0][0]))).not.toBeNull();
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Today", exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Save your recovery key" })).toHaveCount(0);
 
     expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
