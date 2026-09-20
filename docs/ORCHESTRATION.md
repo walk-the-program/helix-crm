@@ -51,3 +51,4 @@
 ## After round 3 (Walker, 2026-09-20)
 - Sequence: round 3 leads finish → Fable integrates and verifies (no push) → ONE Fable agent runs docs/rounds/2026-09-20-cpo-cdqo-prompt.md verbatim (ceilings: 3 Opus, 9 Sonnet; local commits) → one push to GitHub, tag moved → no app launch (Walker asleep).
 - Cost check before every push: subscription-only models, public repo Actions free, artifacts failure-only 3 days.
+- Round 3 integrated and verified by Fable (2026-09-20): typecheck clean, 1789 unit/repo, 49 Rust, 121 e2e in one run, brand greps clean. Manual real-app checks for window drag (criterion 5) and single Keychain prompt (criterion 9) deferred until Walker's next launch (no app launch while he sleeps). Fable CPO/CDQO agent started next; push after it finishes.
