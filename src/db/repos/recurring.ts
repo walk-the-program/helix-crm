@@ -257,6 +257,14 @@ export type RecurringDue = {
   href: string | null;
   phone: string | null;
   email: string | null;
+  /**
+   * True when the contact or company this rule is about is in the Trash. The
+   * joins used to drop a deleted record, which left the screen saying "No
+   * record attached" about a rule that is plainly attached to something - the
+   * owner could not tell a rule he had orphaned from one whose customer he had
+   * deleted (CPO audit, F-W1-4).
+   */
+  recordDeleted: boolean;
   /** Negative when the date has already passed. */
   daysUntil: number;
 };
@@ -282,10 +290,12 @@ const WITH_WHO_SELECT = `SELECT ${selectList(RULE_COLS, "r")},
               ORDER BY p.is_primary DESC, p.created_at ASC LIMIT 1) AS r_phone,
             (SELECT e.email_lower FROM contact_emails e
               WHERE e.contact_id = r.contact_id AND e.deleted_at IS NULL
-              ORDER BY e.is_primary DESC, e.created_at ASC LIMIT 1) AS r_email
+              ORDER BY e.is_primary DESC, e.created_at ASC LIMIT 1) AS r_email,
+            c.deleted_at AS c_deleted_at,
+            co.deleted_at AS co_deleted_at
      FROM recurring_rules r
-     LEFT JOIN contacts c ON c.id = r.contact_id AND c.deleted_at IS NULL
-     LEFT JOIN companies co ON co.id = r.company_id AND co.deleted_at IS NULL`;
+     LEFT JOIN contacts c ON c.id = r.contact_id
+     LEFT JOIN companies co ON co.id = r.company_id`;
 
 /** Map one joined row onto the rule and the four columns after it. */
 function toRecurringDue(row: unknown[], reference: string): RecurringDue {
@@ -300,19 +310,32 @@ function toRecurringDue(row: unknown[], reference: string): RecurringDue {
     row[offset + 3] === null || row[offset + 3] === undefined ? null : String(row[offset + 3]);
   const email =
     row[offset + 4] === null || row[offset + 4] === undefined ? null : String(row[offset + 4]);
+  const contactDeleted = row[offset + 5] !== null && row[offset + 5] !== undefined;
+  const companyDeleted = row[offset + 6] !== null && row[offset + 6] !== undefined;
 
   const contactName = `${first} ${last}`.trim();
   let label: string | null = null;
   let href: string | null = null;
+  let recordDeleted = false;
   if (rule.contactId && contactName.length > 0) {
     label = contactName;
     href = `/contacts/${rule.contactId}`;
+    recordDeleted = contactDeleted;
   } else if (rule.companyId && companyName) {
     label = companyName;
     href = `/companies/${rule.companyId}`;
+    recordDeleted = companyDeleted;
   }
 
-  return { rule, label, href, phone, email, daysUntil: dayGap(reference, rule.nextDueOn) };
+  return {
+    rule,
+    label,
+    href,
+    phone,
+    email,
+    recordDeleted,
+    daysUntil: dayGap(reference, rule.nextDueOn),
+  };
 }
 
 /**

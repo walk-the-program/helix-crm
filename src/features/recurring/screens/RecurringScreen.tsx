@@ -49,10 +49,17 @@ function WhoCell({ entry }: { entry: RecurringDue }) {
   return (
     <Link
       href={entry.href}
-      title={entry.label}
+      title={entry.recordDeleted ? `${entry.label} (in Trash)` : entry.label}
       className="block truncate text-[var(--color-link)] no-underline underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-focus)]"
     >
       {entry.label}
+      {/* The rule is still attached; the record it is about is in the Trash.
+          Saying "No record attached" about it - which is what dropping the
+          deleted row from the join used to produce - is a different and
+          wrong fact (CPO audit, F-W1-4). */}
+      {entry.recordDeleted ? (
+        <span className="text-[var(--color-text-faint)]"> (in Trash)</span>
+      ) : null}
     </Link>
   );
 }
