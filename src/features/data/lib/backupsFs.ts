@@ -239,10 +239,36 @@ export async function backupBeforeImport(): Promise<BackupFile> {
   }
 }
 
+/**
+ * True from the moment a restore starts until it has finished, win or lose.
+ *
+ * `pauseTimers()` stops a NEW scheduler tick from starting; it does nothing to
+ * one that checked a moment earlier and is already running. That tick finishes
+ * its backup and then calls `pruneBackups`, which deletes whatever retention
+ * has dropped - and if the file the owner chose to restore is the oldest one
+ * past the window, it can be deleted while `restoreFromBackup` is copying from
+ * it (found by LR-OPS-W2 as B4). The Rust `backup_guard` serialises the two
+ * database operations correctly; nothing coordinated the two pieces of code
+ * that touch the backups FOLDER. This does.
+ *
+ * A prune skipped is a few stale files kept until the next backup six hours
+ * later, which costs nothing. A prune that races a restore costs the restore.
+ */
+let restoring = false;
+
+/** Test seam: the module-level restore flag. */
+export function resetRestoreStateForTests(): void {
+  restoring = false;
+}
+
 /** Applies planRetention() to what's on disk and removes the dropped files. */
 export async function pruneBackups(
   now: Date = new Date(),
 ): Promise<{ deleted: number; keptBytes: number }> {
+  if (restoring) {
+    console.info("[helix] prune skipped: a restore is reading from the backups folder");
+    return { deleted: 0, keptBytes: 0 };
+  }
   const files = await listBackups();
   const { keep, drop } = planRetention(files, now);
 
@@ -289,6 +315,11 @@ export async function restoreFromBackup(file: BackupFile): Promise<void> {
   const { dbPath, workspaceId } = await workspacePaths();
 
   const resume = pauseTimers();
+  // Set before anything else and cleared in the same `finally` as the timers:
+  // an in-flight scheduler tick that already passed its own `timersPaused()`
+  // check will still call `pruneBackups` when its backup finishes, and the
+  // file it is allowed to delete may be the very one being copied below.
+  restoring = true;
   try {
     await raw.backup("pre-restore");
     await raw.close();
@@ -307,6 +338,7 @@ export async function restoreFromBackup(file: BackupFile): Promise<void> {
       window.location.reload();
     }
   } finally {
+    restoring = false;
     resume();
   }
 }

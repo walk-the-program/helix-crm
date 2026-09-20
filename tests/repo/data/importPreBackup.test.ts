@@ -24,7 +24,6 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHarness, type Harness } from "../harness";
 import { raw } from "../../../src/db/client";
-import * as contacts from "../../../src/db/repos/contacts";
 import { readHeaders, sniffCsv } from "../../../src/lib/csv";
 import { guessMapping } from "../../../src/features/data/lib/mapping";
 import { runImport } from "../../../src/features/data/lib/importRun";
@@ -40,6 +39,11 @@ afterEach(() => {
   harness?.dispose();
   harness = null;
 });
+
+async function liveContacts(): Promise<number> {
+  const rows = await raw.query("SELECT count(*) FROM contacts WHERE deleted_at IS NULL", []);
+  return Number(rows[0][0]);
+}
 
 async function importFixture() {
   const bytes = new Uint8Array(readFileSync(FIXTURE));
@@ -72,7 +76,7 @@ describe("the backup an import is undone with", () => {
    */
   it("stops the import when it cannot be taken, and writes nothing", async () => {
     harness = await createHarness();
-    const before = (await contacts.list({ limit: 1000 })).rows.length;
+    const before = await liveContacts();
 
     vi.spyOn(raw, "backup").mockRejectedValue({
       code: "BACKUP_FAILED",
@@ -83,7 +87,7 @@ describe("the backup an import is undone with", () => {
     await expect(importFixture()).rejects.toThrow("the import was not started");
     await expect(importFixture()).rejects.toThrow("No space left on the disk.");
 
-    const after = (await contacts.list({ limit: 1000 })).rows.length;
+    const after = await liveContacts();
     expect(after).toBe(before);
   });
 
