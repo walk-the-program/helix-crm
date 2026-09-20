@@ -857,7 +857,7 @@ export async function createDeposit(
   );
   if (lines.length === 0) {
     throw new ValidationError("There is nothing to take a deposit on.", [
-      { path: "items", message: "This deal has no one-off services on it yet. Add one first." },
+      { path: "items", message: "There are no one-off services on it yet. Add one first." },
     ]);
   }
   const prior = await priorInvoiced(dealId);

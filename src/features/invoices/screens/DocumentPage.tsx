@@ -69,7 +69,19 @@ import {
   statusIsFixed,
   type BusyState,
 } from "@/features/invoices/lib/documentActions";
-import { MarkPaidDialog } from "@/features/invoices/components/MarkPaidDialog";
+import { MarkPaidDialog, PAYMENT_METHODS } from "@/features/invoices/components/MarkPaidDialog";
+
+/**
+ * The words the owner picked, not the value the row stores.
+ *
+ * "Paid Sep 20, 2026 · bank" is the database talking. He chose "Bank
+ * transfer" from a list of five and that is what the page should read back to
+ * him. An unknown value (an import, an older build) prints as it is rather
+ * than disappearing.
+ */
+function paymentMethodLabel(value: string): string {
+  return PAYMENT_METHODS.find((method) => method.value === value)?.label ?? value;
+}
 import { saveDocumentPdf } from "@/features/invoices/lib/pdfFile";
 
 /**
@@ -277,9 +289,29 @@ export function DocumentPage() {
   }
 
   const overdue = isOverdue(document);
-  const canSend = canTransition(document.kind, document.status, "sent");
+  /**
+   * Send writes the PDF, opens it and marks the document sent. It belongs to a
+   * DRAFT and nothing else.
+   *
+   * `canTransition(kind, status, "sent")` is not the right test any more:
+   * phase one made paid -> sent legal so a payment recorded by mistake could be
+   * undone (F-LB-4), and that quietly put a Send button back on every paid
+   * invoice. Pressing it would have re-sent the PDF and stamped a new sent
+   * date while leaving `paid_on` behind - a paid invoice, in the sent column,
+   * with a payment date. The way back from paid is the Status control, which
+   * asks for confirmation and clears the payment.
+   */
+  const canSend = document.status === "draft";
   const canPay = canTransition(document.kind, document.status, "paid");
-  const canVoid = canTransition(document.kind, document.status, "void");
+  /**
+   * Void keeps the document and spends its number, which is the honest record
+   * of a billing that was taken back. A DRAFT was never sent to anybody, so
+   * there is nothing to take back and nothing to preserve - it is deleted
+   * instead. Offering both on a draft asked the owner to choose between two
+   * words for "get rid of it" with consequences he has no way to guess.
+   */
+  const canVoid =
+    document.status !== "draft" && canTransition(document.kind, document.status, "void");
   const canAccept = canTransition(document.kind, document.status, "accepted");
   const statusOptions = statusChoices(document.kind, document.status);
   const statusFixed = statusIsFixed(document.kind, document.status);
@@ -382,6 +414,14 @@ export function DocumentPage() {
             data-testid="document-status"
           >
             <span className="section-label">Status</span>
+            {/* A two-line paragraph explaining what a draft is used to sit
+                under the header for ever (direction rule 3, no permanent
+                instructions). It is gone rather than relocated: a draft
+                already announces itself three ways - the Status reads Draft,
+                the lines are editable fields, and a Save changes button sits
+                under them. The consequence of sending is on the Send button,
+                which is where a consequence belongs. The long form is a Help
+                entry, which lead-platform owns. */}
             <Select
               ariaLabel="Status"
               className="w-[150px]"
@@ -408,12 +448,6 @@ export function DocumentPage() {
         ) : null}
       </div>
 
-      {document.status === "draft" ? (
-        <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
-          This is still a draft, so you can change anything on it. Sending it
-          fixes the lines and starts the clock on the money.
-        </p>
-      ) : null}
       {document.convertedToId ? (
         <p className="text-[length:var(--text-base)] text-[var(--color-text-muted)]">
           This quote became{" "}
@@ -453,9 +487,6 @@ export function DocumentPage() {
                 >
                   Save changes
                 </Button>
-                <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-                  Sending saves them too.
-                </span>
               </div>
             ) : null}
           </div>
@@ -515,14 +546,16 @@ export function DocumentPage() {
               ) : (
                 <DetailRow label="Due">
                   {document.dueOn
-                    ? `${formats.date(document.dueOn)} · ${dueLabel(document.dueOn)}`
+                    ? document.paidOn || document.status === "void"
+                      ? formats.date(document.dueOn)
+                      : `${formats.date(document.dueOn)} · ${dueLabel(document.dueOn)}`
                     : "No due date"}
                 </DetailRow>
               )}
               {document.paidOn ? (
                 <DetailRow label="Paid">
                   {formats.date(document.paidOn)}
-                  {document.paidMethod ? ` · ${document.paidMethod}` : ""}
+                  {document.paidMethod ? ` · ${paymentMethodLabel(document.paidMethod)}` : ""}
                 </DetailRow>
               ) : null}
               {document.pdfPath ? (
