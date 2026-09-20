@@ -39,7 +39,7 @@ import {
   toast,
 } from "@/ui";
 import { cn } from "@/ui/cn";
-import { formatDateTimeDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { useWriteState } from "@/app/hooks";
 import type { WorkspaceEntry } from "@/app/appSettings";
 import {
@@ -58,8 +58,8 @@ import {
   unarchiveWorkspace,
 } from "@/features/settings/lib/workspaces";
 
-function stamp(value: string | null, never: string): string {
-  return value ? formatDateTimeDisplay(value) : never;
+function stamp(value: string | null, never: string, dateTime: (v: string) => string): string {
+  return value ? dateTime(value) : never;
 }
 
 function WorkspaceRow(props: {
@@ -73,6 +73,7 @@ function WorkspaceRow(props: {
   onUnarchive: () => void;
 }) {
   const { workspace, open, busy, last } = props;
+  const formats = useFormats();
 
   return (
     <CardRow
@@ -97,10 +98,12 @@ function WorkspaceRow(props: {
           {workspace.archived ? <Badge tone="neutral">Archived</Badge> : null}
         </div>
         <div className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-          <span className="tabular">Last backup {stamp(workspace.lastBackupAt, "never")}</span>
+          <span className="tabular">
+            Last backup {stamp(workspace.lastBackupAt, "never", formats.dateTime)}
+          </span>
           {" · "}
           <span className="tabular">
-            Last lead check {stamp(workspace.lastPolledAt, "never")}
+            Last lead check {stamp(workspace.lastPolledAt, "never", formats.dateTime)}
           </span>
         </div>
       </div>

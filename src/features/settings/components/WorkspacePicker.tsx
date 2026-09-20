@@ -37,7 +37,7 @@ import {
   toast,
 } from "@/ui";
 import { cn } from "@/ui/cn";
-import { formatDateTimeDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { SettingsNotice } from "@/features/settings/components/SettingsLayout";
 import { refetchRegistry, useRegistry } from "@/features/settings/lib/queries";
 import {
@@ -53,6 +53,7 @@ export function WorkspacePicker(props: {
   const client = useQueryClient();
   const { data: registry } = useRegistry();
   const [, navigate] = useLocation();
+  const formats = useFormats();
 
   const blocked = switchBlockedReason();
   const workspaces = (registry?.workspaces ?? []).filter((w) => !w.archived);
@@ -125,7 +126,7 @@ export function WorkspacePicker(props: {
                         </span>
                         <span className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)] tabular">
                           {workspace.lastBackupAt
-                            ? `Backed up ${formatDateTimeDisplay(workspace.lastBackupAt)}`
+                            ? `Backed up ${formats.dateTime(workspace.lastBackupAt)}`
                             : "No backup yet"}
                         </span>
                       </span>
