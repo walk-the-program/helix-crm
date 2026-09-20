@@ -78,10 +78,41 @@ function splitFooter(children: ReactNode): { body: ReactNode[]; footer: ReactNod
  * right side, which is what the workspace switcher did before this line was
  * added.
  */
+/**
+ * Where focus goes when a dialog closes and there is nowhere to send it back
+ * to. Put it on the shell's main region; `main` is the fallback.
+ */
+const FOCUS_FALLBACK = "[data-dialog-focus-fallback]";
+
+/**
+ * Radix restores focus to whatever held it when the dialog opened. That is the
+ * right answer for a dialog opened from a button, and no answer at all for one
+ * opened from a keyboard shortcut: "?" is pressed while nothing is focused, so
+ * the element Radix restores to is `document.body`, and closing the shortcuts
+ * sheet leaves the keyboard at the very top of the document — the next Tab
+ * starts again from the first sidebar link instead of resuming where the user
+ * was (Lead C's phase-one design note).
+ *
+ * So when the restore target is missing, detached or the body itself, focus
+ * goes to the shell's main region instead. A caller that passes its own
+ * `onCloseAutoFocus` still wins, and one that calls `preventDefault()` still
+ * places focus itself.
+ */
+function returnFocus() {
+  const active = document.activeElement;
+  if (active && active !== document.body && document.contains(active)) return;
+  const fallback =
+    document.querySelector<HTMLElement>(FOCUS_FALLBACK) ??
+    document.querySelector<HTMLElement>("main");
+  if (!fallback) return;
+  if (!fallback.hasAttribute("tabindex")) fallback.setAttribute("tabindex", "-1");
+  fallback.focus({ preventScroll: true });
+}
+
 export const DialogContent = forwardRef<
   ElementRef<typeof RadixDialog.Content>,
   ComponentPropsWithoutRef<typeof RadixDialog.Content> & { size?: keyof typeof sizeClasses }
->(({ className, size = "md", children, ...props }, ref) => {
+>(({ className, size = "md", children, onCloseAutoFocus, ...props }, ref) => {
   const { body, footer } = splitFooter(children);
   return (
   <RadixDialog.Portal>
@@ -89,6 +120,14 @@ export const DialogContent = forwardRef<
     <RadixDialog.Overlay className="fixed inset-0 z-50 bg-[var(--color-overlay)]" />
     <RadixDialog.Content
       ref={ref}
+      onCloseAutoFocus={(event) => {
+        onCloseAutoFocus?.(event);
+        if (event.defaultPrevented) return;
+        // Radix has not moved focus yet at this point, so let it, then check
+        // where it landed. Nothing is stolen from a real restore target: the
+        // check below only fires when focus came to rest on the body.
+        window.setTimeout(returnFocus, 0);
+      }}
       className={cn(
         "fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-var(--space-6))]",
         sizeClasses[size],

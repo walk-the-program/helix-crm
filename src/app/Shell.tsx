@@ -740,7 +740,16 @@ export function Shell({ registry, workspace }: ShellProps) {
             }
           />
 
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-[var(--space-7)] py-[var(--space-6)]">
+          {/*
+            Where a dialog's focus goes home to when it was opened from a
+            keyboard shortcut and so has no trigger to return to (src/ui/
+            Dialog.tsx). Without it, closing the "?" sheet parked the keyboard
+            on <body> and the next Tab restarted from the first sidebar link.
+          */}
+          <main
+            data-dialog-focus-fallback=""
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto px-[var(--space-7)] py-[var(--space-6)]"
+          >
             <Switch>
               {routes.map((route) => (
                 <Route key={route.path} path={route.path}>
