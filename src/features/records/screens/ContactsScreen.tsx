@@ -201,6 +201,15 @@ export function ContactsScreen() {
   );
 
   const filtered = debouncedSearch.trim().length > 0 || tagId !== ALL || sourceId !== ALL;
+  /**
+   * A saved view can outlive the tag it filters on: `tags.softDelete` leaves
+   * `tag_links` alone, so the view still applies but the tag has gone from
+   * the Select and every contact falls out. The screen used to answer that
+   * with a flat "Nothing matches those filters", which sends the owner
+   * looking for a filter he cannot see (worker finding F-W1-2). When the
+   * filter names a tag that is no longer live, say so and offer the way out.
+   */
+  const missingTag = tagId !== ALL && (tags ?? []).every((tag) => tag.id !== tagId);
   const total = data?.total ?? 0;
 
   return (
@@ -334,6 +343,21 @@ export function ContactsScreen() {
               <Button variant="secondary" onClick={() => setHideUnnamed(false)}>
                 Show them again
               </Button>
+            }
+          />
+        ) : missingTag ? (
+          <EmptyState
+            title="That tag has been deleted"
+            description="This view still filters on a tag that no longer exists, so nothing can match it. Drop the tag filter to see everyone again, or delete the view."
+            action={
+              <div className="flex items-center gap-[var(--space-2)]">
+                <Button variant="secondary" onClick={() => setTagId(ALL)}>
+                  Drop the tag filter
+                </Button>
+                <Button variant="secondary" onClick={() => navigate("/settings/tags")}>
+                  Manage tags
+                </Button>
+              </div>
             }
           />
         ) : filtered ? (
