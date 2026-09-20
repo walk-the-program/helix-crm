@@ -90,10 +90,12 @@ describe("NewServiceDialog: saving", () => {
 
     await user.type(screen.getByTestId("new-service-name-input"), "Lawn plan");
     await user.type(screen.getByTestId("new-service-price-input"), "80");
-    await user.selectOptions(
-      screen.getByLabelText("How is it charged?"),
-      "Every year",
-    );
+    // The kit's Select is a Radix combobox button, not a native <select>, so
+    // it is driven the way the owner drives it: open the trigger, pick the
+    // option. `userEvent.selectOptions` only works on a real <select> and was
+    // silently never run until vitest started collecting *.test.tsx.
+    await user.click(screen.getByRole("combobox", { name: "How is it charged?" }));
+    await user.click(await screen.findByRole("option", { name: "Every year" }));
     await user.click(screen.getByTestId("new-service-save"));
 
     await waitFor(() => {
