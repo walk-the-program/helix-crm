@@ -88,6 +88,10 @@ export function QuickAddDialog() {
   const [saving, setSaving] = useState(false);
   const [warnings, setWarnings] = useState<DuplicateWarning[]>([]);
   const firstField = useRef<HTMLInputElement | null>(null);
+  // A second Enter can arrive before React re-renders `saving`, so the
+  // in-flight guard is a ref checked and set synchronously, not state
+  // (F-LA-1). `saving` state still drives the buttons' visual loading prop.
+  const savingRef = useRef(false);
 
   const debouncedEmail = useDebounced(email, 300);
   const debouncedPhone = useDebounced(phone, 300);
@@ -157,6 +161,10 @@ export function QuickAddDialog() {
   }
 
   async function save(keepOpen: boolean) {
+    // Synchronous, ref-based guard: a second Enter keydown can land before
+    // React commits `saving`, so state alone would let it through (F-LA-1).
+    if (savingRef.current) return;
+    savingRef.current = true;
     setError(null);
     const batchId = newBatchId();
     setSaving(true);
@@ -176,7 +184,10 @@ export function QuickAddDialog() {
           },
           { batchId },
         );
-        await finish(batchId, contactsRepo.contactName(contact), keepOpen);
+        await finish(batchId, contactsRepo.contactName(contact), keepOpen, {
+          type: "contact",
+          id: contact.id,
+        });
         return;
       }
 
@@ -186,7 +197,7 @@ export function QuickAddDialog() {
           return;
         }
         const company = await companiesRepo.create({ name, phone }, { batchId });
-        await finish(batchId, company.name, keepOpen);
+        await finish(batchId, company.name, keepOpen, { type: "company", id: company.id });
         return;
       }
 
@@ -209,7 +220,7 @@ export function QuickAddDialog() {
           },
           { batchId },
         );
-        await finish(batchId, deal.title, keepOpen);
+        await finish(batchId, deal.title, keepOpen, { type: "deal", id: deal.id });
         return;
       }
 
@@ -229,6 +240,7 @@ export function QuickAddDialog() {
           },
           { batchId },
         );
+        // A task has no page of its own, so there is nowhere to navigate.
         await finish(batchId, task.title, keepOpen);
         return;
       }
@@ -245,21 +257,40 @@ export function QuickAddDialog() {
         { kind: "note", body: body.trim(), contactId, companyId },
         { batchId },
       );
+      // A note has no page of its own, so there is nowhere to navigate.
       await finish(batchId, "note", keepOpen);
     } catch (err) {
       reportError(err, "That did not save.");
     } finally {
       setSaving(false);
+      savingRef.current = false;
     }
   }
 
-  async function finish(batchId: string, label: string, keepOpen: boolean) {
+  async function finish(
+    batchId: string,
+    label: string,
+    keepOpen: boolean,
+    nav?: { type: "contact" | "company" | "deal"; id: string },
+  ) {
     await invalidateRecords();
     offerUndoCreate(batchId, label);
-    if (keepOpen) clearForm();
-    else {
+    if (keepOpen) {
       clearForm();
-      closeQuickAdd();
+      return;
+    }
+    clearForm();
+    closeQuickAdd();
+    // "Save and add another" keeps him in the form, so only a plain Save
+    // (keepOpen false) lands him on the record he just created (F-LA-6a).
+    if (nav) {
+      const path =
+        nav.type === "contact"
+          ? `/contacts/${nav.id}`
+          : nav.type === "company"
+            ? `/companies/${nav.id}`
+            : `/deals/${nav.id}`;
+      navigate(path);
     }
   }
 
@@ -270,6 +301,7 @@ export function QuickAddDialog() {
     const inTextarea = target.tagName === "TEXTAREA";
     if (inTextarea && !(event.metaKey || event.ctrlKey)) return;
     event.preventDefault();
+    if (savingRef.current) return;
     void save(event.shiftKey);
   }
 
