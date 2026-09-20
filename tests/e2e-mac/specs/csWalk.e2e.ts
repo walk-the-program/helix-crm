@@ -253,6 +253,36 @@ test("a fresh owner walks from first launch to a job moved forward", async ({
   }
   endLeg();
 
+  /* -------------------------------------------------------------- leg 5b */
+  // The recovery key is work the owner has to do before Today settles down,
+  // so it is counted, not skipped. It is the one leg that is meant to have
+  // got longer: three actions bought against a laptop that dies.
+  beginLeg("5b. Keep the recovery key");
+  const card = page.getByRole("heading", { name: "Save your recovery key" });
+  if (await card.count()) {
+    await act("Show recovery key", () =>
+      page.getByRole("button", { name: "Show recovery key" }).click(),
+    );
+    await expect(page.getByTestId("recovery-key")).toBeVisible();
+    await shoot(page, "09b-recovery-key", true);
+    // Save rather than Copy: the browser this harness runs in refuses
+    // navigator.clipboard without a permission grant, and a refused copy
+    // correctly does not count as having kept the key. Copy on the real
+    // webview is a line on the release checklist instead.
+    await offerSavePath(page, "/e2e/helix-recovery-key.txt");
+    await act("Save to a file", () =>
+      page.getByRole("button", { name: "Save to a file" }).click(),
+    );
+    const confirm = page.getByRole("button", { name: "I have saved it" });
+    await expect(confirm).toBeEnabled();
+    await act("I have saved it", () => confirm.click());
+    await expect(card).toHaveCount(0);
+    await shoot(page, "09c-recovery-key-done", true);
+  } else {
+    friction("There is no recovery-key step anywhere in first run.");
+  }
+  endLeg();
+
   /* ---------------------------------------------------------------- leg 6 */
   beginLeg("6. First job, and moving it a stage");
   await act("open the jobs board", async () => {

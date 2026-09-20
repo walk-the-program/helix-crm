@@ -71,21 +71,26 @@ either will otherwise assume the download is broken or infected.
       the choice lands — none of the four is a trap, and the other three
       stay available afterward from their own screens.
 
-## The recovery key — verify with the lead before release
+## The recovery key
 
-- [ ] **Verify this line is still accurate before shipping the release you
-      install with:** the first thing Today shows, before its regular
-      sections, is a recovery-key card that will not go away on its own. It
-      stays in front of the client until they reveal the key and confirm
-      they copied, saved or printed it — there is no dismiss and no snooze
+This is the step that cannot be skipped and cannot be repaired later, so it is
+the one to slow down for.
+
+- [ ] The first thing Today shows, before its regular content, is a
+      recovery-key card that will not go away on its own. It stays in front
+      of the client until they reveal the key and confirm they copied, saved
+      or printed it — there is no dismiss and no snooze
       (`src/features/today/sections/RecoveryKeyCard.tsx`, LR-6). Stay with
-      the client through this step; do not let them close Helix with the
-      card still showing and assume it is done. This is the fix for
-      F-OPS-1 (a dead laptop makes every encrypted backup unreadable
-      without this key) actually reaching a client who never opens
-      Settings, and at this revision it depends on the LR-CS-W1 worker's
-      change landing and being accepted — confirm that with the lead
-      before you rely on this step in front of a client.
+      the client through it; do not let them close Helix with the card still
+      showing and assume it is done. This is what makes the F-OPS-1 fix — a
+      dead laptop otherwise makes every encrypted backup unreadable — reach a
+      client who never opens Settings.
+- [ ] Watch which of the three they use. **Print is the best answer for a
+      client who is not comfortable with a computer**: a sheet of paper in a
+      filing cabinet survives the laptop, the phone and the cloud account.
+      Save to a file is fine only if the file then leaves this machine.
+      Copy is the weakest — a clipboard pasted into a note on the same
+      laptop is not a second copy of anything.
 - [ ] Whatever the client does with the key once confirmed (write it down,
       keep the file, print it) is theirs to keep somewhere other than "only
       inside Helix" — a recovery key kept solely on the same dead laptop

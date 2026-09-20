@@ -65,16 +65,24 @@ to end."
       wizard (F-REV-13); the wizard is what first launch actually shows,
       and always has (`src/features/onboarding/gate.ts`,
       `OnboardingFlow.tsx`, README "First run").
-- [ ] **Verify with the lead before release:** whichever way setup ends
-      (a choice on screen 3, or Skip), Today's first content is the
-      recovery-key card - one primary block, un-dismissable - until you
+- [ ] Whichever way setup ends (a choice on screen 3, or Skip), Today's
+      first content is the recovery-key card - un-dismissable - until you
       reveal the key and confirm you copied, saved or printed it. Only
-      after that does Today show its regular sections, with the three
-      ways to start (import a CSV, add a contact, connect a website) as
-      README describes them. This line depends on LR-CS-W1's work
-      (`src/features/today/sections/RecoveryKeyCard.tsx`), landed in this
-      checkout but not yet confirmed accepted at the time this checklist
-      was written.
+      after that does Today show its regular content: the three ways to
+      start on an empty workspace, "Your customers are in Helix" once
+      records exist with nothing yet to chase, or the real sections once
+      there is. (`src/features/today/sections/RecoveryKeyCard.tsx`,
+      accepted by the CS lead at the revision this line was written.)
+- [ ] **Copy the recovery key, on the real build.** Press Copy on that
+      card and paste into TextEdit or Notepad: the key must arrive. This
+      is the one of the three keep-a-copy paths that the mocked e2e suite
+      cannot prove - the harness browser refuses
+      `navigator.clipboard.writeText` without a permission grant, and a
+      refused copy correctly does not satisfy the card. Save to a file and
+      Print are covered by tests; Copy is covered here.
+- [ ] **Print the recovery key, on the real build.** Press Print and check
+      the preview shows the key and its instructions alone, with no
+      sidebar and no Today behind it.
 - [ ] `helix.json` exists in the app data folder (macOS:
       `~/Library/Application Support/com.clearpathdigital.helix/`; Windows:
       `%APPDATA%\com.clearpathdigital.helix\`) and lists the new workspace.
