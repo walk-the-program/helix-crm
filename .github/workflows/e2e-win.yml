@@ -12,6 +12,10 @@ on:
   push:
     branches:
       - main
+      # Iterating on this workflow means iterating on CI: the failure modes
+      # here (WebView2 version, process integrity, driver handshake) do not
+      # reproduce on a Mac. Pushing to e2e-win/** runs it without a PR.
+      - "e2e-win/**"
 
 jobs:
   e2e-win:
@@ -58,10 +62,117 @@ jobs:
       - name: Install WebdriverIO (not part of package.json - see tests/e2e-win/README.md)
         run: npm i --no-save --no-audit --no-fund webdriverio @wdio/cli @wdio/local-runner @wdio/mocha-framework @wdio/spec-reporter @wdio/globals @wdio/types tsx
 
-      - name: Run Windows e2e suite
+      # Everything this suite needs a specific version of, printed before the
+      # run rather than guessed at afterwards. The WebView2 runtime version is
+      # the one that matters most: it has to match msedgedriver's major, and it
+      # is what decides whether the de-elevation below is required (see the
+      # next step).
+      - name: Diagnostics - versions, integrity, build output
+        if: always()
+        shell: pwsh
+        run: |
+          # Diagnostics must never be the reason a run goes red: pwsh 7.4 turns a
+          # non-zero exit from a native command into a terminating error when
+          # $ErrorActionPreference is 'stop', which is what the runner sets.
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $webview2 = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -Name pv -ErrorAction SilentlyContinue).pv
+          Write-Host "WebView2 runtime:   $webview2"
+          & "${{ steps.msedgedriver.outputs.msedgedriver-path }}" --version
+          # tauri-driver has no --version flag; cargo knows which one it installed.
+          cargo install --list | Select-String -Pattern 'tauri-driver'
+          Write-Host "node:               $((Get-Command node).Source) $(node --version)"
+          Write-Host "--- src-tauri\target\debug (top level) ---"
+          Get-ChildItem src-tauri\target\debug -File | Select-Object Name, Length | Format-Table -AutoSize | Out-String -Width 200
+          Write-Host "--- this shell's integrity level ---"
+          whoami /groups | Select-String 'Mandatory Label'
+
+      # De-elevated on purpose, and this is the whole reason the suite works.
+      #
+      # WebView2 runtime 150+ ignores every WEBVIEW2_* environment variable
+      # when the host process runs elevated - a hardening change, since those
+      # are user-writable (MicrosoftEdge/WebView2Feedback#5645, #5640).
+      # msedgedriver passes `--remote-debugging-port` to the app through
+      # exactly that mechanism (WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) and
+      # finds the port file through WEBVIEW2_USER_DATA_FOLDER. GitHub's Windows
+      # runner process is elevated, so the app came up with no debugging port
+      # and every session died after msedgedriver's 60s wait with
+      # "session not created: DevToolsActivePort file doesn't exist".
+      #
+      # Running the wdio process at medium integrity restores pre-150
+      # behaviour for the whole chain it spawns (node -> tauri-driver ->
+      # msedgedriver -> helix-crm.exe -> msedgewebview2.exe). This is the
+      # workaround wry's maintainers publish for GitHub Actions
+      # (tauri-apps/wry#1782); the same failure is tracked against the runner
+      # image in actions/runner-images#14738. Pinning to windows-2022 (WebView2
+      # 131) would also go green, but it would test an old runtime instead of
+      # the one users actually have.
+      #
+      # icacls is what keeps the de-elevated process able to read the workspace
+      # (the app binary, node_modules) and write tests/e2e-win/.output: its
+      # token has Administrators as deny-only, so ACEs granted only to
+      # Administrators no longer apply. The grant is inheritable, so existing
+      # children pick it up without walking the whole tree, and the workspace
+      # is a throwaway directory on an ephemeral runner.
+      - name: Run Windows e2e suite (de-elevated - see comment)
+        shell: pwsh
         env:
           MSEDGEDRIVER_PATH: ${{ steps.msedgedriver.outputs.msedgedriver-path }}
-        run: npx wdio run tests/e2e-win/wdio.conf.ts
+        run: |
+          # winget exits non-zero for benign cases (already installed, no
+          # applicable upgrade), and pwsh 7.4 would turn that into a terminating
+          # error under the runner's $ErrorActionPreference = 'stop'. The suite's
+          # own exit code is propagated explicitly at the end of this step.
+          $PSNativeCommandUseErrorActionPreference = $false
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          } else {
+            choco install gsudo -y --no-progress
+          }
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" | Out-Null
+
+          # gsudo ships as an MSI, so it is not necessarily on this shell's
+          # PATH yet; look where the installer and winget put it.
+          $gsudo = (Get-Command gsudo -ErrorAction SilentlyContinue).Source
+          if (-not $gsudo) {
+            $gsudo = (Get-ChildItem "$env:ProgramFiles\gsudo", "$env:ProgramData\chocolatey\bin", "$env:LOCALAPPDATA\Microsoft\WinGet" -Recurse -Filter gsudo.exe -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          }
+          if (-not $gsudo) { throw "gsudo was not found after install" }
+          Write-Host "==> gsudo: $gsudo"
+
+          # Absolute paths throughout: a de-elevated process is not guaranteed
+          # to inherit this shell's PATH, so nothing here (and nothing in
+          # wdio.conf.ts) may resolve a binary by bare name.
+          $node = (Get-Command node).Source
+          $wdio = Join-Path $env:GITHUB_WORKSPACE 'node_modules\@wdio\cli\bin\wdio.js'
+          if (-not (Test-Path $wdio)) { throw "wdio CLI not found at $wdio" }
+
+          Write-Host "--- integrity level the suite will run at ---"
+          & $gsudo --integrity Medium $node -e "console.log(process.version, process.cwd())"
+          & $gsudo --integrity Medium powershell -NoProfile -Command "whoami /groups | Select-String 'Mandatory Label'"
+
+          & $gsudo --integrity Medium $node $wdio run "$env:GITHUB_WORKSPACE\tests\e2e-win\wdio.conf.ts"
+          exit $LASTEXITCODE
+
+      # The app's own log is the only place a startup failure inside the
+      # process shows up: tauri-driver reports "the session did not start",
+      # not why. Printed inline so a red run explains itself without
+      # downloading the artifact.
+      - name: Diagnostics - Helix app log
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $logDir = Join-Path $env:APPDATA 'com.clearpathdigital.helix\logs'
+          if (Test-Path $logDir) {
+            Get-ChildItem $logDir -Filter *.log | ForEach-Object {
+              Write-Host "--- $($_.FullName) ---"
+              Get-Content $_.FullName -Tail 200
+            }
+          } else {
+            Write-Host "No app log directory at $logDir (the app may never have started)."
+          }
 
       - name: Upload e2e logs/screenshots
         if: always()

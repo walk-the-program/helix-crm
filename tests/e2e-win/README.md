@@ -63,6 +63,61 @@ The script:
 Re-running it is cheap - it skips the download if a driver matching the
 currently-installed WebView2 version is already in `-OutDir`.
 
+## Why CI runs the suite de-elevated
+
+This is the one non-obvious thing about the Windows setup, and it cost a red CI
+run to find.
+
+WebView2 runtime **150 and later ignores every `WEBVIEW2_*` environment
+variable when the host process is elevated** - hardening, since those variables
+are writable by a standard user
+([WebView2Feedback#5645](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5645),
+[#5640](https://github.com/MicrosoftEdge/WebView2Feedback/issues/5640)).
+`msedgedriver` hands `--remote-debugging-port` to the app through exactly that
+mechanism (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`) and looks for the port file
+through `WEBVIEW2_USER_DATA_FOLDER`. GitHub's Windows runner process is
+elevated, so the app launched with no debugging port at all and every session
+died after `msedgedriver`'s 60-second wait:
+
+```
+session not created: DevToolsActivePort file doesn't exist
+```
+
+The fix, which is the workaround wry's maintainers publish for GitHub Actions
+([tauri-apps/wry#1782](https://github.com/tauri-apps/wry/issues/1782); the same
+failure is tracked against the runner image in
+[actions/runner-images#14738](https://github.com/actions/runner-images/issues/14738)),
+is to run the `wdio` process itself at **medium integrity** with
+[gsudo](https://github.com/gerardog/gsudo). Everything it spawns - `tauri-driver`,
+`msedgedriver`, `helix-crm.exe`, `msedgewebview2.exe` - inherits that integrity
+level, and the environment variables work again:
+
+```powershell
+icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F"
+gsudo --integrity Medium node node_modules\@wdio\cli\bin\wdio.js run tests\e2e-win\wdio.conf.ts
+```
+
+The `icacls` grant is what keeps the de-elevated process able to read the
+workspace and write `.output/`: its token carries Administrators as deny-only,
+so anything granted only to Administrators stops applying. It is a throwaway
+directory on an ephemeral runner.
+
+Two consequences worth knowing:
+
+- **Nothing in `wdio.conf.ts` may resolve a binary from `PATH`.** A de-elevated
+  process is not guaranteed to inherit the caller's environment, so the config
+  resolves `tauri-driver` (from `CARGO_HOME`/`~/.cargo/bin`) and `msedgedriver`
+  (from `MSEDGEDRIVER_PATH`, else `.drivers/msedgedriver.exe`) to absolute paths
+  itself, and fails naming the missing path rather than waiting 60 seconds for
+  a generic session error.
+- **A local run from an elevated PowerShell hits the same wall.** Run the suite
+  from a normal, non-elevated prompt - or the same `gsudo --integrity Medium`
+  line - if you see `DevToolsActivePort file doesn't exist` on your own machine.
+
+Pinning CI to `windows-2022` (WebView2 131, before the hardening) would also go
+green, and was rejected: it would test a runtime no user has instead of the one
+they do.
+
 ## Why these packages aren't in package.json
 
 `webdriverio`, `@wdio/cli`, and the rest of the WebdriverIO toolchain are
@@ -123,6 +178,9 @@ If step 6 hangs or fails to connect, check that no stray `tauri-driver.exe` or
 `msedgedriver.exe` process is still running from a previous interrupted run
 (`wdio.conf.ts` only ever kills the process it itself spawned, so a killed
 `wdio` process can leave one behind) - end it in Task Manager and re-run.
+
+If step 6 fails with `session not created: DevToolsActivePort file doesn't
+exist`, your shell is elevated - see "Why CI runs the suite de-elevated" above.
 
 ## What's tested today, and what's next
 

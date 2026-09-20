@@ -89,6 +89,13 @@ version and downloads the driver that matches it — they must match or the
 session never starts. `.github/workflows/e2e-win.yml` builds the debug app and
 runs the suite.
 
+The suite runs **de-elevated**, at medium integrity via `gsudo`. WebView2 150+
+ignores the `WEBVIEW2_*` environment variables when the host process is
+elevated, and that is how `msedgedriver` hands the app its remote debugging
+port; an elevated run (which is what a GitHub runner is by default) fails with
+`session not created: DevToolsActivePort file doesn't exist`. The full story,
+including what to do when you hit it locally, is in `tests/e2e-win/README.md`.
+
 This is the only suite that proves the Rust commands, the capability set and a
 real window. It **cannot run on macOS**: WebView2 is a Windows component. See
 `tests/e2e-win/README.md`.
