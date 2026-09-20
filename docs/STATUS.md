@@ -2571,3 +2571,52 @@ Gallery captured at 1280 in light, dark and compact, plus 14 sections in both
 themes, into `design/brand/`. Verified: typecheck clean, `npm test` green
 (15 new tests for Brand, NavItem and Badge), `vite build` succeeds, zero
 console messages and zero failed requests.
+
+---
+
+## 2026-09-19 — Windows e2e: a WebDriver session that actually starts
+
+`.github/workflows/e2e-win.yml` built the debug app fine but never got a
+WebDriver session: every run died after `msedgedriver`'s 60-second wait with
+`session not created: DevToolsActivePort file doesn't exist` (run 35476491615).
+
+The cause is not in this repo. WebView2 runtime **150+ ignores every
+`WEBVIEW2_*` environment variable when the host process is elevated**
+(hardening; those variables are user-writable —
+MicrosoftEdge/WebView2Feedback#5645, #5640). `msedgedriver` passes
+`--remote-debugging-port` to a WebView2 app through exactly that mechanism, and
+finds the port file through `WEBVIEW2_USER_DATA_FOLDER`. GitHub's Windows
+runner process is elevated and its image now carries WebView2 152.0.4191.66, so
+the app launched with no debugging port at all and the session could never come
+up. The same failure is tracked in tauri-apps/wry#1782 and
+actions/runner-images#14738.
+
+The fix, which is what wry's maintainers publish for GitHub Actions: run the
+`wdio` process at medium integrity with `gsudo`, so the whole chain it spawns
+(`tauri-driver` → `msedgedriver` → `helix-crm.exe` → `msedgewebview2.exe`) is
+de-elevated and the environment variables work again. `icacls` grants the
+workspace to the de-elevated token, whose Administrators membership is
+deny-only. Pinning the job to `windows-2022` (WebView2 131, pre-hardening) would
+also be green and was rejected: it would test a runtime no user has.
+
+Because a de-elevated process is not guaranteed to inherit the caller's
+environment, `tests/e2e-win/wdio.conf.ts` no longer resolves anything from
+`PATH`: it finds `tauri-driver` in `CARGO_HOME`/`~/.cargo/bin`, falls back to
+`.drivers/msedgedriver.exe` when `MSEDGEDRIVER_PATH` is unset, fails naming the
+missing binary instead of waiting 60s for a generic session error, waits for
+tauri-driver's port to accept a connection rather than sleeping 1s, and keeps
+tauri-driver's output in `.output/tauri-driver.log` for the CI artifact.
+`connectionRetryCount` dropped 3 → 1, since each retry costs the full 60s
+browser-start timeout and tells you nothing new.
+
+The workflow now also prints the WebView2 runtime version, both driver
+versions, the `target/debug` contents and the integrity level it runs at, and
+tails `%APPDATA%\com.clearpathdigital.helix\logs` after the suite — the app's
+own log is the only place a startup failure inside the process shows up.
+It runs on `push` to `e2e-win/**` as well as `main`, because these failure
+modes cannot be reproduced on a Mac.
+
+Green on runs 35477415312 and 35477806014: three smoke assertions against the
+real window (title, sidebar "Today", Today heading) in 1.2-1.6s, with
+`Helix 0.1.0 starting` in the app's own log from
+`%APPDATA%\com.clearpathdigital.helix\logs\helix.log`.
