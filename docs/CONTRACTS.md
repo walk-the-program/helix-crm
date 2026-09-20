@@ -128,6 +128,30 @@ disk_encryption_status() -> { platform: string, encrypted: boolean | null, detai
    query) on Windows; 5 s timeout. Never errors and never blocks the app;
    `encrypted` is null when the check could not run or its output could not be
    parsed - never a guess.
+
+recovery_key_reveal(workspaceName: string, writtenAt: string)
+   -> { key: string, fileText: string }
+   the open workspace's SQLCipher key, formatted as HLX1-XXXX-... (sixteen
+   groups of four), plus the whole text of the file the owner saves. The two
+   arguments are display strings for that file and nothing else: the key comes
+   from the keychain, and the workspace is the one that is open, not one the
+   frontend names. See "Recovery key" below.
+
+workspace_adopt_backup(sourcePath: string, recoveryKey: string)
+   -> { workspaceId: string, path: string }
+   copies an encrypted Helix file into a NEW workspace under <appData>/workspaces
+   and stores the key in this machine's keychain under the new id. The id is
+   minted in Rust, never taken from JS. Refuses a wrong key, a plaintext file
+   and a non-Helix database, each with nothing written; a failure after the copy
+   removes both the folder and the keychain entry.
+
+backup_mirror(destDir: string)
+   -> { path: string, copied: number, removed: number, failed: string[] }
+   makes <destDir>/Helix backups/<workspaceId> hold exactly the `.db` files the
+   open workspace's backups folder holds. Source derived in Rust from the open
+   database, the way copy_in derives the attachments folder. Removes only `.db`
+   files that the source no longer has; never touches anything else in that
+   folder and never recurses. Refuses a destination inside the workspace.
 ```
 
 ## TypeScript database layer
@@ -1024,3 +1048,92 @@ a keyboard shortcut with nothing focused) sends focus to the shell's main region
 times, bound to the workspace's currency and locale. Pure helpers in `src/lib/money.ts`
 and `src/lib/dates.ts` keep their signatures. The PDF renderer takes currency and locale
 as explicit inputs and does not use the hook.
+
+## Recovery and the second backup copy (LR-OPS, 2026-09-20, binding)
+
+This section amends "Encryption at rest" above. Read both.
+
+### Why it changes that section
+
+D18 put the workspace key in the OS keychain and nowhere else, and "the key never
+crosses the IPC boundary in either direction" was enforced, not merely documented. That
+is the right answer for a lost laptop and the wrong answer for a dead one. Every backup
+is encrypted with that key, so a machine that is stolen, wiped or thrown away takes
+thirty days of backups with it, and a workspace folder copied to a new machine will not
+open. For a solo trade owner with one Mac, that is the most likely way to lose
+everything in this product.
+
+So the key stops being a secret the app keeps from its owner. The rule that replaces it:
+
+> A workspace's key may be shown to the person who owns the workspace, on that person's
+> explicit request, for the workspace that is open. It may not be read by anything else,
+> and it is never written to SQLite, to `helix.json`, or to `helix.log`.
+
+### Recovery key
+
+Format `HLX1-XXXX-...`: the same 64 hex characters the keychain holds, uppercase, in
+sixteen groups of four. The parser ignores dashes, spaces and the prefix, and reports a
+non-hex character rather than dropping it. `src-tauri/src/recovery.rs` owns the format,
+the parser, and the words in the file the owner saves; nothing is duplicated in
+TypeScript.
+
+`secrets::DbKey` gains exactly two public holes, both named for what they are:
+`expose_for_recovery()` and `from_recovery_hex()`. `recovery.rs` is their only caller.
+`secret_set`/`secret_get`/`secret_delete` still refuse the kind `"dbkey"`, so the
+frontend still cannot read, write or delete a key by naming it: the only path is
+`recovery_key_reveal`, which takes no workspace id and answers only for the open one.
+
+`secrets::put_db_key` writes a key that did not come from this machine's CSPRNG. It
+refuses to overwrite an existing entry, and it shares one critical section with
+`db_key`, so the two write paths cannot interleave.
+
+### Adopting a backup
+
+`workspace_adopt_backup` is prove-then-write, with the write undone if the proof fails
+afterwards - the same shape as the one-time encryption migration:
+
+1. parse the key; open the source read-only with it and read `sqlite_schema` (SQLCipher
+   accepts any key and only fails on page 1, so the read is the test)
+2. refuse a plaintext file, and refuse a database with neither `schema_migrations` nor
+   `contacts` in it
+3. mint a workspace id in Rust, create `<workspacesDir>/<id>/`, copy the file in as
+   `helix.db`
+4. `put_db_key` the key under the new id
+5. re-read the key back out of the keychain and open the copy with THAT, because "the key
+   this machine will fetch on the next launch opens this file" is the claim that matters
+6. any failure after step 3 removes the folder and the keychain entry
+
+Step 6 is the one place in the app allowed to delete a `dbkey` entry, and only its own,
+for an id no data has ever been written under. "Nothing in the app ever deletes a
+`dbkey` entry" in the section above is otherwise unchanged.
+
+Nothing is ever deleted from, or written to, the source file.
+
+### The second copy
+
+`backup_mirror` makes `<chosen folder>/Helix backups/<workspaceId>` hold exactly the
+`.db` files the workspace's own `backups` folder holds. Matching rather than
+accumulating is deliberate: the thirty-day retention in
+`src/features/data/lib/retention.ts` stays the only retention rule in the product, and a
+synced folder cannot grow without bound. A file already there with the same size is not
+copied again, because a backup file never changes after it is written.
+
+It removes only `.db` files inside that one folder that the source no longer has. It
+never recurses and never touches anything else the owner keeps there.
+
+The destination is stored per workspace as the `backupCopyDir` setting, chosen through a
+native folder picker. The copy runs after every successful backup, and its failure is
+reported separately from the backup's: a detached drive must not turn a backup that
+succeeded into a banner saying Helix could not save one.
+
+This adds no network call and no new capability. The frontend's filesystem scope still
+stops at the app data folder; Rust does the copying, as it does for `copy_in`. What a
+sync provider sees is the same SQLCipher ciphertext, unreadable without the recovery key.
+
+### Tests
+
+`src-tauri/tests/recovery_tests.rs` (9): restore over the live file, the whole
+new-machine journey, and every refusal leaving no folder and no keychain entry behind.
+`src-tauri/src/recovery.rs` (7) for the format and the parser, `src-tauri/src/backups.rs`
+(5) for the mirror. On the TypeScript side, `tests/unit/data/recoveryKey.test.tsx` (10)
+and `tests/unit/data/backupCopyOut.test.ts` (6).
