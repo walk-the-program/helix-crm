@@ -80,6 +80,12 @@ copy, the HTTP client, a backup on a live connection, window behaviour, the
 capability allowlist, restore, workspace switching. A passing run means the UI
 and the SQL are right, not that the app works.
 
+Two things a spec cannot do, learned the slow way: it cannot `import()` a
+repository module into the page (the preview serves a built bundle, not
+`/src`), so arrange and assert through `helix.bridge` instead; and
+`helix.bridge.query(sql, params)` / `.execute(sql, params)` need the params
+array even when it is empty.
+
 ## tests/e2e-win — WebdriverIO + tauri-driver, CI only
 
 The real compiled app on `windows-latest`: `tauri-driver` proxying WebDriver to
