@@ -43,7 +43,7 @@ import {
   YAxis,
 } from "recharts";
 import { CardGroupLabel, EmptyState, Spinner, Tabs, TabsList, TabsTrigger } from "@/ui";
-import { centsToDecimalString, formatMoney } from "@/lib/money";
+import { centsToDecimalString } from "@/lib/money";
 import {
   defaultGranularity,
   formatBucket,
@@ -62,6 +62,7 @@ import type {
   WonLostRow,
 } from "@/db/repos/reports";
 import { useVocabulary } from "@/app/vocabulary";
+import { useFormats, type Formats } from "@/app/formats";
 import { ReportsFrame } from "@/features/leads/components/ReportsFrame";
 import { ReportCard } from "@/features/leads/components/ReportCard";
 import { DataTable } from "@/features/leads/components/DataTable";
@@ -121,8 +122,8 @@ function formatDaysValue(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(1)}`;
 }
 
-function formatMoneyOrDash(cents: number | null): string {
-  return cents === null ? "—" : formatMoney(cents);
+function formatMoneyOrDash(cents: number | null, money: Formats["money"]): string {
+  return cents === null ? "—" : money(cents);
 }
 
 /** "Mon 3 Mar" for a week bucket, "Mar 2026" for a month one. */
@@ -205,12 +206,13 @@ export function DealsReportScreen() {
  */
 function SummaryTiles(props: { summary: DealsSummary }) {
   const { summary } = props;
+  const formats = useFormats();
   return (
     <div className="flex flex-wrap gap-[var(--space-10)]">
       <StatTile
         label="New deals"
         value={String(summary.newCount)}
-        count={formatMoney(summary.newValueCents)}
+        count={formats.money(summary.newValueCents)}
       />
       <StatTile
         label="Won rate"
@@ -219,9 +221,9 @@ function SummaryTiles(props: { summary: DealsSummary }) {
       />
       <StatTile
         label="Average won"
-        value={formatMoneyOrDash(summary.averageWonCents)}
+        value={formatMoneyOrDash(summary.averageWonCents, formats.money)}
         count={`${summary.wonCount} won${
-          summary.wonValueCents > 0 ? `, ${formatMoney(summary.wonValueCents)} in total` : ""
+          summary.wonValueCents > 0 ? `, ${formats.money(summary.wonValueCents)} in total` : ""
         }`}
       />
       <StatTile
@@ -261,6 +263,7 @@ function TrendCard(props: {
 }) {
   const { rows, grain, onGrainChange } = props;
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const empty = rows.every((row) => row.count === 0);
 
   const data = rows.map((row) => ({
@@ -286,7 +289,7 @@ function TrendCard(props: {
       key: "value",
       header: "Value",
       numeric: true,
-      render: (row) => formatMoney(row.valueCents),
+      render: (row) => formats.money(row.valueCents),
     },
   ];
 
@@ -354,6 +357,7 @@ function TrendCard(props: {
 
 function PipelineCard(props: { rows: PipelineStageRow[] }) {
   const { rows } = props;
+  const formats = useFormats();
   const empty = rows.length === 0 || rows.every((row) => row.openDeals === 0);
 
   const data = rows.map((row) => ({
@@ -363,7 +367,7 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
   }));
 
   const ariaLabel = `Pipeline value by stage: ${rows
-    .map((row) => `${row.stageName} ${formatMoney(row.openValueCents)}`)
+    .map((row) => `${row.stageName} ${formats.money(row.openValueCents)}`)
     .join(", ")}`;
 
   const columns: DataTableColumn<PipelineStageRow>[] = [
@@ -373,7 +377,7 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
       key: "value",
       header: "Value",
       numeric: true,
-      render: (row) => formatMoney(row.openValueCents),
+      render: (row) => formats.money(row.openValueCents),
     },
   ];
 
@@ -408,7 +412,7 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
             <Tooltip
               cursor={CHART_CURSOR_FILL}
               content={(tooltipProps) => (
-                <ChartTooltipContent {...tooltipProps} formatValue={(value) => formatMoney(value)} />
+                <ChartTooltipContent {...tooltipProps} formatValue={(value) => formats.money(value)} />
               )}
             />
             <Bar
@@ -424,7 +428,7 @@ function PipelineCard(props: { rows: PipelineStageRow[] }) {
               <LabelList
                 dataKey="value"
                 position="right"
-                formatter={(value) => formatMoney(Number(value))}
+                formatter={(value) => formats.money(Number(value))}
                 style={CHART_LABEL_STYLE}
               />
             </Bar>
@@ -487,6 +491,7 @@ function WonLostCard(props: {
 }) {
   const { rows, granularity, onGranularityChange } = props;
   const vocabulary = useVocabulary();
+  const formats = useFormats();
   const empty = rows.length === 0;
 
   const wonTotalCents = rows.reduce((sum, row) => sum + row.wonValueCents, 0);
@@ -503,9 +508,9 @@ function WonLostCard(props: {
   const ariaLabel = `Won and lost by ${granularity}: ${rows
     .map(
       (row) =>
-        `${formatBucket(row.bucket)} won ${formatMoney(row.wonValueCents)} across ${row.wonCount} deal${
+        `${formatBucket(row.bucket)} won ${formats.money(row.wonValueCents)} across ${row.wonCount} deal${
           row.wonCount === 1 ? "" : "s"
-        }, lost ${formatMoney(row.lostValueCents)} across ${row.lostCount} deal${
+        }, lost ${formats.money(row.lostValueCents)} across ${row.lostCount} deal${
           row.lostCount === 1 ? "" : "s"
         }`,
     )
@@ -518,14 +523,14 @@ function WonLostCard(props: {
       key: "wonValue",
       header: "Won value",
       numeric: true,
-      render: (row) => formatMoney(row.wonValueCents),
+      render: (row) => formats.money(row.wonValueCents),
     },
     { key: "lostCount", header: "Lost", numeric: true, render: (row) => row.lostCount },
     {
       key: "lostValue",
       header: "Lost value",
       numeric: true,
-      render: (row) => formatMoney(row.lostValueCents),
+      render: (row) => formats.money(row.lostValueCents),
     },
   ];
 
@@ -556,12 +561,12 @@ function WonLostCard(props: {
           <div className="flex flex-wrap gap-[var(--space-10)]">
             <StatTile
               label="Won"
-              value={formatMoney(wonTotalCents)}
+              value={formats.money(wonTotalCents)}
               count={`${wonCountTotal} deal${wonCountTotal === 1 ? "" : "s"}`}
             />
             <StatTile
               label="Lost"
-              value={formatMoney(lostTotalCents)}
+              value={formats.money(lostTotalCents)}
               count={`${lostCountTotal} deal${lostCountTotal === 1 ? "" : "s"}`}
             />
           </div>
@@ -586,7 +591,7 @@ function WonLostCard(props: {
                   content={(tooltipProps) => (
                     <ChartTooltipContent
                       {...tooltipProps}
-                      formatValue={(value) => formatMoney(value)}
+                      formatValue={(value) => formats.money(value)}
                     />
                   )}
                 />
@@ -648,6 +653,7 @@ function WonLostCard(props: {
 
 function SourcesCard(props: { rows: SourceRow[] }) {
   const { rows } = props;
+  const formats = useFormats();
   const empty = rows.length === 0;
 
   const data = rows.map((row) => ({
@@ -666,7 +672,7 @@ function SourcesCard(props: { rows: SourceRow[] }) {
       key: "value",
       header: "Value",
       numeric: true,
-      render: (row) => formatMoney(row.valueCents),
+      render: (row) => formats.money(row.valueCents),
     },
     { key: "won", header: "Won", numeric: true, render: (row) => row.wonCount },
     { key: "open", header: "Open", numeric: true, render: (row) => row.openCount },

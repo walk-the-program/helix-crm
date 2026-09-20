@@ -30,15 +30,13 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Button, Badge, CardGroupLabel, toast } from "@/ui";
-import { formatMoney } from "@/lib/money";
-import { formatDateDisplay } from "@/lib/dates";
+import { useFormats } from "@/app/formats";
 import { ValidationError } from "@/db/errors";
 import {
   useCreateDeposit,
   useCreateFromDeal,
   useDealDocuments,
   useDealSchedule,
-  useInvoiceSettings,
   useIssueScheduledInvoice,
   useRemainingOneTime,
 } from "@/features/invoices/lib/hooks";
@@ -61,7 +59,7 @@ export function DealInvoicesPanel(props: { dealId: string }) {
   const { dealId } = props;
   const { data: documents, isLoading } = useDealDocuments(dealId);
   const { data: schedule } = useDealSchedule(dealId);
-  const { data: settings } = useInvoiceSettings();
+  const formats = useFormats();
   const createFromDeal = useCreateFromDeal();
   const issueScheduled = useIssueScheduledInvoice();
   const createDeposit = useCreateDeposit();
@@ -70,7 +68,7 @@ export function DealInvoicesPanel(props: { dealId: string }) {
   const [depositOpen, setDepositOpen] = useState(false);
 
   const rows = documents ?? [];
-  const money = (cents: number) => formatMoney(cents, settings?.currency, settings?.locale);
+  const money = (cents: number) => formats.money(cents);
 
   // Anything already billed comes off the balance invoice, by number, so a
   // deposit and its balance add up to the job's one-time value (R7).
@@ -185,7 +183,7 @@ export function DealInvoicesPanel(props: { dealId: string }) {
         {schedule ? (
           <p className="border-b border-[var(--color-border)] px-[var(--space-3)] py-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
             {schedule.active
-              ? `Billing every ${schedule.interval}. Next on ${formatDateDisplay(schedule.nextIssueOn)}.`
+              ? `Billing every ${schedule.interval}. Next on ${formats.date(schedule.nextIssueOn)}.`
               : "Billing is paused on this one."}
           </p>
         ) : null}
@@ -216,10 +214,10 @@ export function DealInvoicesPanel(props: { dealId: string }) {
                 <span className="tabular flex-none text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
                   {isOverdue(row)
                     ? dueLabel(row.dueOn)
-                    : formatDateDisplay(row.issuedOn) || "Draft"}
+                    : formats.date(row.issuedOn) || "Draft"}
                 </span>
                 <span className="money flex-none text-right text-[length:var(--text-base)] text-[var(--color-text)]">
-                  {formatMoney(row.totalCents, settings?.currency, settings?.locale)}
+                  {money(row.totalCents)}
                 </span>
               </li>
             ))}
@@ -231,8 +229,8 @@ export function DealInvoicesPanel(props: { dealId: string }) {
         open={depositOpen}
         onOpenChange={setDepositOpen}
         remainingCents={remaining?.remainingCents ?? 0}
-        currency={settings?.currency}
-        locale={settings?.locale}
+        currency={formats.currency}
+        locale={formats.locale}
         onConfirm={takeDeposit}
       />
     </div>
