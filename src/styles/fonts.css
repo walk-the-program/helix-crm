@@ -1,0 +1,184 @@
+/* ============================================================================
+   Helix CRM webfonts
+   Owner: design agent. Loaded first, before tokens.css.
+
+   Every family the app ships, declared once. This file does NOT decide which
+   of them the app uses — that is two lines at the top of tokens.css, under
+   "FONT SWITCH". This file only makes all four available, so changing the
+   app's typography is a token edit rather than a font hunt.
+
+   The families and the variable that names each one:
+
+     --family-zilla-slab   Zilla Slab   600, 700                slab serif
+     --family-dm-sans      DM Sans      400, 500, 700           geometric sans
+     --family-lato         Lato         400, 700, 400 italic    humanist sans
+     --family-poppins      Poppins      400, 500, 700           geometric sans
+
+   Why a variable per family rather than the bare name in tokens.css: the
+   switch then reads `var(--family-dm-sans)` and a typo cannot silently fall
+   through to a system face. Custom properties substitute at computed-value
+   time, so `font-family: var(--font-heading)` resolving to
+   `var(--family-dm-sans), Georgia, …` is the same to the browser as writing
+   the name out.
+
+   All files are self-hosted in public/fonts as latin-subset woff2, fetched
+   from Google Fonts and served from /fonts/ next to index.html. The app runs
+   offline and ships as a Tauri bundle: there is no CDN, no Google Fonts link
+   and no network request at first paint, ever. All four families are SIL Open
+   Font License 1.1 and the licence texts sit beside the files.
+
+   font-display: swap, so a cold start paints in the fallback rather than
+   holding the first frame blank.
+
+   A family declared here is NOT downloaded until something asks for it, so
+   carrying all four costs nothing at runtime. What does cost something is the
+   preload in index.html, which names two specific files — keep it in step
+   with the switch.
+   ========================================================================= */
+
+:root {
+  --family-zilla-slab: "Zilla Slab";
+  --family-dm-sans: "DM Sans";
+  --family-lato: "Lato";
+  --family-poppins: "Poppins";
+}
+
+/* --- Zilla Slab ----------------------------------------------------------
+   The slab. 600 and 700 only: the product never asks for a weight there is
+   no file for, which is what `font-synthesis-weight: none` keeps honest.    */
+
+@font-face {
+  font-family: "Zilla Slab";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/zilla-slab-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Zilla Slab";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/zilla-slab-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- DM Sans -------------------------------------------------------------
+   The heading face as of 2026-09-19. A geometric sans, so it is tracked in
+   harder than the slab was; see --tracking-title in tokens.css.             */
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/dm-sans-400.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/dm-sans-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/dm-sans-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- Lato ----------------------------------------------------------------
+   The body face as of 2026-09-20. 400 and 700, plus the one italic the
+   product can produce. app.css remaps font-medium and font-semibold onto
+   these two real faces rather than asking for a 500 or a 600 that has no
+   file.                                                                     */
+
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/lato-400.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/lato-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Lato";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/lato-400italic.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- Poppins -------------------------------------------------------------
+   The brand guide's original body face, kept so the switch has somewhere to
+   go back to. Nothing in the product asks for it while the switch points at
+   Lato, so none of these files is fetched.                                  */
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/poppins-400.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/poppins-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Poppins";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/poppins-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}

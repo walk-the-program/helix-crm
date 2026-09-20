@@ -224,6 +224,39 @@ export function applyAppearance(theme: Theme, density: Density): void {
   root.setAttribute("data-density", density);
 }
 
+/* -------------------------------------------------------------------------- */
+/* platform                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `data-platform="macos"` on <html>, so CSS can pay for the integrated title
+ * bar without any component knowing which machine it is on.
+ *
+ * The macOS window runs `titleBarStyle: "Overlay"` with the title hidden, so
+ * the web view starts at the very top of the window and the traffic lights
+ * float over our own first 38 pixels. The sidebar pads itself out of their way
+ * (globals.css), and the top bar and the sidebar header carry
+ * `data-tauri-drag-region` so the window still moves and still zooms on a
+ * double-click. Windows keeps its native bar and needs none of it.
+ *
+ * The e2e harness runs Chromium on a Mac with a Macintosh user agent and no
+ * Tauri under it, so it would pick up the padding and shift every screenshot
+ * by 38px against a title bar that is not there. The VITE_E2E guard keeps the
+ * harness on the plain layout; it is only ever set in the e2e build.
+ */
+export function isMacOS(): boolean {
+  if (import.meta.env.VITE_E2E) return false;
+  if (typeof navigator === "undefined") return false;
+  return navigator.userAgent.includes("Macintosh");
+}
+
+/** Called once during boot, before the shell mounts. */
+export function applyPlatform(): void {
+  if (typeof document === "undefined") return;
+  if (!isMacOS()) return;
+  document.documentElement.setAttribute("data-platform", "macos");
+}
+
 export async function setTheme(theme: Theme): Promise<HelixRegistry> {
   const next = await updateRegistry((current) => ({ ...current, theme }));
   applyAppearance(next.theme, next.density);

@@ -2,13 +2,14 @@ import type { ReactNode } from "react";
 import { headingFont } from "@/ui/styles";
 
 /**
- * The page title, set at the brand guide's Heading step: 32/1.1 in Zilla Slab
- * bold, tracked -0.01em, in the near-black. It is the largest type on any
- * screen and the only thing on the screen allowed to be that large.
+ * The page title, set at the brand guide's Heading step: 32/1.1 in the
+ * heading face at bold, tracked in, in the near-black. It is the largest type
+ * on any screen and the only thing on the screen allowed to be that large.
  *
  * It truncates with a title attribute rather than wrapping — a 47-character
  * company name is the normal case, not the exception — and the breadcrumb and
- * subtitle stay in Lato, so the slab is doing one job in one place.
+ * subtitle stay in the body face, so the heading face does one job in one
+ * place.
  *
  * No bottom hairline. The toolbar above it already draws one, and a second
  * rule 24px below the first is the kind of detail that makes a window look

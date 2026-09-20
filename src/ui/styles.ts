@@ -37,8 +37,8 @@ export const pressScale =
   "active:scale-[var(--press-scale)] motion-reduce:active:scale-100";
 
 /** The one uppercase type in the product: the brand guide's caption step
- *  (11px / 1.4) in Lato, tracked out, in tertiary ink. It labels a group of
- *  rows or a table column, never a paragraph (docs/DESIGN.md section 4). */
+ *  (11px / 1.4) in the body face, tracked out, in tertiary ink. It labels a
+ *  group of rows or a table column, never a paragraph (docs/DESIGN.md §4). */
 export const sectionLabel = [
   "font-[family-name:var(--font-body)]",
   "text-[length:var(--text-caption)] font-semibold uppercase",
@@ -46,9 +46,11 @@ export const sectionLabel = [
   "text-[var(--color-text-faint)]",
 ].join(" ");
 
-/** The slab. Every title in the product is set in it, in the near-black, with
- *  the guide's -0.01em tracking. Zilla Slab ships at 600 and 700 only, so a
- *  heading never asks for a weight that would have to be synthesised. */
+/** The heading face. Every title in the product is set in it, in the
+ *  near-black, tracked in by --tracking-title. Which face that is lives in one
+ *  place - the FONT SWITCH at the top of src/styles/tokens.css - and the
+ *  tracking moves with it. Only weights with a real file are ever asked for,
+ *  so nothing is synthesised. */
 export const headingFont =
   "font-[family-name:var(--font-heading)] tracking-[var(--tracking-title)] text-[var(--color-heading)]";
 

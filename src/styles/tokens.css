@@ -36,6 +36,29 @@
    ========================================================================= */
 
 :root {
+  /* ===== FONT SWITCH: change these two lines to change the app's fonts =====
+
+     Every family the app ships is declared in fonts.css under its own
+     --family-* name: --family-zilla-slab, --family-dm-sans, --family-lato,
+     --family-poppins. Point these two lines at any of them and the whole
+     product follows; nothing else in the repo names a face.
+
+     Two things travel with a switch and are not automatic:
+       1. index.html preloads the heading bold and the body regular by
+          filename. Change them to match.
+       2. --tracking-title below is set for the heading face. A geometric sans
+          wants more negative tracking than a slab does.
+     ======================================================================== */
+  --font-heading:
+    var(--family-dm-sans), -apple-system, BlinkMacSystemFont,
+    "Segoe UI Variable Display", "Segoe UI", system-ui, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --font-body:
+    var(--family-lato), -apple-system, BlinkMacSystemFont,
+    "Segoe UI Variable Text", "Segoe UI", system-ui, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  /* ===== end FONT SWITCH ================================================== */
+
   /* ==========================================================================
      BRAND
      The five colours exactly as the guide states them, plus the one derived
@@ -52,26 +75,47 @@
      not a translucency that changes with whatever is behind it.             */
   --brand-primary-tint: #F2F4FA;
 
-  /* The mark's offset "sticker" shadow. Hard edge, no blur, accent colour.
+  /* The mark's offset "sticker" shadow. Hard edge, no blur.
      Reserved for the logo lockup and at most one hero element per screen -
      it is the loudest thing the brand owns and it stops being a signature
-     the moment a second element wears it.                                   */
-  --shadow-sticker: 4px 4px 0 var(--brand-accent);
+     the moment a second element wears it.
+
+     It used to be a solid 4px slab of the accent yellow. It is now an
+     OUTLINE: the element throws a hard-edged rectangle 4px down and right,
+     and only the outer 1.5px of that rectangle is drawn, so what you see is a
+     thin ring floating off the corner with the canvas showing through the gap
+     between it and the element. Two layered box-shadows do it - the first is
+     listed first and so paints on top:
+
+       4px 4px 0 -1.5px  the canvas, inset 1.5px on every side, which covers
+                         the middle of the offset rectangle
+       4px 4px 0  0      the outline, the full offset rectangle underneath
+
+     --sticker-outline is the brand neutral opposite the canvas: neutral light
+     on the near-black dark theme, neutral dark on the light one. White on a
+     white canvas is invisible, which is why it is not simply white.
+
+     --sticker-gap is whatever surface the element is standing on, because
+     that is what has to show through. It defaults to the content canvas; the
+     sidebar sets its own (src/ui/Nav.tsx), since the lockup lives there.     */
+  --sticker-outline: #4E555A;
+  --sticker-gap: var(--color-bg);
+  --shadow-sticker:
+    4px 4px 0 -1.5px var(--sticker-gap),
+    4px 4px 0 0 var(--sticker-outline);
 
   /* --- Type ---------------------------------------------------------------
-     Headings in Zilla Slab, body in Lato, both self-hosted as woff2 in
-     public/fonts and declared in globals.css. The app is offline; there is no
-     CDN and no network font.
+     The two faces themselves are chosen at the top of this file, under FONT
+     SWITCH, and declared in fonts.css. Everything below is the scale they are
+     set in, which does not change when the faces do.
 
-     The serif fallbacks matter: Zilla Slab is a slab, and falling back to a
-     humanist sans would change the page's voice rather than just its shape.  */
-  --font-heading: "Zilla Slab", Georgia, "Times New Roman", "Noto Serif", serif;
-  --font-body:
-    "Lato", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
-    "Segoe UI", system-ui, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+     Both faces now fall back to the system sans. That is deliberate: the
+     product runs two sans faces, so a face that has not arrived yet should
+     swap out of the machine's own sans rather than out of a serif, which
+     would change the page's voice for a frame and then change it back.       */
 
   /* --font-sans is the contract name the whole kit already reaches for; it is
-     the body face. Nothing in src/ui needs to change to pick up Lato.        */
+     the body face. Nothing in src/ui needs to change when the switch moves.  */
   --font-sans: var(--font-body);
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
@@ -111,9 +155,12 @@
   --leading-tight:  1.25;
   --leading-normal: 1.5;
 
-  /* Tracking. Zilla Slab is tracked in slightly at title sizes, and the 11px
-     caption label is tracked out, which is the only capitals in the product. */
-  --tracking-title: -0.01em;
+  /* Tracking. --tracking-title belongs to the heading face and moves with it:
+     DM Sans is a geometric sans whose round, wide letterforms open up at the
+     display and heading steps, so it is tracked in twice as hard as the slab
+     it replaced (-0.01em). The 11px caption label is tracked the other way,
+     which is the only capitals in the product.                               */
+  --tracking-title: -0.02em;
   --tracking-label: 0.05em;
 
   /* --- Space (4 px scale) -------------------------------------------------
@@ -152,6 +199,12 @@
   /* --- Layout ------------------------------------------------------------- */
   --sidebar-w:  240px;
   --topbar-h:   48px;
+  /* macOS runs an integrated title bar (titleBarStyle: "Overlay"), so the web
+     view starts at the very top of the window and the traffic lights float
+     over our own first rows. This is the room the sidebar's brand slot gives
+     them; it is paid only under [data-platform="macos"] (globals.css), and
+     the Windows window, which keeps its native bar, never sees it.          */
+  --titlebar-inset: 38px;
   --row-h:      40px;    /* comfortable table / list row                      */
   --control-h:    32px;  /* button, input, select                             */
   --control-h-sm: 28px;  /* row-action button. The hit-target floor.          */
@@ -557,8 +610,12 @@
   --stage-7-soft: #2B231C;
   --stage-8-soft: #26251B;
 
-  /* The floating hairline inverts with the rest of the theme. Still no blur.
-     --shadow-sticker does not change: the accent is the accent in both. */
+  /* The sticker outline is the brand neutral that the canvas is not. On the
+     near-black canvas that is the neutral light; on the light theme it is the
+     neutral dark (see :root). The offsets themselves do not change.          */
+  --sticker-outline: #FAFAFF;
+
+  /* The floating hairline inverts with the rest of the theme. Still no blur. */
   --shadow-sm: none;
   --shadow-md: 0 0 0 1px rgba(250, 250, 255, 0.16);
   --shadow-lg: 0 0 0 1px rgba(250, 250, 255, 0.16);
@@ -604,6 +661,9 @@
   --leading-normal: 1.45;
   --leading-body:   1.55;
 
-  /* The sticker offset comes down with the type it sits behind. */
-  --shadow-sticker: 3px 3px 0 var(--brand-accent);
+  /* The sticker offset comes down with the type it sits behind. The ring stays
+     1.5px, so the gap the canvas shows through narrows from 2.5px to 1.5px.  */
+  --shadow-sticker:
+    3px 3px 0 -1.5px var(--sticker-gap),
+    3px 3px 0 0 var(--sticker-outline);
 }

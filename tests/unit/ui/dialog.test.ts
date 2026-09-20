@@ -31,11 +31,15 @@ describe("Dialog", () => {
     expect(classes).toContain("flex-col");
     expect(classes).toContain("overflow-hidden");
 
-    // The one scroll box, between the panel edge and the content.
+    // The one scroll box, between the panel edge and the content. It scrolls
+    // vertically only — a feature row that gets its own width wrong clips at
+    // this edge instead of widening the panel or hanging a trailing element
+    // off the right side (the workspace switcher's clipped check mark).
     const scroller = dialog.querySelector(".overflow-y-auto");
     expect(scroller).toBeTruthy();
     expect(scroller?.className).toContain("min-h-0");
     expect(scroller?.className).toContain("flex-1");
+    expect(scroller?.className).toContain("overflow-x-hidden");
 
     // The header sticks to the top of that box and the footer to the bottom,
     // so the confirm button is reachable however tall the form is.

@@ -151,7 +151,7 @@ export function DealPage() {
       <div className="flex flex-col gap-[var(--space-2)]">
         <div className="flex flex-wrap items-center gap-[var(--space-3)]">
           {/* The one primary block on this screen: the money, flat-filled,
-              with the accent sticker shadow as its single detail. Everything
+              with the offset sticker outline as its single detail. Everything
               else on the deal page is a neutral or a hairline. */}
           <span
             data-testid="deal-value"

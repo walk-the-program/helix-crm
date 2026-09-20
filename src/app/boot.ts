@@ -30,6 +30,7 @@ import { seedWorkspace } from "@/db/repos/seed";
 import { resetQueryCache } from "@/app/queryClient";
 import {
   applyAppearance,
+  applyPlatform,
   ensureFirstWorkspace,
   readRegistry,
   setLastOpened,
@@ -120,6 +121,8 @@ export async function openWorkspace(
 /** Run the whole sequence. Throws DbOpenError, Fts5MissingError or MigrationError. */
 export async function boot(): Promise<BootResult> {
   installDriver();
+
+  applyPlatform();
 
   const registryBefore = await readRegistry();
   applyAppearance(registryBefore.theme, registryBefore.density);

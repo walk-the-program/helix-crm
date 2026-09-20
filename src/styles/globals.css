@@ -4,16 +4,19 @@
    Only tokens from tokens.css may be used here. No hex values.
    ========================================================================= */
 
+@import "./fonts.css";
 @import "./tokens.css";
 
 /* --- Fonts ----------------------------------------------------------------
-   Zilla Slab for headings, Lato for body: self-hosted from public/fonts as
-   woff2, latin subset. The app runs offline and ships as a Tauri bundle, so
-   there is no CDN, no Google Fonts link and no network request at first
-   paint - the files sit next to index.html and are served from /fonts/.
+   The @font-face rules moved to fonts.css, which declares every family the
+   app ships - Zilla Slab, DM Sans, Lato and Poppins - under its own
+   --family-* name. Which two of them the app actually wears is decided by two
+   lines at the top of tokens.css, marked "FONT SWITCH". Nothing else in the
+   repo names a family.
 
-   Both families are SIL Open Font License 1.1; the licence texts live beside
-   the files in public/fonts/.
+   Today that is DM Sans for headings and Lato for body. Both are self-hosted
+   latin-subset woff2 in public/fonts; the app is offline, so there is no CDN
+   and no network font request at first paint.
 
    Lato ships here at 400 and 700 (plus 400 italic), not the five weights
    Google Fonts offers, so there is no real 500 or 600 face. font-medium and
@@ -21,68 +24,52 @@
    (400 and 700) rather than asking the browser to pick a weight with no
    matching @font-face.
 
-   font-display: swap, so a cold start paints in the fallback rather than
-   holding the first frame blank. The fallbacks in --font-heading are serifs
-   for exactly that moment: a slab swapping out of a sans changes the page's
-   voice, a slab swapping out of Georgia only changes its shape.
+   index.html preloads the two files the first frame actually sets - the
+   heading bold and the body regular - and everything else is fetched on
+   demand. Those two preloads are derived from the switch: change the switch
+   and change them with it.                                                  */
 
-   index.html preloads the two faces the first screen actually uses - Zilla
-   Slab 700 and Lato 400 - and the other two (Zilla 600, Lato 700) are fetched
-   on demand. Lato 400 italic is fetched only where italic text appears.      */
+/* --- The window -----------------------------------------------------------
+   The shell owns the whole window, always.
 
-@font-face {
-  font-family: "Zilla Slab";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url("/fonts/zilla-slab-600.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+   html, body and #root are all full height, so the shell's `h-full` is a
+   definite viewport height rather than "as tall as whatever is on screen".
+   Without that, a short screen left the sidebar and the content canvas ending
+   at the content's own height with the bare window showing underneath - which
+   is exactly what dark mode made obvious - and a long screen scrolled the
+   BODY, which dragged the sidebar and the toolbar up off the top with it.
+   Now the main column scrolls inside a fixed frame (`overflow-y: auto` on
+   <main>, src/app/Shell.tsx) and the chrome stays put.                       */
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
-@font-face {
-  font-family: "Zilla Slab";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/zilla-slab-700.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+/* --- The macOS title bar ---------------------------------------------------
+   The macOS window runs `titleBarStyle: "Overlay"` with the title hidden
+   (src-tauri/tauri.conf.json), so the web view starts at the very top of the
+   window and the traffic lights float over our own first rows. The sidebar's
+   brand slot buys them the room; the top bar and that same slot carry
+   `data-tauri-drag-region`, so the window still moves when you pull on the
+   chrome and still zooms on a double-click.
+
+   `data-platform="macos"` is set on <html> at boot from the user agent
+   (src/app/appSettings.ts). Windows keeps its native bar and never pays this,
+   and the e2e harness - Chromium on a Mac, with no Tauri under it - is
+   deliberately excluded, so the screenshots stay comparable.                 */
+
+[data-platform="macos"] [data-titlebar-inset] {
+  padding-top: var(--titlebar-inset);
 }
 
-@font-face {
-  font-family: "Lato";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/lato-400.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Lato";
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url("/fonts/lato-700.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Lato";
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/lato-400italic.woff2") format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+/* Anything the window can be dragged by is chrome, not content: no I-beam, no
+   selection, and a double-click zooms rather than selecting a word.          */
+[data-tauri-drag-region] {
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* --- Reset ----------------------------------------------------------------
@@ -275,6 +262,115 @@ input:disabled,
 select:disabled,
 textarea:disabled,
 [aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* --- Date and time fields --------------------------------------------------
+   input[type="date"] and input[type="time"] are the one control in the whole
+   product the browser draws itself. Everywhere else "form control" means the
+   Input primitive, painted entirely in our tokens - but the day/month/year
+   and hour/minute segments inside a date or time field, and the calendar and
+   clock glyph beside them, are rendered by the UA from inside a shadow tree
+   that plain CSS mostly can't see into. Left alone, that shadow tree paints
+   itself as a light-mode web form no matter what colour the window around it
+   is, which is exactly how the UA's own blue/purple field text ends up sitting
+   inside a #141414 dark canvas.
+
+   `color-scheme` is the one property the UA actually reads before it paints
+   that tree, so it's the only lever that reaches the native picker POPUP
+   itself (the calendar/clock overlay) - nothing below this line can restyle
+   that popup, because it isn't in the document at all. index.html's
+   <meta name="color-scheme" content="light dark"> just tells the browser both
+   themes exist; it doesn't know which one the app is in right now. These two
+   rules are what tell it, off the same [data-theme] attribute the shell sets
+   on <html> at boot (index.html's initial value is "light", matching the
+   attribute's own default before boot picks a theme).                        */
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* The segment text (the actual digits and the "/" and ":" separators) lives
+   in a shadow part that doesn't inherit `color` or `font` from the host input
+   the way a normal descendant would, so the `color: inherit` / `font: inherit`
+   reset a few rules up never reaches it. Set both by hand so a date or time
+   field reads as Helix's own ink and type rather than the platform's. */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field,
+input[type="time"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]::-webkit-datetime-edit-text,
+input[type="time"]::-webkit-datetime-edit-hour-field,
+input[type="time"]::-webkit-datetime-edit-minute-field,
+input[type="time"]::-webkit-datetime-edit-ampm-field {
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+}
+
+/* WebKit matches :placeholder-shown on a date or time input when it has no
+   value yet, the same way it would match a text input showing its
+   placeholder attribute. An empty field is showing a hint ("mm/dd/yyyy"),
+   not a value, so give it the same faint ink the Input primitive gives its
+   own placeholder text (`placeholder:text-[var(--color-text-faint)]`). */
+input[type="date"]:placeholder-shown::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]:placeholder-shown::-webkit-datetime-edit-text,
+input[type="date"]:placeholder-shown::-webkit-datetime-edit-month-field,
+input[type="date"]:placeholder-shown::-webkit-datetime-edit-day-field,
+input[type="date"]:placeholder-shown::-webkit-datetime-edit-year-field,
+input[type="time"]:placeholder-shown::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]:placeholder-shown::-webkit-datetime-edit-text,
+input[type="time"]:placeholder-shown::-webkit-datetime-edit-hour-field,
+input[type="time"]:placeholder-shown::-webkit-datetime-edit-minute-field,
+input[type="time"]:placeholder-shown::-webkit-datetime-edit-ampm-field {
+  color: var(--color-text-faint);
+}
+
+/* A disabled field - the task form disables "Due time" until a date is
+   chosen - takes the disabled ink, not whatever ink it would otherwise be
+   showing. The Input primitive already dims the whole control with
+   `disabled:opacity-50`; this makes sure what's underneath that dimming is
+   the right grey instead of a faded-out browser blue. */
+input[type="date"]:disabled::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]:disabled::-webkit-datetime-edit-text,
+input[type="date"]:disabled::-webkit-datetime-edit-month-field,
+input[type="date"]:disabled::-webkit-datetime-edit-day-field,
+input[type="date"]:disabled::-webkit-datetime-edit-year-field,
+input[type="time"]:disabled::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]:disabled::-webkit-datetime-edit-text,
+input[type="time"]:disabled::-webkit-datetime-edit-hour-field,
+input[type="time"]:disabled::-webkit-datetime-edit-minute-field,
+input[type="time"]:disabled::-webkit-datetime-edit-ampm-field {
+  color: var(--color-text-disabled);
+}
+
+/* The calendar/clock glyph is a drawn asset, not text, so `color` never
+   reaches it either - a filter is the only lever CSS has over its pixels.
+   It ships as a dark mark meant for a light popover; inverting it in dark
+   mode is what keeps it from reading as a near-black glyph on a near-black
+   field, and the shared opacity brings what is otherwise a full-strength
+   browser icon down to the same quiet weight as the rest of the field's
+   tertiary ink instead of standing out against it. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+input[type="date"]:disabled::-webkit-calendar-picker-indicator,
+input[type="time"]:disabled::-webkit-calendar-picker-indicator {
   cursor: not-allowed;
 }
 

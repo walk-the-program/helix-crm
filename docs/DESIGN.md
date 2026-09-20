@@ -96,8 +96,9 @@ not change the job. It gives the tool a face.
 
 - **Sidebar**: `--sidebar-w` 240px, `--color-sidebar` (#F2F4FA — the primary at
   8% over the neutral light, which is the guide's tint ceiling), one hairline
-  right edge, never collapses. The `Brand` lockup sits at the top with room
-  under it for the sticker shadow's 4px overhang. Nav rows are 32px tall with
+  right edge, never collapses, and always runs the full height of the window.
+  The `Brand` lockup sits at the top with room under it for the sticker
+  outline's 4px overhang. Nav rows are 32px tall with
   a hard edge, label at body size in secondary ink, icon at 18px taking the
   row's own ink. **The selected row is the primary block**: a flat `#97B1C3`
   fill with `#141414` ink at 8.24:1. Group labels are the 11px caption style.
@@ -111,21 +112,67 @@ not change the job. It gives the tool a face.
 - **Content**: `--color-bg` (#FAFAFF) canvas, 32px side gutter, 24px top.
   Panels are white with a hairline and no radius. Minimum window 1024px,
   design target 1280.
+- **The shell fills the window.** `html`, `body` and `#root` are all 100% tall,
+  the shell is a flex row at the full viewport height, and the main column is
+  the only thing that scrolls (`overflow-y: auto` on `<main>`). The body never
+  scrolls, so the sidebar and the toolbar never travel: a short screen no
+  longer leaves the bare window showing under the canvas, and a long one no
+  longer drags the chrome off the top.
+- **The macOS title bar is integrated.** The macOS window runs
+  `titleBarStyle: "Overlay"` with `hiddenTitle`, so the web view starts at the
+  very top of the window: no grey bar, no second horizontal rule above our
+  own. The traffic lights float over the sidebar's brand slot, which pays
+  `--titlebar-inset` (38px) for them under `[data-platform="macos"]`, and the
+  toolbar and that same slot carry `data-tauri-drag-region` so the window
+  moves when you pull on the chrome and zooms on a double-click. The attribute
+  is set on `<html>` at boot from the user agent; Windows keeps its native bar
+  and pays none of this, and the e2e harness is excluded so its screenshots
+  stay comparable.
 
 ## 4. Typography
 
-Two faces, both self-hosted, both OFL 1.1: **Zilla Slab** for headings and
+Two faces, both self-hosted, both OFL 1.1: **DM Sans** for headings and
 **Lato** for everything else. They live in `public/fonts` as latin-subset
-woff2, are declared in `globals.css` with `font-display: swap`, and the two
-faces the first frame needs are preloaded from `index.html`. The app is
-offline; there is no CDN and no network font request, ever.
+woff2, are declared in `src/styles/fonts.css` with `font-display: swap`, and
+the two files the first frame needs are preloaded from `index.html`. The app
+is offline; there is no CDN and no network font request, ever.
 
-Zilla Slab ships at 600 and 700, and Lato at 400 and 700 (plus 400 italic), so
-neither face has a real 500 or 600. Rather than let the browser synthesise a
-weight it doesn't have, `font-synthesis-weight: none` disables that, and
-`--font-weight-medium` / `--font-weight-semibold` are remapped in `app.css` to
-the nearest real weight — 400 and 700 — so Tailwind's `font-medium` and
-`font-semibold` utilities render an actual face instead of a faked one.
+**The font switch.** Which two faces the app wears is two lines, at the very
+top of `src/styles/tokens.css`, under a banner that says so:
+
+```css
+/* ===== FONT SWITCH: change these two lines to change the app's fonts ===== */
+--font-heading: var(--family-dm-sans), <system fallbacks>;
+--font-body:    var(--family-lato),    <system fallbacks>;
+```
+
+`fonts.css` declares **every** family the app ships, each under its own name —
+`--family-zilla-slab`, `--family-dm-sans`, `--family-lato`, `--family-poppins`
+— so all four are switchable and nothing else in the repo names a face. A
+declared family is not downloaded until something asks for it, so carrying
+four costs nothing at runtime.
+
+Two things do not follow the switch on their own and have to be moved with it:
+
+- the two `index.html` preloads, which name files (today `dm-sans-700.woff2`
+  and `lato-400.woff2`); and
+- `--tracking-title`, which belongs to the heading face. DM Sans is a
+  geometric sans whose round, wide letterforms open up at the display and
+  heading steps, so it is tracked to **-0.02em**, twice as tight as the slab
+  it replaced. Headings stay at weight 700.
+
+Zilla Slab ships at 600 and 700, Lato at 400 and 700 (plus 400 italic), DM
+Sans and Poppins at 400, 500 and 700 — so the two faces in force have no real
+500 or 600. Rather than let the browser synthesise a weight it doesn't have,
+`font-synthesis-weight: none` disables that, and `--font-weight-medium` /
+`--font-weight-semibold` are remapped in `app.css` to the nearest real weight
+— 400 and 700 — so Tailwind's `font-medium` and `font-semibold` utilities
+render an actual face instead of a faked one.
+
+Both fallback stacks are the system sans. The product runs two sans faces now,
+so a face that has not arrived yet should swap out of the machine's own sans
+rather than out of a serif, which would change the page's voice for a frame
+and then change it back.
 
 The guide's scale, verbatim:
 
@@ -155,12 +202,12 @@ its subhead, `--text-3xl` **is** its heading.
 
 Rules:
 
-- **Headings are the slab.** Every `h1`–`h6`, `PageHeader`, `CardTitle`,
-  `DialogTitle`, `EmptyState` title and the `Brand` wordmark are
+- **Headings are the heading face.** Every `h1`–`h6`, `PageHeader`,
+  `CardTitle`, `DialogTitle`, `EmptyState` title and the `Brand` wordmark are
   `--font-heading` in `--color-heading` (#141414 light, #FAFAFF dark) tracked
-  -0.01em. Nothing else is.
-- **Everything else is Lato.** `--font-sans` resolves to `--font-body`, so
-  the whole kit picked it up without an edit.
+  `--tracking-title` (-0.02em). Nothing else is.
+- **Everything else is the body face.** `--font-sans` resolves to
+  `--font-body`, so the whole kit follows the switch without an edit.
 - **Two leadings.** Prose — a paragraph, a description, an empty state — takes
   `--leading-body` (1.65), which is what the guide specifies. Rows and
   controls take `--leading-normal` (1.5), because 1.65 pushes a label off the
@@ -257,14 +304,38 @@ The secondary is never a button fill and never chrome.
 
 ### The accent
 
-`#EDF0A3` is a detail. It appears in exactly two shapes:
+`#EDF0A3` is a detail, and as of 2026-09-19 it is out of the sticker shadow
+entirely. It appears in exactly one shape:
 
-- `--shadow-sticker` (`4px 4px 0`), which belongs to the `Brand` lockup and to
-  **at most one hero element per screen**; and
 - `--color-brand-accent-soft` (`#FDFEF6`), the accent at 10%, which is the one
-  surface it is allowed to make and is nearly white by design.
+  surface it is allowed to make and is nearly white by design. Badges may wear
+  it as a pastel tint; buttons and controls may not.
 
-It is never a background, never a row, never a fill behind body text.
+It is never a background, never a row, never a fill behind body text, and
+never a button fill.
+
+**The sticker shadow is an outline.** `--shadow-sticker` used to be a solid
+`4px 4px 0` slab of the accent. It is now a thin ring: the element throws a
+hard-edged rectangle 4px down and right, and only the outer 1.5px of it is
+drawn, so the surface shows through the 2.5px gap between the element and the
+ring. Two layered box-shadows do it — the gap colour painted over the ring
+colour, the first one listed winning:
+
+```css
+--shadow-sticker:
+  4px 4px 0 -1.5px var(--sticker-gap),      /* the surface, inset 1.5px */
+  4px 4px 0  0     var(--sticker-outline);  /* the ring, underneath     */
+```
+
+- `--sticker-outline` is the brand neutral the canvas is not: `#FAFAFF` on the
+  near-black dark theme, `#4E555A` on the light one. White on a white canvas
+  is invisible, which is why it is not simply white.
+- `--sticker-gap` is whatever surface the element is standing on, because that
+  is what has to show through. It defaults to `--color-bg`; the sidebar sets
+  its own, since the lockup lives there.
+
+It still belongs to the `Brand` lockup and to **at most one hero element per
+screen**, and compact density still brings the offset down to 3px.
 
 ### Brand tint pairs
 

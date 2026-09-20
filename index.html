@@ -4,16 +4,21 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/helix-logo.png" />
     <!--
-      The two faces the first frame actually sets: the Zilla Slab the lockup
-      and the page title are in, and the Lato regular everything else is in.
-      Self-hosted in public/fonts; the app is offline, so there is no CDN and
-      these are the only font requests the window ever makes. The other two
-      weights (Zilla 600, Lato 700) load on demand, and Lato 400 italic loads
-      only where italic text appears.
+      The two files the first frame actually sets: the heading bold the lockup
+      and the page title are in, and the body regular everything else is in.
+
+      These two lines are DERIVED from the font switch at the top of
+      src/styles/tokens.css. Move the switch and move these with it, or the
+      app preloads a face it no longer wears and swaps into the one it does.
+      Today: DM Sans 700 for headings, Lato 400 for body.
+
+      Every family is self-hosted in public/fonts and declared in
+      src/styles/fonts.css. The app is offline, so these are the only font
+      requests the window ever makes; the remaining weights load on demand.
     -->
     <link
       rel="preload"
-      href="/fonts/zilla-slab-700.woff2"
+      href="/fonts/dm-sans-700.woff2"
       as="font"
       type="font/woff2"
       crossorigin

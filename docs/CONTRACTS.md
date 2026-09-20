@@ -235,11 +235,26 @@ Components in `src/ui/` use only tokens; feature code uses only `src/ui/` compon
 `tokens.css`.
 
 Minimum window width 1024 px, design target 1280. Body text 15 px comfortable / 13 px
-compact. Two self-hosted webfonts, and no third: Zilla Slab for headings, Lato for body
-(`public/fonts/*.woff2`, latin subset, OFL 1.1, declared in `globals.css`, no CDN because
-the app is offline). Tabular numbers on money and counts.
+compact. Tabular numbers on money and counts.
 
-The design agent owns `tokens.css`, `globals.css` and `src/ui/icons.ts`. Both the design
+**Fonts are a switch, not a hunt.** `src/styles/fonts.css` declares every family the app
+ships — Zilla Slab, DM Sans, Lato, Poppins — each under its own `--family-*` name
+(`public/fonts/*.woff2`, latin subset, OFL 1.1, no CDN because the app is offline).
+Which two the app wears is two lines at the very top of `tokens.css`, under a
+`FONT SWITCH` banner: `--font-heading` and `--font-body`, each `var(--family-…)` followed
+by system fallbacks. Today that is DM Sans for headings and Lato for body. **No other
+file in the repo may name a font family.** Two things travel with the switch by hand: the
+two `index.html` preloads, which name files, and `--tracking-title`, which belongs to the
+heading face.
+
+**The shell fills the window, and macOS has no title bar of its own.** `html`, `body` and
+`#root` are 100 % tall; the shell is a full-height flex row and `<main>` is the only
+scroller. On macOS the window runs `titleBarStyle: "Overlay"` with `hiddenTitle`, `<html>`
+carries `data-platform="macos"` (set at boot from the user agent, never under the e2e
+harness), the sidebar's brand slot pays `--titlebar-inset` for the traffic lights, and the
+toolbar and that slot carry `data-tauri-drag-region`. Windows keeps its native bar.
+
+The design agent owns `tokens.css`, `fonts.css`, `globals.css` and `src/ui/icons.ts`. Both the design
 agent and the foundations agent use exactly these variable names (the design agent may
 add more, never rename):
 
@@ -263,16 +278,22 @@ add more, never rename):
 --color-brand-primary-soft    --color-brand-primary-ink
 --color-brand-secondary-soft  --color-brand-secondary-ink
 --color-brand-accent-soft     --color-brand-accent-ink
+--family-zilla-slab  --family-dm-sans  --family-lato  --family-poppins
+                                   (declared in fonts.css, one per shipped family)
 --font-heading  --font-body  --font-sans  --font-mono
+                                   (the FONT SWITCH; --font-heading/-body name a --family-*)
 --text-display  --text-heading  --text-subhead  --text-body  --text-caption
 --leading-display  --leading-heading  --leading-subhead  --leading-body  --leading-caption
 --text-label  --text-xs  --text-sm  --text-base  --text-lg  --text-xl  --text-2xl  --text-3xl
 --leading-tight  --leading-normal  --tracking-title  --tracking-label
---shadow-sticker                   (the mark's offset accent shadow)
+--shadow-sticker                   (the mark's offset outline, two layered shadows)
+--sticker-outline                  (the ring colour: the brand neutral the canvas is not)
+--sticker-gap                      (the surface showing through the gap; --color-bg by default)
 --space-1 ... --space-10           (4 px scale)
 --radius-sm  --radius-md  --radius-lg  --radius-full
 --shadow-sm  --shadow-md  --shadow-lg
 --sidebar-w  --topbar-h  --row-h  --control-h  --control-h-sm  --content-max
+--titlebar-inset                   (macOS traffic-light clearance, paid by the brand slot)
 --hairline  --focus-ring-w
 --dur-fast  --dur-base  --dur-slow  --ease-out  --ease-in-out  --press-scale
 ```
@@ -303,8 +324,13 @@ and `--shadow-sticker`. Nothing was renamed. What the mapping now means:
 - **`--shadow-md` / `--shadow-lg` are a hairline with no blur.** `--shadow-sticker` is not
   part of that ramp: it belongs to the `Brand` lockup and at most one hero element per
   screen.
-- **`--font-sans` is `--font-body`**, so every existing component picks up Lato with no
-  edit. Headings opt in to `--font-heading`.
+- **`--shadow-sticker` is an outline, not a slab.** Two layered hard shadows at the same
+  offset: `--sticker-gap` inset by 1.5 px painted over `--sticker-outline` at full size,
+  so only a 1.5 px ring shows and the surface shows through the gap. The accent yellow is
+  no longer in it, and no button or control wears an accent-yellow fill; badges may keep
+  their pastel tints.
+- **`--font-sans` is `--font-body`**, so every existing component follows the font switch
+  with no edit. Headings opt in to `--font-heading`.
 
 Themes: `:root` is light, `[data-theme="dark"]` overrides colours,
 `[data-density="compact"]` overrides the type scale, `--space-*`, `--row-h`, `--topbar-h`

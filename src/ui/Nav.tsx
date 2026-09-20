@@ -33,6 +33,9 @@ export function Sidebar(props: {
       className={[
         "flex h-full min-h-0 w-[var(--sidebar-w)] flex-none flex-col",
         "border-r border-[var(--color-border)] bg-[var(--color-sidebar)]",
+        // The lockup's sticker outline shows the surface behind it through a
+        // 2.5px gap, and in here that surface is the sidebar, not the canvas.
+        "[--sticker-gap:var(--color-sidebar)]",
       ].join(" ")}
     >
       {props.brand ? (
@@ -59,8 +62,8 @@ export function Sidebar(props: {
 /**
  * A group of nav rows under an optional label.
  *
- * The label is the section-label style — the guide's 11px caption step in
- * Lato, uppercase, tracked 0.05em, tertiary ink — which is how a native
+ * The label is the section-label style — the guide's 11px caption step in the
+ * body face, uppercase, tracked 0.05em, tertiary ink — which is how a native
  * sidebar names a group. It is the only place in the product where type is set
  * in capitals, and it is never longer than three words.
  */

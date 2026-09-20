@@ -47,7 +47,7 @@ import {
 import type { FeatureNavItem, FeatureNavSection } from "@/app/feature";
 import { useAppearance, useShortcut, useWriteState } from "@/app/hooks";
 import { useCommandShortcuts } from "@/app/shortcuts";
-import type { HelixRegistry, WorkspaceEntry } from "@/app/appSettings";
+import { isMacOS, type HelixRegistry, type WorkspaceEntry } from "@/app/appSettings";
 import {
   Badge,
   Brand,
@@ -260,14 +260,27 @@ export function Shell({ registry, workspace }: ShellProps) {
 
   const hasWorkspaceSwitcher = findCommand("switch-workspace") !== null;
 
+  /* macOS runs an integrated title bar, so the window has to be draggable by
+     our own chrome — the top bar and the slot beside the traffic lights. On
+     Windows the native bar does that job and these stay off. Read once: the
+     platform does not change while the app is running. */
+  const macOS = isMacOS();
+
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-screen min-w-[1024px] bg-[var(--color-bg)] text-[var(--color-text)]">
+      {/* The shell owns the whole window. html, body and #root are all 100%
+          (globals.css), so `h-full` here is a definite viewport height rather
+          than "as tall as the content" — which is what used to leave the
+          sidebar and the canvas stopping short and the bare window showing
+          through underneath. The main column scrolls inside that height; the
+          body never scrolls. */}
+      <div className="flex h-full min-h-screen min-w-[1024px] overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
         <Sidebar
+          dragRegion={macOS}
           brand={
-            /* The lockup: the mark with its accent sticker shadow and the
-               word in Zilla Slab. The one place in the running application
-               that wears --shadow-sticker. */
+            /* The lockup: the mark with its offset sticker outline and the
+               word in the heading face. The one place in the running
+               application that always wears --shadow-sticker. */
             <div className="flex min-h-[var(--control-h)] w-full items-center px-[var(--space-3)]">
               <Brand size="sm" />
             </div>
@@ -292,8 +305,9 @@ export function Shell({ registry, workspace }: ShellProps) {
           {sidebar}
         </Sidebar>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Topbar
+            dragRegion={macOS}
             left={
               /* The macOS search field: a soft grey field, no border, the
                  glyph in tertiary ink, the shortcut on the right. It is a
@@ -331,7 +345,7 @@ export function Shell({ registry, workspace }: ShellProps) {
             }
           />
 
-          <main className="min-w-0 flex-1 overflow-y-auto px-[var(--space-7)] py-[var(--space-6)]">
+          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-[var(--space-7)] py-[var(--space-6)]">
             <Switch>
               {routes.map((route) => (
                 <Route key={route.path} path={route.path}>

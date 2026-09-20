@@ -33,6 +33,17 @@ const sizeClasses = {
  * dialog. Every call site gets the fix without changing a line, because the
  * pinning is done by the header and footer components rather than by a new
  * wrapper the features would have to adopt.
+ *
+ * **It is also width-bound.** `w-[calc(100%-var(--space-6))]` sizes off the
+ * viewport (this is a `fixed` element, so "100%" is the window, not a parent),
+ * so a dialog can never get wider than the window minus a gutter even at the
+ * 1024px floor — the `size` cap just tightens that further for a given
+ * dialog. `overflow-x: hidden` on the scroll box below is the backstop: a
+ * feature row that gets its own width math wrong (a stray fixed width, an
+ * untruncated line) clips at the dialog's edge instead of pushing the whole
+ * panel wider or leaving a check mark or trailing action hanging off the
+ * right side, which is what the workspace switcher did before this line was
+ * added.
  */
 export const DialogContent = forwardRef<
   ElementRef<typeof RadixDialog.Content>,
@@ -54,7 +65,7 @@ export const DialogContent = forwardRef<
       )}
       {...props}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto px-[var(--space-6)] py-[var(--space-5)]">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-[var(--space-6)] py-[var(--space-5)]">
         {children}
       </div>
       <RadixDialog.Close asChild>
