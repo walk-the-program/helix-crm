@@ -162,6 +162,7 @@ export function NewDocumentScreen() {
     try {
       const deal = await createDeal.mutateAsync({
         title: named,
+        kind,
         contactId,
         companyId,
         lines: (items ?? []).map((item) => ({

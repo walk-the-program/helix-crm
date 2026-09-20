@@ -247,6 +247,15 @@ export function useCreateDocument() {
  * "New deal for this": the deal a from-scratch invoice belongs to, carrying
  * the same lines the invoice is about to carry.
  *
+ * WHICH STAGE depends on what is being raised, and getting it wrong is not
+ * cosmetic. Raising an INVOICE means the work is done and is being billed, so
+ * the job is won; it used to land in the first stage ("New lead"), where it sat
+ * in the open pipeline inflating Open value while simultaneously being invoiced
+ * and collected, and Won stayed at zero for ever because nothing ever set
+ * `closed_at`. A QUOTE is the opposite: the work has not been agreed yet, so
+ * the first stage is exactly right. A workspace with no won stage at all falls
+ * back to the first one rather than refusing to make the deal.
+ *
  * The deal and its lines are written through the repositories one after the
  * other rather than folded into a single transaction. `dealItems.add` owns
  * two things a feature file has no business reimplementing - the next position
@@ -259,12 +268,17 @@ export function useCreateDealForDocument() {
   return useMutation({
     mutationFn: async (input: {
       title: string;
+      /** What is being raised against it, which decides the stage. */
+      kind: "invoice" | "quote";
       contactId: string | null;
       companyId: string | null;
       lines: { name: string; description: string | null; qty: number; unitCents: number; taxable: boolean; kind: "one_time" | "recurring"; interval: "month" | "year" | null }[];
     }) => {
       const pipeline = await pipelines.getDefaultOrThrow();
-      const stage = await stages.firstStage(pipeline.id);
+      const all = await stages.list(pipeline.id);
+      const first = all[0] ?? null;
+      const won = all.find((stage) => stage.isWon) ?? null;
+      const stage = input.kind === "invoice" ? (won ?? first) : first;
       if (!stage) throw new Error("This workspace has no stages to put a deal in.");
 
       const settings = await settingsNow();
@@ -275,6 +289,11 @@ export function useCreateDealForDocument() {
         contactId: input.contactId,
         companyId: input.companyId,
       });
+
+      // `deals.create` always writes `closed_at: null`, even into a won stage,
+      // so a deal made this way needs the move to stamp it. Without it the
+      // deal is won with no close date and every period report leaves it out.
+      if (stage.isWon) await deals.moveToStage(deal.id, stage.id);
 
       for (const line of input.lines) {
         await dealItems.add({

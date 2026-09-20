@@ -28,6 +28,12 @@ export type { ReportTabId } from "@/features/leads/components/ReportsFrame";
 export { RevenueScreen } from "@/features/leads/screens/RevenueScreen";
 export { usePollStatus } from "@/features/leads/hooks";
 export { PollBanner } from "@/features/leads/components/PollBanner";
+/**
+ * The one-line version for Today, mounted by the records feature at the top of
+ * TodayPanels. Renders null unless the poll banner is due, so the mount point
+ * needs no condition of its own.
+ */
+export { PollNotice } from "@/features/leads/components/PollNotice";
 export {
   getStatus as getPollStatus,
   subscribe as subscribePollStatus,
