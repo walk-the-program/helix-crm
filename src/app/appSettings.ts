@@ -152,18 +152,45 @@ export async function writeRegistry(next: HelixRegistry): Promise<void> {
   await fs.writeTextFile(`${paths.appData}/${REGISTRY_FILE}`, text);
 }
 
+/**
+ * Every update runs to completion before the next one starts.
+ *
+ * Without this, two updates that overlap both read the same cached registry,
+ * each writes its own whole-file copy, and whichever `writeTextFile` happens
+ * to land second wins — so the first change is silently lost. It is not a
+ * theoretical race: pressing End then Home on the sidebar's drag handle, or
+ * flipping the theme while a resize is still being written, issues two writes
+ * inside a frame, and the round-3 e2e caught the file holding the older width.
+ *
+ * A promise chain is the whole mechanism. `readRegistry` is inside the queued
+ * section deliberately: a change function must see what the previous one
+ * wrote, not what was there before it.
+ */
+let registryWrites: Promise<unknown> = Promise.resolve();
+
 export async function updateRegistry(
   change: (current: HelixRegistry) => HelixRegistry,
 ): Promise<HelixRegistry> {
-  const next = change(await readRegistry());
-  await writeRegistry(next);
-  return next;
+  const queued = registryWrites.then(async () => {
+    const next = change(await readRegistry());
+    await writeRegistry(next);
+    return next;
+  });
+  // The queue must keep moving even when this update throws, or one failed
+  // write would wedge every setting in the app for the rest of the session.
+  registryWrites = queued.catch(() => undefined);
+  return queued;
 }
 
 /** Forget the cache, so the next read hits disk (used after a restore). */
 export function resetRegistryCache(): void {
   cached = null;
   cachedPaths = null;
+}
+
+/** Resolve once every queued write has finished. Tests and a quit path use it. */
+export async function flushRegistryWrites(): Promise<void> {
+  await registryWrites;
 }
 
 /* -------------------------------------------------------------------------- */

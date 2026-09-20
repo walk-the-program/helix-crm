@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY_REGISTRY,
+  flushRegistryWrites,
   readRegistry,
   registrySchema,
   resetRegistryCache,
@@ -142,5 +143,37 @@ describe("subscribeToRegistry", () => {
     unsubscribe();
     unsubscribeQuiet();
     error.mockRestore();
+  });
+});
+
+describe("updateRegistry", () => {
+  it("serialises overlapping writes, so the last one wins and none is lost", async () => {
+    // Two updates issued inside one frame — End then Home on the sidebar's
+    // drag handle, or a theme flip landing on top of a resize. Without a
+    // queue both read the same cached registry and whichever file write
+    // happened to land second won, silently dropping the other change. The
+    // round-3 e2e caught exactly that: helix.json held the older width.
+    await Promise.all([
+      setSidebar({ width: 360 }),
+      setSidebar({ collapsed: true }),
+      setSidebar({ width: 200 }),
+    ]);
+    await flushRegistryWrites();
+
+    resetRegistryCache();
+    const registry = await readRegistry();
+    // The last width wins, AND the collapse from the middle write survived.
+    expect(registry.sidebar).toEqual({ width: 200, collapsed: true });
+  });
+
+  it("a failed update does not wedge the queue for the rest of the session", async () => {
+    await expect(
+      updateRegistry(() => {
+        throw new Error("change function blew up");
+      }),
+    ).rejects.toThrow("change function blew up");
+
+    await setSidebar({ width: 320 });
+    expect((await readRegistry()).sidebar.width).toBe(320);
   });
 });
