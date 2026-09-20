@@ -33,6 +33,45 @@ import {
 
 export type { BackupFile };
 
+/* -------------------------------------------------------------------------- */
+/* the second copy                                                            */
+/* -------------------------------------------------------------------------- */
+
+export type MirrorResult = {
+  path: string;
+  copied: number;
+  removed: number;
+  /** Files that could not be copied, already formatted as "<name>: <reason>". */
+  failed: string[];
+};
+
+type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+
+/**
+ * Copy this workspace's backups into the folder the owner chose.
+ *
+ * Rust derives the source from the open database and makes the destination
+ * match it, so the thirty-day retention the app already applies is the only
+ * retention rule there is (`src-tauri/src/backups.rs`).
+ */
+export async function mirrorBackups(destDir: string): Promise<MirrorResult> {
+  const core = await import("@tauri-apps/api/core");
+  return (core.invoke as InvokeFn)<MirrorResult>("backup_mirror", { destDir });
+}
+
+/** The chosen folder, or null. Read on the Backups screen and after a backup. */
+export async function backupCopyDir(): Promise<string | null> {
+  try {
+    return await settingsRepo.get("backupCopyDir");
+  } catch {
+    return null;
+  }
+}
+
+export async function setBackupCopyDir(dir: string | null): Promise<void> {
+  await settingsRepo.set("backupCopyDir", dir);
+}
+
 export class BackupWriteError extends Error {
   readonly cause: unknown;
   constructor(message: string, cause?: unknown) {
@@ -42,9 +81,23 @@ export class BackupWriteError extends Error {
   }
 }
 
+/**
+ * The readable text out of whatever a rejected `invoke()` carries.
+ *
+ * Tauri v2 rejects a command with a plain `{ code, message }` object, not an
+ * `Error`, so `String(err)` on the shape this module sees most - a refused
+ * `db_backup` or `backup_mirror` - gives "[object Object]". The banner on the
+ * Backups screen was showing "Helix could not save a backup: [object Object]"
+ * for every real backup failure, which is the same trap the lead poller fell
+ * into (F-LB-6) and was found again here by the copy-out tests.
+ */
 function reasonOf(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
   return String(err);
 }
 
@@ -112,7 +165,50 @@ export async function runBackup(reason: string): Promise<BackupFile> {
     console.error("[helix] could not mirror lastBackupAt into settings", err);
   }
 
+  // The second copy, when the owner has asked for one. It runs after the backup
+  // rather than as part of it, and its failure is reported separately: a
+  // detached drive or a signed-out sync folder must not turn a backup that
+  // succeeded into a backup that failed. `lastMirrorError` is what the Backups
+  // screen shows so the owner is still told.
+  await copyOutIfConfigured();
+
   return file;
+}
+
+let lastMirror: { at: string; result: MirrorResult } | null = null;
+let lastMirrorError: string | null = null;
+
+/** What the last copy-out did, for the Backups screen. */
+export function lastMirrorState(): {
+  at: string | null;
+  result: MirrorResult | null;
+  error: string | null;
+} {
+  return { at: lastMirror?.at ?? null, result: lastMirror?.result ?? null, error: lastMirrorError };
+}
+
+/** Test seam: the module-level record of the last copy-out. */
+export function resetMirrorStateForTests(): void {
+  lastMirror = null;
+  lastMirrorError = null;
+}
+
+export async function copyOutIfConfigured(): Promise<MirrorResult | null> {
+  const dir = await backupCopyDir();
+  if (!dir) return null;
+  try {
+    const result = await mirrorBackups(dir);
+    lastMirror = { at: nowIso(), result };
+    lastMirrorError =
+      result.failed.length > 0
+        ? `${result.failed.length} file(s) could not be copied to ${result.path}.`
+        : null;
+    return result;
+  } catch (err) {
+    lastMirrorError = `Helix could not copy your backups to ${dir}: ${reasonOf(err)}`;
+    console.error("[helix] backup copy-out failed", err);
+    return null;
+  }
 }
 
 /** Applies planRetention() to what's on disk and removes the dropped files. */

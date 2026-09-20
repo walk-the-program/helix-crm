@@ -45,11 +45,16 @@ import {
 import { todayLocal } from "@/lib/dates";
 import { dqk } from "@/features/data/lib/queries";
 import {
+  backupCopyDir,
+  copyOutIfConfigured,
+  lastMirrorState,
   listBackups,
   restoreFromBackup,
   runBackup,
+  setBackupCopyDir,
   type BackupFile,
 } from "@/features/data/lib/backupsFs";
+import { pickDirectory } from "@/features/data/lib/fsBridge";
 import { formatBytes, totalBytes } from "@/features/data/lib/retention";
 import { getBackupStatus, subscribeBackupStatus } from "@/features/data/backups/scheduler";
 import { workspacePaths } from "@/features/data/lib/workspace";
@@ -187,6 +192,145 @@ export function RecoveryKeyPanel() {
                 Saved to {savedTo}
               </p>
             ) : null}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * The second copy.
+ *
+ * Backups sit next to the live database, which covers a mistake and does not
+ * cover a disk. One folder on a drive or in a synced folder is the difference,
+ * and with the recovery key above it is the difference between "we can get your
+ * data back" and "it is gone" (F-OPS-2).
+ */
+export function BackupCopyFolderPanel() {
+  const queryClient = useQueryClient();
+  const [mirror, setMirror] = useState(() => lastMirrorState());
+
+  const dirQuery = useQuery({
+    queryKey: dqk.backupCopyDir(),
+    queryFn: () => backupCopyDir(),
+  });
+  const dir = dirQuery.data ?? null;
+
+  const choose = useMutation({
+    mutationFn: async () => {
+      const picked = await pickDirectory({ title: "Choose a folder for a second copy" });
+      if (picked === null) return null;
+      await setBackupCopyDir(picked);
+      await copyOutIfConfigured();
+      return picked;
+    },
+    onSuccess: (picked) => {
+      if (picked === null) return;
+      void queryClient.invalidateQueries({ queryKey: dqk.backupCopyDir() });
+      setMirror(lastMirrorState());
+      toast.success("Second copy folder set.");
+    },
+    onError: (err: unknown) =>
+      toast.error(messageFrom(err, "Helix could not use that folder.")),
+  });
+
+  const copyNow = useMutation({
+    mutationFn: () => copyOutIfConfigured(),
+    onSuccess: () => {
+      setMirror(lastMirrorState());
+      toast.success("Backups copied.");
+    },
+    onError: (err: unknown) =>
+      toast.error(messageFrom(err, "Helix could not copy your backups.")),
+  });
+
+  const clear = useMutation({
+    mutationFn: () => setBackupCopyDir(null),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: dqk.backupCopyDir() });
+      toast.success("Second copy turned off.");
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>A second copy</CardTitle>
+      </CardHeader>
+      <CardBody className="flex flex-col gap-[var(--space-3)]">
+        <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+          Backups live next to your data, on this computer. Choose a second
+          folder - an external drive, or a folder your Dropbox, iCloud Drive or
+          OneDrive already syncs - and Helix keeps a copy there after every
+          backup. Nothing is uploaded by Helix, and the copies are encrypted the
+          same way, so you will need your recovery key to open one elsewhere.
+        </p>
+
+        {dir ? (
+          <>
+            <p
+              title={dir}
+              className="truncate text-[length:var(--text-sm)] text-[var(--color-text)]"
+            >
+              {dir}
+            </p>
+            {mirror.error ? (
+              <div
+                role="alert"
+                className={[
+                  "flex items-start gap-[var(--space-3)]",
+                  "border border-[var(--color-border)]",
+                  "bg-[var(--color-danger-soft)] px-[var(--space-4)] py-[var(--space-3)]",
+                  "text-[length:var(--text-sm)] text-[var(--color-danger-ink)]",
+                ].join(" ")}
+              >
+                <Warning
+                  size={18}
+                  weight="regular"
+                  className="mt-[var(--space-1)] flex-none"
+                  aria-hidden="true"
+                />
+                <div className="min-w-0">{mirror.error}</div>
+              </div>
+            ) : mirror.result ? (
+              <p className="text-[length:var(--text-xs)] tabular-nums text-[var(--color-text-faint)]">
+                {mirror.result.copied} copied, {mirror.result.removed} removed to match
+                the 30 days Helix keeps.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+              <Button
+                variant="secondary"
+                onClick={() => copyNow.mutate()}
+                loading={copyNow.isPending}
+                loadingLabel="Copying…"
+              >
+                Copy now
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => choose.mutate()}
+                loading={choose.isPending}
+                loadingLabel="Setting up…"
+              >
+                Change folder
+              </Button>
+              <Button variant="ghost" onClick={() => clear.mutate()}>
+                Turn off
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div>
+            <Button
+              variant="secondary"
+              onClick={() => choose.mutate()}
+              loading={choose.isPending}
+              loadingLabel="Setting up…"
+            >
+              Choose a folder
+            </Button>
           </div>
         )}
       </CardBody>
@@ -498,6 +642,7 @@ export function BackupsScreen() {
           </div>
         )}
 
+        <BackupCopyFolderPanel />
         <RecoveryKeyPanel />
         <OpenFromAnotherMachinePanel />
       </div>

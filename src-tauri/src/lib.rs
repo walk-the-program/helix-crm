@@ -5,6 +5,7 @@
 //! only paths and origins this process will act on are the ones it works out
 //! for itself.
 
+pub mod backups;
 pub mod db;
 pub mod disk;
 pub mod error;
@@ -121,6 +122,7 @@ pub fn run() {
             db::db_batch,
             db::db_backup,
             db::db_info,
+            backups::backup_mirror,
             recovery::recovery_key_reveal,
             recovery::workspace_adopt_backup,
             secrets::secret_set,

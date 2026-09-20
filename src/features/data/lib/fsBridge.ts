@@ -92,6 +92,22 @@ export async function pickOpenFile(options: {
   return String(picked);
 }
 
+/**
+ * Pick one existing folder. null when the dialog was cancelled.
+ *
+ * Used for the second backup folder. The path is handed to Rust, which does the
+ * copying: the frontend's own filesystem scope stops at the app data folder,
+ * and widening it to "anywhere the owner ever picked" is not a trade worth
+ * making for a copy Rust can do on its own (docs/CONTRACTS.md, `backup_mirror`).
+ */
+export async function pickDirectory(options: { title?: string }): Promise<string | null> {
+  const { open } = await dialog();
+  const picked = await open({ multiple: false, directory: true, title: options.title });
+  if (picked === null || picked === undefined) return null;
+  if (Array.isArray(picked)) return picked.length > 0 ? String(picked[0]) : null;
+  return String(picked);
+}
+
 /** Pick a destination path. null when the dialog was cancelled. */
 export async function pickSavePath(options: {
   title?: string;

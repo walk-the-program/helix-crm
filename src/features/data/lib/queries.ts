@@ -9,6 +9,8 @@ export const dqk = {
   /** The remembered column mapping for one header signature. */
   mapping: (signature: string) => ["data", "mapping", signature] as const,
   backups: () => ["data", "backups"] as const,
+  /** The folder the owner chose for a second copy of the backups, or null. */
+  backupCopyDir: () => ["data", "backupCopyDir"] as const,
   duplicatePairs: (entityType: string) =>
     ["data", "duplicates", entityType] as const,
   mergeHistory: () => ["data", "merges"] as const,

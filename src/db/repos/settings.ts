@@ -32,6 +32,14 @@ const SETTINGS = {
   aiKeyState: { schema: z.enum(["unset", "saved", "rejected"]), default: "unset" },
   aiBaseUrl: { schema: z.string(), default: "https://api.anthropic.com" },
   backupsEnabled: { schema: z.boolean(), default: true },
+  // A second folder to copy this workspace's backups into, chosen by the owner
+  // through a native folder picker: an external drive, or a folder their
+  // Dropbox, iCloud Drive or OneDrive already syncs (LR-OPS, F-OPS-2). Null
+  // until they pick one. Backups next to the live database survive a mistake;
+  // only a copy somewhere else survives the disk. The copy is the same
+  // SQLCipher-encrypted file, and `src-tauri/src/backups.rs` is the only thing
+  // that writes it.
+  backupCopyDir: { schema: z.string().nullable(), default: null },
   lastDuplicateScanAt: { schema: z.string().nullable(), default: null },
   lastBackupAt: { schema: z.string().nullable(), default: null },
   connectCardDismissed: { schema: z.boolean(), default: false },
