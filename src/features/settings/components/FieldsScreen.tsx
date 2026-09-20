@@ -201,7 +201,11 @@ function CreateFieldDialog(props: {
         <DialogHeader>
           <DialogTitle>Add a field</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-[var(--space-4)]">
+        <form
+          id="create-field-form"
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-[var(--space-4)]"
+        >
           <FieldNameAndKind
             name={name}
             onNameChange={setName}
@@ -210,20 +214,26 @@ function CreateFieldDialog(props: {
             optionsText={optionsText}
             onOptionsTextChange={setOptionsText}
           />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" loading={pending} data-testid="field-create">
-              Add field
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="create-field-form"
+            variant="primary"
+            loading={pending}
+            data-testid="field-create"
+          >
+            Add field
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -267,7 +277,11 @@ function EditFieldDialog(props: {
           <DialogTitle>Edit field</DialogTitle>
         </DialogHeader>
         {field ? (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-[var(--space-4)]">
+          <form
+            id="edit-field-form"
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-[var(--space-4)]"
+          >
             <FieldNameAndKind
               name={name}
               onNameChange={setName}
@@ -275,20 +289,22 @@ function EditFieldDialog(props: {
               optionsText={optionsText}
               onOptionsTextChange={setOptionsText}
             />
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => onOpenChange(false)}
-                disabled={pending}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" loading={pending}>
-                Save changes
-              </Button>
-            </DialogFooter>
           </form>
+        ) : null}
+        {field ? (
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" form="edit-field-form" variant="primary" loading={pending}>
+              Save changes
+            </Button>
+          </DialogFooter>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -322,9 +338,9 @@ function DeleteFieldDialog(props: {
         </DialogHeader>
         {field ? (
           <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            {`Delete "${field.name}"? ${count} ${entityPlural} ${
-              count === 1 ? "has" : "have"
-            } a value in it, and those values go too.`}
+            {count === 0
+              ? `Delete "${field.name}"? Nothing has a value in it.`
+              : `Delete "${field.name}"? ${count} ${entityPlural} keep their value. The field is hidden, not gone, for 30 days.`}
           </p>
         ) : null}
         <DialogFooter>

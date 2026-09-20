@@ -190,7 +190,11 @@ function AddTagDialog(props: {
         <DialogHeader>
           <DialogTitle>Add tag</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-[var(--space-4)]">
+        <form
+          id="add-tag-form"
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-[var(--space-4)]"
+        >
           <Field label="Name" htmlFor="new-tag-name" error={nameError ?? undefined}>
             <Input
               id="new-tag-name"
@@ -205,20 +209,26 @@ function AddTagDialog(props: {
             />
           </Field>
           <LabelledColorPicker label="Colour" value={color} onChange={setColor} />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" loading={pending} data-testid="tag-add">
-              Add tag
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="add-tag-form"
+            variant="primary"
+            loading={pending}
+            data-testid="tag-add"
+          >
+            Add tag
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -259,7 +269,11 @@ function EditTagDialog(props: {
         <DialogHeader>
           <DialogTitle>Rename and recolour tag</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-[var(--space-4)]">
+        <form
+          id="edit-tag-form"
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-[var(--space-4)]"
+        >
           <Field label="Name" htmlFor="edit-tag-name">
             <Input
               id="edit-tag-name"
@@ -269,20 +283,20 @@ function EditTagDialog(props: {
             />
           </Field>
           <LabelledColorPicker label="Colour" value={color} onChange={setColor} showName />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={pending}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" loading={pending}>
-              Save changes
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" form="edit-tag-form" variant="primary" loading={pending}>
+            Save changes
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
