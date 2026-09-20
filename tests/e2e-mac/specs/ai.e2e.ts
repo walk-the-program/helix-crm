@@ -261,6 +261,37 @@ test.describe("AI, off", () => {
     expect(seen).toHaveLength(0);
   });
 
+  test("a record page carries no AI control at all", async ({ page, helix }) => {
+    void helix;
+    // Finding F-LC-20 / ruling R16: an optional module that is off does not
+    // narrate its absence on every customer record. Before this, all three
+    // record pages carried a disabled button and the sentence "AI is off. Turn
+    // it on in Settings.", and the deal page needed a CSS rule to stop
+    // printing it twice.
+    // The migrations run when the app boots, so the rows go in after it.
+    await boot(page);
+    const now = new Date().toISOString();
+    helix.bridge.call("execute", [
+      "insert into companies (id, name, created_at, updated_at) values ('c-ai','Alpine Ridge',?,?)",
+      [now, now],
+    ]);
+    helix.bridge.call("execute", [
+      `insert into contacts (id, company_id, first_name, last_name, created_at, updated_at)
+       values ('p-ai','c-ai','Dave','Tracy',?,?)`,
+      [now, now],
+    ]);
+
+    for (const route of ["/contacts/p-ai", "/companies/c-ai"]) {
+      await page.evaluate((to) => window.history.pushState({}, "", to), route);
+      await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")));
+      await expect(page.locator("main")).toBeVisible();
+      await expect(page.getByTestId("ai-summarize")).toHaveCount(0);
+      await expect(page.getByTestId("ai-draft-followup")).toHaveCount(0);
+      await expect(page.getByTestId("ai-disabled-reason")).toHaveCount(0);
+      await expect(page.locator("main")).not.toContainText("AI is off");
+    }
+  });
+
   test("the settings screen starts off, with no key", async ({ page, helix }) => {
     void helix; // installs the e2e shim - see the test above
     await boot(page);
@@ -377,6 +408,58 @@ test.describe("AI, on", () => {
 
     const phones = helix.bridge.query("SELECT raw, e164 FROM contact_phones", []);
     expect(phones[0][1]).toBe("+18015550147");
+  });
+});
+
+test.describe("AI, on but no key", () => {
+  test("the button is there, disabled, and says why without printing a line", async ({
+    page,
+    helix,
+  }) => {
+    // Ruling R16's other half: once the owner HAS opted in, a control that is
+    // simply absent is a mystery. So the button stays, disabled, and the
+    // reason moves into the tooltip and the accessible description rather
+    // than onto the page.
+    // The migrations run when the app boots, so the rows go in after it.
+    await boot(page);
+    const now = new Date().toISOString();
+    helix.bridge.call("execute", [
+      "insert into companies (id, name, created_at, updated_at) values ('c-ai','Alpine Ridge',?,?)",
+      [now, now],
+    ]);
+    helix.bridge.call("execute", [
+      `insert into contacts (id, company_id, first_name, last_name, created_at, updated_at)
+       values ('p-ai','c-ai','Dave','Tracy',?,?)`,
+      [now, now],
+    ]);
+
+    // Turn AI on and save no key.
+    await openAiSettings(page);
+    const toggle = page.locator("#ai-enabled");
+    if ((await toggle.getAttribute("data-state")) !== "checked") await toggle.click();
+    await expect(page.getByTestId("ai-enabled-label")).toHaveText("AI is on");
+    await expect(page.getByTestId("ai-key-state")).toContainText("No key saved");
+
+    await page.evaluate(() => window.history.pushState({}, "", "/contacts/p-ai"));
+    await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")));
+
+    const button = page.getByTestId("ai-summarize");
+    await expect(button).toBeVisible();
+    await expect(button).toBeDisabled();
+
+    // The reason is reachable by assistive technology...
+    const describedBy = await button.getAttribute("aria-describedby");
+    expect(describedBy, "the disabled button names its reason").toBeTruthy();
+    const reason = page.locator(`#${describedBy}`);
+    await expect(reason).toHaveCount(1);
+    await expect(reason).toContainText(/key/i);
+
+    // ...and it is not a visible line of body text on the record.
+    const reasonBox = await reason.boundingBox();
+    expect(
+      reasonBox === null || reasonBox.width <= 1 || reasonBox.height <= 1,
+      "the reason is not printed on the page",
+    ).toBe(true);
   });
 });
 
