@@ -16,6 +16,7 @@ import type {
 } from "@/app/feature";
 import { feature as records } from "@/features/records";
 import { feature as today } from "@/features/today";
+import { feature as schedule } from "@/features/schedule";
 import { feature as data } from "@/features/data";
 import { feature as leads } from "@/features/leads";
 import { feature as ai } from "@/features/ai";
@@ -31,6 +32,7 @@ import { sidebarCommands } from "@/app/sidebarCommand";
 
 export const registry: FeatureModule[] = [
   today,
+  schedule,
   records,
   data,
   leads,

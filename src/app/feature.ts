@@ -12,6 +12,7 @@ import type { ComponentType, ReactNode } from "react";
 export type FeatureId =
   | "records"
   | "today"
+  | "schedule"
   | "data"
   | "leads"
   | "ai"
@@ -139,7 +140,7 @@ export type FeatureModule = {
  * together, and `NAV_GROUPS` below draws a hairline between each run:
  *
  *   Today · Contacts, Companies · Deals, Services, Invoices, Reports ·
- *   Tasks, Reminders · Import · Trash · Settings, Help
+ *   Schedule, Tasks, Reminders · Import · Trash · Settings, Help
  */
 export const NAV_ORDER = {
   today: 10,
@@ -152,6 +153,8 @@ export const NAV_ORDER = {
   services: 45,
   invoices: 48,
   reports: 50,
+  /** The week, first in the "what do I have to do" group. */
+  schedule: 58,
   tasks: 60,
   reminders: 65,
   import: 70,
@@ -180,7 +183,7 @@ export const NAV_GROUPS: readonly (readonly string[])[] = [
   ["/"],
   ["/contacts", "/companies"],
   ["/pipeline", "/services", "/invoices", "/reports"],
-  ["/tasks", "/recurring"],
+  ["/schedule", "/tasks", "/recurring"],
   ["/import"],
   ["/trash"],
   ["/settings", "/help"],
