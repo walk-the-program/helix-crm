@@ -13,7 +13,7 @@
  */
 import type { ReactElement } from "react";
 import { Link } from "wouter";
-import { Badge, Card, CardGroupLabel, CardRow } from "@/ui";
+import { Badge, Card, CardGroupLabel, CardRow, EmptyState } from "@/ui";
 import { useFormats } from "@/app/formats";
 
 export type DealsCardRow = {
@@ -38,9 +38,11 @@ export function DealsCard(props: {
       </CardGroupLabel>
       <Card>
         {props.deals.length === 0 ? (
-          <p className="p-[var(--space-4)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-            {props.emptyText}
-          </p>
+          // The kit's section-level empty, rather than a hand-rolled paragraph:
+          // one muted sentence at a row's height, so an empty card is the same
+          // shape here, on Today and on every other record panel (kit commit
+          // 4c2a8e2; phase two, direction rule 6).
+          <EmptyState variant="quiet" title={props.emptyText} />
         ) : (
           props.deals.map((deal) => (
             <CardRow key={deal.id} interactive className="p-0">

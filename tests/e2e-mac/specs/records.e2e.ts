@@ -1162,3 +1162,66 @@ test.describe("records: merged-away records", () => {
     await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(1);
   });
 });
+
+test.describe("records: phase-two design", () => {
+  /**
+   * An empty list rendered its whole toolbar over the empty state: a count
+   * reading "0 of 0 people" and six controls for narrowing nothing. The
+   * controls stand down until there is something to use them on — but a filter
+   * that matches nothing keeps them, because the owner needs the control that
+   * got him there.
+   */
+  test("an empty list hides its toolbar; a filter that matches nothing keeps it", async ({
+    page,
+    helix,
+  }) => {
+    await page.goto("/contacts");
+    await waitForShell(page);
+    await expect(page.getByRole("heading", { name: "No contacts yet" })).toBeVisible();
+    await expect(page.getByLabel("Search contacts")).toBeHidden();
+    await expect(page.getByText(/0 of 0 people/)).toBeHidden();
+
+    // With a contact on file the toolbar comes back...
+    const now = new Date().toISOString();
+    helix.bridge.execute(
+      `INSERT INTO contacts (id, created_at, updated_at, first_name, last_name)
+       VALUES ('c-tb', ?, ?, 'Annika', 'Sorensen')`,
+      [now, now],
+    );
+    await page.reload();
+    await expect(page.getByLabel("Search contacts")).toBeVisible();
+
+    // ...and a search that matches nothing must NOT take it away again.
+    await page.getByLabel("Search contacts").fill("zzzz-no-such-person");
+    await expect(page.getByLabel("Search contacts")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Nothing matches/ })).toBeVisible();
+  });
+
+  /**
+   * The deal page lost its expected date in phase one and got it back in phase
+   * two: at 1024 the Identity card that also carries it sits below the whole
+   * timeline.
+   */
+  test("the deal header states the close date, open or closed", async ({ page, helix }) => {
+    await page.goto("/");
+    await quickAddDeal(page, "Sprinkler repair");
+    const dealId = String(helix.bridge.query("SELECT id FROM deals LIMIT 1", [])[0][0]);
+    helix.bridge.execute("UPDATE deals SET expected_on = '2026-09-28' WHERE id = ?", [dealId]);
+    await page.goto(`/deals/${dealId}`);
+    await page.reload();
+    await expect(page.getByText(/Expected Sep 28/)).toBeVisible();
+
+    const wonStage = helix.bridge.query(
+      "SELECT id FROM stages WHERE is_won = 1 AND deleted_at IS NULL LIMIT 1",
+      [],
+    )[0][0];
+    helix.bridge.execute("UPDATE deals SET stage_id = ?, closed_at = ? WHERE id = ?", [
+      String(wonStage),
+      "2026-09-12T12:00:00.000Z",
+      dealId,
+    ]);
+    await page.reload();
+    await expect(page.getByText(/Won Sep 12/)).toBeVisible();
+    await expect(page.getByText(/Expected Sep 28/)).toBeHidden();
+  });
+});
