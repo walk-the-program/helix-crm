@@ -209,6 +209,9 @@ two. Packet CPO-LC-IMPL rev 2 sent 00:3x.
 
 | F-P2-LA-2 | critical | defect | After the `fit` close, Contacts renders 10 of 16 contacts at 1280x820 (12 of 16 compact) with no scrollbar while the header says "16 of 16 people": `fit` sizes the scroller from what the virtualiser has measured and nothing above constrains it, so it settles at one viewport and never grows; the panel is overflow-hidden. The 3-contact seed in listNav.e2e.ts passes under every broken arrangement. Reported by lead-records; **not reproduced by the coordinator on committed HEAD** (`cpoRows.e2e.ts`, port 4222, sample week at 1280x820: 16 of 16 rendered in both densities, the list is overflow auto and scrolls to the last contact, `rows-comfortable.png`). The report most likely measured a working-tree state. | lead-platform verifies against committed HEAD before touching the kit; the 40-contact scroll guard in listNav.e2e.ts is kept as the standing check; gate hold lifted | lead-platform (verify), lead-records (guard) | not reproduced; guard pending |
 
+| F-LB-D1..D26 | — | design | Lead B's phase-two findings (`docs/rounds/cpo-returns/lead-b-money-design.md`): em dash for period zeros at the shared DataTable; two-line caption; one headline system; Copy as CSV on the per-deal table; 1024 overflow cue; quiet empties; Invoices field order, sub-rows, tax column only when mixed, number column at 1024; Document page actions hierarchy (Send is a draft action; a draft offers Delete only); repositories say the owner's word. | implemented except D8 (aging block as a semantic table), sent back as a follow-up | lead-money | implemented / D8 follow-up |
+| F-P2-LC-2 (cont.) | — | perf | recharts and pdf-lib split at the route/call site by lead-money: main chunk 2,924.62 kB → **1,355.06 kB** (gzip 849.62 → 357.57 kB), nothing on the boot path lazy. Removing the feature index's static re-exports was half the win. | measured after each change | lead-money | implemented |
+
 Further phase-two findings are appended from each lead's return.
 
 ## 5. Decisions
@@ -302,6 +305,8 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 | 01:5x | **Gate 1 (phase-one integration, Fable, port 4221):** typecheck clean; vitest 146 files / 2049 passed / 3 skipped; cargo 49 passed; vite build clean (chunk-size warning only, deferred to phase two); full e2e **148 passed** (baseline 121) including `cpoWalk.e2e.ts` re-run on the finished product. Two stranded spec changes from lead-platform committed after passing. | phase one verified |
 
 | 02:0x | Phase one reconciled against the re-run walk (`cpo/` vs `cpo-before/`): won deal reads Won $3,610 · Upfront $1,450 + $180/mo · Invoiced/Collected $1,450 · Outstanding $0; Today lists the overdue invoice; Contacts shows phone and next step; Invoices list true; Revenue Quoted $65,530 / Won $4,530; AI narration gone; quick add in the toolbar. Two leftovers noted for phase two (board column subtotals say "Upfront"; "No company" as content). | phase two dispatched: lead-platform (kit first), lead-records, lead-money |
+
+| 02:5x | Lead B phase-two return: typecheck clean; vitest 2094 passed / 3 skipped; invoices+revenue+leads e2e 40+23; build green; main chunk 1,355 kB. Fable inspected `30e1dba`, `8c4cae4`, `2eaa0ff`, `d841146`. | accepted; D8 follow-up sent |
 
 Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
 with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
