@@ -24,6 +24,7 @@ import * as settingsRepo from "@/db/repos/settings";
 import * as leadSync from "@/db/repos/leadSync";
 import { migrationVersion } from "@/features/settings/lib/counts";
 import { keychainAvailable } from "@/features/ai/lib/secrets";
+import { formatDateTimeDisplay } from "@/lib/dates";
 
 export { APP_VERSION };
 
@@ -53,8 +54,25 @@ export type Diagnostics = {
   logPath: string | null;
 };
 
+/**
+ * The readable text out of whatever was thrown or rejected.
+ *
+ * Tauri v2 rejects a command with a plain `{ code, message }` object, not an
+ * `Error` - the trap `src/features/leads/poller.ts` and
+ * `src/features/data/lib/backupsFs.ts` already name and fix (F-LB-6):
+ * `err instanceof Error` is false for that shape, and `String(err)` on a
+ * plain object gives "[object Object]", which `raw.info()` (a `db_info`
+ * `invoke()` call) could put straight onto this screen as the reason the
+ * database size is unknown - the exact bare-exception-text this screen's own
+ * design exists to prevent.
+ */
 function reason(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null) {
+    const message = (err as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return String(err);
 }
 
 /**
@@ -228,5 +246,114 @@ export async function revealDataFolder(path: string | null): Promise<ActionResul
     return { ok: true };
   } catch (err) {
     return { ok: false, reason: reason(err) };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* "Copy details": one plain-text block, for Walker (LR-CS-W3, PIECE 3)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the OS calls itself, from the same `disk_encryption_status` reading
+ * the Encryption group already shows - never guessed, and "Unknown" when the
+ * platform was never read (outside Tauri, or the check refused to run).
+ */
+function operatingSystemName(diskEncryption: DiskEncryption | null): string {
+  if (diskEncryption?.platform === "macos") return "macOS";
+  if (diskEncryption?.platform === "windows") return "Windows";
+  if (diskEncryption?.platform) return diskEncryption.platform;
+  return "Unknown";
+}
+
+/**
+ * Whether Helix encrypted its own workspace file, in the one line this block
+ * carries - the same Unknown-vs-off distinction `WorkspaceEncryption` in
+ * DiagnosticsScreen.tsx draws, so this block never claims more than the
+ * screen already does. `db.encrypted` absent means "this build cannot tell",
+ * never "not encrypted" (docs/CONTRACTS.md "Encryption at rest").
+ */
+function workspaceFileEncryptionLine(db: DbInfo | null): string {
+  if (!db || db.encrypted === undefined) return "Unknown (this build cannot tell)";
+  if (db.encrypted === false) return "Not encrypted";
+  return db.cipherVersion ? `Encrypted (SQLCipher ${db.cipherVersion})` : "Encrypted";
+}
+
+/**
+ * The OS's own full-disk encryption, in one line. `encrypted: null` means the
+ * check could not run, which this line calls Unknown rather than off - the
+ * same distinction `DiskEncryptionValue` draws on screen.
+ */
+function diskEncryptionLine(status: DiskEncryption | null): string {
+  if (!status || status.encrypted === null) {
+    const detail = status?.detail;
+    return detail ? `Unknown (could not check - ${detail})` : "Unknown (could not check)";
+  }
+  const name =
+    status.platform === "macos" ? "FileVault" : status.platform === "windows" ? "BitLocker" : "Full-disk encryption";
+  if (status.encrypted) return status.detail || `${name} is on.`;
+  return status.detail || `${name} is off.`;
+}
+
+/**
+ * "connected" / "failing" from the same two fields the Website leads group
+ * already reads: a site is only ever failing when its last poll actually
+ * recorded an error, never guessed from silence (`leadSync.saveCursor`
+ * clears `lastError` on every success, `saveError` sets it - src/db/repos/
+ * leadSync.ts).
+ */
+function websiteConnectionLine(data: Diagnostics): string {
+  if (!data.siteOrigin) return "No site connected";
+  const state = data.lastPollError ? "failing" : "connected";
+  const lastChecked = data.lastPolledAt ? formatDateTimeDisplay(data.lastPolledAt) : "never";
+  return `${data.siteOrigin} - ${state}, last checked ${lastChecked}`;
+}
+
+/**
+ * One plain-text, paste-anywhere block: exactly what Walker needs to start
+ * looking into a client's Helix, and nothing else. Every field here is one
+ * this module already reads for the screen itself - no customer record,
+ * recovery key, token or API key is ever in reach of this function, because
+ * `Diagnostics` does not carry one (SEC/OPS/REV already drew that line; this
+ * only formats what is already here). `tests/unit/settings/
+ * supportBlock.test.ts` proves the absence against a workspace that actually
+ * has contacts, companies and notes in it.
+ *
+ * `userAgent` is the one piece of "OS version, if cheaply available" this
+ * build has without a new dependency or a network call (PLAN.md's own
+ * observability note): the desktop webview's user agent string usually
+ * carries the OS version the platform name alone does not.
+ */
+export function buildSupportDetails(
+  data: Diagnostics,
+  options: { userAgent?: string } = {},
+): string {
+  const userAgent =
+    options.userAgent ?? (typeof navigator !== "undefined" ? navigator.userAgent : "");
+  const lines = [
+    "Helix support details",
+    "",
+    `Helix version: ${data.appVersion}`,
+    `Operating system: ${operatingSystemName(data.diskEncryption)}${
+      userAgent ? ` (${userAgent})` : ""
+    }`,
+    `Workspace: ${data.workspaceId ?? "Unknown"}`,
+    `Workspace file: ${workspaceFileEncryptionLine(data.db)}`,
+    `Disk encryption: ${diskEncryptionLine(data.diskEncryption)}`,
+    `Last backup: ${
+      data.lastBackupAt ? formatDateTimeDisplay(data.lastBackupAt) : "No backup has run yet"
+    }`,
+    `Website: ${websiteConnectionLine(data)}`,
+    `Last error: ${data.lastPollError ?? "None"}`,
+  ];
+  return lines.join("\n");
+}
+
+/** Put the block on the clipboard. Never throws. */
+export async function copySupportDetails(data: Diagnostics): Promise<ActionResult> {
+  try {
+    await navigator.clipboard.writeText(buildSupportDetails(data));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: `The clipboard refused it: ${reason(err)}` };
   }
 }

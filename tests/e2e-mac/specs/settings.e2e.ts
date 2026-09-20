@@ -431,6 +431,7 @@ test("diagnostics renders the version, database, FTS5 status and migration under
 
   await expect(page.getByTestId("diagnostics-copy-log")).toBeVisible();
   await expect(page.getByTestId("diagnostics-reveal")).toBeVisible();
+  await expect(page.getByTestId("diagnostics-copy-details")).toBeVisible();
 
   // The diagnostics query is several async round trips (db info, appPaths,
   // the registry, the migration table, settings, the keychain probe). Wait
@@ -449,6 +450,13 @@ test("diagnostics renders the version, database, FTS5 status and migration under
   // answers honestly with "not found" rather than a Tauri runtime - the point
   // of this assertion is only that the click does not crash the page.
   await page.getByTestId("diagnostics-copy-log").click();
+  await expect(screen).toBeVisible();
+
+  // "Copy details" (LR-CS-W3) builds its block from the same query this test
+  // already waited on, so the click is synchronous UI, not another round
+  // trip - the point is the same as "Copy log" above: it does not crash the
+  // page under the e2e stubs, which have no real clipboard either.
+  await page.getByTestId("diagnostics-copy-details").click();
   await expect(screen).toBeVisible();
   expect(errors, `uncaught page errors: ${errors.join(" | ")}`).toHaveLength(0);
 });

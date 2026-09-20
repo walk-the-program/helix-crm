@@ -2,12 +2,15 @@
  * Diagnostics: where the data is, how big it is, and what the app last did.
  *
  * Five grouped inset lists of label/value rows and nothing else — this screen
- * reads, it never writes. Both buttons are quiet (ghost), so the screen shows
- * no primary at all: a screen earns its one block of brand primary only when
- * it has a single thing the owner came to do, and this one has two equals.
+ * reads, it never writes. All three actions are quiet (ghost), so the screen
+ * shows no primary at all: a screen earns its one block of brand primary only
+ * when it has a single thing the owner came to do, and this one has three
+ * equals - Copy log for the whole history, Reveal data folder for the files
+ * themselves, and Copy details (LR-CS-W3) for the one paste-into-an-email
+ * block Walker actually asks for on a support call.
  *
- * Both say plainly when they cannot work rather than failing silently, which is
- * the whole point of the screen.
+ * All three say plainly when they cannot work rather than failing silently,
+ * which is the whole point of the screen.
  *
  * The Encryption group is the one place in the product that answers "is my
  * customer list safe on this laptop". It is two readings and they are different
@@ -25,6 +28,7 @@ import { Badge, Button, toast } from "@/ui";
 import { useWriteState } from "@/app/hooks";
 import { useFormats } from "@/app/formats";
 import { isTauri } from "@/app/appSettings";
+import { HelpLink } from "@/features/help";
 import {
   SettingsGroup,
   SettingsLoading,
@@ -34,6 +38,7 @@ import {
 import { settingsKeys } from "@/features/settings/lib/queries";
 import {
   copyLog,
+  copySupportDetails,
   formatBytes,
   readDiagnostics,
   revealDataFolder,
@@ -157,6 +162,13 @@ export function DiagnosticsScreen() {
     else toast.error(result.reason);
   }
 
+  async function onCopyDetails() {
+    if (!data) return;
+    const result = await copySupportDetails(data);
+    if (result.ok) toast.success("Copied the support details to the clipboard");
+    else toast.error(result.reason);
+  }
+
   async function onReveal() {
     const folder = data?.db?.path
       ? data.db.path.replace(/[/\\][^/\\]+$/, "")
@@ -189,6 +201,17 @@ export function DiagnosticsScreen() {
             data-testid="diagnostics-reveal"
           >
             Reveal data folder
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={!data}
+            iconLeft={
+              <ClipboardCopy size={ICON_SIZE_SM} weight={ICON_WEIGHT_STRONG} aria-hidden />
+            }
+            onClick={() => void onCopyDetails()}
+            data-testid="diagnostics-copy-details"
+          >
+            Copy details
           </Button>
         </div>
       }
@@ -275,7 +298,12 @@ export function DiagnosticsScreen() {
               {data.lastBackupAt ? (
                 formats.dateTime(data.lastBackupAt)
               ) : (
-                <Unknown>No backup has run yet</Unknown>
+                <span className="flex flex-col gap-[var(--space-1)]">
+                  <Unknown>No backup has run yet</Unknown>
+                  <HelpLink to="backups" className="text-[length:var(--text-sm)] text-[var(--color-text-muted)] underline">
+                    How backups and the recovery key work
+                  </HelpLink>
+                </span>
               )}
             </SettingsValueRow>
           </SettingsGroup>
