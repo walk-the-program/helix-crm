@@ -1,7 +1,8 @@
 /**
  * The full-screen states from docs/PLAN.md's error map: the database would not
- * open, this build has no FTS5, a migration failed, this build is older than
- * the workspace it opened, and the top-level error boundary. Each one names
+ * open, the keychain would not hand over the key, this build has no FTS5, a
+ * migration failed, this build is older than the workspace it opened, and the
+ * top-level error boundary. Each one names
  * the problem in plain words, shows the path, and never swallows the detail.
  */
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
@@ -14,7 +15,7 @@ import {
 } from "@/ui/icons";
 import { cn } from "@/ui/cn";
 import { MigrationError, NewerSchemaError } from "@/db/migrator";
-import { DbOpenError, Fts5MissingError } from "@/db/client";
+import { DbOpenError, Fts5MissingError, SecretStoreError } from "@/db/client";
 import { Brand, Button, Card, CardBody, Spinner } from "@/ui";
 
 function FullScreen({
@@ -267,6 +268,41 @@ export function NewerSchemaErrorScreen({ error }: { error: NewerSchemaError }) {
   );
 }
 
+/**
+ * The keychain refused, or could not be reached.
+ *
+ * `secrets.rs` already writes the one sentence that matters - for a Deny on an
+ * unsigned macOS build it is "quit Helix, open it again, and choose Always
+ * Allow" - so this screen shows that message as the body rather than inventing
+ * a cause of its own. There is a Try again button because on this failure
+ * trying again is exactly the right move: the prompt comes back.
+ */
+export function SecretStoreErrorScreen({
+  error,
+  path,
+  onRetry,
+}: {
+  error: SecretStoreError;
+  path?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <FullScreen
+      icon={<AlertTriangle size={28} weight="regular" />}
+      title="Helix needs permission to use this computer's keychain"
+    >
+      <p className="m-0">{error.message}</p>
+      <p className="m-0">
+        Your workspace is encrypted, and the key that opens it is kept in the
+        keychain. Helix cannot read your data without it, and nothing on disk
+        has been changed.
+      </p>
+      {path ? <PathLine path={path} /> : null}
+      <Actions path={path} onRetry={onRetry} />
+    </FullScreen>
+  );
+}
+
 /** Whatever else went wrong at boot. */
 export function BootErrorScreen({
   error,
@@ -298,6 +334,8 @@ export function BootFailure({
   onRetry?: () => void;
 }) {
   if (error instanceof Fts5MissingError) return <Fts5MissingScreen error={error} />;
+  if (error instanceof SecretStoreError)
+    return <SecretStoreErrorScreen error={error} path={path} onRetry={onRetry} />;
   if (error instanceof DbOpenError)
     return <DbOpenErrorScreen error={error} path={path} onRetry={onRetry} />;
   if (error instanceof NewerSchemaError) return <NewerSchemaErrorScreen error={error} />;

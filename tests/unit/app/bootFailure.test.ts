@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
-import { DbError, DbOpenError, Fts5MissingError } from "@/db/client";
+import { DbError, DbOpenError, Fts5MissingError, SecretStoreError } from "@/db/client";
 import { MigrationError, NewerSchemaError, newerSchemaMessage } from "@/db/migrator";
 import { renderBootFailure } from "./bootFailure.fixtures";
 
@@ -78,6 +78,26 @@ describe("BootFailure", () => {
     renderBootFailure({ error: new DbError("IO_ERROR", "disk went away") });
     expect(screen.getByRole("heading").textContent).toContain("Helix could not start");
     expect(document.body.textContent).toContain("disk went away");
+  });
+
+  it("sends a refused keychain to its own screen, not to the file-locked one (LR-OPS F-OPS-5)", () => {
+    // What secrets.rs writes when macOS hands back a denial. An unsigned build
+    // reprompts after every rebuild, so this is the single most likely way an
+    // owner ever sees a boot failure at all.
+    const denied = new SecretStoreError(
+      "This machine's keychain turned Helix down, so Helix cannot reach this " +
+        "workspace's key. Quit Helix, open it again, and choose Always Allow " +
+        "when the keychain asks. Nothing on disk has been changed. (User canceled)",
+    );
+    renderBootFailure({ error: denied, path: "/w/helix.db", onRetry: () => {} });
+
+    expect(screen.getByRole("heading").textContent).toContain("keychain");
+    expect(document.body.textContent).toContain("choose Always Allow");
+    // The two wrong causes the old screen offered.
+    expect(document.body.textContent).not.toContain("Another copy of Helix");
+    expect(document.body.textContent).not.toContain("may not be writable");
+    // Trying again is the right move here: the prompt comes back.
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeNull();
   });
 
   it("gives a newer-than-this-build workspace its own screen, distinct from a failed migration (LR-OPS-W1 A1/A2)", () => {

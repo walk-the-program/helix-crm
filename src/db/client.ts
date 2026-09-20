@@ -78,6 +78,25 @@ export class DbOpenError extends DbError {
   }
 }
 
+/**
+ * The OS keychain refused, or could not be reached (`SECRET_ERROR`).
+ *
+ * Its own class because the boot path must not dress it up as a file problem.
+ * On an unsigned macOS build the Keychain prompt reappears after every rebuild,
+ * and an owner who clicks Deny used to get the screen headed "Helix can't open
+ * your data", which says another copy of Helix may have the file or the folder
+ * may not be writable. Both plausible, both wrong, and both send him looking
+ * for a second Helix that is not running - the same mistake F-LC-10 fixed for
+ * the generic case. `secrets.rs` writes a message that says what to do; this
+ * class is what gets it to a screen that shows it (LR-OPS, F-OPS-5).
+ */
+export class SecretStoreError extends DbError {
+  constructor(message: string) {
+    super("SECRET_ERROR", message);
+    this.name = "SecretStoreError";
+  }
+}
+
 export class Fts5MissingError extends DbError {
   constructor(
     message = "This build of SQLite has no FTS5 support, so search cannot work.",
@@ -104,6 +123,7 @@ export function toDbError(err: unknown): DbError {
     if (err.code === "DB_CLOSED") return new DbClosedError(err.message);
     if (err.code === "DB_OPEN_FAILED") return new DbOpenError(err.message);
     if (err.code === "FTS_MISSING") return new Fts5MissingError(err.message);
+    if (err.code === "SECRET_ERROR") return new SecretStoreError(err.message);
     return new DbError(err.code, err.message);
   }
   if (err instanceof Error) return new DbError("SQL_ERROR", err.message);

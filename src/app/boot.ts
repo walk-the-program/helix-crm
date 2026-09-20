@@ -23,6 +23,7 @@ import {
   Fts5MissingError,
   DbOpenError,
   raw,
+  SecretStoreError,
   setDriver,
 } from "@/db/client";
 import { e2eDriver, hasE2eBridge } from "@/db/drivers/e2e";
@@ -110,6 +111,13 @@ export async function openWorkspace(
        * `BootErrorScreen`, which says "Helix could not start" and shows the
        * detail without inventing a cause.
        */
+      // A keychain refusal is not a file problem and must not be shown as one:
+      // db_open asks the keychain for the workspace's key before it opens
+      // anything, so SECRET_ERROR means the file was never reached. Wrapping it
+      // as a DbOpenError sent the owner to a screen about another copy of Helix
+      // holding the file (LR-OPS, F-OPS-5) - the same shape of wrong cause
+      // F-LC-10 was about.
+      if (err instanceof SecretStoreError) throw err;
       if (err instanceof DbError) throw new DbOpenError(err.message);
       throw err;
     }
