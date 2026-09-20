@@ -3404,6 +3404,65 @@ Walker changed his mind on the body face. Headings stay Zilla Slab.
   and the regenerated `design/ui-screens/gallery.css` / `gallery.html` carry Lato,
   not Poppins.
 
+---
+
+## 2026-09-19 — Import: deals, companies and services, and example files
+
+The import wizard used to be the contacts import with a wizard around it. It
+now asks what is in the file before it asks for the file, and it can read four
+things. Contacts is untouched: same guesser, same mapping step, same write
+path, same tests.
+
+- **What are you importing?** A radio list on step 1 — Contacts (default),
+  Companies, Deals, Services — in the same grouped-inset shape the duplicate
+  question uses one step later. Everything downstream follows from it: which
+  aliases the guesser knows, which columns the preview shows, which duplicate
+  question is worth asking, and what the result screen counts.
+- **Field definitions.** `src/features/data/import/fields/<type>.ts` is now the
+  single description of a type: key, label, required, aliases, parser and
+  writer per field, plus the three example rows. `parsers.ts` holds one total
+  parser per kind (text, money, date, phone, email, choice, tags) — every one
+  of them returns a warning rather than throwing, because an import must never
+  stop on a bad cell.
+- **Deals.** Title is the only required column. The stage is matched to the
+  workspace's stage names ignoring case, and a name Helix does not have lands
+  in the first stage with a warning instead of a failure. The contact is
+  matched on email, then phone, then an unambiguous exact full name, and
+  created when nobody matches. The company and the source are matched by name
+  or created. Notes become a note on the deal's timeline; tags are linked.
+  A won or lost date closes the deal and, when the stage column is blank, puts
+  it in the won or lost stage. Money follows `drizzle/0004_revenue.sql`:
+  `value_cents` is the derived ANNUAL value, so a file with Upfront and Monthly
+  columns is read from those two and the total recomputed, and a row whose own
+  total disagrees with its own split says so.
+- **Services.** The catalog landed mid-flight (`feat(revenue)`), so the
+  services import shipped with it rather than as a TODO: name, description,
+  price, billing (One-time / Monthly / Yearly, mapped onto `kind` + `interval`)
+  and taxable, matched by name.
+- **Download an example.** A secondary button top right of the Import screen,
+  one menu entry per type plus "All examples (zip)". Every file is generated at
+  click time from the field definitions, so the header row is always exactly
+  what the mapper reads back, and the deals example carries this workspace's
+  real stage names so the file downloads directly importable.
+  `tests/unit/data/importExamples.test.ts` proves the round trip: every
+  example's headers come back 100% auto-mapped, with nothing on Skip.
+- **The result screen** now shows per-type counts and, under them, the rows
+  Helix had to decide something about — unknown stage, contact created,
+  unreadable money — with "Save warnings as CSV" beside the existing "Save
+  skipped rows as CSV".
+- **Deals have no natural key**, so their duplicate question is narrower than
+  a person's: skip a row whose deal name and customer already match a deal you
+  still have open, or import anyway. A won deal from last year never blocks
+  this year's renewal.
+- **Fixtures.** `hubspot-deals.csv` and `pipedrive-deals.csv` (30 rows each)
+  and `hubspot-companies.csv` (25), all invented Utah trade data, documented
+  row by row in `tests/fixtures/README.md`. Each deal file carries exactly one
+  unknown stage and one unreadable amount, and reuses contact emails from the
+  contacts fixtures so the "import the deals after the people" path is real.
+- **Verified:** `npm run typecheck` and `npm test` green (1,478 tests),
+  `tests/e2e-mac/specs/data.e2e.ts` green on port 4206, `npx vite build`
+  succeeds, and no colour literal appears anywhere under `src/features/data`.
+
 ## 2026-09-19 — UI fixes: macOS title bar, a filled window, and the font switch
 
 Walker reviewed the running app in dark mode and asked for five things. All
@@ -3476,3 +3535,148 @@ real workspace folder. Screenshots at 1280 in light and dark — Today empty and
 populated, Tasks, a contact page, Settings, the workspace switcher (including a
 name long enough to truncate) and onboarding screen 1 — are in
 `design/brand/uifix/`.
+
+---
+
+## 2026-09-19 — Revenue (catalog) agent
+
+D20: a deal is priced from a services catalog with one-time and monthly
+pricing, its value is always shown as the breakdown, and MRR and ARR are
+reported.
+
+### The schema, first and on its own
+
+`drizzle/0004_revenue.sql` plus the journal entry and the snapshot, committed
+before any UI so the invoices agent could build against it:
+
+- **`products`** — the price list. `kind` is `one_time` or `recurring`;
+  a recurring row carries `interval` `month` or `year` and a one-time row
+  leaves it NULL. The price is the *suggested* price.
+- **`deal_items`** — one line per service on a deal, copying the product's
+  name, kind, interval and price rather than reading through the reference,
+  because a price list changes and a deal agreed at last year's price is still
+  that deal. `product_id` is ON DELETE SET NULL for the same reason.
+  `suggested_unit_cents` is what the catalog said, `actual_unit_cents` is what
+  is being charged, and the gap between the two totals is the discount.
+- **`deals`** gains `one_time_cents`, `recurring_monthly_cents`,
+  `recurring_started_on`, `recurring_ended_on` and `suggested_total_cents`,
+  all nullable with a 0/NULL default because they arrive on a table that
+  already holds rows. **`value_cents` keeps its meaning as the deal's one
+  stored number and is now defined as the annual value**: upfront plus twelve
+  months of recurring. Everything that already sorts, filters, sums or charts
+  on it keeps working.
+- **`documents`, `document_items`, `document_sequences`, `invoice_schedules`**
+  — written for the invoices agent, to its spec: quotes and invoices in one
+  table with a per-kind status set, a per-kind unique number handed out by a
+  counter row rather than `max(number) + 1`, and tax in basis points so no
+  float touches money.
+- **Settings**, typed in `src/db/repos/settings.ts`: `business.address`,
+  `business.taxId`, `business.paymentInstructions`, `invoices.prefix` ("INV"),
+  `quotes.prefix` ("QUO"), `invoices.taxRateBp` (0), `invoices.dueDays` (14).
+
+**One deviation, deliberate.** The brief said `drizzle-kit generate --custom`.
+I ran a plain `drizzle-kit generate --name revenue` instead, which produces the
+same `drizzle/0004_revenue.sql` and journal entry **and** an honest
+`drizzle/meta/0004_snapshot.json`. A custom migration leaves the snapshot
+describing the old shape, so the next agent to run `generate` would emit
+`CREATE TABLE products` a second time. `0003_recurring_templates.sql` says in
+its own header that it was generated for exactly this reason.
+
+### The money, in one place
+
+`src/db/repos/dealItems.ts` owns it. `recompute(dealId)` is the only writer of
+the four derived columns, and every write in the file runs it in the same
+transaction as the change that caused it, so a deal whose lines and whose value
+disagree cannot exist. The write lock is not reentrant, so the internal path is
+`recomputeStatements` and the caller batches it; `recompute` is the same thing
+with the transaction around it, for the two places a stage change happens (the
+deal page's stage picker and a drop on the board's Won column).
+
+- A yearly line is normalised to monthly **per line**, rounded half up, so
+  `recurring_monthly_cents` is one number MRR can sum with no CASE in it, and
+  the rows on the deal page add up to the total printed under them.
+- The value math is pure and exported, which is what lets the rounding, the
+  normalisation and the discount be tested without a database.
+
+### What the owner sees
+
+- **`/settings/services`** — the catalog, in three groups that are the same
+  three answers the dialog asks for (charged once, every month, every year),
+  reorderable, with a Taxable and an Inactive badge. Delete deletes a service
+  nothing references and deactivates one a deal already uses, because that
+  deal's price has to survive.
+- **The deal page** gets a Services panel above the timeline: add from the
+  catalog (searchable) or a custom line, each line with its quantity, the
+  read-only suggested price and the editable actual price, then
+  "Suggested $3,300 / Actual $3,000 / -$300" and the breakdown
+  "Upfront $1,200 + $150/mo". Winning a deal that has recurring lines stamps
+  `recurring_started_on`; "End recurring" stamps the end date and leaves the
+  lines alone, because what was sold is history and history does not change.
+- **The board and the list** read the breakdown rather than one total, and
+  both column totals say "Upfront $X · $Y/mo" in tabular figures. A deal with
+  nothing recurring on it still reads as its own value, so a workspace that
+  never touches the catalog looks exactly as it did.
+- **`/reports/revenue`** — MRR now, ARR, MRR by month for twelve months as a
+  line with direct labels and no value axis, new and churned this month,
+  upfront won this month, quarter and year, and the table of active recurring
+  deals. Churn is muted ink, not red: a plan ending on schedule is a fact, not
+  an alarm.
+- **Onboarding** — every trade preset carries three to five real services,
+  inserted in the same transaction as the rest of setup, and only for a
+  genuinely new workspace.
+
+### Decisions worth knowing
+
+- **MRR boundaries.** A plan counts from the day it starts and on the day it
+  ends: "ended on the 30th" means the 30th was paid for. Both are tested.
+- **The current month is read as of today**, not as of its last day, because a
+  chart whose final point is a month that has not happened yet always looks
+  like a collapse.
+- **Upfront revenue is counted on `closed_at` and on `one_time_cents`**, not on
+  `value_cents`: the annual value of a monthly plan is not money that arrived
+  this month.
+- **`formatMoneyTrim`** (new in `src/lib/money.ts`) drops ".00" when there is
+  none, so a price list reads in the round numbers it was written in. The deal
+  page's hero figure moved to it too, so one screen does not print the same
+  number two ways.
+
+### Verified
+
+- `npm run typecheck` clean.
+- `npm test`: 97 files, 1511 passing, 1 skipped.
+- `tests/e2e-mac/specs/revenue.e2e.ts` (new) passes, and so do `records.e2e.ts`
+  (10) and `leads.e2e.ts` (12), all on `E2E_PORT=4203 E2E_OUT=dist-rev`. The
+  revenue spec walks the whole decision: build a two-service catalog, price a
+  deal from it with an overridden price, read the suggested/actual/discount and
+  the breakdown off the panel AND out of the database, see the same breakdown
+  on the board card, the column total and the list row, win the deal, and find
+  it counted on the revenue report.
+- Eight screenshots at 1280, light and dark, in
+  `tests/e2e-mac/.cache/screens/revenue/`. I looked at all eight against
+  DESIGN.md. Two things they caught, both now fixed: the Services screen was
+  rendering its primary "Add a service" button in the page header and again
+  inside the empty state, which is two blocks of the brand primary on one view;
+  and a line's price field kept whatever had been typed into it, so a saved
+  "1200" sat beside a saved "150.00" on the same panel.
+
+### One thing fixed that was not mine
+
+`tests/e2e-mac/fixtures.ts` had no stub for `plugin:event|listen`, so three
+`leads.e2e.ts` tests failed on an uncaught page error. The cause is
+`src/app/menu.ts` (commit a19dcd3, the menu bar): `installMenuBridge()`
+subscribes at boot whenever `isTauri()` is true, and `isTauri()` only asks
+whether `__TAURI_INTERNALS__` is present, which the harness always installs -
+so the bridge runs under the harness too, contrary to that file's own comment.
+I added the stub, because the harness stubs every other Tauri command and this
+one was simply missed, and leads is 12/12 again. **The deeper question belongs
+to whoever owns `src/app/menu.ts`**: either the bridge should be guarded by
+something stronger than `isTauri()`, or the harness should keep answering it.
+I did not touch `src/app`.
+
+### Not done, on purpose
+
+- Today: nothing, as briefed.
+- The deal page's Value field is now read-only once the deal has services on
+  it, because `recompute` would silently overwrite anything typed there. A deal
+  with no services keeps the inline editor exactly as it was, so a workspace
+  that never opens the catalog is unchanged.

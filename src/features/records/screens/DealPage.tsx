@@ -21,7 +21,12 @@ import {
 import * as dealsRepo from "@/db/repos/deals";
 import { contactName } from "@/db/repos/contacts";
 import { useVocabulary } from "@/app/vocabulary";
-import { centsToDecimalString, formatMoney, parseMoneyToCents } from "@/lib/money";
+import {
+  centsToDecimalString,
+  formatBreakdown,
+  formatMoneyTrim,
+  parseMoneyToCents,
+} from "@/lib/money";
 import { formatDateDisplay, formatRelative } from "@/lib/dates";
 import { useContact, useDeal, useStages, usePipeline, useTasks } from "@/features/records/lib/hooks";
 import {
@@ -43,7 +48,11 @@ import { Timeline } from "@/features/records/components/Timeline";
 import { TaskRail } from "@/features/records/components/TaskRail";
 import { LostReasonDialog } from "@/features/records/components/LostReasonDialog";
 import { AttachmentList } from "@/features/data/attachments/AttachmentList";
+import { DealServicesPanel } from "@/features/catalog/components/DealServicesPanel";
+import { useDealItems } from "@/features/catalog/lib/dealItemHooks";
+import * as dealItemsRepo from "@/db/repos/dealItems";
 import { DraftFollowUpButton, SummarizeButton } from "@/features/ai";
+import { DealInvoicesPanel } from "@/features/invoices";
 
 export function DealPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -54,6 +63,9 @@ export function DealPage() {
   const { data: stages } = useStages(pipeline?.id);
   const { data: contact } = useContact(deal?.contactId ?? "");
   const { data: openTasks } = useTasks({ dealId: id, openOnly: true }, 20);
+  // Shared with the Services panel below through the query cache, so this is
+  // the same read rather than a second one.
+  const { data: dealItems } = useDealItems(id);
   const [pendingLostStage, setPendingLostStage] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -98,6 +110,11 @@ export function DealPage() {
     }
     try {
       await dealsRepo.moveToStage(id, stageId);
+      // Winning a deal that has recurring lines starts its clock, and the
+      // recompute is what decides that (D20). It is a second transaction
+      // rather than part of the move, because the move belongs to the deals
+      // repository and the money belongs to this one.
+      await dealItemsRepo.recompute(id);
       await invalidateRecords();
     } catch (err) {
       reportError(err, "That stage change did not save.");
@@ -105,6 +122,7 @@ export function DealPage() {
   }
 
   const closed = deal.stageIsWon || deal.stageIsLost;
+  const pricedFromServices = (dealItems ?? []).length > 0;
   const primaryEmail = contact
     ? (contact.emails.find((email) => email.isPrimary) ?? contact.emails[0] ?? null)
     : null;
@@ -157,8 +175,19 @@ export function DealPage() {
             data-testid="deal-value"
             className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]"
           >
-            {formatMoney(deal.valueCents, deal.currency)}
+            {formatMoneyTrim(deal.valueCents, deal.currency)}
           </span>
+          {deal.recurringMonthlyCents > 0 ? (
+            <span
+              data-testid="deal-breakdown"
+              className="money text-[length:var(--text-base)] text-[var(--color-text-muted)]"
+            >
+              {formatBreakdown(deal.oneTimeCents, deal.recurringMonthlyCents, {
+                currency: deal.currency,
+                upfrontLabel: true,
+              })}
+            </span>
+          ) : null}
           <Badge dotColor={(stages ?? []).find((s) => s.id === deal.stageId)?.color}>
             {deal.stageName}
           </Badge>
@@ -233,7 +262,14 @@ export function DealPage() {
         {/* self-start: the grid row is as tall as the details column, and a
             timeline stretched to 1900px with one empty state in the middle
             of it is a void, not a layout. */}
-        <div className="min-w-0 xl:self-start">
+        <div className="flex min-w-0 flex-col gap-[var(--space-5)] xl:self-start">
+          <DealServicesPanel
+            dealId={id}
+            currency={deal.currency}
+            isWon={deal.stageIsWon}
+            recurringStartedOn={deal.recurringStartedOn}
+            recurringEndedOn={deal.recurringEndedOn}
+          />
           <Timeline dealId={id} />
         </div>
 
@@ -252,19 +288,41 @@ export function DealPage() {
                 />
               </CardRow>
               <CardRow className="items-stretch">
-                <InlineText
-                  className="w-full"
-                  label="Value"
-                  value={centsToDecimalString(deal.valueCents)}
-                  inputClassName="money"
-                  onSave={(value) => {
-                    const cents = parseMoneyToCents(value);
-                    if (cents === null) {
-                      return Promise.reject(new Error("Enter an amount, for example 1500."));
-                    }
-                    return patch({ valueCents: cents });
-                  }}
-                />
+                {/* Once the deal has services on it, its value is theirs to
+                    decide: `dealItems.recompute` rewrites value_cents in the
+                    same transaction as any line change, so a number typed in
+                    here would be thrown away by the next edit without saying
+                    so. The row states where the figure comes from instead of
+                    offering an edit that does not hold (D20). */}
+                {pricedFromServices ? (
+                  <div className="flex w-full items-baseline justify-between gap-[var(--space-3)]">
+                    <span className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+                      Value
+                    </span>
+                    <span className="flex flex-col items-end">
+                      <span className="money text-[length:var(--text-base)] text-[var(--color-text)]">
+                        {formatMoneyTrim(deal.valueCents, deal.currency)}
+                      </span>
+                      <span className="text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+                        From the services above
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <InlineText
+                    className="w-full"
+                    label="Value"
+                    value={centsToDecimalString(deal.valueCents)}
+                    inputClassName="money"
+                    onSave={(value) => {
+                      const cents = parseMoneyToCents(value);
+                      if (cents === null) {
+                        return Promise.reject(new Error("Enter an amount, for example 1500."));
+                      }
+                      return patch({ valueCents: cents });
+                    }}
+                  />
+                )}
               </CardRow>
               <CardRow className="items-stretch">
                 <InlineText
@@ -382,6 +440,8 @@ export function DealPage() {
             </Card>
           </div>
 
+          <DealInvoicesPanel dealId={id} />
+
           <AttachmentList entityType="deal" entityId={id} />
         </div>
       </div>
@@ -398,6 +458,7 @@ export function DealPage() {
           if (!stageId) return;
           try {
             await dealsRepo.moveToStage(id, stageId, { outcomeReason: reason });
+            await dealItemsRepo.recompute(id);
             await invalidateRecords();
           } catch (err) {
             reportError(err, "That stage change did not save.");

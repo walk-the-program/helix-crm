@@ -454,6 +454,9 @@ function installShim(seed: {
     };
   }
 
+  /** Handed out by `plugin:event|listen`, the way the real plugin does. */
+  let nextEventId = 1;
+
   async function invoke(
     cmd: string,
     args?: unknown,
@@ -597,6 +600,24 @@ function installShim(seed: {
         // left to the default rejection below so the screen is exercised on the
         // path a real machine with no answer takes.
         return { platform: "e2e", encrypted: null, detail: "" };
+
+      // plugin:event -- the menu bar's bridge (src/app/menu.ts) subscribes to
+      // the native menu's events at boot, on every screen. `isTauri()` only
+      // asks whether `__TAURI_INTERNALS__` is present, which this harness
+      // always installs, so the subscription runs here too and an unstubbed
+      // `listen` surfaced as an uncaught page error on every page load. Three
+      // leads specs assert zero uncaught errors and failed on it.
+      //
+      // `listen` answers with an event id the way the real plugin does, and
+      // `unlisten` and `emit` are accepted and dropped: nothing in this harness
+      // ever fires a native menu event, so a subscription that is never called
+      // is the honest stub rather than a silent one.
+      case "plugin:event|listen":
+        return nextEventId++;
+      case "plugin:event|unlisten":
+      case "plugin:event|emit":
+      case "plugin:event|emit_to":
+        return undefined;
 
       default:
         // Anything unstubbed is a real gap, not a silent null.

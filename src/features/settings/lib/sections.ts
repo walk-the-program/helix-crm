@@ -9,11 +9,11 @@
  *
  * Four rows point at screens other features own and are linked, never
  * registered here: "/pipeline" (stages, records), "/trash" (records),
- * "/recurring" (reminders) and "/setup" (onboarding). Two more sit under
+ * "/recurring" (reminders) and "/setup" (onboarding). Three more sit under
  * "/settings" but belong to another feature, which registers them itself:
- * "/settings/templates" (templates) and "/settings/ai" (ai). Website connection
- * and Backups are mounted under "/settings" by this feature — see the route
- * table in ../index.tsx.
+ * "/settings/templates" (templates), "/settings/ai" (ai) and
+ * "/settings/services" (catalog). Website connection and Backups are mounted
+ * under "/settings" by this feature — see the route table in ../index.tsx.
  */
 import type { IconType } from "@/ui/icons";
 import {
@@ -23,10 +23,12 @@ import {
   ClockCounterClockwise,
   Cpu,
   Database,
+  FileText,
   Globe,
   Keyboard,
   Layers,
   MagicWand,
+  Package,
   Palette,
   SlidersHorizontal,
   Stethoscope,
@@ -92,6 +94,14 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "general",
   },
   {
+    id: "invoices",
+    title: "Invoices",
+    description: "Your numbering, tax rate, payment terms and the details printed on every invoice.",
+    to: "/settings/invoices",
+    icon: FileText,
+    group: "general",
+  },
+  {
     id: "shortcuts",
     title: "Keyboard shortcuts",
     description: "Every key this app answers to. Also opens with ?.",
@@ -127,6 +137,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     description: "Repeat visits and yearly services, and when each is next due.",
     to: "/recurring",
     icon: ArrowsClockwise,
+    group: "records",
+    external: true,
+  },
+  {
+    id: "services",
+    title: "Services",
+    description: "What you sell, with the price you usually charge.",
+    to: "/settings/services",
+    icon: Package,
     group: "records",
     external: true,
   },

@@ -20,6 +20,7 @@ import type { Key } from "react";
 import { Line, LabelList, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "wouter";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, PageHeader, Spinner } from "@/ui";
+import { AgingBlock } from "@/features/invoices";
 import { formatDateDisplay } from "@/lib/dates";
 import { formatBucket } from "@/lib/periods";
 import { formatMoney } from "@/lib/money";
@@ -225,13 +226,21 @@ function customerName(row: RecurringDealRow): string {
 
 function RevenueContent(props: { data: RevenueBundle }) {
   const { data } = props;
-  const isEmpty = data.mrrCents === 0 && data.active.length === 0;
+  // The whole page stands down only when there is no money of either kind to
+  // show. Upfront revenue with nothing recurring is a real state - a trade
+  // that has not sold a plan yet - and hiding this quarter's won work behind
+  // "no recurring revenue yet" would be a lie about the business.
+  const noRecurring = data.mrrCents === 0 && data.active.length === 0;
+  const noUpfront =
+    data.upfrontMonthCents === 0 &&
+    data.upfrontQuarterCents === 0 &&
+    data.upfrontYearCents === 0;
 
-  if (isEmpty) {
+  if (noRecurring && noUpfront) {
     return (
       <EmptyState
-        title="No recurring revenue yet"
-        description="When you win a deal with a monthly service on it, it shows up here."
+        title="No revenue yet"
+        description="Win a deal and what it is worth shows up here, up front and every month."
       />
     );
   }
@@ -274,14 +283,16 @@ function RevenueContent(props: { data: RevenueBundle }) {
         />
       </div>
 
-      <Card>
-        <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
-          <CardTitle>MRR by month</CardTitle>
-        </CardHeader>
-        <CardBody className="p-[var(--space-5)]">
-          <MrrChart byMonth={data.byMonth} mrrCents={data.mrrCents} />
-        </CardBody>
-      </Card>
+      {noRecurring ? null : (
+        <Card>
+          <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
+            <CardTitle>MRR by month</CardTitle>
+          </CardHeader>
+          <CardBody className="p-[var(--space-5)]">
+            <MrrChart byMonth={data.byMonth} mrrCents={data.mrrCents} />
+          </CardBody>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
@@ -312,8 +323,22 @@ function RevenueContent(props: { data: RevenueBundle }) {
         <CardHeader className="px-[var(--space-5)] py-[var(--space-4)]">
           <CardTitle>Active recurring deals</CardTitle>
         </CardHeader>
-        <DataTable columns={columns} rows={data.active} getRowKey={(row) => row.dealId} />
+        {noRecurring ? (
+          <CardBody className="p-[var(--space-5)]">
+            <p className="text-[length:var(--text-base)] leading-[var(--leading-body)] text-[var(--color-text-muted)]">
+              Nothing repeats yet. Win a deal with a monthly service on it and it
+              lands here.
+            </p>
+          </CardBody>
+        ) : (
+          <DataTable columns={columns} rows={data.active} getRowKey={(row) => row.dealId} />
+        )}
       </Card>
+
+      {/* What is booked is only half the question; the other half is what has
+          actually been collected. The invoices feature owns this block and the
+          detail behind it at /reports/receivables. */}
+      <AgingBlock />
     </div>
   );
 }

@@ -22,7 +22,7 @@
  * value beside the title, so everything here is neutral ink, hairlines and one
  * secondary button.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Plus, Trash, X } from "@/ui/icons";
 import {
   Button,
@@ -279,6 +279,24 @@ function ServiceRow(props: { item: DealItem; currency: string }) {
   const [price, setPrice] = useState(centsToDecimalString(item.actualUnitCents));
   const [qty, setQty] = useState(String(item.qty));
 
+  /*
+   * Redraw both fields from the row whenever the row changes underneath them.
+   *
+   * Without this the field keeps whatever was typed into it - "1200" beside
+   * the next line's "150.00" - so two prices that are both saved and both
+   * correct are written two different ways on the same panel. The guard
+   * matters: rewriting on every render would fight the owner's cursor
+   * mid-word, so the input is only reset when the saved value it is showing
+   * is genuinely a different number.
+   */
+  useEffect(() => {
+    setPrice(centsToDecimalString(item.actualUnitCents));
+  }, [item.id, item.actualUnitCents]);
+
+  useEffect(() => {
+    setQty(String(item.qty));
+  }, [item.id, item.qty]);
+
   async function savePrice() {
     const cents = parseMoneyToCents(price);
     if (cents === null || cents === item.actualUnitCents) {
@@ -287,6 +305,7 @@ function ServiceRow(props: { item: DealItem; currency: string }) {
     }
     try {
       await dealItemsRepo.update(item.id, { actualUnitCents: cents });
+      setPrice(centsToDecimalString(cents));
       await invalidateDealMoney();
     } catch (err) {
       setPrice(centsToDecimalString(item.actualUnitCents));
