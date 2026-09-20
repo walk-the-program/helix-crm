@@ -65,7 +65,34 @@ export function smsHref(value: string, options: { body?: string } = {}): string 
 }
 
 /**
- * Percent-encoding for a `mailto:` or `sms:` parameter.
+ * Strips CR and LF before a value is ever percent-encoded into the
+ * *address* segment of a `mailto:` URL.
+ *
+ * `encodeURIComponent` already turns a literal newline into `%0D`/`%0A`, so
+ * the character never appears raw in the URL Helix builds - but the URL is
+ * handed to whatever mail client the OS opens, and that client decodes it
+ * before showing (or, worse, before re-composing) the message. A mail
+ * client that then writes the decoded "To" value straight into a header
+ * line it builds itself would see the newline again on the other side of
+ * that decode, which is the CRLF header-injection class this closes: an
+ * address of `a@b.com\nBcc:attacker@evil.com` never reaches the client with
+ * a newline in it at all, encoded or not.
+ *
+ * This is deliberately NOT applied to the subject or body: a real newline
+ * inside the message body is how a multi-paragraph template (blank line
+ * between "Hi Nella," and the next sentence) is supposed to look once the
+ * owner's mail app decodes it, and stripping it there would silently mangle
+ * every templated email into one run-on paragraph. The subject and body are
+ * still fully percent-encoded (`encodeQueryValue` below) - a newline there
+ * lands inside the message text a mail client shows, never inside a header
+ * line the way it would in the recipient address.
+ */
+function stripCrlf(value: string): string {
+  return value.replace(/[\r\n]/g, "");
+}
+
+/**
+ * Percent-encoding for a `mailto:` or `sms:` parameter (subject/body).
  *
  * Not `URLSearchParams`: that encodes a space as `+`, which a mail client shows
  * to the customer as a literal plus sign in every gap of the message. RFC 6068
@@ -83,7 +110,7 @@ export function mailtoHref(
   if (options.subject) params.push(`subject=${encodeQueryValue(options.subject)}`);
   if (options.body) params.push(`body=${encodeQueryValue(options.body)}`);
   const query = params.join("&");
-  return `mailto:${encodeURIComponent(value.trim())}${query ? `?${query}` : ""}`;
+  return `mailto:${encodeURIComponent(stripCrlf(value.trim()))}${query ? `?${query}` : ""}`;
 }
 
 /**
@@ -95,6 +122,79 @@ export function mapsHref(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     address.trim(),
   )}`;
+}
+
+/**
+ * A free-text "website" field (CSV import, pasted text, anything an owner or
+ * a competitor's export can put in a text column), validated down to a URL
+ * `openUrl` is actually willing to open: `http:`/`https:` only, a bare
+ * domain upgraded to `https:`, everything else refused with a plain-English
+ * reason instead of being handed to the OS opener or a raw `<a href>`.
+ *
+ * Two things a naive `startsWith("http")` check (or a scheme regex alone)
+ * gets wrong, both closed here:
+ *
+ *  - **Control characters split a scheme.** A URL parser strips embedded
+ *    TAB/CR/LF before it ever reads the scheme - that is how `java\tscript:`
+ *    or `java\nscript:` decode to `javascript:`. Every TAB, CR and LF is
+ *    stripped from the whole string before anything else runs, and leading/
+ *    trailing whitespace (a leading space ahead of `javascript:`, a trailing
+ *    newline after a legitimate `https://…`) is trimmed next.
+ *  - **A bare domain with a port looks like a scheme.** `example.com:8080`
+ *    matches the URI grammar for a scheme (letters, digits, `+`, `-`, `.`
+ *    before a colon) just as easily as `javascript:` does. No real scheme
+ *    Helix would ever ALLOW or need to REFUSE contains a literal `.`, so a
+ *    candidate scheme with a dot in it is treated as part of a bare domain
+ *    instead - `example.com:8080/path` upgrades to
+ *    `https://example.com:8080/path` rather than being refused as an
+ *    unrecognised scheme called "example.com".
+ */
+export type SafeExternalUrlResult =
+  | { ok: true; url: string }
+  | { ok: false; message: string };
+
+const CONTROL_CHARS = /[\t\r\n]/g;
+const SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.-]*):/;
+
+export function safeExternalUrl(input: string): SafeExternalUrlResult {
+  const trimmed = input.replace(CONTROL_CHARS, "").trim();
+  if (trimmed.length === 0) {
+    return { ok: false, message: "There's no web address saved." };
+  }
+
+  const refused = (): SafeExternalUrlResult => ({
+    ok: false,
+    message: `"${trimmed}" isn't a web address Helix can open.`,
+  });
+
+  // "//evil.com" has no scheme of its own; it borrows whatever loads it.
+  // Refuse it outright rather than let it fall through to the bare-domain
+  // path below, even though prefixing "https://" would not change its host.
+  if (trimmed.startsWith("//")) return refused();
+
+  const schemeMatch = SCHEME_PATTERN.exec(trimmed);
+  const hasRealScheme = schemeMatch !== null && !schemeMatch[1].includes(".");
+
+  if (hasRealScheme) {
+    const scheme = schemeMatch![1].toLowerCase();
+    if (scheme !== "http" && scheme !== "https") return refused();
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return refused();
+      return { ok: true, url: parsed.toString() };
+    } catch {
+      return refused();
+    }
+  }
+
+  // No recognisable scheme: treat the whole thing as a bare domain (with an
+  // optional port and path) and upgrade it to https.
+  try {
+    const parsed = new URL(`https://${trimmed}`);
+    return { ok: true, url: parsed.toString() };
+  } catch {
+    return refused();
+  }
 }
 
 /**

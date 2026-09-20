@@ -17,6 +17,7 @@ import {
   EmptyState,
   PageHeader,
   Spinner,
+  toast,
 } from "@/ui";
 import * as companiesRepo from "@/db/repos/companies";
 import { contactName } from "@/db/repos/contacts";
@@ -37,7 +38,8 @@ import {
   writeWithUndo,
   reportError,
 } from "@/features/records/lib/mutations";
-import { oneTap } from "@/lib/actions";
+import { oneTap, safeExternalUrl } from "@/lib/actions";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { InlineText, InlineTextarea } from "@/features/records/components/InlineEdit";
 import { SourcePicker } from "@/features/records/components/Pickers";
 import { CustomerMoneyStrip } from "@/features/records/components/MoneyStrip";
@@ -203,17 +205,27 @@ export function CompanyPage() {
         )}
 
         {company.website ? (
-          <a
-            href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
+          <button
+            type="button"
+            onClick={() => {
+              const result = safeExternalUrl(company.website ?? "");
+              if (!result.ok) {
+                toast.error(result.message);
+                return;
+              }
+              void openUrl(result.url).catch((err: unknown) => {
+                toast.error(
+                  `That website did not open. ${err instanceof Error ? err.message : ""}`.trim(),
+                );
+              });
+            }}
+            className="inline-flex w-fit items-center gap-[var(--space-2)] border-0 bg-transparent p-0 text-[length:var(--text-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus)]"
           >
             <Globe size={16} weight="regular" aria-hidden="true" />
             <span className="max-w-[260px] truncate" title={company.website}>
               {company.website}
             </span>
-          </a>
+          </button>
         ) : null}
 
         {/* The AI action sits with the record's other actions rather than in

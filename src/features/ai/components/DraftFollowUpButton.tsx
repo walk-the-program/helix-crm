@@ -13,6 +13,7 @@
  * (PLAN.md, "NOT in scope"), and this is the line that keeps it that way.
  */
 import { useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Copy, ICON_SIZE_SM, ICON_WEIGHT_STRONG, Mail, PenLine } from "@/ui/icons";
 import {
   Button,
@@ -31,16 +32,32 @@ import { aiErrorMessage } from "@/features/ai/errors";
 import { AiActionButton, AiReason } from "@/features/ai/components/AiGate";
 import { runWithProvider, useAi } from "@/features/ai/lib/useAi";
 import { dealContext } from "@/features/ai/lib/context";
+import { mailtoHref } from "@/lib/actions";
 
+/**
+ * `to` is a customer's email address, read straight out of the database - a
+ * CSV import or a pasted note can put anything in that column. This used to
+ * build `mailto:${to}?subject=...` by hand, which handed an unescaped `to`
+ * straight into the URL: a value like `a@b.com&bcc=attacker@evil.com` (or a
+ * literal CRLF) rode along as extra query parameters or injected mail
+ * headers instead of being treated as the address's own text. `mailtoHref`
+ * (`src/lib/actions.ts`) is the one place that address, subject and body are
+ * all percent-encoded and stripped of CR/LF before they reach a `mailto:`
+ * URL, so this reuses it instead of re-deriving the same encoding.
+ *
+ * The opener is scoped to `mailto:*` in `src-tauri/capabilities/default.json`
+ * and nothing else; there is deliberately no `window.location.href` fallback
+ * on failure (that would be a raw top-level navigation off the app), so a
+ * refusal just reports it in a toast, the same as every other one-tap action.
+ */
 async function openInMail(to: string | null, subject: string, body: string) {
-  const url = `mailto:${to ?? ""}?subject=${encodeURIComponent(
-    subject,
-  )}&body=${encodeURIComponent(body)}`;
+  const url = mailtoHref(to ?? "", { subject, body });
   try {
-    const opener = await import("@tauri-apps/plugin-opener");
-    await opener.openUrl(url);
-  } catch {
-    window.location.href = url;
+    await openUrl(url);
+  } catch (err) {
+    toast.error(
+      `Your mail app did not open. ${err instanceof Error ? err.message : ""}`.trim(),
+    );
   }
 }
 
