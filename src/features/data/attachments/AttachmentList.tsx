@@ -29,7 +29,7 @@ import {
   Spinner,
   toast,
 } from "@/ui";
-import { formatDateDisplay } from "@/lib/dates";
+
 import {
   AttachmentTooLargeError,
   MAX_ATTACHMENT_BYTES,
@@ -48,6 +48,7 @@ import {
   pickOpenFile,
 } from "@/features/data/lib/fsBridge";
 import { workspacePaths } from "@/features/data/lib/workspace";
+import { useFormats } from "@/app/formats";
 
 const UNDO_MS = 10_000;
 
@@ -115,6 +116,7 @@ export function AttachmentList(props: {
   /** Hide the heading when the host screen already has one. */
   compact?: boolean;
 }) {
+  const formats = useFormats();
   const { entityType, entityId, compact } = props;
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
@@ -278,7 +280,7 @@ export function AttachmentList(props: {
                   </span>
                   <span className="text-[length:var(--text-xs)] tabular-nums text-[var(--color-text-faint)]">
                     {formatFileSize(attachment.bytes)} · added{" "}
-                    {formatDateDisplay(attachment.createdAt)}
+                    {formats.date(attachment.createdAt)}
                   </span>
                 </button>
                 <Button

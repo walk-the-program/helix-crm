@@ -18,8 +18,9 @@ import {
   Tooltip,
   toast,
 } from "@/ui";
-import { formatDateTimeDisplay } from "@/lib/dates";
+
 import { dqk } from "@/features/data/lib/queries";
+import { useFormats } from "@/app/formats";
 import {
   MERGE_REVERSAL_DAYS,
   list as listMerges,
@@ -41,6 +42,7 @@ async function loadHistory(): Promise<Row[]> {
 }
 
 export function MergesHistory() {
+  const formats = useFormats();
   const queryClient = useQueryClient();
   const history = useQuery({ queryKey: dqk.mergeHistory(), queryFn: loadHistory });
 
@@ -89,7 +91,7 @@ export function MergesHistory() {
           <TBody className="[&>tr:last-child]:border-b-0">
             {rows.map((row) => (
               <TR key={row.id}>
-                <TD>{formatDateTimeDisplay(row.at)}</TD>
+                <TD>{formats.dateTime(row.at)}</TD>
                 <TD>{row.entityType === "contact" ? "Person" : "Company"}</TD>
                 <TD>
                   <code

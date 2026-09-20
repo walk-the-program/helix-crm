@@ -32,6 +32,7 @@ import { changeLogStatement } from "@/db/changeLog";
 import { newBatchId, newId } from "@/lib/ids";
 import { nowIso, parseDateOnly, toIso } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
+import { getAll as getAllSettings } from "@/db/repos/settings";
 import { walkCsv, type Delimiter } from "@/lib/csv";
 import { splitFullName } from "@/features/data/lib/mapping";
 import {
@@ -210,6 +211,16 @@ type Lookups = {
   lostStage: StageRow | null;
   /** stage id -> the next free position in that stage. */
   nextPosition: Map<string, number>;
+  /**
+   * The workspace's own currency and locale (F-LC-1).
+   *
+   * An imported deal used to be stamped `currency: "USD"` outright, and the
+   * warning about a mismatched money column printed US dollars in the
+   * browser's locale, whatever the owner had chosen in Settings. This is a
+   * lookup rather than a hook because none of this runs inside a component.
+   */
+  currency: string;
+  locale: string;
   emailToContact: Map<string, string>;
   phoneToContact: Map<string, string>;
   /** lower("first last") -> contact id. Only names that are unambiguous. */
@@ -362,7 +373,11 @@ async function loadLookups(typeId: ImportTypeId): Promise<Lookups> {
     dealRevenueColumns = await hasDealRevenueColumns();
   }
 
+  const workspaceSettings = await getAllSettings();
+
   return {
+    currency: workspaceSettings.currency,
+    locale: workspaceSettings.locale,
     stages,
     stageOrder,
     wonStage: stageOrder.find((s) => s.isWon) ?? null,
@@ -901,6 +916,8 @@ export async function runTypedImport(
               "money",
               `The total in this row does not match its upfront and monthly columns, so Helix used the split: ${formatMoney(
                 valueCents,
+                lookups.currency,
+                lookups.locale,
               )} a year.`,
             );
           }
@@ -920,7 +937,7 @@ export async function runTypedImport(
           ...stamps,
           title,
           valueCents,
-          currency: "USD",
+          currency: lookups.currency,
           stageId: stage.id,
           stageEnteredAt: at,
           position,

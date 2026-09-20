@@ -11,8 +11,6 @@
  * last screen where anything is free to change.
  */
 import { Badge, Card, CardGroupLabel, CardRow, Table, TBody, TD, TH, THead, TR } from "@/ui";
-import { formatMoney } from "@/lib/money";
-import { formatDateDisplay } from "@/lib/dates";
 import { policiesFor } from "@/features/data/lib/typedImportRun";
 import type { DedupePolicy } from "@/features/data/lib/importRun";
 import type { DraftRow } from "@/features/data/lib/typedMapping";
@@ -20,18 +18,25 @@ import type {
   FieldDefinition,
   ImportTypeDefinition,
 } from "@/features/data/import/fields/types";
+import { useFormats, type Formats } from "@/app/formats";
 
 /** How many of the type's fields fit across the table before it stops helping. */
 const MAX_COLUMNS = 6;
 
-function cellText(field: FieldDefinition, row: DraftRow): string {
+/**
+ * One cell, formatted the way this workspace writes money and dates.
+ *
+ * `formats` is passed in rather than read here: this is a module function, not
+ * a component, and the preview renders a few hundred of these per paint.
+ */
+function cellText(field: FieldDefinition, row: DraftRow, formats: Formats): string {
   const value = row.draft[field.key];
   if (value === undefined || value === null) return "";
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "number") {
-    return field.parser === "money" ? formatMoney(value) : String(value);
+    return field.parser === "money" ? formats.money(value) : String(value);
   }
-  if (field.parser === "date") return formatDateDisplay(value);
+  if (field.parser === "date") return formats.date(value);
   return value;
 }
 
@@ -44,6 +49,7 @@ export function TypedPreviewStep(props: {
   onPolicyChange: (policy: DedupePolicy) => void;
 }) {
   const { type, rows, mappedFieldKeys, totalRows, policy, onPolicyChange } = props;
+  const formats = useFormats();
 
   const columns = type.fields
     .filter((field) => mappedFieldKeys.includes(field.key))
@@ -92,7 +98,7 @@ export function TypedPreviewStep(props: {
                   {row.rowNumber}
                 </TD>
                 {columns.map((field, i) => {
-                  const text = cellText(field, row);
+                  const text = cellText(field, row, formats);
                   const first = i === 0;
                   return (
                     <TD

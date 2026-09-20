@@ -28,7 +28,7 @@ import {
   TR,
   toast,
 } from "@/ui";
-import { formatDateDisplay, formatDateTimeDisplay, todayLocal } from "@/lib/dates";
+import { todayLocal } from "@/lib/dates";
 import { dqk } from "@/features/data/lib/queries";
 import {
   listBackups,
@@ -39,6 +39,7 @@ import {
 import { formatBytes, totalBytes } from "@/features/data/lib/retention";
 import { getBackupStatus, subscribeBackupStatus } from "@/features/data/backups/scheduler";
 import { workspacePaths } from "@/features/data/lib/workspace";
+import { useFormats } from "@/app/formats";
 
 function useBackupsDir(): string | null {
   const [dir, setDir] = useState<string | null>(null);
@@ -55,6 +56,7 @@ function useBackupsDir(): string | null {
 }
 
 export function BackupsScreen() {
+  const formats = useFormats();
   const queryClient = useQueryClient();
   const backupsDir = useBackupsDir();
   const status = useSyncExternalStore(subscribeBackupStatus, getBackupStatus, getBackupStatus);
@@ -190,7 +192,7 @@ export function BackupsScreen() {
                 <TBody className="[&>tr:last-child]:border-b-0">
                   {files.map((file) => (
                     <TR key={file.path}>
-                      <TD primary>{formatDateTimeDisplay(file.at)}</TD>
+                      <TD primary>{formats.dateTime(file.at)}</TD>
                       <TD>
                         <Badge>{file.reason}</Badge>
                       </TD>
@@ -233,8 +235,8 @@ export function BackupsScreen() {
         title="Restore this backup?"
         description={
           restoreTarget
-            ? `Replace today's data (${formatDateDisplay(todayLocal())}) with the backup from ` +
-              `${formatDateTimeDisplay(restoreTarget.at)}? Today's data will be backed up first, ` +
+            ? `Replace today's data (${formats.date(todayLocal())}) with the backup from ` +
+              `${formats.dateTime(restoreTarget.at)}? Today's data will be backed up first, ` +
               `so this can be undone by restoring that backup afterward.`
             : undefined
         }

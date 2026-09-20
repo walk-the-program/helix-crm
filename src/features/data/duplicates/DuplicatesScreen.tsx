@@ -31,7 +31,7 @@ import {
   TabsTrigger,
   toast,
 } from "@/ui";
-import { formatDateDisplay } from "@/lib/dates";
+
 import { dqk } from "@/features/data/lib/queries";
 import type { DuplicatePair } from "@/db/repos/_base";
 import {
@@ -41,6 +41,7 @@ import {
 import { merge as mergeRecords, reverse as reverseMerge } from "@/db/repos/merge";
 import { MergeDialog } from "@/features/data/duplicates/MergeDialog";
 import { MergesHistory } from "@/features/data/duplicates/MergesHistory";
+import { useFormats } from "@/app/formats";
 import {
   queryFromState,
   stateFromQuery,
@@ -78,6 +79,7 @@ function PairRow(props: {
   onMerge: () => void;
   onDismiss: () => void;
 }) {
+  const formats = useFormats();
   const { pair, dismissed, onMerge, onDismiss } = props;
   const href = (id: string) =>
     pair.entityType === "contact" ? `/contacts/${id}` : `/companies/${id}`;
@@ -108,7 +110,7 @@ function PairRow(props: {
                 title={side.detail}
                 className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
               >
-                {side.detail} · added {formatDateDisplay(side.createdAt)}
+                {side.detail} · added {formats.date(side.createdAt)}
               </span>
             </div>
           ))}

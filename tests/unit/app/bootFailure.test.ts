@@ -45,7 +45,7 @@ describe("BootFailure", () => {
     expect(screen.getByRole("heading").textContent).toContain("missing search");
     cleanup();
 
-    renderBootFailure({ error: new MigrationError("0003_money", "no such column") });
+    renderBootFailure({ error: new MigrationError("0003_money", "no such column", null, null) });
     expect(screen.getByRole("heading").textContent).toContain("update");
   });
 
