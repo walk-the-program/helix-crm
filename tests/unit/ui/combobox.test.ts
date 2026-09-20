@@ -7,7 +7,14 @@ import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { filterComboboxItems, defaultCreateLabel, type ComboboxItem } from "@/ui/Combobox";
 import { installRadixStubs } from "./radixSetup";
-import { CONTACTS, renderCombobox, renderMultiCombobox } from "./combobox.fixtures";
+import {
+  CONTACTS,
+  MANY,
+  renderCombobox,
+  renderComboboxInFieldWithError,
+  renderLongCombobox,
+  renderMultiCombobox,
+} from "./combobox.fixtures";
 
 installRadixStubs();
 
@@ -212,5 +219,85 @@ describe("MultiCombobox", () => {
     await user.click(await screen.findByText("Aisha Okafor"));
     await user.click(screen.getByText("Aisha Okafor"));
     expect(onChangeSpy).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe("the CPO pass's two kit fixes", () => {
+  it("keeps the highlighted row in view in a 400-item list (F-LC-12)", async () => {
+    const user = userEvent.setup();
+    const scrolled: unknown[] = [];
+    // jsdom has no layout, so scrollIntoView does not exist on the prototype;
+    // recording the calls is what proves the component asks for it at all,
+    // which is exactly what was missing.
+    const original = (HTMLElement.prototype as unknown as { scrollIntoView?: unknown })
+      .scrollIntoView;
+    (HTMLElement.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView =
+      function scrollIntoViewStub(this: HTMLElement, arg: unknown) {
+        scrolled.push({ id: this.id, arg });
+      };
+    try {
+      renderLongCombobox();
+      await user.click(screen.getByTestId("combobox"));
+      const input = await screen.findByTestId("combobox-input");
+      expect(MANY).toHaveLength(400);
+
+      scrolled.length = 0;
+      for (let i = 0; i < 20; i += 1) await user.keyboard("{ArrowDown}");
+
+      expect(scrolled.length, "arrowing asks the list to follow").toBeGreaterThan(0);
+      // "nearest" moves the list by the minimum, rather than jumping the row
+      // to the middle of the popover.
+      expect(scrolled.at(-1)).toMatchObject({ arg: { block: "nearest" } });
+      expect(input).toBeTruthy();
+    } finally {
+      if (original === undefined) {
+        delete (HTMLElement.prototype as unknown as { scrollIntoView?: unknown }).scrollIntoView;
+      } else {
+        (HTMLElement.prototype as unknown as { scrollIntoView: unknown }).scrollIntoView = original;
+      }
+    }
+  });
+
+  it("moves a page at a time with PageDown and PageUp", async () => {
+    const user = userEvent.setup();
+    renderLongCombobox();
+    await user.click(screen.getByTestId("combobox"));
+    const input = await screen.findByTestId("combobox-input");
+
+    const active = () => input.getAttribute("aria-activedescendant");
+    const first = active();
+    await user.keyboard("{PageDown}");
+    expect(active(), "PageDown moves further than one row").not.toBe(first);
+    await user.keyboard("{PageUp}");
+    expect(active(), "PageUp comes back").toBe(first);
+
+    // It clamps rather than wrapping: a page up from the top stays at the top.
+    await user.keyboard("{PageUp}");
+    expect(active()).toBe(first);
+  });
+
+  it("lets Field wire its error to the control (F-LC-11)", async () => {
+    renderComboboxInFieldWithError();
+    const trigger = screen.getByTestId("combobox");
+
+    expect(trigger.getAttribute("aria-invalid")).toBe("true");
+    const describedBy = trigger.getAttribute("aria-describedby");
+    expect(describedBy, "Field's error id reaches the control").toBeTruthy();
+
+    const error = document.getElementById(describedBy as string);
+    expect(error?.textContent).toContain("Pick the customer");
+  });
+
+  it("still forwards nothing when Field has no error to give", () => {
+    renderCombobox();
+    const trigger = screen.getByTestId("combobox");
+    expect(trigger.getAttribute("aria-invalid")).toBeNull();
+    expect(trigger.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("declares the two ARIA props on every picker in the file", () => {
+    // One grep, so a future picker cannot quietly drop back to the old shape.
+    const declarations = SOURCE.match(/"aria-describedby"\?: string;/g) ?? [];
+    expect(declarations.length, "Combobox and MultiCombobox both declare it").toBe(2);
   });
 });

@@ -258,6 +258,55 @@ function OptionRow(props: {
   );
 }
 
+/**
+ * Keep the highlighted row on screen.
+ *
+ * The list is height-capped at 320px and renders every option, so a workspace
+ * with four hundred contacts — which is what an owner has after one import,
+ * and the case this component was written for — put the highlight out of
+ * sight after about eight presses of ArrowDown. `aria-activedescendant` told a
+ * screen reader where it was; nothing told the eye (CPO finding F-LC-12).
+ *
+ * `block: "nearest"` is deliberate: it moves the list by the minimum needed,
+ * so arrowing down one row scrolls one row rather than jumping the highlight
+ * to the middle of the popover.
+ *
+ * The row is found with `getElementById` rather than a selector: React 19's
+ * `useId` produces ids containing guillemets, which are not valid in a CSS
+ * selector without escaping, and `CSS.escape` does not exist in the unit
+ * suite's DOM. An id lookup needs neither.
+ */
+function useHighlightIntoView(
+  listboxRef: RefObject<HTMLDivElement | null>,
+  optionElementId: string | null,
+  open: boolean,
+): void {
+  useEffect(() => {
+    if (!open || optionElementId === null) return;
+    const box = listboxRef.current;
+    if (!box) return;
+    const row = document.getElementById(optionElementId);
+    // Only scroll a row that is actually inside this list: two open pickers
+    // must not fight over the same id.
+    if (row && box.contains(row) && typeof row.scrollIntoView === "function") {
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }, [listboxRef, optionElementId, open]);
+}
+
+/**
+ * How far PageUp/PageDown move. A screen of rows, near enough: the cap is
+ * 320px and a row is one control height, so ten is about a page and is the
+ * step a listbox is expected to take.
+ */
+const PAGE_STEP = 10;
+
+/** Clamp an index into [0, count - 1], with an empty list sitting at 0. */
+function clampIndex(next: number, count: number): number {
+  if (count <= 0) return 0;
+  return Math.min(count - 1, Math.max(0, next));
+}
+
 /* -------------------------------------------------------------------------- */
 /* Combobox: one value                                                        */
 /* -------------------------------------------------------------------------- */
@@ -274,6 +323,12 @@ export function Combobox(props: {
   multiple?: false;
   disabled?: boolean;
   "aria-label"?: string;
+  /** Wired by `Field` when it wraps this control: the id of its hint or error
+   *  text, and whether that error is live. Without these a `<Field error>`
+   *  around a Combobox showed a red sentence that no screen reader ever
+   *  connected to the control (CPO finding F-LC-11). */
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
   autoFocus?: boolean;
   /** The chosen record, when `items` is an async search and the caller
    *  already knows its label (so the closed trigger is not blank). */
@@ -303,12 +358,15 @@ export function Combobox(props: {
     defaultOpen,
   } = props;
   const ariaLabel = props["aria-label"];
+  const ariaDescribedBy = props["aria-describedby"];
+  const ariaInvalid = props["aria-invalid"];
 
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const listboxRef = useRef<HTMLDivElement | null>(null);
   /** The last item we were handed for the current value, so an async picker
    *  can still print a name after the list is gone. */
   const [lastChosen, setLastChosen] = useState<ComboboxItem | null>(selectedItem ?? null);
@@ -327,6 +385,8 @@ export function Combobox(props: {
   useEffect(() => {
     setHighlight(0);
   }, [query, open]);
+
+  useHighlightIntoView(listboxRef, rowCount > 0 ? optionId(highlight) : null, open);
 
   useEffect(() => {
     if (highlight >= rowCount) setHighlight(rowCount > 0 ? rowCount - 1 : 0);
@@ -377,6 +437,16 @@ export function Combobox(props: {
         setHighlight((h) => (rowCount === 0 ? 0 : (h - 1 + rowCount) % rowCount));
         return;
       }
+      if (e.key === "PageDown") {
+        e.preventDefault();
+        setHighlight((h) => clampIndex(h + PAGE_STEP, rowCount));
+        return;
+      }
+      if (e.key === "PageUp") {
+        e.preventDefault();
+        setHighlight((h) => clampIndex(h - PAGE_STEP, rowCount));
+        return;
+      }
       if (e.key === "Home") {
         e.preventDefault();
         setHighlight(0);
@@ -424,6 +494,8 @@ export function Combobox(props: {
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
           disabled={disabled}
           autoFocus={autoFocus}
           data-testid="combobox"
@@ -490,6 +562,7 @@ export function Combobox(props: {
             inputRef={inputRef}
           />
           <div
+            ref={listboxRef}
             id={listboxId}
             role="listbox"
             aria-label={ariaLabel ?? placeholder}
@@ -560,6 +633,9 @@ export function MultiCombobox(props: {
   createLabel?: (q: string) => string;
   disabled?: boolean;
   "aria-label"?: string;
+  /** As on `Combobox`: wired by `Field` (CPO finding F-LC-11). */
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
   /** How the trigger reads once something is chosen. Default: "3 chosen". */
   summaryLabel?: (count: number) => string;
   id?: string;
@@ -582,12 +658,15 @@ export function MultiCombobox(props: {
     defaultOpen,
   } = props;
   const ariaLabel = props["aria-label"];
+  const ariaDescribedBy = props["aria-describedby"];
+  const ariaInvalid = props["aria-invalid"];
 
   const [open, setOpen] = useState(Boolean(defaultOpen));
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const listboxRef = useRef<HTMLDivElement | null>(null);
 
   const reactId = useId();
   const inputId = `${reactId}-input`;
@@ -602,6 +681,8 @@ export function MultiCombobox(props: {
   useEffect(() => {
     setHighlight(0);
   }, [query, open]);
+
+  useHighlightIntoView(listboxRef, rowCount > 0 ? optionId(highlight) : null, open);
 
   const toggle = useCallback(
     (item: ComboboxItem) => {
@@ -628,6 +709,26 @@ export function MultiCombobox(props: {
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setHighlight((h) => (rowCount === 0 ? 0 : (h - 1 + rowCount) % rowCount));
+        return;
+      }
+      if (e.key === "PageDown") {
+        e.preventDefault();
+        setHighlight((h) => clampIndex(h + PAGE_STEP, rowCount));
+        return;
+      }
+      if (e.key === "PageUp") {
+        e.preventDefault();
+        setHighlight((h) => clampIndex(h - PAGE_STEP, rowCount));
+        return;
+      }
+      if (e.key === "Home") {
+        e.preventDefault();
+        setHighlight(0);
+        return;
+      }
+      if (e.key === "End") {
+        e.preventDefault();
+        setHighlight(rowCount > 0 ? rowCount - 1 : 0);
         return;
       }
       if (e.key === "Enter") {
@@ -668,6 +769,8 @@ export function MultiCombobox(props: {
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
           disabled={disabled}
           data-testid="combobox"
           data-multiple="true"
@@ -714,6 +817,7 @@ export function MultiCombobox(props: {
             inputRef={inputRef}
           />
           <div
+            ref={listboxRef}
             id={listboxId}
             role="listbox"
             aria-multiselectable="true"

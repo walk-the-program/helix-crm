@@ -32,16 +32,29 @@ export function Select(props: {
   id?: string;
   className?: string;
   ariaLabel?: string;
+  /**
+   * Wired by `Field` when it wraps this control (it clones its child and
+   * injects both). Before this, `Field`'s error text rendered in red and was
+   * never connected to the control, because this function destructured only
+   * its named props and dropped everything else on the floor (CPO finding
+   * F-LC-11). `invalid` stays as the direct prop for a caller that is not
+   * inside a `Field`; whichever says so wins.
+   */
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }) {
   const { value, onValueChange, options, placeholder, disabled, invalid, id, className, ariaLabel } =
     props;
+  const ariaDescribedBy = props["aria-describedby"];
+  const isInvalid = invalid || props["aria-invalid"] === true;
 
   return (
     <RadixSelect.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <RadixSelect.Trigger
         id={id}
         aria-label={ariaLabel}
-        aria-invalid={invalid || undefined}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={isInvalid || undefined}
         className={cn(
           "flex w-full h-[var(--control-h)] flex-none items-center justify-between gap-[var(--space-2)]",
           "border border-[var(--color-border-strong)]",
@@ -52,7 +65,7 @@ export function Select(props: {
           disabledState,
           focusRing,
           "data-[placeholder]:text-[var(--color-text-faint)]",
-          invalid && "border-[var(--color-danger)]",
+          isInvalid && "border-[var(--color-danger)]",
           className,
         )}
       >

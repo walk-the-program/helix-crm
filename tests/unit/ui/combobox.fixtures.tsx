@@ -9,6 +9,7 @@ import { useState } from "react";
 import { render } from "@testing-library/react";
 import type { RenderResult } from "@testing-library/react";
 import { Combobox, MultiCombobox, type ComboboxItem } from "@/ui/Combobox";
+import { Field } from "@/ui/Field";
 
 export const CONTACTS: ComboboxItem[] = [
   { id: "c1", label: "Aisha Okafor", detail: "Okafor Roofing", keywords: ["07700 900111"] },
@@ -76,4 +77,27 @@ export function renderMultiCombobox(props?: {
   onChangeSpy?: (ids: string[]) => void;
 }): RenderResult {
   return render(<MultiComboboxFixture onChangeSpy={props?.onChangeSpy} />);
+}
+
+/**
+ * A long list, for the height-cap and scroll-into-view behaviour: a workspace
+ * with four hundred contacts is what an owner has after one import, and it is
+ * the case the component was written for (CPO finding F-LC-12).
+ */
+export const MANY: ComboboxItem[] = Array.from({ length: 400 }, (_, i) => ({
+  id: `m${i}`,
+  label: `Contact number ${i}`,
+}));
+
+export function renderLongCombobox(): RenderResult {
+  return render(<ComboboxFixture items={MANY} />);
+}
+
+/** A Combobox inside a Field that is showing an error (CPO finding F-LC-11). */
+export function renderComboboxInFieldWithError(): RenderResult {
+  return render(
+    <Field label="Company" error="Pick the customer this invoice is for.">
+      <Combobox aria-label="Company" value={null} items={CONTACTS} onChange={() => {}} />
+    </Field>,
+  );
 }
