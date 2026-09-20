@@ -127,7 +127,22 @@ fn to_hex(bytes: &[u8]) -> String {
 /// Idempotent: two calls for the same workspace return the same key, because the
 /// second one finds the first one's entry. A workspace's file is unreadable
 /// without this entry, so nothing in the app ever deletes it.
+///
+/// The read and the create are one critical section. Without the lock, two
+/// callers that both find no entry each mint a key and the second `set` wins,
+/// which leaves whatever the first caller already wrote with its key unreadable
+/// for good. That is the worst failure this module can produce, and it showed up
+/// as a flaky `cargo test` on a CI runner before the lock was added. One global
+/// mutex is enough: this is called once per `db_open`, so there is nothing to
+/// contend over.
+///
+/// It does not close the same race across two processes. It does not have to:
+/// the single-instance plugin in `lib.rs` means there is only ever one Helix on
+/// a machine, and it is the only thing that asks for these keys.
 pub fn db_key(workspace_id: &str) -> AppResult<DbKey> {
+    static CREATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one_at_a_time = CREATE.lock().unwrap_or_else(|p| p.into_inner());
+
     if let Some(existing) = get(workspace_id, "dbkey")?.value {
         return DbKey::from_hex_string(existing);
     }

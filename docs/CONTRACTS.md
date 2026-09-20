@@ -641,6 +641,13 @@ and `site`. 32 bytes from the OS CSPRNG, stored as 64 lowercase hex characters, 
 on the first open of a workspace and stable forever after. The workspace id is the name
 of the folder holding `helix.db`, the same derivation `leads_fetch` already uses.
 
+Reading the key and creating it are one critical section, guarded by a mutex in
+`secrets::db_key`. Two callers that both find no entry would otherwise each mint a key
+and the second `set` would win, leaving anything already written with a losing key
+unreadable for good - the worst failure this area can produce. It closes the race within
+the process, which is enough because the single-instance plugin means there is only ever
+one Helix on a machine.
+
 The key never crosses the IPC boundary and is never logged. In Rust its type has no
 `Display` and a `Debug` that prints `DbKey(<redacted>)`. This is enforced, not merely
 documented: `secret_set`, `secret_get` and `secret_delete` all refuse the kind `"dbkey"`

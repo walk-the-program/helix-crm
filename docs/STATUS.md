@@ -2707,12 +2707,15 @@ module doc at the top of `src-tauri/src/db.rs`.
   links **SQLCipher 4.14.0 community on SQLite 3.51.3, FTS5 compiled in** —
   checked with `sqlite_compileoption_used('ENABLE_FTS5')`, not assumed, because
   the whole search feature rests on it. No `SQLCIPHER_*` build env was needed.
-  `getrandom` was added for the OS CSPRNG. No workflow changes: `openssl-src`
-  falls back to `no-asm` when NASM is absent on MSVC, and the Perl its configure
-  script needs ships on `windows-latest`. CI is what proves that.
+  `getrandom` was added for the OS CSPRNG. **No workflow changes were needed**:
+  `openssl-src` falls back to `no-asm` when NASM is absent on MSVC, and the Perl
+  its configure script needs ships on `windows-latest`. CI proved it — the
+  `rust (windows-latest)` job built SQLCipher and OpenSSL from source and passed
+  with `ci.yml` untouched.
 - **The key.** A third keychain kind, `dbkey`, under `<workspaceId>:dbkey` in
   service `helix`. 32 bytes from the OS CSPRNG as 64 lowercase hex characters,
-  created on first open and stable after. Its Rust type has no `Display`, a
+  created on first open and stable after. Reading and creating are one critical
+  section under a mutex — see the bug CI caught, below. Its Rust type has no `Display`, a
   `Debug` that prints `DbKey(<redacted>)`, and a buffer it zeroes on drop, so it
   cannot reach a log by accident. `secret_set`, `secret_get` and `secret_delete`
   all **refuse** the kind with `SECRET_ERROR`, which is enforced in Rust rather
@@ -2796,10 +2799,11 @@ $ cargo build
 $ cargo test
 test result: ok. 26 passed; 0 failed   (lib: db, disk, files, leads, secrets)
 test result: ok. 10 passed; 0 failed   (tests/db_tests.rs)
-test result: ok.  7 passed; 0 failed   (tests/encryption_tests.rs)
+test result: ok.  8 passed; 0 failed   (tests/encryption_tests.rs)
+(five consecutive runs, no flake)
 
 $ cargo clippy --all-targets
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.72s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
     (no warnings, no errors)
 
 $ npm test
@@ -2807,12 +2811,32 @@ $ npm test
       Tests  873 passed (873)
 ```
 
-Tests added: 7 in `src-tauri/tests/encryption_tests.rs` (key creation is
-idempotent; a fresh workspace has no plaintext header; plaintext is detected and
-migrated with the original set aside; FTS survives the migration; a backup is
-encrypted and opens with the same key; the wrong key is refused with a readable
-message; 10k inserts in one batch), 9 parser tests in `src-tauri/src/disk.rs`,
-and 5 in `src-tauri/src/secrets.rs`.
+Tests added: 8 in `src-tauri/tests/encryption_tests.rs` (key creation is
+idempotent; key creation survives a race; a fresh workspace has no plaintext
+header; plaintext is detected and migrated with the original set aside; FTS
+survives the migration; a backup is encrypted and opens with the same key; the
+wrong key is refused with a readable message; 10k inserts in one batch), 9 parser
+tests in `src-tauri/src/disk.rs`, and 5 in `src-tauri/src/secrets.rs`.
+
+### The bug CI caught
+
+The first push went red on `rust (macos-latest)` while Windows and the JS job
+went green. `secrets::db_key` read the keychain and then created a key as two
+separate steps, so two threads that both found no entry each minted one and the
+second `set` won — leaving the file the first thread had already written with the
+losing key unreadable for good. Ten parallel `cargo test` threads sharing one
+workspace id found it on the runner; this Mac had been scheduling them in a lucky
+order and passed every time, which is the worst way for a bug like this to
+behave.
+
+The fix is a mutex around the read-then-create in `db_key`, and
+`key_creation_survives_a_race` is the regression test: eight threads ask for one
+workspace's key at once and must all get the same one, and the stored key must be
+that one too. Confirmed by removing the lock again — the test fails on all three
+runs without it and passes with it — and the whole Rust suite was then run five
+times in a row with no flake. The cross-process version of the race is not closed
+and does not need to be: the single-instance plugin means there is only ever one
+Helix running.
 
 ### Not done, and one thing to know
 

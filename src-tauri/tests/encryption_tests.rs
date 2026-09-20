@@ -10,6 +10,7 @@
 //!
 //! ```text
 //!   key_creation_is_idempotent          one workspace, one key, forever
+//!   key_creation_survives_a_race         concurrent first opens agree on a key
 //!   a_fresh_workspace_is_encrypted      no plaintext header on a new file
 //!   plaintext_is_detected_and_migrated  rows, FTS and the set-aside copy
 //!   the_migration_keeps_fts_working     FTS5 survives sqlcipher_export
@@ -128,6 +129,56 @@ fn key_creation_is_idempotent() {
     db.open(&path)
         .expect("the second open must find the same key and read the same file");
     assert_eq!(count(&db, "SELECT id FROM t"), 7);
+}
+
+/// The race that matters: several callers asking for a workspace's key at the
+/// same moment, none of them finding one yet. If the read and the create are not
+/// one critical section, each mints its own key, the last `set` wins, and any
+/// file already written with one of the losing keys is unreadable for good. This
+/// is a regression test for exactly that - it failed on a CI runner before
+/// `db_key` took a lock, and passed on the developer's machine, which is the
+/// worst way for a bug like this to behave.
+#[test]
+fn key_creation_survives_a_race() {
+    secrets::use_in_memory_store();
+    let ws = "018f-raced";
+
+    let handles: Vec<_> = (0..8)
+        .map(|_| std::thread::spawn(move || secrets::db_key(ws).map(|k| k.key_pragma())))
+        .collect();
+
+    let pragmas: Vec<String> = handles
+        .into_iter()
+        .map(|h| {
+            h.expect_thread()
+                .expect("every thread should get a key, not an error")
+        })
+        .collect();
+
+    let first = &pragmas[0];
+    for (i, p) in pragmas.iter().enumerate() {
+        assert_eq!(
+            p, first,
+            "thread {i} came back with a different key; the get-then-create is not atomic"
+        );
+    }
+    // And the winner is what is actually stored, not just what the threads agreed on.
+    assert_eq!(
+        &secrets::db_key(ws).expect("read it back").key_pragma(),
+        first
+    );
+}
+
+/// `JoinHandle::join` returns a `Result` whose error is a panic payload, which is
+/// noise at the call site. This keeps the test above readable.
+trait ExpectThread<T> {
+    fn expect_thread(self) -> T;
+}
+
+impl<T> ExpectThread<T> for std::thread::JoinHandle<T> {
+    fn expect_thread(self) -> T {
+        self.join().expect("no thread in this test should panic")
+    }
 }
 
 // ---------------------------------------------------------------------------
