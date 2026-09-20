@@ -7,6 +7,22 @@
   `public/fonts/`; headings stay Zilla Slab. Lato ships at 400/700 only, so
   `font-medium`/`font-semibold` now render 400/700 instead of the old
   Poppins 500/600.
+- Fixed the 30-day trash purge to also remove a purged quote or invoice's own
+  generated PDF, when Helix is the one that saved it (a PDF the owner saved
+  somewhere else through the save dialog is left alone, because that path is
+  the owner's own choice, not Helix's file to delete).
+- Bounded how long `change_log` (the data behind Cmd+Z) keeps a deleted or
+  changed record's field values: 90 days, well past both the 30-day merge
+  reversal window and the fact that undo itself never survives closing and
+  reopening the app. Rows used to be kept forever.
+- Corrected several claims that no longer matched what the app does: the
+  "Not in v1" list here (see below), the Help screen's "nothing you type is
+  sent anywhere, ever" (true only with the AI module and the website
+  connection both off), and added copy telling the owner, at the point
+  Diagnostics offers the log or Backups explains what it covers, that
+  attachments and exports are plain, unencrypted files and that the log does
+  not name a customer. Added "Removing a workspace for good" to Help, since
+  archiving a workspace never deletes it and there was nowhere that said so.
 
 ## 0.1.0 - 2026-09-18
 
@@ -135,15 +151,20 @@ The following were considered and deliberately left out of this release:
 - Multiple users or team accounts
 - Cloud sync between machines
 - Mobile builds (iOS/Android)
-- Quotes, invoices, and payments
+- Payment processing (an invoice can be marked paid; Helix never moves money)
 - Gmail and Google Calendar integration
 - A map view
-- Recurring service reminders
-- Importing deals from a CSV (only contacts and companies import)
 - Signed and notarized installers, and auto-update (which depends on
   signing)
 - Telemetry or crash reporting of any kind
 - Any AI action that runs without the owner pressing a button
-- Encrypted workspaces
-- Email templates with merge fields
 - The gone-quiet rule for contacts that have no deal
+
+Corrected since first publishing this list (SEC audit, launch round
+2026-09-20): quotes and invoices, recurring service reminders, importing
+deals from a CSV, encrypted workspaces, and templates with merge fields were
+all listed above as absent from v1. All five shipped in 0.1.0 and are
+documented in the README's "What it does" list ("Services, quotes and
+invoices", "Reminders", "CSV import", "Templates") and in
+"Where your data lives" (encryption). This list exists so a client can rely
+on what it says is NOT there, so a stale entry here was not a small mistake.

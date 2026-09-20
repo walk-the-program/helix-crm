@@ -321,6 +321,18 @@ export function WorkspacesScreen() {
         </SettingsGroup>
       ) : null}
 
+      {live.length > 0 ? (
+        <p
+          data-testid="workspace-removal-note"
+          className="px-[var(--space-1)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+        >
+          Archiving keeps every file exactly where it is; there is no button in Helix
+          that erases a workspace. If a workspace's data needs to be gone for good -
+          a client's relationship with you has ended, for instance - see Help,
+          &ldquo;Removing a workspace for good,&rdquo; for the exact steps.
+        </p>
+      ) : null}
+
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent size="sm" data-testid="workspace-new-dialog">
           <DialogHeader>

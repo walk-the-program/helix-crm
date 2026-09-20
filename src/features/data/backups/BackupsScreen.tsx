@@ -216,6 +216,11 @@ export function BackupsScreen() {
                 Stored in {backupsDir}
               </p>
             ) : null}
+            <p className="px-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+              Each backup is a copy of your database, encrypted the same way the open
+              file is. It does not include the files you have attached to a contact,
+              company or job - those live in a separate, unencrypted folder next to it.
+            </p>
           </div>
         )}
       </div>

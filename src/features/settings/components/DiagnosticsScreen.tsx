@@ -322,13 +322,18 @@ export function DiagnosticsScreen() {
 
           <SettingsGroup
             label="Files"
-            footnote="Backups and attachments sit beside the database in this folder."
+            footnote="Backups and attachments sit beside the database in this folder. The database is encrypted; the files you attach to a contact, company or job are not - they sit on disk exactly as you added them, the same as a photo anywhere else on this computer."
           >
             <SettingsValueRow label="App data">
               {data.appData ? <Mono>{data.appData}</Mono> : <Unknown />}
             </SettingsValueRow>
             <SettingsValueRow label="Log file">
               {data.logPath ? <Mono>{data.logPath}</Mono> : <Unknown />}
+              <div className="mt-[var(--space-1)] text-[length:var(--text-xs)] text-[var(--color-text-faint)]">
+                Records when Helix started, backed up, checked your website, or hit an
+                error, plus your connected website&rsquo;s address. It does not hold a
+                customer&rsquo;s name, phone number, email or message.
+              </div>
             </SettingsValueRow>
           </SettingsGroup>
         </>

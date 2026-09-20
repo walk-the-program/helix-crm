@@ -59,8 +59,8 @@ export const HELP_SECTIONS: HelpSection[] = [
     id: "backups",
     title: "Backups and where your data lives",
     paragraphs: [
-      "Helix runs on your computer and does not need the internet to work; nothing you type is sent anywhere, ever. Your data lives in one file on your own machine, and Diagnostics, under Settings, shows exactly where it is and how big it has gotten. Helix backs itself up automatically after it opens, unless one has run in the last hour, and every six hours after that, keeping every backup from the last day and then one a day for thirty days.",
-      "Go to Settings, then Backups, to see the list, force one with Back up now, or restore an older one if something went wrong; restoring backs up today's data first, so that can be undone too. Attachments, the files you have added to a customer or job, are stored beside the database and are not part of the backup. If you ever want everything out of Helix, use Export to save a CSV of any list, or all of it at once.",
+      "Helix runs on your computer and does not need the internet for the everyday work; nothing about a customer leaves your machine unless you turn on the optional AI module or connect your website, and even then only what those features need is sent, and only when you ask. Your data lives in one file on your own machine, and Diagnostics, under Settings, shows exactly where it is and how big it has gotten. Helix backs itself up automatically after it opens, unless one has run in the last hour, and every six hours after that, keeping every backup from the last day and then one a day for thirty days.",
+      "Go to Settings, then Backups, to see the list, force one with Back up now, or restore an older one if something went wrong; restoring backs up today's data first, so that can be undone too. Attachments, the files you have added to a customer or job, are stored beside the database as plain, unencrypted files, not part of the backup, the same as a photo anywhere else on this computer. If you ever want everything out of Helix, use Export to save a CSV of any list, or all of it at once; an export is a plain file too, so keep it somewhere as safe as you would keep the original.",
     ],
   },
   {
@@ -94,11 +94,29 @@ export const HELP_WEBSITE_ENDPOINT: HelpSection = {
   ],
 };
 
+/**
+ * Not one of the six in `HELP_SECTIONS` for the same reason
+ * `HELP_WEBSITE_ENDPOINT` is not: it is new this round (SEC audit, launch
+ * round 2026-09-20, acceptance A4), spliced in right after "Backups and where
+ * your data lives" on the screen, and kept as its own export so the existing
+ * "exactly six sections" contract in tests/unit/help/content.test.ts still
+ * holds. `src/features/settings/components/WorkspacesScreen.tsx` names this
+ * section by its title, so the two must stay in sync.
+ */
+export const HELP_WORKSPACE_REMOVAL: HelpSection = {
+  id: "workspace-removal",
+  title: "Removing a workspace for good",
+  paragraphs: [
+    "Archiving a workspace, under Settings then Workspaces, takes it out of the switcher and stops it checking for leads or backing itself up; it does not delete anything, which is why it is the right choice whenever there is any chance you will want that business back. There is no button in Helix that deletes a workspace's files - that is deliberate, the same reason a deleted record sits in Trash for thirty days rather than vanishing the moment you click delete.",
+    "When a client's relationship with you has genuinely ended and nothing of theirs should remain, archive the workspace first, close Helix, then delete that workspace's folder yourself; Diagnostics, under Settings, names the exact file, one level up from it. Deleting that folder removes the database, its backups and every attached file in one step. One small technical leftover cannot be helped: the saved key that unlocked that database can stay in your Mac Keychain or Windows Credential Manager after the folder is gone, and it names nothing about your customers; remove it by hand there if you want it gone too.",
+  ],
+};
+
 export const HELP_TROUBLE: HelpSection = {
   id: "trouble",
   title: "Something's wrong?",
   paragraphs: [
-    "Start with Diagnostics, under Settings; it shows where your data lives, how big the file is, and the log of what Helix last did, along with a button to copy that log. If something is actually broken, report it on GitHub at https://github.com/walk-the-program/helix-crm/issues, and include what you were doing right before it happened, plus the copied log. Helix has no support team watching in the background, so this page and that log are how a problem actually gets fixed.",
+    "Start with Diagnostics, under Settings; it shows where your data lives, how big the file is, and the log of what Helix last did, along with a button to copy that log. If something is actually broken, report it on GitHub at https://github.com/walk-the-program/helix-crm/issues, and include what you were doing right before it happened, plus the copied log. Helix has no support team watching in the background, so this page and that log are how a problem actually gets fixed. The log itself names when Helix started, backed up, checked your website or hit an error, and your connected website's address; it does not name a customer.",
   ],
 };
 

@@ -179,6 +179,18 @@ not give up your customers. Backups are encrypted the same way. Full-disk
 encryption (FileVault, BitLocker) still protects everything else, and
 Diagnostics shows whether it is on.
 
+Two things are plain files, not encrypted by Helix: the attachments folder
+(a photo or a signed contract sits on disk exactly as you added it) and
+anything you export or save as a PDF (a CSV, a JSON export, or a quote or
+invoice). Full-disk encryption still covers them, the same as everything
+else on the machine; Helix's own encryption does not.
+
+Archiving a workspace (Settings, then Workspaces) takes it out of the
+switcher without deleting anything, which is why it never asks a client's
+old data to be gone. There is no in-app button that deletes a workspace's
+files; the Help screen's "Removing a workspace for good" walks through
+deleting one by hand when a client's data genuinely needs to be gone.
+
 ## Keyboard shortcuts
 
 | Shortcut | What it does |

@@ -16,6 +16,9 @@
  * #17) is one such section that is not part of `HELP_SECTIONS`: it is
  * spliced in right after "Your website's leads" so `HELP_SECTIONS` can keep
  * its own six-item contract in tests/unit/help/content.test.ts.
+ * `HELP_WORKSPACE_REMOVAL` (SEC audit, launch round 2026-09-20) is the same
+ * shape, spliced in right after "Backups and where your data lives"; the
+ * Workspaces settings screen points here by the section's own title.
  *
  * Two sections carry a real action instead of just words:
  *  - "Keyboard shortcuts" opens the same sheet the "?" key does. It looks the
@@ -42,6 +45,7 @@ import {
   HELP_SECTIONS,
   HELP_TROUBLE,
   HELP_WEBSITE_ENDPOINT,
+  HELP_WORKSPACE_REMOVAL,
   ISSUES_URL,
   type HelpSection,
 } from "@/features/help/lib/content";
@@ -161,6 +165,9 @@ export function HelpScreen() {
             <HelpSectionBlock section={section} />
             {section.id === "website-leads" ? (
               <HelpSectionBlock section={HELP_WEBSITE_ENDPOINT} />
+            ) : null}
+            {section.id === "backups" ? (
+              <HelpSectionBlock section={HELP_WORKSPACE_REMOVAL} />
             ) : null}
           </Fragment>
         ))}
