@@ -8,6 +8,7 @@ import {
   duplicateShortcuts,
   groupShortcuts,
   OTHER_GROUP,
+  PALETTE_GROUP,
   SHELL_GROUP,
   SHELL_SHORTCUTS,
 } from "../../../src/features/settings/lib/shortcuts";
@@ -33,7 +34,7 @@ describe("groupShortcuts", () => {
       command("s", "Open settings", "Settings", "mod+,"),
       command("r", "Quick add", "Records", "mod+n"),
       command("a", "Paste to record", "AI", "mod+shift+v"),
-      command("t", "Go to today", "Today"),
+      command("t", "Go to today", "Today", "mod+1"),
     ]);
     expect(groups.map((g) => g.name)).toEqual([
       SHELL_GROUP,
@@ -58,28 +59,84 @@ describe("groupShortcuts", () => {
     ]);
   });
 
-  it("lists the commands with a key before the ones without, each alphabetical", () => {
+  it("lists a group's keys alphabetically", () => {
     const groups = groupShortcuts([
-      command("c", "Zip it", "Records"),
-      command("a", "Archive", "Records"),
       command("n", "New contact", "Records", "mod+n"),
       command("d", "Duplicate", "Records", "mod+d"),
     ]);
     const records = groups.find((g) => g.name === "Records");
-    expect(records?.rows.map((r) => r.label)).toEqual([
-      "Duplicate",
-      "New contact",
-      "Archive",
-      "Zip it",
+    expect(records?.rows.map((r) => r.label)).toEqual(["Duplicate", "New contact"]);
+  });
+
+  /*
+   * R17. A keyless command used to sit in its feature's group with an em dash
+   * where the key should be — twelve of the sheet's twenty-six rows, which
+   * read as broken rather than as "this one has no key". It keeps its place on
+   * the page, in a list that says where to find it instead.
+   */
+  it("moves the keyless commands to their own group, alphabetically, last", () => {
+    const groups = groupShortcuts([
+      command("c", "Zip it", "Records"),
+      command("a", "Archive", "Records"),
+      command("n", "New contact", "Records", "mod+n"),
+    ]);
+    const records = groups.find((g) => g.name === "Records");
+    expect(records?.rows.map((r) => r.label)).toEqual(["New contact"]);
+
+    const palette = groups.find((g) => g.name === PALETTE_GROUP);
+    expect(palette?.rows.map((r) => r.label)).toEqual(["Archive", "Zip it"]);
+    expect(groups.at(-1)?.name).toBe(PALETTE_GROUP);
+  });
+
+  it("keeps a keyless command rather than dropping it", () => {
+    const groups = groupShortcuts([command("t", "Empty the trash", "Records")]);
+    const palette = groups.find((g) => g.name === PALETTE_GROUP);
+    expect(palette?.rows).toEqual([
+      { id: "t", label: "Empty the trash", shortcut: null, alias: undefined },
     ]);
   });
 
-  it("keeps a command with no shortcut, with a null key rather than dropping it", () => {
-    const groups = groupShortcuts([command("t", "Empty the trash", "Records")]);
-    const records = groups.find((g) => g.name === "Records");
-    expect(records?.rows).toEqual([
-      { id: "t", label: "Empty the trash", shortcut: null },
-    ]);
+  /*
+   * R17's other half: the sheet listed ⌘K twice, as the shell's "Search
+   * everything" and as Today's real "Search records" command, and "?" twice
+   * the same way. A real binding outranks a hard-coded row.
+   */
+  it("drops a shell row whose key a real command already documents", () => {
+    const groups = groupShortcuts(
+      [command("search", "Search records", "Today", "mod+k")],
+      [
+        { id: "shell-search", label: "Search everything", shortcut: "mod+k" },
+        { id: "shell-escape", label: "Close a dialog", shortcut: "escape" },
+      ],
+    );
+    const shell = groups.find((g) => g.name === SHELL_GROUP);
+    expect(shell?.rows.map((r) => r.label)).toEqual(["Close a dialog"]);
+    expect(groups.find((g) => g.name === "Today")?.rows[0].label).toBe("Search records");
+    expect(duplicateShortcuts(groups)).toEqual([]);
+  });
+
+  it("prints a command's second, feature-bound key beside its first", () => {
+    // mod+/ really opens the search dialog and appeared nowhere on the sheet.
+    const groups = groupShortcuts([command("search", "Search records", "Today", "mod+k")]);
+    const row = groups.find((g) => g.name === "Today")?.rows[0];
+    expect(row?.shortcut).toBe("mod+k");
+    expect(row?.alias).toBe("mod+/");
+  });
+
+  it("counts a duplicate between a shell row and a command, which it used to skip", () => {
+    const groups = groupShortcuts(
+      [command("x", "Something else", "Records", "escape")],
+      [{ id: "shell-escape", label: "Close a dialog", shortcut: "escape" }],
+    );
+    // The shell row is dropped as the duplicate it is, so nothing is reported
+    // — but the mechanism that finds it no longer refuses to look at the shell.
+    expect(groups.find((g) => g.name === SHELL_GROUP)).toBeUndefined();
+    expect(
+      duplicateShortcuts([
+        { name: SHELL_GROUP, rows: [{ id: "s", label: "A", shortcut: "mod+k" }] },
+        { name: "Today", rows: [{ id: "t", label: "B", shortcut: "mod+k" }] },
+      ]),
+    ).toEqual(["mod+k"]);
   });
 
   it("renders the shell's keys even when no feature has any commands", () => {

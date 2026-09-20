@@ -18,6 +18,7 @@ import {
 import {
   duplicateShortcuts,
   groupShortcuts,
+  PALETTE_GROUP,
   type ShortcutRow,
 } from "@/features/settings/lib/shortcuts";
 import { allCommands } from "@/app/registry";
@@ -31,15 +32,22 @@ function Row(props: { row: ShortcutRow; last: boolean }) {
       data-testid="shortcut-row"
     >
       {row.shortcut ? (
-        <Kbd keys={row.shortcut} />
-      ) : (
-        <span
-          className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]"
-          aria-label="No shortcut"
-        >
-          —
+        /*
+         * Both keys when a command has two. "or" rather than a slash: a slash
+         * beside a key that IS a slash (search's ⌘/) is unreadable.
+         */
+        <span className="flex items-center gap-[var(--space-2)]">
+          <Kbd keys={row.shortcut} />
+          {row.alias ? (
+            <>
+              <span className="text-[length:var(--text-sm)] text-[var(--color-text-faint)]">
+                or
+              </span>
+              <Kbd keys={row.alias} />
+            </>
+          ) : null}
         </span>
-      )}
+      ) : null}
     </SettingsRow>
   );
 }
@@ -51,7 +59,15 @@ export function ShortcutsList() {
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
       {groups.map((group) => (
-        <SettingsGroup key={group.name} label={group.name}>
+        <SettingsGroup
+          key={group.name}
+          label={group.name}
+          footnote={
+            group.name === PALETTE_GROUP
+              ? "These have no key of their own. Press the command palette key above and type the name."
+              : undefined
+          }
+        >
           {group.rows.map((row, index) => (
             <Row key={row.id} row={row} last={index === group.rows.length - 1} />
           ))}
