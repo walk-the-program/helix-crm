@@ -15,8 +15,12 @@ import { NotFoundError } from "@/db/errors";
 import { systemStatement } from "@/db/repos/activities";
 import {
   addDaysToDateString,
+  isOverdue,
   nowIso,
+  parseDateOnly,
+  parseIso,
   todayLocal,
+  toIso,
   toLocalDateString,
 } from "@/lib/dates";
 import {
@@ -174,20 +178,56 @@ export async function list(
   return { rows: mapRows(TASK_COLS, rows), total };
 }
 
-/** Today's three buckets: overdue rises to the top. */
+/** The last instant of a local calendar day, for a synthetic "now". */
+function endOfLocalDay(dateOnly: string): Date | null {
+  const d = parseDateOnly(dateOnly);
+  if (!d) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+/**
+ * Today's three buckets: overdue rises to the top.
+ *
+ * `reference` is the local calendar day the buckets are drawn against, and it
+ * is also the SQL prefilter's cheap upper bound. Overdue is decided by
+ * `isOverdue` (src/lib/dates.ts) - the same rule the Tasks screen and every
+ * task row use - so a task due today at 09:00 stops reading "Today" here
+ * once its due_at has passed (F-LA-8).
+ *
+ * `now` lets a caller pin the instant `isOverdue` compares against, for a
+ * test that needs to say "viewed at 14:00" without touching the system
+ * clock. Left out, and `reference` is the real today (the only way the one
+ * production caller, useToday.ts, calls this), the real clock is exactly
+ * right. Left out with a `reference` that is NOT today (a test standing up
+ * a whole day of fixtures without a due_at-precision assertion), there is no
+ * real instant to anchor a due_at check to, so the end of that day is used -
+ * which keeps the day-level rule (`dueOn < reference`) reading exactly as it
+ * did before this fix.
+ */
 export async function today(
   reference: string = todayLocal(),
+  now?: Date,
 ): Promise<{ overdue: Task[]; today: Task[]; next7: Task[] }> {
   const in7 = addDaysToDateString(reference, 7);
   const { rows } = await list(
     { openOnly: true, dueOnOrBefore: in7 },
     { limit: 500 },
   );
-  return {
-    overdue: rows.filter((t) => t.dueOn !== null && t.dueOn < reference),
-    today: rows.filter((t) => t.dueOn === reference),
-    next7: rows.filter((t) => t.dueOn !== null && t.dueOn > reference),
-  };
+  const effectiveNow =
+    now ?? (reference === todayLocal() ? new Date() : (endOfLocalDay(reference) ?? new Date()));
+  const overdue: Task[] = [];
+  const todayBucket: Task[] = [];
+  const next7: Task[] = [];
+  for (const t of rows) {
+    if (isOverdue(t, effectiveNow)) {
+      overdue.push(t);
+    } else if (t.dueOn === reference) {
+      todayBucket.push(t);
+    } else if (t.dueOn !== null && t.dueOn > reference) {
+      next7.push(t);
+    }
+  }
+  return { overdue, today: todayBucket, next7 };
 }
 
 /**
@@ -318,6 +358,33 @@ export async function uncomplete(
 }
 
 /**
+ * Carry a `due_at`'s wall-clock time onto a new `due_on`, rather than
+ * dropping it (F-LA-15). `parseIso`/`parseDateOnly` read local calendar
+ * fields (see src/lib/dates.ts), so the hour and minute constructed here are
+ * the ones on the owner's clock, and re-composing them through `new Date(...)`
+ * lets the runtime resolve the correct UTC offset for the new day — the
+ * wall-clock time survives a daylight-saving boundary, the UTC offset does
+ * not. Returns null when there was no time to carry (an all-day task stays
+ * all-day) or the old value cannot be parsed.
+ */
+export function shiftDueAtToDate(oldDueAt: string | null, newDueOn: string): string | null {
+  if (!oldDueAt) return null;
+  const oldAt = parseIso(oldDueAt);
+  const newDay = parseDateOnly(newDueOn);
+  if (!oldAt || !newDay) return null;
+  const shifted = new Date(
+    newDay.getFullYear(),
+    newDay.getMonth(),
+    newDay.getDate(),
+    oldAt.getHours(),
+    oldAt.getMinutes(),
+    oldAt.getSeconds(),
+    oldAt.getMilliseconds(),
+  );
+  return toIso(shifted);
+}
+
+/**
  * Snooze to tomorrow or next week, counted from today rather than from the
  * old due date: a task three weeks overdue snoozed "to tomorrow" means
  * tomorrow, not three weeks ago plus a day.
@@ -334,9 +401,10 @@ export async function snooze(
   return withWrite(async () => {
     const before = await getOrThrow(id);
     const at = nowIso();
+    const dueAt = shiftDueAtToDate(before.dueAt, dueOn);
     const stmt = updateStatement("tasks", id, {
       dueOn,
-      dueAt: null,
+      dueAt,
       updatedAt: at,
     });
     await raw.execute(stmt.sql, stmt.params);
@@ -345,7 +413,7 @@ export async function snooze(
       id,
       "update",
       before,
-      { dueOn, dueAt: null },
+      { dueOn, dueAt },
       options.batchId,
     );
     return getOrThrow(id);
