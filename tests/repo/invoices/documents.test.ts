@@ -269,11 +269,19 @@ describe("documents: status rules", () => {
     await expect(documents.markPaid(other.id)).rejects.toBeInstanceOf(ValidationError);
   });
 
-  it("allows void from draft and from sent, and nothing after paid", async () => {
+  it("allows an invoice to be corrected after it is paid, but never a voided one", async () => {
     h = await createSeededHarness();
     expect(documents.canTransition("invoice", "draft", "void")).toBe(true);
     expect(documents.canTransition("invoice", "sent", "void")).toBe(true);
-    expect(documents.canTransition("invoice", "paid", "void")).toBe(false);
+    // Paid is recoverable: marking the wrong invoice paid used to be
+    // permanent, and wrong Collected figures with it.
+    expect(documents.canTransition("invoice", "paid", "void")).toBe(true);
+    expect(documents.canTransition("invoice", "paid", "sent")).toBe(true);
+    // Void is the one end state. A written-off billing stays written off.
+    expect(documents.canTransition("invoice", "void", "sent")).toBe(false);
+    expect(documents.canTransition("invoice", "void", "paid")).toBe(false);
+    // A draft was never sent, so it cannot skip straight to paid.
+    expect(documents.canTransition("invoice", "draft", "paid")).toBe(false);
     expect(documents.canTransition("quote", "sent", "accepted")).toBe(true);
     expect(documents.canTransition("quote", "draft", "accepted")).toBe(false);
     expect(documents.canTransition("invoice", "sent", "accepted")).toBe(false);
@@ -616,7 +624,7 @@ describe("documents: the money model - a document belongs to a deal", () => {
     // (round 3, "Money model"), so by here the documents have already
     // followed and syncCustomerFromDeal has nothing left to do.
     await deals.update(deal.id, { contactId: contactB.id, companyId: companyB.id });
-    expect(await documents.syncCustomerFromDeal(deal.id)).toBe(0);
+    expect((await documents.syncCustomerFromDeal(deal.id)).changed).toBe(0);
 
     const reloadedOne = await documents.getOrThrow(docOne.id);
     const reloadedTwo = await documents.getOrThrow(docTwo.id);
@@ -633,12 +641,88 @@ describe("documents: the money model - a document belongs to a deal", () => {
       `UPDATE documents SET contact_id = ?, company_id = ? WHERE deal_id = ?`,
       [contactA.id, companyA.id, deal.id],
     );
-    expect(await documents.syncCustomerFromDeal(deal.id)).toBe(2);
+    expect((await documents.syncCustomerFromDeal(deal.id)).changed).toBe(2);
     expect((await documents.getOrThrow(docOne.id)).document.companyId).toBe(companyB.id);
     expect((await documents.getOrThrow(docTwo.id)).document.companyId).toBe(companyB.id);
 
     // Nothing left to change: a second call is a no-op.
-    expect(await documents.syncCustomerFromDeal(deal.id)).toBe(0);
+    expect((await documents.syncCustomerFromDeal(deal.id)).changed).toBe(0);
+  });
+
+  it("does NOT re-address a document the customer has already received", async () => {
+    h = await createSeededHarness();
+    const companyA = await companies.create({ name: "Original Co" });
+    const companyB = await companies.create({ name: "Corrected Co" });
+    const deal = await deals.create({
+      title: "Already sent",
+      stageId: await firstStageId(),
+      companyId: companyA.id,
+    });
+    const draft = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(1000) });
+    const sent = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(2000) });
+    const paid = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(3000) });
+    await documents.send(sent.id);
+    await documents.send(paid.id);
+    await documents.markPaid(paid.id);
+
+    const result = await documents.syncCustomerFromDeal(deal.id);
+    // The deal has not moved yet, so nothing at all should have happened.
+    expect(result.changed).toBe(0);
+    expect(result.keptNumbers).toEqual([]);
+
+    await deals.update(deal.id, { companyId: companyB.id });
+    const after = await documents.syncCustomerFromDeal(deal.id);
+    expect(after.changed).toBe(0);
+    // The sent and the paid one are named so the caller can say so; the draft
+    // has already followed the deal.
+    expect(after.keptNumbers.sort()).toEqual([sent.number, paid.number].sort());
+
+    expect((await documents.getOrThrow(draft.id)).document.companyId).toBe(companyB.id);
+    expect((await documents.getOrThrow(sent.id)).document.companyId).toBe(companyA.id);
+    expect((await documents.getOrThrow(paid.id)).document.companyId).toBe(companyA.id);
+  });
+
+  it("clears a draft's stale PDF when its bill-to changes", async () => {
+    h = await createSeededHarness();
+    const companyA = await companies.create({ name: "Before Co" });
+    const companyB = await companies.create({ name: "After Co" });
+    const deal = await deals.create({
+      title: "Stale pdf",
+      stageId: await firstStageId(),
+      companyId: companyA.id,
+    });
+    const draft = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(1000) });
+    await documents.setPdfPath(draft.id, "/tmp/before.pdf");
+
+    await deals.update(deal.id, { companyId: companyB.id });
+
+    const reloaded = await documents.getOrThrow(draft.id);
+    expect(reloaded.document.companyId).toBe(companyB.id);
+    expect(reloaded.document.pdfPath).toBeNull();
+  });
+
+  it("a paid invoice can be marked unpaid, and voided, and never reuses its number", async () => {
+    h = await createSeededHarness();
+    const deal = await deals.create({ title: "Wrong one", stageId: await firstStageId() });
+    const invoice = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(5000) });
+    await documents.send(invoice.id);
+    await documents.markPaid(invoice.id, { method: "cheque", note: "Cheque 4471" });
+
+    const unpaid = await documents.markUnpaid(invoice.id);
+    expect(unpaid.status).toBe("sent");
+    expect(unpaid.paidOn).toBeNull();
+    expect(unpaid.paidMethod).toBeNull();
+    expect(unpaid.paidNote).toBeNull();
+    expect(unpaid.number).toBe(invoice.number);
+
+    // It is owed again, so it can be paid again or written off.
+    await documents.markPaid(invoice.id);
+    const voided = await documents.markVoid(invoice.id);
+    expect(voided.status).toBe("void");
+
+    // The next invoice does not get the voided one's number back.
+    const next = await documents.create({ kind: "invoice", dealId: deal.id, prefix: "INV", items: lines(100) });
+    expect(next.number).not.toBe(invoice.number);
   });
 
   it("syncCustomerFromDeal leaves a soft-deleted document alone", async () => {
@@ -659,8 +743,8 @@ describe("documents: the money model - a document belongs to a deal", () => {
     await documents.softDelete(doc.id);
 
     await deals.update(deal.id, { companyId: companyB.id });
-    const changed = await documents.syncCustomerFromDeal(deal.id);
-    expect(changed).toBe(0);
+    const result = await documents.syncCustomerFromDeal(deal.id);
+    expect(result.changed).toBe(0);
 
     const reloaded = await documents.getOrThrow(doc.id);
     expect(reloaded.document.companyId).toBe(companyA.id);

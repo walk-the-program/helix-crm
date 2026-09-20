@@ -229,6 +229,7 @@ export type DocumentActivityEvent =
   | "created"
   | "sent"
   | "paid"
+  | "unpaid"
   | "void"
   | "accepted"
   | "declined";
@@ -266,6 +267,8 @@ export function documentActivityBody(
       return `${label} ${input.number} sent · ${money()}`;
     case "paid":
       return input.method ? `Paid ${money()} by ${input.method}` : `Paid ${money()}`;
+    case "unpaid":
+      return `${label} ${input.number} marked unpaid · ${money()} owed again`;
     case "void":
       return `${label} ${input.number} voided`;
     case "accepted":
@@ -867,12 +870,31 @@ function statementParts(statement: {
   return [statement.sql, statement.params];
 }
 
+/** What `syncCustomerFromDeal` did, so the caller can tell the owner. */
+export type CustomerSyncResult = {
+  /** Drafts whose bill-to was rewritten. */
+  changed: number;
+  /** Documents the customer has already seen, left exactly as they were. */
+  keptNumbers: string[];
+};
+
 /**
- * Re-copy the deal's customer onto every live document of that deal.
- * Returns how many rows changed. Called after a deal's contact or company
- * is edited; safe to call when nothing changed.
+ * Re-copy the deal's customer onto its DRAFT documents. Called after a deal's
+ * contact or company is edited; safe to call when nothing changed.
+ *
+ * Drafts only, and that is the whole point of this function's second half.
+ * `assertDraft` above refuses to touch a sent document's lines because "a sent
+ * document is a record of what the customer received" - and this used to
+ * rewrite the bill-to on sent and paid invoices anyway, with no status test at
+ * all. Correcting a deal's customer, or merging two contacts, silently
+ * re-addressed invoices that were already in somebody's hands, while the PDF
+ * on disk kept the old name. The two rules are now the same rule.
+ *
+ * A draft whose bill-to does change also loses its `pdf_path`: the file that
+ * was rendered is addressed to the wrong customer, so the next Download has to
+ * make a new one rather than open the stale one.
  */
-export async function syncCustomerFromDeal(dealId: string): Promise<number> {
+export async function syncCustomerFromDeal(dealId: string): Promise<CustomerSyncResult> {
   return withTransaction(async () => {
     const deal = await deals.getOrThrow(dealId);
     // `list` already excludes soft-deleted rows by default (no
@@ -880,20 +902,26 @@ export async function syncCustomerFromDeal(dealId: string): Promise<number> {
     const { rows } = await list({ dealId }, { limit: 5000 });
     const at = nowIso();
     let changed = 0;
+    const keptNumbers: string[] = [];
     for (const doc of rows) {
       if (doc.contactId === deal.contactId && doc.companyId === deal.companyId) {
+        continue;
+      }
+      if (doc.status !== "draft") {
+        keptNumbers.push(doc.number);
         continue;
       }
       const values = {
         contactId: deal.contactId,
         companyId: deal.companyId,
+        pdfPath: null,
         updatedAt: at,
       };
       await raw.execute(...statementParts(updateStatement("documents", doc.id, values)));
       await logWrite("document", doc.id, "update", doc, values);
       changed += 1;
     }
-    return changed;
+    return { changed, keptNumbers };
   }, "Syncing the customer from the deal");
 }
 
@@ -924,7 +952,15 @@ const TRANSITIONS: Record<string, Record<string, string[]>> = {
   invoice: {
     draft: ["sent", "void"],
     sent: ["paid", "void"],
-    paid: [],
+    // Paid is not the end of the road. Marking the wrong invoice paid, or
+    // paying it on the wrong date, is the commonest mistake there is on this
+    // screen, and before this it was unrecoverable: Collected, the deal strip,
+    // the customer's lifetime figures and every period report stayed wrong for
+    // ever, because a document cannot be edited, deleted or re-marked. Going
+    // back to `sent` clears the payment; voiding it writes the whole billing
+    // off. Both are one confirmation and both leave a timeline line, so the
+    // history still says what happened.
+    paid: ["sent", "void"],
     void: [],
   },
 };
@@ -958,6 +994,7 @@ async function setStatus(
   to: string,
   extra: Record<string, unknown>,
   label: string,
+  event?: DocumentActivityEvent,
 ): Promise<Document> {
   return withWrite(async () => {
     const current = await getOrThrow(id);
@@ -971,7 +1008,7 @@ async function setStatus(
     const rawMethod = (extra as { paidMethod?: unknown }).paidMethod;
     const method = typeof rawMethod === "string" || rawMethod === null ? rawMethod : null;
     const activity = activities.systemStatement({
-      body: documentActivityBody(to as DocumentActivityEvent, {
+      body: documentActivityBody(event ?? (to as DocumentActivityEvent), {
         kind: current.document.kind,
         number: current.document.number,
         totalCents: current.document.totalCents,
@@ -1023,6 +1060,24 @@ export async function markPaid(
       paidNote: trimmedOrNull(input.note ?? null),
     },
     "Marking it paid",
+  );
+}
+
+/**
+ * Undo a payment: the invoice goes back to `sent` and is owed again.
+ *
+ * The payment fields are cleared rather than kept "for the record", because a
+ * `paid_on` sitting on an invoice whose status is `sent` is a lie waiting to
+ * be read by the next query somebody writes. What happened is on the timeline,
+ * which is where history belongs.
+ */
+export async function markUnpaid(id: string): Promise<Document> {
+  return setStatus(
+    id,
+    "sent",
+    { paidOn: null, paidMethod: null, paidNote: null },
+    "Marking it unpaid",
+    "unpaid",
   );
 }
 
