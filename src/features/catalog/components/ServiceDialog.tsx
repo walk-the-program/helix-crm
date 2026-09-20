@@ -171,7 +171,7 @@ export function ServiceDialog(props: {
           <Field label="How is it charged?" htmlFor="service-charge">
             <Select
               id="service-charge"
-              ariaLabel="How is it charged?"
+              aria-label="How is it charged?"
               value={charge}
               options={CHARGE_OPTIONS}
               onValueChange={(v) => setCharge(v as Charge)}

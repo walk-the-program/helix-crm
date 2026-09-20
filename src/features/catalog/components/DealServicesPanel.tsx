@@ -211,7 +211,7 @@ function CustomLineRow(props: { dealId: string; onDone: () => void }) {
       </div>
       <div className="w-[140px]">
         <Select
-          ariaLabel="How is it charged?"
+          aria-label="How is it charged?"
           value={charge}
           options={CHARGE_OPTIONS}
           onValueChange={setCharge}

@@ -423,7 +423,7 @@ export function DocumentPage() {
                 which is where a consequence belongs. The long form is a Help
                 entry, which lead-platform owns. */}
             <Select
-              ariaLabel="Status"
+              aria-label="Status"
               className="w-[150px]"
               value={document.status}
               options={statusOptions}
