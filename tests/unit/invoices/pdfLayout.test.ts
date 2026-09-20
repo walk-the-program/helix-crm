@@ -159,6 +159,53 @@ describe("renderDocument", () => {
     expect(loaded.getPageCount()).toBe(1);
   });
 
+  // ---------------------------------------------------------------------------
+  // Bill-to block: pdf-lib cannot read text back out of a rendered PDF (see
+  // the note below), so what these can verify is that renderDocument never
+  // throws or produces a malformed PDF for the customer shapes that used to
+  // draw a blank first line -- a contact with no name, no contact at all,
+  // and nothing but an email. The actual title/detail-line decisions are
+  // covered exhaustively, as pure functions, in billTo.test.ts; renderDocument
+  // itself is proven to consult that same decision in drawCustomerBlock.
+  // ---------------------------------------------------------------------------
+  describe("bill-to block with a missing name", () => {
+    it("renders when the contact has no name but the document has a company", async () => {
+      const input = makeInput(2, {
+        customer: {
+          name: "",
+          company: "Whitfield Family Holdings LLC",
+          email: "office@whitfieldholdings.example",
+          phone: "(312) 555-0199",
+          address: "88 Lakeshore Drive, Unit 1204\nChicago, IL 60601",
+        },
+      });
+      const bytes = await renderDocument(input, assets);
+      expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
+      const loaded = await PDFDocument.load(bytes);
+      expect(loaded.getPageCount()).toBe(1);
+    });
+
+    it("renders when there is no contact and no company, only an email", async () => {
+      const input = makeInput(2, {
+        customer: { name: "", company: "", email: "marguerite@example.com", phone: "", address: "" },
+      });
+      const bytes = await renderDocument(input, assets);
+      expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
+      const loaded = await PDFDocument.load(bytes);
+      expect(loaded.getPageCount()).toBe(1);
+    });
+
+    it("renders when the document has no customer information at all", async () => {
+      const input = makeInput(2, {
+        customer: { name: "", company: "", email: "", phone: "", address: "" },
+      });
+      const bytes = await renderDocument(input, assets);
+      expect(Buffer.from(bytes.slice(0, 4)).toString("latin1")).toBe("%PDF");
+      const loaded = await PDFDocument.load(bytes);
+      expect(loaded.getPageCount()).toBe(1);
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Byte-level content: tried and dropped. This was meant to assert the raw
   // saved bytes contain the document number and formatted total, using

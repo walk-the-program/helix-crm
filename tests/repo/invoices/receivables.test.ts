@@ -7,10 +7,13 @@
  * it. Contacts and companies go through their own repos for the same reason.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createHarness, type Harness } from "../harness";
+import { createSeededHarness, type Harness } from "../harness";
 import * as documents from "../../../src/db/repos/documents";
+import * as deals from "../../../src/db/repos/deals";
 import * as contacts from "../../../src/db/repos/contacts";
 import * as companies from "../../../src/db/repos/companies";
+import * as stages from "../../../src/db/repos/stages";
+import * as pipelines from "../../../src/db/repos/pipelines";
 import { addDaysToDateString } from "../../../src/lib/dates";
 import {
   AGING_BUCKETS,
@@ -23,7 +26,10 @@ import {
 let h: Harness | null = null;
 
 beforeEach(async () => {
-  h = await createHarness();
+  // Seeded (not just createHarness): every invoice below now belongs to a
+  // deal (the money model, round 3), and a deal needs a real pipeline stage
+  // to be created against.
+  h = await createSeededHarness();
 });
 
 afterEach(() => {
@@ -45,6 +51,12 @@ async function makeCompany(name: string): Promise<string> {
   return company.id;
 }
 
+async function firstStageId(): Promise<string> {
+  const pipeline = await pipelines.getDefaultOrThrow();
+  const all = await stages.list(pipeline.id);
+  return all[0].id;
+}
+
 type InvoiceOptions = {
   contactId?: string | null;
   companyId?: string | null;
@@ -53,12 +65,23 @@ type InvoiceOptions = {
   issuedOn?: string;
 };
 
-/** A draft invoice, one line, no tax, so `totalCents` is exactly the line. */
+/**
+ * A draft invoice, one line, no tax, so `totalCents` is exactly the line.
+ *
+ * The money model says a document's customer is its deal's customer, never
+ * its own, so this seeds a deal with the requested contact/company first and
+ * hangs the invoice off that - the document repo copies them across itself.
+ */
 async function createInvoice(options: InvoiceOptions): Promise<documents.Document> {
-  return documents.create({
-    kind: "invoice",
+  const deal = await deals.create({
+    title: "Receivables test deal",
+    stageId: await firstStageId(),
     contactId: options.contactId ?? null,
     companyId: options.companyId ?? null,
+  });
+  return documents.create({
+    kind: "invoice",
+    dealId: deal.id,
     prefix: "INV",
     taxRateBp: 0,
     issuedOn: options.issuedOn ?? "2026-01-01",
@@ -220,9 +243,14 @@ describe("aging", () => {
     await documents.softDelete(deleted.id);
 
     // A quote, sent, otherwise identical - never counted, it is not an invoice.
+    const quoteDeal = await deals.create({
+      title: "Excluded quote's deal",
+      stageId: await firstStageId(),
+      companyId,
+    });
     const quote = await documents.create({
       kind: "quote",
-      companyId,
+      dealId: quoteDeal.id,
       prefix: "QUO",
       taxRateBp: 0,
       issuedOn: "2026-01-01",

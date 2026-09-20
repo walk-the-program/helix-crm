@@ -29,6 +29,7 @@ import {
   ConfirmDialog,
   EmptyState,
   PageHeader,
+  Select,
   Spinner,
   Textarea,
   toast,
@@ -59,6 +60,14 @@ import {
   toNewItems,
   useDraftLines,
 } from "@/features/invoices/components/DocumentLines";
+import { billToTitle } from "@/features/invoices/lib/billTo";
+import {
+  anyBusy,
+  isBusy,
+  statusChoices,
+  statusIsFixed,
+  type BusyState,
+} from "@/features/invoices/lib/documentActions";
 import { MarkPaidDialog } from "@/features/invoices/components/MarkPaidDialog";
 import { saveDocumentPdf } from "@/features/invoices/lib/pdfFile";
 
@@ -101,7 +110,9 @@ export function DocumentPage() {
   const [paying, setPaying] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [declining, setDeclining] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // ONE action at a time, named. A single shared boolean used to put a
+  // spinner on every button in the header at once; see documentActions.ts.
+  const [busy, setBusy] = useState<BusyState>(null);
 
   const replaceItems = useReplaceItems();
   const updateDocument = useUpdateDocument();
@@ -167,7 +178,7 @@ export function DocumentPage() {
   }
 
   async function onSend() {
-    setBusy(true);
+    setBusy("send");
     try {
       if (editable && !(await saveLines())) return;
       await send.mutateAsync(id);
@@ -180,24 +191,24 @@ export function DocumentPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `That ${noun} did not send.`);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function onDownload() {
-    setBusy(true);
+    setBusy("download");
     try {
       const path = await writePdf(false);
       if (path) toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "The PDF could not be written.");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function onAccept() {
-    setBusy(true);
+    setBusy("accept");
     try {
       const result = await accept.mutateAsync(id);
       if (result.invoice) {
@@ -209,7 +220,45 @@ export function DocumentPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "That did not save.");
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  /**
+   * The Status control. An invoice handed over on paper still has to become
+   * "sent", and before this the only way to get there was the Send button,
+   * which also writes and opens a PDF. This moves the document and nothing
+   * else - same repository call, same dates, no file.
+   *
+   * "Paid", "Accepted" and "Declined" hand off to the same dialogs the buttons
+   * use, because the money needs a date and a method and a declined quote is
+   * worth one confirmation.
+   */
+  async function onStatusPicked(next: string) {
+    if (!document || next === document.status) return;
+    if (next === "paid") {
+      setPaying(true);
+      return;
+    }
+    if (next === "declined") {
+      setDeclining(true);
+      return;
+    }
+    if (next === "accepted") {
+      await onAccept();
+      return;
+    }
+    if (next !== "sent") return;
+
+    setBusy("status");
+    try {
+      if (editable && !(await saveLines())) return;
+      await send.mutateAsync(id);
+      toast.success(`Marked ${document.number} sent.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "That status did not save.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -218,6 +267,8 @@ export function DocumentPage() {
   const canPay = canTransition(document.kind, document.status, "paid");
   const canVoid = canTransition(document.kind, document.status, "void");
   const canAccept = canTransition(document.kind, document.status, "accepted");
+  const statusOptions = statusChoices(document.kind, document.status);
+  const statusFixed = statusIsFixed(document.kind, document.status);
 
   return (
     <div className="flex flex-col gap-[var(--space-6)]">
@@ -237,7 +288,8 @@ export function DocumentPage() {
             <Button
               variant="secondary"
               iconLeft={<DownloadSimple size={16} weight="bold" aria-hidden="true" />}
-              loading={busy}
+              loading={isBusy(busy, "download")}
+              disabled={anyBusy(busy)}
               onClick={() => void onDownload()}
             >
               Download PDF
@@ -246,7 +298,8 @@ export function DocumentPage() {
               <Button
                 variant="secondary"
                 iconLeft={<Envelope size={16} weight="bold" aria-hidden="true" />}
-                loading={busy}
+                loading={isBusy(busy, "send")}
+                disabled={anyBusy(busy)}
                 onClick={() => void onSend()}
               >
                 Send
@@ -254,16 +307,21 @@ export function DocumentPage() {
             ) : null}
             {canAccept ? (
               <>
-                <Button variant="secondary" loading={busy} onClick={() => void onAccept()}>
+                <Button
+                  variant="secondary"
+                  loading={isBusy(busy, "accept")}
+                  disabled={anyBusy(busy)}
+                  onClick={() => void onAccept()}
+                >
                   Accepted
                 </Button>
-                <Button variant="secondary" onClick={() => setDeclining(true)}>
+                <Button variant="secondary" disabled={anyBusy(busy)} onClick={() => setDeclining(true)}>
                   Declined
                 </Button>
               </>
             ) : null}
             {canPay ? (
-              <Button variant="secondary" onClick={() => setPaying(true)}>
+              <Button variant="secondary" disabled={anyBusy(busy)} onClick={() => setPaying(true)}>
                 Mark paid
               </Button>
             ) : null}
@@ -271,6 +329,7 @@ export function DocumentPage() {
               <Button
                 variant="destructive"
                 iconLeft={<Prohibit size={16} weight="bold" aria-hidden="true" />}
+                disabled={anyBusy(busy)}
                 onClick={() => setVoiding(true)}
               >
                 Void
@@ -284,11 +343,28 @@ export function DocumentPage() {
         {/* The one primary block on this page: what the document is worth. */}
         <span
           data-testid="document-total"
-          className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]"
+          className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]"
         >
           {money(document.totalCents)}
         </span>
-        <Badge tone={statusTone(document.status)}>{statusLabel(document.status)}</Badge>
+        {statusFixed ? (
+          <Badge tone={statusTone(document.status)}>{statusLabel(document.status)}</Badge>
+        ) : (
+          <div
+            className="flex items-center gap-[var(--space-2)]"
+            data-testid="document-status"
+          >
+            <span className="section-label">Status</span>
+            <Select
+              ariaLabel="Status"
+              className="w-[150px]"
+              value={document.status}
+              options={statusOptions}
+              disabled={anyBusy(busy)}
+              onValueChange={(next) => void onStatusPicked(next)}
+            />
+          </div>
+        )}
         {isQuote ? <Badge>Quote</Badge> : null}
         {overdue ? (
           <span className="tabular text-[length:var(--text-sm)] font-medium text-[var(--color-text)]">
@@ -341,6 +417,7 @@ export function DocumentPage() {
                 <Button
                   variant="secondary"
                   loading={replaceItems.isPending}
+                  disabled={anyBusy(busy)}
                   onClick={() => {
                     void saveLines().then((ok) => {
                       if (ok) toast.success("Saved the lines.");
@@ -389,7 +466,18 @@ export function DocumentPage() {
                 and filler is what DESIGN.md section 11 rules out. */}
             <CardGroupLabel>Details</CardGroupLabel>
             <Card>
-              <DetailRow label="Customer">{customerLabel(document)}</DetailRow>
+              {/* "Bill to", not "Customer": this is the exact line the PDF
+                  prints at the top of the block, resolved by the same
+                  function, so the screen cannot promise a name the document
+                  does not carry. */}
+              <DetailRow label="Bill to">
+                {billToTitle({
+                  contactName: [document.contactFirstName ?? "", document.contactLastName ?? ""]
+                    .join(" ")
+                    .trim(),
+                  companyName: document.companyName,
+                })}
+              </DetailRow>
               <DetailRow label="Issued">
                 {formatDateDisplay(document.issuedOn) || "Not yet"}
               </DetailRow>

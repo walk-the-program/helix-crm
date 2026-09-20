@@ -13,13 +13,15 @@
  * quote for a monthly service honest about what is being agreed to.
  */
 import { useEffect, useState } from "react";
-import { Trash } from "@/ui/icons";
+import { Plus, Trash } from "@/ui/icons";
 import { Badge, Button, Checkbox, IconButton, Input, Table, TBody, TD, TFoot, TH, THead, TR } from "@/ui";
 import { centsToDecimalString, formatMoney, parseMoneyToCents } from "@/lib/money";
 import { computeTotals, type DocumentItem, type NewDocumentItem } from "@/db/repos/documents";
 import { intervalLabel } from "@/features/invoices/lib/format";
 import { formatTaxRate } from "@/features/invoices/lib/settings";
 import { hasMixedTaxability, summarizeTaxLines, taxRowLabel } from "@/features/invoices/lib/taxLabel";
+import { ServicesPicker } from "@/features/invoices/components/ServicesPicker";
+import type { PickedService } from "@/features/invoices/lib/newService";
 
 /** A line while it is being edited: money as the text in the box. */
 export type DraftLine = {
@@ -49,6 +51,24 @@ export function blankLine(): DraftLine {
     taxable: false,
     kind: "one_time",
     interval: null,
+  };
+}
+
+/**
+ * A service picked out of the catalog, as a line. The price and the kind come
+ * from the catalog row, not from a default: a monthly service quoted as a
+ * one-off is the kind of mistake that only shows up on the invoice.
+ */
+export function fromPickedService(service: PickedService): DraftLine {
+  return {
+    key: nextKey(),
+    name: service.name,
+    description: service.description ?? "",
+    qty: "1",
+    unit: centsToDecimalString(service.unitCents),
+    taxable: service.taxable,
+    kind: service.kind,
+    interval: service.kind === "recurring" ? (service.interval ?? "month") : null,
   };
 }
 
@@ -113,6 +133,10 @@ export function DocumentLines(props: {
   locale?: string;
 }) {
   const { lines, onChange, editable, taxRateBp, currency, locale } = props;
+  // "Add a line" opens the catalog rather than dropping an empty row: the
+  // owner is almost always billing something he already sells, and typing the
+  // name and the price again is where a wrong price comes from.
+  const [picking, setPicking] = useState(false);
 
   const totals = computeTotals(
     lines.map((line) => {
@@ -144,20 +168,25 @@ export function DocumentLines(props: {
       <Table>
         <THead>
           <TR>
-            <TH>Description</TH>
-            <TH className="w-[72px] text-right">Qty</TH>
-            <TH className="w-[120px] text-right">Unit</TH>
+            {/* Claimed explicitly. The table sizes itself off its content, and
+                with four fixed-width columns beside it the description column
+                was collapsing to the width of the word "Description" - which
+                is what left the two inputs in it too narrow to read what you
+                had typed. */}
+            <TH className="w-[40%]">Description</TH>
+            <TH className="w-[72px] min-w-[72px] text-right">Qty</TH>
+            <TH className="w-[120px] min-w-[112px] text-right">Unit</TH>
             <TH className="w-[72px] text-center">Tax</TH>
-            <TH className="w-[120px] text-right">Amount</TH>
+            <TH className="w-[120px] min-w-[104px] text-right">Amount</TH>
             {editable ? <TH className="w-[var(--control-h)]" /> : null}
           </TR>
         </THead>
         <TBody>
           {lines.map((line) => (
             <TR key={line.key}>
-              <TD>
+              <TD className={editable ? "h-auto py-[var(--space-3)] align-top" : undefined}>
                 {editable ? (
-                  <div className="flex flex-col gap-[var(--space-1)]">
+                  <div className="flex flex-col gap-[var(--space-2)]">
                     <Input
                       aria-label="Description"
                       value={line.name}
@@ -196,7 +225,7 @@ export function DocumentLines(props: {
                   </div>
                 )}
               </TD>
-              <TD className={numericCell}>
+              <TD className={editable ? `${numericCell} h-auto py-[var(--space-3)] align-top` : numericCell}>
                 {editable ? (
                   <Input
                     aria-label="Quantity"
@@ -209,7 +238,7 @@ export function DocumentLines(props: {
                   line.qty
                 )}
               </TD>
-              <TD className={numericCell}>
+              <TD className={editable ? `${numericCell} h-auto py-[var(--space-3)] align-top` : numericCell}>
                 {editable ? (
                   <Input
                     aria-label="Unit price"
@@ -222,7 +251,7 @@ export function DocumentLines(props: {
                   formatMoney(parseMoneyToCents(line.unit) ?? 0, currency, locale)
                 )}
               </TD>
-              <TD className="text-center">
+              <TD className={editable ? "h-auto py-[var(--space-3)] text-center align-top" : "text-center"}>
                 {editable ? (
                   <Checkbox
                     checked={line.taxable}
@@ -237,11 +266,15 @@ export function DocumentLines(props: {
                   <span className="text-[var(--color-text-faint)]">No</span>
                 )}
               </TD>
-              <TD className={numericCell}>
+              <TD
+                className={
+                  editable ? `${numericCell} h-auto py-[var(--space-3)] align-top` : numericCell
+                }
+              >
                 {formatMoney(lineCents(line), currency, locale)}
               </TD>
               {editable ? (
-                <TD>
+                <TD className="h-auto py-[var(--space-3)] align-top">
                   <IconButton
                     label={`Remove ${line.name || "this line"}`}
                     icon={<Trash size={16} weight="bold" aria-hidden="true" />}
@@ -292,12 +325,23 @@ export function DocumentLines(props: {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => onChange?.([...lines, blankLine()])}
+            iconLeft={<Plus size={16} weight="bold" aria-hidden="true" />}
+            onClick={() => setPicking(true)}
           >
             Add a line
           </Button>
         </div>
       ) : null}
+
+      <ServicesPicker
+        open={picking}
+        onOpenChange={setPicking}
+        onAdd={(services) => {
+          onChange?.([...lines, ...services.map(fromPickedService)]);
+          setPicking(false);
+        }}
+        onCustomLine={() => onChange?.([...lines, blankLine()])}
+      />
     </div>
   );
 }

@@ -18,7 +18,8 @@ import * as contacts from "../../../src/db/repos/contacts";
 import * as companies from "../../../src/db/repos/companies";
 import * as stages from "../../../src/db/repos/stages";
 import * as pipelines from "../../../src/db/repos/pipelines";
-import { ValidationError } from "../../../src/db/errors";
+import * as activities from "../../../src/db/repos/activities";
+import { NotFoundError, ValidationError } from "../../../src/db/errors";
 import { newId } from "../../../src/lib/ids";
 import { todayLocal } from "../../../src/lib/dates";
 
@@ -87,18 +88,26 @@ function lines(...unitCents: number[]): documents.NewDocumentItem[] {
 describe("documents: numbering", () => {
   it("counts up per kind, with the prefix and the year", async () => {
     h = await createSeededHarness();
-    const a = await documents.create({ kind: "invoice", prefix: "INV", items: lines(1000) });
-    const b = await documents.create({ kind: "invoice", prefix: "INV", items: lines(1000) });
+    const dealId = await aDeal();
+    const a = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(1000) });
+    const b = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(1000) });
     expect(a.number).toBe(`INV-${YEAR}-0001`);
     expect(b.number).toBe(`INV-${YEAR}-0002`);
   });
 
   it("keeps a separate sequence for quotes", async () => {
     h = await createSeededHarness();
-    await documents.create({ kind: "invoice", prefix: "INV", items: lines(1000) });
-    const quote = await documents.create({ kind: "quote", prefix: "QUO", items: lines(1000) });
+    const dealId = await aDeal();
+    await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(1000) });
+    const quote = await documents.create({
+      kind: "quote",
+      dealId,
+      prefix: "QUO",
+      items: lines(1000),
+    });
     const secondInvoice = await documents.create({
       kind: "invoice",
+      dealId,
       prefix: "INV",
       items: lines(1000),
     });
@@ -108,12 +117,13 @@ describe("documents: numbering", () => {
 
   it("has no gaps and no duplicates when ten creates are fired at once", async () => {
     h = await createSeededHarness();
+    const dealId = await aDeal();
     // Fired without awaiting in turn: the write lock is what has to serialise
     // these. If the sequence read ever escapes the transaction, two of them
     // take the same number and the unique index rejects the second.
     const created = await Promise.all(
       Array.from({ length: 10 }, () =>
-        documents.create({ kind: "invoice", prefix: "INV", items: lines(500) }),
+        documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(500) }),
       ),
     );
     const numbers = created.map((d) => d.number).sort();
@@ -125,9 +135,20 @@ describe("documents: numbering", () => {
 
   it("does not hand a voided invoice's number back out", async () => {
     h = await createSeededHarness();
-    const first = await documents.create({ kind: "invoice", prefix: "INV", items: lines(1000) });
+    const dealId = await aDeal();
+    const first = await documents.create({
+      kind: "invoice",
+      dealId,
+      prefix: "INV",
+      items: lines(1000),
+    });
     await documents.markVoid(first.id);
-    const second = await documents.create({ kind: "invoice", prefix: "INV", items: lines(1000) });
+    const second = await documents.create({
+      kind: "invoice",
+      dealId,
+      prefix: "INV",
+      items: lines(1000),
+    });
     expect(second.number).toBe(`INV-${YEAR}-0002`);
   });
 });
@@ -135,8 +156,10 @@ describe("documents: numbering", () => {
 describe("documents: totals and tax", () => {
   it("sums qty times unit and leaves tax at zero with no rate", async () => {
     h = await createSeededHarness();
+    const dealId = await aDeal();
     const doc = await documents.create({
       kind: "invoice",
+      dealId,
       prefix: "INV",
       items: [
         { name: "Callout", qty: 1, unitCents: 9500, taxable: false },
@@ -150,8 +173,10 @@ describe("documents: totals and tax", () => {
 
   it("charges tax on the taxable lines only, rounded once over the whole", async () => {
     h = await createSeededHarness();
+    const dealId = await aDeal();
     const doc = await documents.create({
       kind: "invoice",
+      dealId,
       prefix: "INV",
       taxRateBp: 825,
       items: [
@@ -183,8 +208,10 @@ describe("documents: totals and tax", () => {
 
   it("rewrites the totals when the lines are replaced", async () => {
     h = await createSeededHarness();
+    const dealId = await aDeal();
     const doc = await documents.create({
       kind: "invoice",
+      dealId,
       prefix: "INV",
       taxRateBp: 1000,
       items: [{ name: "One", qty: 1, unitCents: 1000, taxable: true }],
@@ -203,7 +230,8 @@ describe("documents: totals and tax", () => {
 describe("documents: status rules", () => {
   it("allows draft to sent and sent to paid, and stamps each", async () => {
     h = await createSeededHarness();
-    const doc = await documents.create({ kind: "invoice", prefix: "INV", items: lines(5000) });
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(5000) });
     expect(doc.status).toBe("draft");
 
     const sent = await documents.send(doc.id, { dueDays: 14 });
@@ -223,17 +251,19 @@ describe("documents: status rules", () => {
 
   it("refuses to pay an invoice that was never sent", async () => {
     h = await createSeededHarness();
-    const doc = await documents.create({ kind: "invoice", prefix: "INV", items: lines(5000) });
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(5000) });
     await expect(documents.markPaid(doc.id)).rejects.toBeInstanceOf(ValidationError);
   });
 
   it("refuses to send an invoice twice, and refuses to pay a void one", async () => {
     h = await createSeededHarness();
-    const doc = await documents.create({ kind: "invoice", prefix: "INV", items: lines(5000) });
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(5000) });
     await documents.send(doc.id);
     await expect(documents.send(doc.id)).rejects.toBeInstanceOf(ValidationError);
 
-    const other = await documents.create({ kind: "invoice", prefix: "INV", items: lines(100) });
+    const other = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(100) });
     await documents.send(other.id);
     await documents.markVoid(other.id);
     await expect(documents.markPaid(other.id)).rejects.toBeInstanceOf(ValidationError);
@@ -251,7 +281,8 @@ describe("documents: status rules", () => {
 
   it("refuses to edit the lines of anything that has left draft", async () => {
     h = await createSeededHarness();
-    const doc = await documents.create({ kind: "invoice", prefix: "INV", items: lines(1000) });
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(1000) });
     await documents.send(doc.id);
     await expect(
       documents.replaceItems(doc.id, [{ name: "Sneaky", qty: 1, unitCents: 1, taxable: false }]),
@@ -403,8 +434,10 @@ describe("documents: accepting a quote", () => {
 
   it("refuses to accept an invoice", async () => {
     h = await createSeededHarness();
+    const dealId = await aDeal();
     const invoice = await documents.create({
       kind: "invoice",
+      dealId,
       prefix: "INV",
       items: lines(1000),
     });
@@ -416,7 +449,13 @@ describe("documents: accepting a quote", () => {
 
   it("refuses to accept a quote that was never sent", async () => {
     h = await createSeededHarness();
-    const quote = await documents.create({ kind: "quote", prefix: "QUO", items: lines(1000) });
+    const dealId = await aDeal();
+    const quote = await documents.create({
+      kind: "quote",
+      dealId,
+      prefix: "QUO",
+      items: lines(1000),
+    });
     await expect(documents.accept(quote.id, { prefix: "INV" })).rejects.toBeInstanceOf(
       ValidationError,
     );
@@ -426,10 +465,11 @@ describe("documents: accepting a quote", () => {
 describe("documents: listing", () => {
   it("filters unpaid to invoices that are draft or sent", async () => {
     h = await createSeededHarness();
-    const draft = await documents.create({ kind: "invoice", prefix: "INV", items: lines(100) });
-    const sent = await documents.create({ kind: "invoice", prefix: "INV", items: lines(200) });
-    const paid = await documents.create({ kind: "invoice", prefix: "INV", items: lines(300) });
-    const quote = await documents.create({ kind: "quote", prefix: "QUO", items: lines(400) });
+    const dealId = await aDeal();
+    const draft = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(100) });
+    const sent = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(200) });
+    const paid = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(300) });
+    const quote = await documents.create({ kind: "quote", dealId, prefix: "QUO", items: lines(400) });
     await documents.send(sent.id);
     await documents.send(paid.id);
     await documents.markPaid(paid.id);
@@ -445,11 +485,391 @@ describe("documents: listing", () => {
 
   it("leaves a soft-deleted document out unless it is asked for", async () => {
     h = await createSeededHarness();
-    const doc = await documents.create({ kind: "invoice", prefix: "INV", items: lines(100) });
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(100) });
     await documents.softDelete(doc.id);
     expect((await documents.list({})).rows).toHaveLength(0);
     expect((await documents.list({ includeDeleted: true })).rows).toHaveLength(1);
     await documents.restore(doc.id);
     expect((await documents.list({})).rows).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Money model (round 3): every document belongs to a deal.                   */
+/* -------------------------------------------------------------------------- */
+
+describe("documents: the money model - a document belongs to a deal", () => {
+  it("refuses to create without a deal, names the deal in the error, and writes nothing", async () => {
+    h = await createSeededHarness();
+
+    // Omitted entirely - bypassing the type the way a caller ignoring TS
+    // still could - is rejected too.
+    await expect(
+      documents.create({
+        kind: "invoice",
+        prefix: "INV",
+        items: lines(1000),
+      } as unknown as documents.NewDocument),
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    // Explicitly empty hits the schema's own message, which is what "names
+    // the deal": "A document belongs to a deal."
+    try {
+      await documents.create({ kind: "invoice", dealId: "", prefix: "INV", items: lines(1000) });
+      expect.unreachable("create should have thrown");
+    } catch (err) {
+      const validation = err as InstanceType<typeof ValidationError>;
+      expect(validation.issues.some((issue) => /deal/i.test(issue.message))).toBe(true);
+    }
+
+    expect((await documents.list({ includeDeleted: true })).rows).toHaveLength(0);
+  });
+
+  it("stores the deal's contact and company even when the input passes different ones", async () => {
+    h = await createSeededHarness();
+    const dealCompany = await companies.create({ name: "Deal Co" });
+    const dealContact = await contacts.create({ firstName: "Deal", lastName: "Contact" });
+    const otherCompany = await companies.create({ name: "Other Co" });
+    const otherContact = await contacts.create({ firstName: "Other", lastName: "Contact" });
+    const deal = await deals.create({
+      title: "Money model - mismatched input",
+      stageId: await firstStageId(),
+      contactId: dealContact.id,
+      companyId: dealCompany.id,
+    });
+
+    const doc = await documents.create({
+      kind: "invoice",
+      dealId: deal.id,
+      contactId: otherContact.id,
+      companyId: otherCompany.id,
+      prefix: "INV",
+      items: lines(1000),
+    });
+
+    expect(doc.contactId).toBe(dealContact.id);
+    expect(doc.companyId).toBe(dealCompany.id);
+  });
+
+  it("raises NotFoundError for a deal that does not exist, and writes nothing", async () => {
+    h = await createSeededHarness();
+    await expect(
+      documents.create({
+        kind: "invoice",
+        dealId: "not-a-real-deal",
+        prefix: "INV",
+        items: lines(1000),
+      }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect((await documents.list({ includeDeleted: true })).rows).toHaveLength(0);
+  });
+
+  it("createFromDeal still produces a document linked to the deal with the deal's customer", async () => {
+    h = await createSeededHarness();
+    const company = await companies.create({ name: "Fromdeal Co" });
+    const contact = await contacts.create({ firstName: "From", lastName: "Deal" });
+    const deal = await deals.create({
+      title: "createFromDeal keeps the link",
+      stageId: await firstStageId(),
+      contactId: contact.id,
+      companyId: company.id,
+    });
+    await addDealItem(deal.id, { name: "Install", actualUnitCents: 20_000 });
+
+    const invoice = await documents.createFromDeal(deal.id, {
+      kind: "invoice",
+      prefix: "INV",
+      taxRateBp: 0,
+    });
+    expect(invoice.dealId).toBe(deal.id);
+    expect(invoice.contactId).toBe(contact.id);
+    expect(invoice.companyId).toBe(company.id);
+  });
+
+  it("syncCustomerFromDeal updates every live document to the deal's current customer, and is idempotent", async () => {
+    h = await createSeededHarness();
+    const companyA = await companies.create({ name: "Company A" });
+    const companyB = await companies.create({ name: "Company B" });
+    const contactA = await contacts.create({ firstName: "A", lastName: "One" });
+    const contactB = await contacts.create({ firstName: "B", lastName: "Two" });
+    const deal = await deals.create({
+      title: "Sync test",
+      stageId: await firstStageId(),
+      contactId: contactA.id,
+      companyId: companyA.id,
+    });
+    const docOne = await documents.create({
+      kind: "invoice",
+      dealId: deal.id,
+      prefix: "INV",
+      items: lines(1000),
+    });
+    const docTwo = await documents.create({
+      kind: "quote",
+      dealId: deal.id,
+      prefix: "QUO",
+      items: lines(500),
+    });
+
+    await deals.update(deal.id, { contactId: contactB.id, companyId: companyB.id });
+
+    const changed = await documents.syncCustomerFromDeal(deal.id);
+    expect(changed).toBe(2);
+
+    const reloadedOne = await documents.getOrThrow(docOne.id);
+    const reloadedTwo = await documents.getOrThrow(docTwo.id);
+    expect(reloadedOne.document.contactId).toBe(contactB.id);
+    expect(reloadedOne.document.companyId).toBe(companyB.id);
+    expect(reloadedTwo.document.contactId).toBe(contactB.id);
+    expect(reloadedTwo.document.companyId).toBe(companyB.id);
+
+    // Nothing left to change: the second call is a no-op.
+    expect(await documents.syncCustomerFromDeal(deal.id)).toBe(0);
+  });
+
+  it("syncCustomerFromDeal leaves a soft-deleted document alone", async () => {
+    h = await createSeededHarness();
+    const companyA = await companies.create({ name: "Keep Co" });
+    const companyB = await companies.create({ name: "New Co" });
+    const deal = await deals.create({
+      title: "Trash test",
+      stageId: await firstStageId(),
+      companyId: companyA.id,
+    });
+    const doc = await documents.create({
+      kind: "invoice",
+      dealId: deal.id,
+      prefix: "INV",
+      items: lines(1000),
+    });
+    await documents.softDelete(doc.id);
+
+    await deals.update(deal.id, { companyId: companyB.id });
+    const changed = await documents.syncCustomerFromDeal(deal.id);
+    expect(changed).toBe(0);
+
+    const reloaded = await documents.getOrThrow(doc.id);
+    expect(reloaded.document.companyId).toBe(companyA.id);
+  });
+
+  it("accepts a quote with no deal, carrying the quote's own contact and company onto the invoice", async () => {
+    h = await createSeededHarness();
+    const company = await companies.create({ name: "Legacy Co" });
+    const contact = await contacts.create({ firstName: "Legacy", lastName: "Contact" });
+    const deal = await deals.create({
+      title: "About to be orphaned",
+      stageId: await firstStageId(),
+      contactId: contact.id,
+      companyId: company.id,
+    });
+    const quote = await documents.create({
+      kind: "quote",
+      dealId: deal.id,
+      prefix: "QUO",
+      items: lines(5000),
+    });
+    // Simulate a quote written before this round: its deal_id is null, the
+    // way an old row can be, while its own contact/company (copied off the
+    // deal at the time, back when that was the only way) remain on the row.
+    await raw.execute(`UPDATE documents SET deal_id = NULL WHERE id = ?`, [quote.id]);
+    await documents.send(quote.id);
+
+    const result = await documents.accept(quote.id, { prefix: "INV" });
+    expect(result.invoice).not.toBeNull();
+    expect(result.invoice?.dealId).toBeNull();
+    expect(result.invoice?.contactId).toBe(contact.id);
+    expect(result.invoice?.companyId).toBe(company.id);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* documentActivityBody: pure, no database                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("documentActivityBody", () => {
+  const money = { currency: "USD", locale: "en-US" } as const;
+
+  it("describes a created invoice and a created quote, each with its money", () => {
+    expect(
+      documents.documentActivityBody("created", {
+        kind: "invoice",
+        number: "INV-2026-0003",
+        totalCents: 104_236,
+        ...money,
+      }),
+    ).toBe("Invoice INV-2026-0003 created · $1,042.36");
+    expect(
+      documents.documentActivityBody("created", {
+        kind: "quote",
+        number: "QUO-2026-0007",
+        totalCents: 100,
+        ...money,
+      }),
+    ).toBe("Quote QUO-2026-0007 created · $1.00");
+  });
+
+  it("describes a sent document", () => {
+    expect(
+      documents.documentActivityBody("sent", {
+        kind: "invoice",
+        number: "INV-2026-0003",
+        totalCents: 104_236,
+        ...money,
+      }),
+    ).toBe("Invoice INV-2026-0003 sent · $1,042.36");
+  });
+
+  it("describes a paid document, with and without a method", () => {
+    expect(
+      documents.documentActivityBody("paid", {
+        kind: "invoice",
+        number: "INV-2026-0003",
+        totalCents: 104_236,
+        method: "bank transfer",
+        ...money,
+      }),
+    ).toBe("Paid $1,042.36 by bank transfer");
+    expect(
+      documents.documentActivityBody("paid", {
+        kind: "invoice",
+        number: "INV-2026-0003",
+        totalCents: 104_236,
+        method: null,
+        ...money,
+      }),
+    ).toBe("Paid $1,042.36");
+  });
+
+  it("describes a voided document", () => {
+    expect(
+      documents.documentActivityBody("void", {
+        kind: "invoice",
+        number: "INV-2026-0003",
+        totalCents: 104_236,
+        ...money,
+      }),
+    ).toBe("Invoice INV-2026-0003 voided");
+  });
+
+  it("describes an accepted quote, with and without the invoice it became", () => {
+    expect(
+      documents.documentActivityBody("accepted", {
+        kind: "quote",
+        number: "QUO-2026-0007",
+        totalCents: 100_000,
+        becameNumber: "INV-2026-0009",
+        ...money,
+      }),
+    ).toBe("Quote QUO-2026-0007 accepted · became INV-2026-0009");
+    expect(
+      documents.documentActivityBody("accepted", {
+        kind: "quote",
+        number: "QUO-2026-0007",
+        totalCents: 100_000,
+        becameNumber: null,
+        ...money,
+      }),
+    ).toBe("Quote QUO-2026-0007 accepted");
+  });
+
+  it("describes a declined quote", () => {
+    expect(
+      documents.documentActivityBody("declined", {
+        kind: "quote",
+        number: "QUO-2026-0007",
+        totalCents: 100_000,
+        ...money,
+      }),
+    ).toBe("Quote QUO-2026-0007 declined");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* One activities row per create and per status-changing write.               */
+/* -------------------------------------------------------------------------- */
+
+describe("documents: activity", () => {
+  it("records one activity for a create, carrying the deal id and the amount", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal();
+    const before = await activities.list({ dealId });
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(1000) });
+    const after = await activities.list({ dealId });
+
+    expect(after.total).toBe(before.total + 1);
+    const entry = after.rows.find((r) => !before.rows.some((b) => b.id === r.id));
+    expect(entry).toBeTruthy();
+    expect(entry?.isSystem).toBe(true);
+    expect(entry?.dealId).toBe(dealId);
+    expect(entry?.body).toContain(doc.number);
+    expect(entry?.body).toContain("created");
+  });
+
+  it("records one activity each for sending and for paying, and paying records the amount", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(5000) });
+
+    const afterCreate = await activities.list({ dealId });
+    await documents.send(doc.id);
+    const afterSend = await activities.list({ dealId });
+    expect(afterSend.total).toBe(afterCreate.total + 1);
+    expect(afterSend.rows.some((r) => r.body.includes("sent"))).toBe(true);
+
+    await documents.markPaid(doc.id, { method: "bank transfer" });
+    const afterPaid = await activities.list({ dealId });
+    expect(afterPaid.total).toBe(afterSend.total + 1);
+    expect(
+      afterPaid.rows.some((r) => r.body.includes("Paid") && r.body.includes("bank transfer")),
+    ).toBe(true);
+  });
+
+  it("records one activity for voiding", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal();
+    const doc = await documents.create({ kind: "invoice", dealId, prefix: "INV", items: lines(1000) });
+    const before = await activities.list({ dealId });
+    await documents.markVoid(doc.id);
+    const after = await activities.list({ dealId });
+    expect(after.total).toBe(before.total + 1);
+    expect(after.rows.some((r) => r.body.includes("voided"))).toBe(true);
+  });
+
+  it("records one activity for accepting a quote, naming the invoice it became", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal("Loft conversion, take two");
+    await addDealItem(dealId, { name: "Stage one", actualUnitCents: 100_000 });
+    const quote = await documents.createFromDeal(dealId, {
+      kind: "quote",
+      prefix: "QUO",
+      taxRateBp: 0,
+    });
+    await documents.send(quote.id);
+
+    const before = await activities.list({ dealId });
+    const result = await documents.accept(quote.id, { prefix: "INV" });
+    const after = await activities.list({ dealId });
+
+    // One "accepted" line for the quote - the invoice it produced does not
+    // also get its own "created" line, since the accepted line names it.
+    expect(after.total).toBe(before.total + 1);
+    expect(
+      after.rows.some(
+        (r) => r.body.includes("accepted") && r.body.includes(result.invoice!.number),
+      ),
+    ).toBe(true);
+  });
+
+  it("records one activity for declining a quote", async () => {
+    h = await createSeededHarness();
+    const dealId = await aDeal();
+    const quote = await documents.create({ kind: "quote", dealId, prefix: "QUO", items: lines(1000) });
+    await documents.send(quote.id);
+    const before = await activities.list({ dealId });
+    await documents.decline(quote.id);
+    const after = await activities.list({ dealId });
+    expect(after.total).toBe(before.total + 1);
+    expect(after.rows.some((r) => r.body.includes("declined"))).toBe(true);
   });
 });

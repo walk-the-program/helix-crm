@@ -103,7 +103,7 @@ export function InvoicesScreen() {
             money outstanding, flat-filled, with the accent sticker shadow as
             its single detail — the same treatment DealPage.tsx gives the
             deal value. */}
-        <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]">
+        <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
           {formatMoney((summary ?? EMPTY_SUMMARY).outstandingCents, settings?.currency, settings?.locale)}
         </span>
         <span className="text-[length:var(--text-base)] text-[var(--color-text)]">

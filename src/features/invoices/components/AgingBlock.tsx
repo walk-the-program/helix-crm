@@ -93,7 +93,7 @@ export function AgingBlock() {
                 </span>
                 {/* The one primary block on this screen, drawn exactly the way
                     DealPage.tsx draws the deal value. */}
-                <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)] shadow-[var(--shadow-sticker)]">
+                <span className="money inline-flex items-center bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[length:var(--text-subhead)] font-semibold tabular-nums text-[var(--color-accent-text)]">
                   {money(aging!.totalCents)}
                 </span>
               </div>

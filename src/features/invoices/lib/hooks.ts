@@ -14,6 +14,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/app/queryClient";
 import * as documents from "@/db/repos/documents";
+import * as deals from "@/db/repos/deals";
+import * as dealItems from "@/db/repos/dealItems";
+import * as pipelines from "@/db/repos/pipelines";
+import * as stages from "@/db/repos/stages";
 import * as schedules from "@/db/repos/invoiceSchedules";
 import { todayLocal } from "@/lib/dates";
 import { readInvoiceSettings, prefixFor, type InvoiceSettings } from "@/features/invoices/lib/settings";
@@ -29,6 +33,8 @@ export const iqk = {
   unpaid: () => ["invoices", "unpaid"] as const,
   summary: () => ["invoices", "summary"] as const,
   settings: () => ["invoices", "settings"] as const,
+  customerDeals: (contactId: string | null, companyId: string | null) =>
+    ["invoices", "customer-deals", contactId, companyId] as const,
   aging: () => ["invoices", "aging"] as const,
 } as const;
 
@@ -156,6 +162,38 @@ export function useOutstandingSummary() {
   });
 }
 
+/**
+ * The deals a document could belong to: everything of this customer, open work
+ * first.
+ *
+ * Both links are asked separately and merged rather than filtered together.
+ * `deals.list({ contactId, companyId })` ANDs the two, which would hide the
+ * deal booked against the company before anyone put a name to it - and that is
+ * exactly the deal a new invoice for that company usually belongs to.
+ */
+export function useCustomerDeals(contactId: string | null, companyId: string | null) {
+  return useQuery({
+    queryKey: iqk.customerDeals(contactId, companyId),
+    enabled: Boolean(contactId || companyId),
+    queryFn: async (): Promise<deals.Deal[]> => {
+      const results = await Promise.all([
+        contactId ? deals.list({ contactId }, { limit: 50 }) : null,
+        companyId ? deals.list({ companyId }, { limit: 50 }) : null,
+      ]);
+      const seen = new Map<string, deals.Deal>();
+      for (const result of results) {
+        for (const deal of result?.rows ?? []) seen.set(deal.id, deal);
+      }
+      return [...seen.values()].sort((a, b) => {
+        const aOpen = !a.stageIsWon && !a.stageIsLost;
+        const bOpen = !b.stageIsWon && !b.stageIsLost;
+        if (aOpen !== bOpen) return aOpen ? -1 : 1;
+        return b.updatedAt.localeCompare(a.updatedAt);
+      });
+    },
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* writes                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -200,6 +238,59 @@ export function useCreateDocument() {
         paymentInstructions:
           input.paymentInstructions ?? (settings.paymentInstructions || null),
       });
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * "New deal for this": the deal a from-scratch invoice belongs to, carrying
+ * the same lines the invoice is about to carry.
+ *
+ * The deal and its lines are written through the repositories one after the
+ * other rather than folded into a single transaction. `dealItems.add` owns
+ * two things a feature file has no business reimplementing - the next position
+ * on the deal, and the recompute that keeps a deal's value and its lines from
+ * disagreeing - and it takes the write lock itself, so it cannot be called
+ * from inside a transaction that already holds it.
+ */
+export function useCreateDealForDocument() {
+  const invalidate = useInvalidateInvoices();
+  return useMutation({
+    mutationFn: async (input: {
+      title: string;
+      contactId: string | null;
+      companyId: string | null;
+      lines: { name: string; description: string | null; qty: number; unitCents: number; taxable: boolean; kind: "one_time" | "recurring"; interval: "month" | "year" | null }[];
+    }) => {
+      const pipeline = await pipelines.getDefaultOrThrow();
+      const stage = await stages.firstStage(pipeline.id);
+      if (!stage) throw new Error("This workspace has no stages to put a deal in.");
+
+      const settings = await settingsNow();
+      const deal = await deals.create({
+        title: input.title,
+        stageId: stage.id,
+        currency: settings.currency,
+        contactId: input.contactId,
+        companyId: input.companyId,
+      });
+
+      for (const line of input.lines) {
+        await dealItems.add({
+          dealId: deal.id,
+          name: line.name,
+          description: line.description,
+          kind: line.kind,
+          interval: line.kind === "recurring" ? (line.interval ?? "month") : null,
+          qty: line.qty,
+          suggestedUnitCents: line.unitCents,
+          actualUnitCents: line.unitCents,
+          taxable: line.taxable,
+        });
+      }
+
+      return deal;
     },
     onSuccess: invalidate,
   });

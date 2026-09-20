@@ -47,6 +47,49 @@ function stageIdByName(bridge: HelixHarness["bridge"], name: string): string {
   return String(rows[0][0]);
 }
 
+/**
+ * A deal for one contact, straight through the bridge - the same way the
+ * first test seeds its own deal. Round 3 made a deal a required parent for
+ * every document a screen creates (`src/db/repos/documents.ts`), so every
+ * test below that submits NewDocumentScreen needs one of these first. The
+ * Job combobox's own "New job" row is a real feature in its own right and
+ * gets no separate coverage here - seeding through the bridge is the
+ * deterministic path, not a workaround.
+ */
+function seedContactDeal(
+  db: HelixHarness["bridge"],
+  params: { id: string; title: string; contactId: string; stageId: string },
+): void {
+  const now = iso(0);
+  db.execute(
+    `INSERT INTO deals (id, title, value_cents, currency, stage_id, stage_entered_at, position, contact_id, company_id, created_at, updated_at)
+     VALUES (?, ?, 0, 'USD', ?, ?, 0, ?, NULL, ?, ?)`,
+    [params.id, params.title, params.stageId, now, params.contactId, now, now],
+  );
+}
+
+/** Picks a job on NewDocumentScreen's Job combobox by its (unique) title. */
+async function pickJob(page: Page, dealTitle: string): Promise<void> {
+  await page.getByRole("combobox", { name: "Job" }).click();
+  await page.getByRole("option").filter({ hasText: dealTitle }).click();
+}
+
+/**
+ * Opens a `DatePicker` by its label and clicks the exact day. The picker
+ * focuses on the field's current value (or today, if it has none), so this
+ * walks backward a month at a time until the requested day is on screen -
+ * every date this spec ever picks is in the past relative to whatever the
+ * field started at, so one direction is all it needs.
+ */
+async function pickDatePickerDay(page: Page, label: string, isoDate: string): Promise<void> {
+  await page.getByLabel(label).click();
+  const day = page.locator(`[data-testid="date-picker-day"][data-date="${isoDate}"]`);
+  for (let i = 0; i < 24 && (await day.count()) === 0; i += 1) {
+    await page.getByRole("button", { name: "Previous month" }).click();
+  }
+  await day.click();
+}
+
 // ---------------------------------------------------------------------------
 // Quick add, trimmed to the one type this spec needs (contacts) - the full
 // version with every type lives in records.e2e.ts; each spec keeps its own
@@ -254,7 +297,14 @@ test.describe("invoices", () => {
     await page.getByRole("button", { name: "Mark paid" }).click();
     const payDialog = page.getByTestId("mark-paid-dialog");
     await expect(payDialog).toBeVisible();
-    await expect(payDialog.getByLabel("Date paid")).toHaveValue(dateOnly(0));
+    // "Date paid" is now the in-app DatePicker, not input[type=date] - open
+    // it and check today's cell is the one the calendar marks selected,
+    // which is the same fact ".toHaveValue(dateOnly(0))" used to prove.
+    await payDialog.getByLabel("Date paid").click();
+    await expect(
+      page.locator(`[data-testid="date-picker-day"][data-date="${dateOnly(0)}"]`),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Escape");
 
     await shoot(page, "mark-paid-dialog");
 
@@ -273,15 +323,33 @@ test.describe("invoices", () => {
     await page.goto("/");
     await quickAddContact(page, "Dana Ostrander");
 
+    // Round 3: every document belongs to a deal, so a from-scratch invoice
+    // needs a job to attach to before NewDocumentScreen will save it.
+    const [[contactId]] = db.query(
+      "SELECT id FROM contacts WHERE first_name = ?",
+      ["Dana"],
+    ) as [string][];
+    const stageId = stageIdByName(db, "New");
+    seedContactDeal(db, {
+      id: "deal-dana-irrigation",
+      title: "Irrigation repair job",
+      contactId,
+      stageId,
+    });
+
     await page.goto("/invoices/new");
     await page.getByRole("combobox", { name: "Contact" }).click();
     await page.getByRole("option", { name: "Dana Ostrander" }).click();
+    await pickJob(page, "Irrigation repair job");
 
-    await page.getByLabel("Description, line 1").fill("Irrigation repair");
-    await page.getByLabel("Unit price, line 1").fill("450.00");
+    // NewDocumentScreen no longer has its own line table - it renders the
+    // shared DocumentLines editor, one blank line already on it.
+    await page.getByLabel("Description").first().fill("Irrigation repair");
+    await page.getByLabel("Unit price").first().fill("450.00");
     // Well clear of any hour-of-day rounding edge, and clear of the
-    // just-created quote/invoice's numbering in the other test.
-    await page.getByLabel("Due").fill(dateOnly(-12 * DAY));
+    // just-created quote/invoice's numbering in the other test. Due is now
+    // the in-app DatePicker, not input[type=date].
+    await pickDatePickerDay(page, "Due", dateOnly(-12 * DAY));
 
     await page.getByRole("button", { name: "Create invoice" }).click();
     await page.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
@@ -294,10 +362,6 @@ test.describe("invoices", () => {
     // proof that the send actually landed as "sent".
     await expect(page.getByRole("button", { name: "Mark paid" })).toBeVisible();
 
-    const [[contactId]] = db.query(
-      "SELECT id FROM contacts WHERE first_name = ?",
-      ["Dana"],
-    ) as [string][];
     const [[number]] = db.query(
       "SELECT number FROM documents WHERE contact_id = ? AND kind = 'invoice'",
       [contactId],
@@ -316,14 +380,28 @@ test.describe("invoices", () => {
   });
 
   test("download PDF writes a .pdf", async ({ page, helix }) => {
+    const db = helix.bridge;
     await page.goto("/");
     await quickAddContact(page, "Oren Castillo");
+
+    const [[contactId]] = db.query(
+      "SELECT id FROM contacts WHERE first_name = ?",
+      ["Oren"],
+    ) as [string][];
+    const stageId = stageIdByName(db, "New");
+    seedContactDeal(db, {
+      id: "deal-oren-cleanup",
+      title: "Fall cleanup job",
+      contactId,
+      stageId,
+    });
 
     await page.goto("/invoices/new");
     await page.getByRole("combobox", { name: "Contact" }).click();
     await page.getByRole("option", { name: "Oren Castillo" }).click();
-    await page.getByLabel("Description, line 1").fill("Fall cleanup");
-    await page.getByLabel("Unit price, line 1").fill("300.00");
+    await pickJob(page, "Fall cleanup job");
+    await page.getByLabel("Description").first().fill("Fall cleanup");
+    await page.getByLabel("Unit price").first().fill("300.00");
     await page.getByRole("button", { name: "Create invoice" }).click();
     await page.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
 
@@ -394,6 +472,292 @@ test.describe("invoices", () => {
       "doc-vernon",
     ]) as [string][];
     expect(status).toBe("paid");
+  });
+
+  // ---------------------------------------------------------------------
+  // Round 3 acceptance evidence: the Status control, the Contact -> Company
+  // autofill, the services picker's catalog and custom lines, "New
+  // service...", and default payment instructions.
+  // ---------------------------------------------------------------------
+
+  test("the Status control alone moves Draft -> Sent -> Paid, with no PDF write", async ({
+    page,
+    helix,
+  }) => {
+    const db = helix.bridge;
+
+    // The migrator has to run before the bridge can write into its tables.
+    await page.goto("/");
+    await waitForShell(page);
+
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      ["c-marguerite", "Marguerite", "Voss", iso(-10 * DAY), iso(-10 * DAY)],
+    );
+    const docId = "doc-marguerite-status";
+    const now = iso(0);
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, due_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'draft', ?, ?, ?, 0, 0, ?, ?, ?)`,
+      [docId, "INV-2026-0900", "c-marguerite", dateOnly(0), dateOnly(14 * DAY), 40000, 40000, now, now],
+    );
+    db.execute(
+      `INSERT INTO document_items (id, document_id, name, qty, unit_cents, taxable, kind, position)
+       VALUES (?, ?, ?, 1, ?, 0, 'one_time', 0)`,
+      ["item-marguerite", docId, "Hedge trimming", 40000],
+    );
+
+    await page.goto(`/invoices/${docId}`);
+    await expect(page.getByTestId("document-status")).toBeVisible();
+
+    // Draft -> Sent, through the Status select only. Never "Send".
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Sent" }).click();
+
+    await expect
+      .poll(
+        () =>
+          (db.query("SELECT status FROM documents WHERE id = ?", [docId]) as [string][])[0][0],
+      )
+      .toBe("sent");
+    const [[, sentAt]] = db.query("SELECT status, sent_at FROM documents WHERE id = ?", [
+      docId,
+    ]) as [string, string | null][];
+    expect(sentAt).not.toBeNull();
+    // The whole point: moving the status writes no file. Sending (the other
+    // test's "Send" button) does.
+    expect(await lastFsWrite(page)).toBeNull();
+
+    // The header's own "Mark paid" is visible now that the invoice is sent -
+    // proving it is never clicked is the point of using the select instead.
+    await expect(page.getByRole("button", { name: "Mark paid" })).toBeVisible();
+
+    // Sent -> Paid, through the Status select. Paid needs a date and a
+    // method, so the select hands off to the same MarkPaidDialog the header
+    // button opens - its own confirm button is not "the Mark paid button"
+    // this test is avoiding, that button is in the header and stays unclicked.
+    await page.getByRole("combobox", { name: "Status" }).click();
+    await page.getByRole("option", { name: "Paid" }).click();
+
+    const payDialog = page.getByTestId("mark-paid-dialog");
+    await expect(payDialog).toBeVisible();
+    await payDialog.getByRole("button", { name: "Mark paid" }).click();
+    await expect(payDialog).toBeHidden();
+
+    const [[finalStatus]] = db.query("SELECT status FROM documents WHERE id = ?", [
+      docId,
+    ]) as [string][];
+    expect(finalStatus).toBe("paid");
+    expect(await lastFsWrite(page)).toBeNull();
+  });
+
+  test("picking a contact on a new document fills in their company", async ({ page, helix }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    db.execute(
+      `INSERT INTO companies (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      ["co-larkspur", "Larkspur Grounds LLC", iso(-30 * DAY), iso(-30 * DAY)],
+    );
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, company_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      ["c-holt", "Holt", "Ferris", "co-larkspur", iso(-30 * DAY), iso(-30 * DAY)],
+    );
+
+    await page.goto("/invoices/new");
+    const contactCombo = page.getByRole("combobox", { name: "Contact" });
+    await contactCombo.click();
+
+    // The /invoices/new screen with the Contact combobox open - one of the
+    // two new screenshot pairs this round adds.
+    await shoot(page, "new-document");
+
+    await page.keyboard.type("Holt");
+    await page.getByRole("option", { name: /Holt Ferris/ }).click();
+
+    // Never touched: the Company combobox fills itself from the chosen
+    // contact's own company.
+    await expect(page.getByRole("combobox", { name: "Company" })).toHaveText(
+      "Larkspur Grounds LLC",
+    );
+  });
+
+  test("Add a line: catalog services, then a custom line", async ({ page, helix }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      ["c-benedek", "Benedek", "Toth", iso(-5 * DAY), iso(-5 * DAY)],
+    );
+    const docId = "doc-benedek-lines";
+    const now = iso(0);
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'draft', ?, ?, 0, 0, ?, ?, ?)`,
+      [docId, "INV-2026-0910", "c-benedek", dateOnly(0), 20000, 20000, now, now],
+    );
+    db.execute(
+      `INSERT INTO document_items (id, document_id, name, qty, unit_cents, taxable, kind, position)
+       VALUES (?, ?, ?, 1, ?, 0, 'one_time', 0)`,
+      ["item-benedek-existing", docId, "Initial site visit", 20000],
+    );
+    db.execute(
+      `INSERT INTO products (id, name, description, kind, interval, unit_price_cents, taxable, active, position, created_at, updated_at)
+       VALUES (?, ?, NULL, 'one_time', NULL, ?, 0, 1, 0, ?, ?)`,
+      ["prod-mulch", "Mulch install", 12000, now, now],
+    );
+    db.execute(
+      `INSERT INTO products (id, name, description, kind, interval, unit_price_cents, taxable, active, position, created_at, updated_at)
+       VALUES (?, ?, NULL, 'one_time', NULL, ?, 0, 1, 1, ?, ?)`,
+      ["prod-edging", "Bed edging", 8500, now, now],
+    );
+
+    await page.goto(`/invoices/${docId}`);
+    await expect(page.getByLabel("Description").first()).toHaveValue("Initial site visit");
+
+    await page.getByRole("button", { name: "Add a line" }).click();
+    await shoot(page, "services-picker");
+
+    await page.getByRole("checkbox", { name: "Mulch install" }).click();
+    await page.getByRole("checkbox", { name: "Bed edging" }).click();
+    await page.getByRole("button", { name: "Add 2 services" }).click();
+
+    // Two new lines, carrying the catalog's own names and prices - appended
+    // after the one line the document already had, in catalog order.
+    const descriptions = page.getByLabel("Description");
+    const unitPrices = page.getByLabel("Unit price");
+    await expect(descriptions).toHaveCount(3);
+    await expect(descriptions.nth(1)).toHaveValue("Mulch install");
+    await expect(unitPrices.nth(1)).toHaveValue("120.00");
+    await expect(descriptions.nth(2)).toHaveValue("Bed edging");
+    await expect(unitPrices.nth(2)).toHaveValue("85.00");
+
+    await page.getByRole("button", { name: "Add a line" }).click();
+    await page.getByRole("button", { name: "Custom line" }).click();
+
+    // A third (newly added) line: blank, for the owner to type himself.
+    await expect(descriptions).toHaveCount(4);
+    await expect(descriptions.nth(3)).toHaveValue("");
+    await expect(unitPrices.nth(3)).toHaveValue("0.00");
+  });
+
+  test("New service... saves a catalog row and adds it as a line", async ({ page, helix }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    db.execute(
+      `INSERT INTO contacts (id, first_name, last_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      ["c-adaeze", "Adaeze", "Nnamdi", iso(-5 * DAY), iso(-5 * DAY)],
+    );
+    const docId = "doc-adaeze-newservice";
+    const now = iso(0);
+    db.execute(
+      `INSERT INTO documents (id, kind, number, contact_id, status, issued_on, subtotal_cents, tax_rate_bp, tax_cents, total_cents, created_at, updated_at)
+       VALUES (?, 'invoice', ?, ?, 'draft', ?, ?, 0, 0, ?, ?, ?)`,
+      [docId, "INV-2026-0920", "c-adaeze", dateOnly(0), 15000, 15000, now, now],
+    );
+    db.execute(
+      `INSERT INTO document_items (id, document_id, name, qty, unit_cents, taxable, kind, position)
+       VALUES (?, ?, ?, 1, ?, 0, 'one_time', 0)`,
+      ["item-adaeze-existing", docId, "Consultation", 15000],
+    );
+
+    await page.goto(`/invoices/${docId}`);
+    await page.getByRole("button", { name: "Add a line" }).click();
+
+    // No catalog yet in this fresh workspace, so the picker's own empty
+    // state is what opens the form - the same form a populated catalog's
+    // "New service..." button opens.
+    await page.getByRole("button", { name: "New service..." }).click();
+
+    const dialog = page.getByTestId("new-service-dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("Name").fill("Gutter guard install");
+    await dialog.getByLabel("Price").fill("225.00");
+    await dialog.getByRole("button", { name: "Add service" }).click();
+    await expect(dialog).toBeHidden();
+
+    const productRows = db.query(
+      "SELECT id, unit_price_cents FROM products WHERE name = ?",
+      ["Gutter guard install"],
+    ) as [string, number][];
+    expect(productRows.length).toBe(1);
+    expect(productRows[0][1]).toBe(22500);
+
+    const descriptions = page.getByLabel("Description");
+    await expect(descriptions).toHaveCount(2);
+    await expect(descriptions.nth(1)).toHaveValue("Gutter guard install");
+    await expect(page.getByLabel("Unit price").nth(1)).toHaveValue("225.00");
+  });
+
+  test("default payment instructions prefill a new document, and an override does not change the setting", async ({
+    page,
+    helix,
+  }) => {
+    const db = helix.bridge;
+
+    await page.goto("/");
+    await waitForShell(page);
+
+    await page.goto("/settings/invoices");
+    const defaultInstructions = "Zelle to payments@example.com, or a check to the office.";
+    const settingsBox = page.getByTestId("invoice-payment-instructions-input");
+    await settingsBox.fill(defaultInstructions);
+    await settingsBox.blur();
+    await expect(page.getByText("Saved your payment instructions")).toBeVisible();
+
+    // Off the Settings screen before quickAddContact's own waitForShell: the
+    // settings layout renders a second <nav> (its own section list), which
+    // makes getByRole("navigation") ambiguous while it is on screen.
+    await page.goto("/");
+    await quickAddContact(page, "Farrukh Islom");
+    const [[contactId]] = db.query(
+      "SELECT id FROM contacts WHERE first_name = ?",
+      ["Farrukh"],
+    ) as [string][];
+    const stageId = stageIdByName(db, "New");
+    seedContactDeal(db, {
+      id: "deal-farrukh-fence",
+      title: "Fence repair job",
+      contactId,
+      stageId,
+    });
+
+    await page.goto("/invoices/new");
+    await page.getByRole("combobox", { name: "Contact" }).click();
+    await page.getByRole("option", { name: "Farrukh Islom" }).click();
+
+    const paymentBox = page.getByLabel("Payment instructions");
+    await expect(paymentBox).toHaveValue(defaultInstructions);
+
+    const overrideText = "Cash or Venmo @farrukh-fence only for this one.";
+    await paymentBox.fill(overrideText);
+
+    await pickJob(page, "Fence repair job");
+    await page.getByLabel("Description").first().fill("Fence repair");
+    await page.getByLabel("Unit price").first().fill("500.00");
+
+    await page.getByRole("button", { name: "Create invoice" }).click();
+    await page.waitForURL(/\/invoices\/[0-9a-f-]{36}$/);
+    const newDocId = page.url().split("/").pop() as string;
+
+    const [[storedInstructions]] = db.query(
+      "SELECT payment_instructions FROM documents WHERE id = ?",
+      [newDocId],
+    ) as [string][];
+    expect(storedInstructions).toBe(overrideText);
+
+    const [[settingJson]] = db.query("SELECT value_json FROM settings WHERE key = ?", [
+      "business.paymentInstructions",
+    ]) as [string][];
+    expect(JSON.parse(settingJson) as string).toBe(defaultInstructions);
   });
 });
 

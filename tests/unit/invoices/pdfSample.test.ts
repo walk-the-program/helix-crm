@@ -71,3 +71,64 @@ it.skipIf(!process.env.HELIX_PDF_SAMPLE)("writes a sample invoice to look at", a
   writeFileSync(join(OUT, "sample-invoice.pdf"), bytes);
   console.log("wrote", join(OUT, "sample-invoice.pdf"), bytes.length, "bytes");
 });
+
+/**
+ * The same invoice for a customer with no contact name — an account booked
+ * against a company, or an import that only ever captured the business.
+ *
+ * It exists to be looked at, not asserted on: the bug it guards is that the
+ * bill-to block used to open with a blank bold line and then print the company
+ * underneath as if it were a detail, which no assertion on bytes was going to
+ * show. `billTo.test.ts` proves the rule; this proves it looks right.
+ *
+ *   HELIX_PDF_SAMPLE=1 npx vitest run tests/unit/invoices/pdfSample.test.ts
+ */
+it.skipIf(!process.env.HELIX_PDF_SAMPLE)(
+  "writes a company-only invoice to look at",
+  async () => {
+    const assets: DocumentAssets = {
+      fonts: {
+        heading: read("fonts", "ZillaSlab-SemiBold.ttf"),
+        headingBold: read("fonts", "ZillaSlab-Bold.ttf"),
+        body: read("fonts", "Lato-Regular.ttf"),
+        bodyBold: read("fonts", "Lato-Bold.ttf"),
+      },
+      logoPng: read("helix-logo-square.png"),
+    };
+    const input: RenderInput = {
+      kind: "invoice",
+      number: "INV-2026-0043",
+      issuedOn: "2026-09-05",
+      dueOn: "2026-09-19",
+      validUntil: null,
+      business: {
+        name: "Rundle & Sons Plumbing",
+        address: "412 Cedar Avenue\nSpringfield, IL 62704",
+        phone: "(217) 555-0142",
+        email: "office@rundleplumbing.com",
+        taxId: "EIN 47-2810934",
+      },
+      customer: {
+        name: "",
+        company: "Ridgeway Farms",
+        email: "accounts@ridgewayfarms.example",
+        phone: "(217) 555-0188",
+        address: "88 Harrow Lane\nChatham, IL 62629",
+      },
+      lines: [
+        { name: "Quarterly parlour service", description: "Two visits, parts included.", qty: 1, unitCents: 48000, taxable: false, kind: "one_time", interval: null },
+      ],
+      subtotalCents: 48000,
+      taxRateBp: 0,
+      taxCents: 0,
+      totalCents: 48000,
+      currency: "USD",
+      notes: null,
+      paymentInstructions: "Bank transfer to Rundle & Sons Plumbing, sort 40-11-09, account 8123 4457.",
+    };
+    const bytes = await renderDocument(input, assets);
+    mkdirSync(OUT, { recursive: true });
+    writeFileSync(join(OUT, "sample-invoice-company-only.pdf"), bytes);
+    console.log("wrote", join(OUT, "sample-invoice-company-only.pdf"), bytes.length, "bytes");
+  },
+);

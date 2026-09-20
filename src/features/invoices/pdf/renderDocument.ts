@@ -14,6 +14,7 @@ import type { PDFFont, PDFImage, PDFPage } from "pdf-lib";
 import type { RGB } from "pdf-lib";
 import { formatMoney } from "@/lib/money";
 import { formatDateDisplay } from "@/lib/dates";
+import { resolveBillToBlock } from "@/features/invoices/lib/billTo";
 import {
   hasMixedTaxability,
   summarizeTaxLines,
@@ -440,22 +441,34 @@ function drawCustomerBlock(
   drawSectionLabel(page, label, PAGE_MARGIN, y, fonts.body);
   y -= 18;
 
+  const billTo = resolveBillToBlock({
+    contactName: input.customer.name,
+    companyName: input.customer.company,
+    email: input.customer.email,
+    phone: input.customer.phone,
+    address: input.customer.address,
+  });
+
   const nameSize = 11;
-  for (const line of wrapAndClip(input.customer.name, fonts.bodyBold, nameSize, CONTENT_WIDTH, 2)) {
+  for (const line of wrapAndClip(billTo.title, fonts.bodyBold, nameSize, CONTENT_WIDTH, 2)) {
     page.drawText(line, { x: PAGE_MARGIN, y, size: nameSize, font: fonts.bodyBold, color: COLOR_NEAR_BLACK });
     y -= nameSize + 5;
   }
 
+  // Each part keeps the wrapping it has always had: the company clips to one
+  // line so a long legal name cannot push the page down, an address wraps, and
+  // an email or a phone number is one line whole. What to show at all was
+  // decided in billTo.ts, which is also what the screen asks.
   const detailSize = 9.5;
   const detailLines: string[] = [];
-  if (input.customer.company.trim() !== "") {
-    detailLines.push(...wrapAndClip(input.customer.company, fonts.body, detailSize, CONTENT_WIDTH, 1));
+  if (billTo.company) {
+    detailLines.push(...wrapAndClip(billTo.company, fonts.body, detailSize, CONTENT_WIDTH, 1));
   }
-  if (input.customer.address.trim() !== "") {
-    detailLines.push(...splitAndWrap(input.customer.address, fonts.body, detailSize, CONTENT_WIDTH));
+  for (const addressLine of billTo.addressLines) {
+    detailLines.push(...wrapText(addressLine, fonts.body, detailSize, CONTENT_WIDTH));
   }
-  if (input.customer.email.trim() !== "") detailLines.push(input.customer.email.trim());
-  if (input.customer.phone.trim() !== "") detailLines.push(input.customer.phone.trim());
+  if (billTo.email) detailLines.push(billTo.email);
+  if (billTo.phone) detailLines.push(billTo.phone);
 
   for (const line of detailLines) {
     page.drawText(line, { x: PAGE_MARGIN, y, size: detailSize, font: fonts.body, color: COLOR_NEUTRAL_DARK });

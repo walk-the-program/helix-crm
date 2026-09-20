@@ -6,7 +6,9 @@
  * does not watch a bank feed - so this dialog is the whole of the record. The
  * date defaults to today because that is what it is nine times out of ten, and
  * it is a real date field because the tenth time is a cheque that cleared on
- * Friday and is being entered on Monday.
+ * Friday and is being entered on Monday. It has no "clear": a paid invoice
+ * with no date is not a state worth allowing, so the picker falls back to
+ * today instead of offering one.
  *
  * The method is a short list rather than free text so the reports can count
  * it, with "Other" carrying the note for everything the list does not have.
@@ -21,10 +23,10 @@ import {
   DialogHeader,
   DialogTitle,
   Field,
-  Input,
   Select,
   Textarea,
 } from "@/ui";
+import { DatePicker } from "@/features/invoices/lib/pickers";
 import { formatMoney } from "@/lib/money";
 import { todayLocal } from "@/lib/dates";
 
@@ -98,10 +100,10 @@ export function MarkPaidDialog(props: {
 
         <div className="flex flex-col gap-[var(--space-4)]">
           <Field label="Date paid" error={error ?? undefined}>
-            <Input
-              type="date"
+            <DatePicker
+              aria-label="Date paid"
               value={paidOn}
-              onChange={(event) => setPaidOn(event.target.value)}
+              onChange={(value) => setPaidOn(value ?? todayLocal())}
             />
           </Field>
 

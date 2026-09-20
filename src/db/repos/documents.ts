@@ -29,6 +29,10 @@ import { withTransaction, withWrite } from "@/db/writeLock";
 import { NotFoundError, ValidationError } from "@/db/errors";
 import { nowIso, todayLocal, addDaysToDateString } from "@/lib/dates";
 import { newId } from "@/lib/ids";
+import { formatMoney } from "@/lib/money";
+import * as deals from "@/db/repos/deals";
+import * as settings from "@/db/repos/settings";
+import * as activities from "@/db/repos/activities";
 import {
   countRows,
   insertStatement,
@@ -218,6 +222,66 @@ export function intervalSuffix(kind: string, interval: string | null): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/* activity                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type DocumentActivityEvent =
+  | "created"
+  | "sent"
+  | "paid"
+  | "void"
+  | "accepted"
+  | "declined";
+
+/**
+ * The one line each event writes to the deal's (and its contact's and
+ * company's) timeline. Pure and DB-free on purpose, so it is unit-testable
+ * without a harness: the actual write is a `systemStatement` built from this
+ * string plus the ids, folded into the same batch as the document write that
+ * caused it (see `insertDocument`, `setStatus` and `accept`).
+ *
+ * "accepted" names the invoice the quote became when it produced one, in the
+ * same sentence, rather than that invoice also getting its own "created"
+ * line - one user action is one line on the timeline, not two.
+ */
+export function documentActivityBody(
+  event: DocumentActivityEvent,
+  input: {
+    kind: string;
+    number: string;
+    totalCents: number;
+    currency?: string;
+    locale?: string;
+    method?: string | null;
+    becameNumber?: string | null;
+  },
+): string {
+  const label = input.kind === "quote" ? "Quote" : "Invoice";
+  const money = () => formatMoney(input.totalCents, input.currency, input.locale);
+
+  switch (event) {
+    case "created":
+      return `${label} ${input.number} created · ${money()}`;
+    case "sent":
+      return `${label} ${input.number} sent · ${money()}`;
+    case "paid":
+      return input.method ? `Paid ${money()} by ${input.method}` : `Paid ${money()}`;
+    case "void":
+      return `${label} ${input.number} voided`;
+    case "accepted":
+      return input.becameNumber
+        ? `${label} ${input.number} accepted · became ${input.becameNumber}`
+        : `${label} ${input.number} accepted`;
+    case "declined":
+      return `${label} ${input.number} declined`;
+    default: {
+      const _exhaustive: never = event;
+      return _exhaustive;
+    }
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* numbering                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -382,7 +446,14 @@ export type NewDocumentItem = z.input<typeof newDocumentItemSchema>;
 
 export const newDocumentSchema = z.object({
   kind: z.enum(DOCUMENT_KINDS),
-  dealId: z.string().nullable().optional(),
+  // Money model (round 3): every document belongs to a deal. Required, not
+  // advisory - see `insertDocument`, the one place that turns this into a
+  // customer.
+  dealId: z.string().min(1, "A document belongs to a deal."),
+  // Still accepted on input, but advisory only: `insertDocument` always
+  // overwrites these from the deal, so a document and its deal can never
+  // disagree about who it is for. Kept in the type so a caller that still
+  // reads them off a contact/company picker does not need to strip them.
   contactId: z.string().nullable().optional(),
   companyId: z.string().nullable().optional(),
   items: z.array(newDocumentItemSchema).min(1, "A document needs at least one line."),
@@ -398,6 +469,23 @@ export const newDocumentSchema = z.object({
 });
 
 export type NewDocument = z.input<typeof newDocumentSchema>;
+
+/**
+ * The one path that is allowed to skip the deal rule: `accept()` converting a
+ * quote into its invoice. A quote written before this round may have no deal
+ * at all, and accepting it must still be able to raise its invoice - carrying
+ * the quote's own `dealId` across exactly as it is (null included), never
+ * inventing one just to satisfy the schema.
+ */
+const convertedDocumentSchema = newDocumentSchema.extend({
+  dealId: z.string().nullable().default(null),
+});
+
+type ParsedDocument = z.output<typeof newDocumentSchema>;
+/** `insertDocument`'s own parameter shape: a parsed document whose dealId may
+ * be null, which is true of both `ParsedDocument` (never null in practice,
+ * since the public schema requires one) and the looser conversion schema. */
+type ParsedDocumentLoose = Omit<ParsedDocument, "dealId"> & { dealId: string | null };
 
 function itemRows(
   documentId: string,
@@ -427,18 +515,52 @@ function itemRows(
 export async function create(input: NewDocument): Promise<Document> {
   const parsed = parseOrThrow(newDocumentSchema, input);
   return withTransaction(async () => {
-    const id = await insertDocument(parsed);
+    const { id } = await insertDocument(parsed);
     const created = await get(id);
     if (!created) throw new NotFoundError("document", id);
     return created.document;
   }, `Creating a ${input.kind}`);
 }
 
-/** The body of `create`, for a caller that already holds the transaction. */
+/**
+ * The body of `create`, for a caller that already holds the transaction.
+ *
+ * `options.inheritCustomer` (default true) is the one knob that enforces the
+ * money model: when true, the document's contact and company are read off
+ * its deal and whatever the caller passed for them is ignored outright - one
+ * customer of record, so a document and its deal can never disagree. It is
+ * false for exactly one caller, `accept()`'s own conversion of a quote that
+ * predates this rule and may have no deal at all; that path carries the
+ * quote's own stored contact and company across instead.
+ *
+ * `options.skipCreatedActivity` is for the same caller: the invoice an
+ * accepted quote turns into does not get its own "created" line on the
+ * timeline, because `accept()` already writes one "accepted" line that names
+ * it - one user action, one line.
+ */
 async function insertDocument(
-  parsed: z.output<typeof newDocumentSchema>,
+  parsed: ParsedDocumentLoose,
   extra: { convertedToId?: string | null } = {},
-): Promise<string> {
+  options: { inheritCustomer?: boolean; skipCreatedActivity?: boolean } = {},
+): Promise<{ id: string; number: string }> {
+  const inheritCustomer = options.inheritCustomer ?? true;
+
+  let contactId: string | null;
+  let companyId: string | null;
+  if (inheritCustomer) {
+    if (!parsed.dealId) {
+      throw new ValidationError("A document belongs to a deal.", [
+        { path: "dealId", message: "Pick a deal for this document." },
+      ]);
+    }
+    const deal = await deals.getOrThrow(parsed.dealId);
+    contactId = deal.contactId;
+    companyId = deal.companyId;
+  } else {
+    contactId = parsed.contactId ?? null;
+    companyId = parsed.companyId ?? null;
+  }
+
   const at = nowIso();
   const issuedOn = parsed.issuedOn ?? null;
   const year = Number((issuedOn ?? todayLocal()).slice(0, 4)) || new Date().getFullYear();
@@ -461,9 +583,9 @@ async function insertDocument(
     id,
     kind: parsed.kind,
     number,
-    dealId: parsed.dealId ?? null,
-    contactId: parsed.contactId ?? null,
-    companyId: parsed.companyId ?? null,
+    dealId: parsed.dealId,
+    contactId,
+    companyId,
     status: "draft",
     issuedOn,
     dueOn: parsed.dueOn ?? null,
@@ -485,13 +607,35 @@ async function insertDocument(
     deletedAt: null,
   };
 
-  await raw.batch([
+  const statements: Statement[] = [
     ...sequence,
     insertStatement("documents", row),
     ...itemRows(id, parsed.items),
-  ]);
+  ];
+
+  if (!options.skipCreatedActivity) {
+    const [currency, locale] = await Promise.all([
+      settings.get("currency"),
+      settings.get("locale"),
+    ]);
+    const activity = activities.systemStatement({
+      body: documentActivityBody("created", {
+        kind: parsed.kind,
+        number,
+        totalCents: totals.totalCents,
+        currency,
+        locale,
+      }),
+      dealId: row.dealId,
+      contactId,
+      companyId,
+    });
+    statements.push({ sql: activity.sql, params: activity.params });
+  }
+
+  await raw.batch(statements);
   await logWrite("document", id, "create", null, row);
-  return id;
+  return { id, number };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -546,22 +690,6 @@ async function dealLines(dealId: string): Promise<DealLine[]> {
   }));
 }
 
-/** Who the document is for, taken off the deal. */
-async function dealParties(
-  dealId: string,
-): Promise<{ contactId: string | null; companyId: string | null }> {
-  const rows = await raw.query(
-    `SELECT dl.contact_id AS dl_contact_id, dl.company_id AS dl_company_id
-     FROM deals dl WHERE dl.id = ?`,
-    [dealId],
-  );
-  if (rows.length === 0) throw new NotFoundError("deal", dealId);
-  return {
-    contactId: rows[0][0] === null || rows[0][0] === undefined ? null : String(rows[0][0]),
-    companyId: rows[0][1] === null || rows[0][1] === undefined ? null : String(rows[0][1]),
-  };
-}
-
 export type FromDealOptions = {
   kind: DocumentKind;
   /** Defaults to "all" for a quote and "one_time" for an invoice. */
@@ -598,14 +726,14 @@ export async function createFromDeal(
     ]);
   }
 
-  const parties = await dealParties(dealId);
   const issuedOn = options.issuedOn ?? todayLocal();
 
+  // contactId/companyId are not passed here: `create` -> `insertDocument`
+  // always takes them from the deal itself, so fetching them here as well
+  // would be redundant, dead-reading code.
   return create({
     kind: options.kind,
     dealId,
-    contactId: parties.contactId,
-    companyId: parties.companyId,
     prefix: options.prefix,
     taxRateBp: options.taxRateBp,
     issuedOn,
@@ -682,9 +810,12 @@ export async function replaceItems(
   }, "Saving the lines");
 }
 
+// contactId, companyId and dealId are deliberately absent: the money model
+// says a document's customer and its deal are one and the same thing, always
+// read off the deal (see `insertDocument`), and `syncCustomerFromDeal` is the
+// only path allowed to rewrite contact_id/company_id on an existing document.
+// A patch cannot reintroduce disagreement through the back door.
 export type DocumentPatch = {
-  contactId?: string | null;
-  companyId?: string | null;
   dueOn?: string | null;
   validUntil?: string | null;
   issuedOn?: string | null;
@@ -702,8 +833,6 @@ export async function update(id: string, patch: DocumentPatch): Promise<Document
     const current = await getOrThrow(id);
     assertDraft(current.document);
     const values: Record<string, unknown> = { updatedAt: nowIso() };
-    if (patch.contactId !== undefined) values.contactId = patch.contactId;
-    if (patch.companyId !== undefined) values.companyId = patch.companyId;
     if (patch.dueOn !== undefined) values.dueOn = patch.dueOn;
     if (patch.validUntil !== undefined) values.validUntil = patch.validUntil;
     if (patch.issuedOn !== undefined) values.issuedOn = patch.issuedOn;
@@ -736,6 +865,36 @@ function statementParts(statement: {
   params: unknown[];
 }): [string, unknown[]] {
   return [statement.sql, statement.params];
+}
+
+/**
+ * Re-copy the deal's customer onto every live document of that deal.
+ * Returns how many rows changed. Called after a deal's contact or company
+ * is edited; safe to call when nothing changed.
+ */
+export async function syncCustomerFromDeal(dealId: string): Promise<number> {
+  return withTransaction(async () => {
+    const deal = await deals.getOrThrow(dealId);
+    // `list` already excludes soft-deleted rows by default (no
+    // `includeDeleted`), which is what leaves a trashed document alone.
+    const { rows } = await list({ dealId }, { limit: 5000 });
+    const at = nowIso();
+    let changed = 0;
+    for (const doc of rows) {
+      if (doc.contactId === deal.contactId && doc.companyId === deal.companyId) {
+        continue;
+      }
+      const values = {
+        contactId: deal.contactId,
+        companyId: deal.companyId,
+        updatedAt: at,
+      };
+      await raw.execute(...statementParts(updateStatement("documents", doc.id, values)));
+      await logWrite("document", doc.id, "update", doc, values);
+      changed += 1;
+    }
+    return changed;
+  }, "Syncing the customer from the deal");
 }
 
 /** Record where the PDF was written. Allowed in any status. */
@@ -786,6 +945,14 @@ function assertTransition(document: Document, to: string): void {
   );
 }
 
+/**
+ * Every caller of `setStatus` passes a `to` that is also one of
+ * `DocumentActivityEvent`'s status-move names ("sent", "paid", "void",
+ * "declined"), so the status value doubles as the event name for the one
+ * timeline line each of these writes alongside the document row, in the same
+ * batch. "created" and "accepted" are written by `insertDocument` and
+ * `accept` respectively, not here.
+ */
 async function setStatus(
   id: string,
   to: string,
@@ -796,7 +963,28 @@ async function setStatus(
     const current = await getOrThrow(id);
     assertTransition(current.document, to);
     const values = { status: to, updatedAt: nowIso(), ...extra };
-    await raw.execute(...statementParts(updateStatement("documents", id, values)));
+
+    const [currency, locale] = await Promise.all([
+      settings.get("currency"),
+      settings.get("locale"),
+    ]);
+    const rawMethod = (extra as { paidMethod?: unknown }).paidMethod;
+    const method = typeof rawMethod === "string" || rawMethod === null ? rawMethod : null;
+    const activity = activities.systemStatement({
+      body: documentActivityBody(to as DocumentActivityEvent, {
+        kind: current.document.kind,
+        number: current.document.number,
+        totalCents: current.document.totalCents,
+        currency,
+        locale,
+        method,
+      }),
+      dealId: current.document.dealId,
+      contactId: current.document.contactId,
+      companyId: current.document.companyId,
+    });
+
+    await raw.batch([updateStatement("documents", id, values), activity]);
     await logWrite("document", id, "update", current.document, values);
     const next = await get(id);
     if (!next) throw new NotFoundError("document", id);
@@ -872,11 +1060,12 @@ export async function accept(
 
     const oneTime = current.items.filter((item) => item.kind !== "recurring");
     let invoiceId: string | null = null;
+    let invoiceNumber: string | null = null;
 
     if (oneTime.length > 0) {
       const issuedOn = todayLocal();
-      invoiceId = await insertDocument(
-        parseOrThrow(newDocumentSchema, {
+      const createdInvoice = await insertDocument(
+        parseOrThrow(convertedDocumentSchema, {
           kind: "invoice",
           dealId: current.document.dealId,
           contactId: current.document.contactId,
@@ -898,7 +1087,17 @@ export async function accept(
             interval: null,
           })),
         }),
+        {},
+        // This is the one conversion path that predates the deal rule (rule
+        // 4): the quote's own dealId may be null, so its customer cannot be
+        // re-derived from a deal - the invoice carries the quote's own
+        // contact and company across instead, exactly as it did before this
+        // round. Its "created" line is skipped because the "accepted" line
+        // below names it in the same sentence.
+        { inheritCustomer: false, skipCreatedActivity: true },
       );
+      invoiceId = createdInvoice.id;
+      invoiceNumber = createdInvoice.number;
     }
 
     const values = {
@@ -906,7 +1105,24 @@ export async function accept(
       convertedToId: invoiceId,
       updatedAt: nowIso(),
     };
-    await raw.execute(...statementParts(updateStatement("documents", id, values)));
+    const [currency, locale] = await Promise.all([
+      settings.get("currency"),
+      settings.get("locale"),
+    ]);
+    const activity = activities.systemStatement({
+      body: documentActivityBody("accepted", {
+        kind: current.document.kind,
+        number: current.document.number,
+        totalCents: current.document.totalCents,
+        currency,
+        locale,
+        becameNumber: invoiceNumber,
+      }),
+      dealId: current.document.dealId,
+      contactId: current.document.contactId,
+      companyId: current.document.companyId,
+    });
+    await raw.batch([updateStatement("documents", id, values), activity]);
     await logWrite("document", id, "update", current.document, values);
 
     const quote = await get(id);
