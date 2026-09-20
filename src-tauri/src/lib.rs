@@ -11,6 +11,7 @@ pub mod error;
 pub mod files;
 pub mod leads;
 pub mod menu;
+pub mod recovery;
 pub mod secrets;
 
 use std::path::{Path, PathBuf};
@@ -120,6 +121,8 @@ pub fn run() {
             db::db_batch,
             db::db_backup,
             db::db_info,
+            recovery::recovery_key_reveal,
+            recovery::workspace_adopt_backup,
             secrets::secret_set,
             secrets::secret_get,
             secrets::secret_delete,

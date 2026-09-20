@@ -79,6 +79,30 @@ impl DbKey {
         std::str::from_utf8(&self.0).unwrap_or("")
     }
 
+    /// The 64 hex characters, handed out in the clear.
+    ///
+    /// This is the one deliberate hole in the newtype, and it exists for one
+    /// caller: `recovery.rs`, which shows the owner their workspace's recovery
+    /// key so that a dead laptop is not the end of their data. Everything else
+    /// in the app must use `key_pragma`/`attach_key_clause`.
+    ///
+    /// The trade-off is written down in `docs/CONTRACTS.md` under "Recovery
+    /// key": a key that exists only inside one machine's keychain is a key that
+    /// dies with the machine, and for a one-laptop trade owner that is the most
+    /// likely way to lose everything. A key the owner can write down is worth
+    /// more than a key nothing can ever read.
+    pub fn expose_for_recovery(&self) -> String {
+        self.hex().to_string()
+    }
+
+    /// Build a key from 64 hex characters the owner typed back in.
+    ///
+    /// The same validation as the stored form, deliberately: a recovery key is
+    /// a stored key that took a trip through a piece of paper.
+    pub fn from_recovery_hex(hex: &str) -> AppResult<Self> {
+        Self::from_hex_string(hex.to_string())
+    }
+
     fn from_hex_string(hex: String) -> AppResult<Self> {
         let trimmed = hex.trim();
         if trimmed.len() != DB_KEY_BYTES * 2 || !trimmed.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -147,9 +171,33 @@ pub fn has_db_key(workspace_id: &str) -> AppResult<bool> {
     Ok(get(workspace_id, "dbkey")?.value.is_some())
 }
 
+/// The critical section around "is there a key, and if not make one". Shared by
+/// [`db_key`] and [`put_db_key`] so the two can never interleave.
+static KEY_CREATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Store a key that did not come from this machine's CSPRNG.
+///
+/// One caller: `recovery.rs`, adopting a backup from another machine into a
+/// workspace id that was minted seconds earlier. It refuses to overwrite an
+/// existing entry, because overwriting a `dbkey` is the worst thing this module
+/// can do (see [`db_key`]) - and because on this path an existing entry means
+/// the caller's "new" id was not new, which is a bug worth stopping for rather
+/// than writing through.
+pub fn put_db_key(workspace_id: &str, key: &DbKey) -> AppResult<()> {
+    let _one_at_a_time = KEY_CREATE.lock().unwrap_or_else(|p| p.into_inner());
+
+    if get(workspace_id, "dbkey")?.value.is_some() {
+        return Err(AppError::secret(format!(
+            "This machine already has a database key for workspace {workspace_id}. \
+             Helix has not replaced it: a replaced key cannot open the file the \
+             old one wrote."
+        )));
+    }
+    set(workspace_id, "dbkey", &key.expose_for_recovery())
+}
+
 pub fn db_key(workspace_id: &str) -> AppResult<DbKey> {
-    static CREATE: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _one_at_a_time = CREATE.lock().unwrap_or_else(|p| p.into_inner());
+    let _one_at_a_time = KEY_CREATE.lock().unwrap_or_else(|p| p.into_inner());
 
     if let Some(existing) = get(workspace_id, "dbkey")?.value {
         return DbKey::from_hex_string(existing);
@@ -236,6 +284,49 @@ fn user_name(workspace_id: &str, kind: &str) -> AppResult<String> {
 
 /* --- the raw item operations: the only three that touch the OS ----------- */
 
+/// True when the OS refused because a person said no, rather than because
+/// something is broken.
+///
+/// An unsigned macOS build gets a fresh code identity on every rebuild, so the
+/// Keychain prompt reappears and the owner can click Deny. keyring surfaces
+/// that as `NoStorageAccess`, or as a platform failure carrying the Security
+/// framework's wording ("User canceled", errSecUserCanceled -128,
+/// errSecAuthFailed -25293). Windows Credential Manager has no prompt, so this
+/// branch is macOS in practice; the sniff is written against the text rather
+/// than the platform so a future keyring release cannot quietly reclassify it.
+fn is_access_refusal(e: &keyring::Error) -> bool {
+    if matches!(e, keyring::Error::NoStorageAccess(_)) {
+        return true;
+    }
+    let text = e.to_string().to_ascii_lowercase();
+    [
+        "denied",
+        "canceled",
+        "cancelled",
+        "not authorized",
+        "not authorised",
+        "user interaction",
+        "-128",
+        "-25293",
+    ]
+    .iter()
+    .any(|marker| text.contains(marker))
+}
+
+/// What the owner is told when a person, not a fault, is the reason.
+///
+/// The old message was "Can't read from the keychain: <OS text>", which is true
+/// and useless: it does not say that the answer was no, and it does not say
+/// that clicking Always Allow on the next launch fixes it. This is the one
+/// place that sentence is written.
+fn access_refused(detail: String) -> AppError {
+    AppError::secret(format!(
+        "This machine's keychain turned Helix down, so Helix cannot reach this \
+         workspace's key. Quit Helix, open it again, and choose Always Allow \
+         when the keychain asks. Nothing on disk has been changed. ({detail})"
+    ))
+}
+
 fn raw_get(workspace_id: &str, kind: &str) -> AppResult<Option<String>> {
     let user = user_name(workspace_id, kind)?;
     #[cfg(debug_assertions)]
@@ -246,6 +337,7 @@ fn raw_get(workspace_id: &str, kind: &str) -> AppResult<Option<String>> {
     match entry(workspace_id, kind)?.get_password() {
         Ok(value) => Ok(Some(value)),
         Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) if is_access_refusal(&e) => Err(access_refused(e.to_string())),
         Err(e) => Err(AppError::secret(format!("Can't read from the keychain: {e}"))),
     }
 }
@@ -258,9 +350,13 @@ fn raw_set(workspace_id: &str, kind: &str, value: &str) -> AppResult<()> {
         return Ok(());
     }
     let _ = &user;
-    entry(workspace_id, kind)?
-        .set_password(value)
-        .map_err(|e| AppError::secret(format!("Can't save the key securely on this machine: {e}")))
+    entry(workspace_id, kind)?.set_password(value).map_err(|e| {
+        if is_access_refusal(&e) {
+            access_refused(e.to_string())
+        } else {
+            AppError::secret(format!("Can't save the key securely on this machine: {e}"))
+        }
+    })
 }
 
 fn raw_delete(workspace_id: &str, kind: &str) -> AppResult<()> {
