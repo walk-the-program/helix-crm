@@ -21,7 +21,41 @@ import { forwardRef } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { DotsSixVertical } from "@/ui/icons";
 import { formatBreakdown, formatMoney } from "@/lib/money";
+import { contactName } from "@/db/repos/contacts";
 import type { Deal } from "@/db/repos/deals";
+import { trashSuffix, TrashMark } from "@/features/records/components/RecordChip";
+
+const NO_CUSTOMER_LABEL = "No customer";
+
+/**
+ * The card names the customer, not a thing the deal does not have. A deal
+ * with a linked contact reads that person's name — the contact is who made
+ * the promise, the company is context — and the company name (if there is
+ * one) moves into the tooltip instead of taking the label (CPO audit,
+ * F-LA-12). A trashed contact or company still names itself, marked
+ * (F-LA-9): the mark travels with whichever name is showing.
+ */
+export function dealCustomer(deal: Deal): { name: string; deletedAt: string | null; tooltip: string } {
+  if (deal.contactId !== null) {
+    const name = contactName({
+      firstName: deal.contactFirstName ?? "",
+      lastName: deal.contactLastName ?? "",
+    });
+    const tooltip =
+      deal.companyId !== null && deal.companyName
+        ? `${deal.companyName}${trashSuffix(deal.companyDeletedAt)}`
+        : `${name}${trashSuffix(deal.contactDeletedAt)}`;
+    return { name, deletedAt: deal.contactDeletedAt, tooltip };
+  }
+  if (deal.companyId !== null && deal.companyName) {
+    return {
+      name: deal.companyName,
+      deletedAt: deal.companyDeletedAt,
+      tooltip: `${deal.companyName}${trashSuffix(deal.companyDeletedAt)}`,
+    };
+  }
+  return { name: NO_CUSTOMER_LABEL, deletedAt: null, tooltip: NO_CUSTOMER_LABEL };
+}
 
 export type DealCardProps = {
   deal: Deal;
@@ -57,6 +91,8 @@ export const DealCard = forwardRef<HTMLDivElement, DealCardProps>(function DealC
     onKeyMove(direction);
   }
 
+  const customer = dealCustomer(deal);
+
   return (
     <div
       ref={ref}
@@ -90,9 +126,10 @@ export const DealCard = forwardRef<HTMLDivElement, DealCardProps>(function DealC
         <div className="mt-[var(--space-1)] flex items-baseline gap-[var(--space-2)]">
           <span
             className="min-w-0 flex-1 truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-            title={deal.companyName ?? ""}
+            title={customer.tooltip}
           >
-            {deal.companyName ?? "No company"}
+            {customer.name}
+            <TrashMark deletedAt={customer.deletedAt} />
           </span>
           {/* The breakdown, not the total (D20). "$1,500 + $150/mo" is what
               the owner recognises; "$3,300" is a number he has to unpick. A

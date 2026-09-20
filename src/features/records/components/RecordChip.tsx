@@ -27,6 +27,29 @@ const PATH_FOR: Record<RecordChipTarget["kind"], string> = {
   deal: "/deals",
 };
 
+/**
+ * " (in Trash)" for a linked contact or company whose `deletedAt` is set.
+ *
+ * The joins that name a linked record (Contact.companyName, Deal.companyName,
+ * Deal.contactFirstName/contactLastName) deliberately do not filter on
+ * `deletedAt` — dropping the name would read as "No company" on a record that
+ * plainly has one, which is worse than saying it was deleted. Hiding it is
+ * wrong; this is the one small mark for it instead, shared by ContactsScreen,
+ * CompaniesScreen and DealCard so the three screens cannot drift on the
+ * wording (CPO audit, F-LA-9 / F-W1-4). `trashSuffix` is the plain string for
+ * a `title` attribute; `TrashMark` is the muted-ink element for the visible
+ * label, meant to sit inside the same truncating element as the name it
+ * follows so a long name plus the suffix still truncates as one line.
+ */
+export function trashSuffix(deletedAt: string | null): string {
+  return deletedAt ? " (in Trash)" : "";
+}
+
+export function TrashMark(props: { deletedAt: string | null }): ReactElement | null {
+  if (!props.deletedAt) return null;
+  return <span className="text-[var(--color-text-faint)]">{trashSuffix(props.deletedAt)}</span>;
+}
+
 export function RecordChip(props: { target: RecordChipTarget; className?: string }): ReactElement {
   const { target, className } = props;
   const Icon = ICON_FOR[target.kind];
