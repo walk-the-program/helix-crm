@@ -198,4 +198,53 @@ describe("driver semantics: withTransaction", () => {
     ]);
     expect(Number(rows[0][0])).toBe(0);
   });
+
+  it("a concurrent writer waits for the open transaction and survives its rollback", async () => {
+    // F-OPS-12. A long import holds the lock inside a transaction; the owner
+    // creates something while it runs; the import then fails. The owner's
+    // write must land in its own transaction after the import, not inside
+    // the import's, so the rollback cannot take it.
+    h = await createHarness();
+    let releaseImport: () => void = () => {};
+    const importMayFail = new Promise<void>((resolve) => {
+      releaseImport = resolve;
+    });
+
+    const failingImport = withTransaction(async () => {
+      await raw.execute(`INSERT INTO sources (id, name) VALUES (?, ?)`, [
+        "tx-import",
+        "Import row",
+      ]);
+      await importMayFail;
+      throw new Error("import failed");
+    }, "Importing");
+
+    // Give the import a turn to take the lock and open its transaction.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isWriteBusy()).toBe(true);
+
+    let ownerWriteRanWhileImportHeldLock = false;
+    const ownerWrite = withTransaction(async () => {
+      ownerWriteRanWhileImportHeldLock = writeState.label === "Importing";
+      await raw.execute(`INSERT INTO sources (id, name) VALUES (?, ?)`, [
+        "tx-owner",
+        "Owner row",
+      ]);
+    }, "Adding a source");
+
+    // The owner's write is queued, not running inside the import.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(writeState.queued).toBe(1);
+
+    releaseImport();
+    await expect(failingImport).rejects.toThrow("import failed");
+    await ownerWrite;
+
+    expect(ownerWriteRanWhileImportHeldLock).toBe(false);
+    const rows = await raw.query(`SELECT id FROM sources WHERE id IN (?, ?) ORDER BY id`, [
+      "tx-import",
+      "tx-owner",
+    ]);
+    expect(rows.map((r) => String(r[0]))).toEqual(["tx-owner"]);
+  });
 });

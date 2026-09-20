@@ -161,17 +161,25 @@ export function inTransaction(): boolean {
 
 /**
  * Run `fn` inside an explicit transaction, under the write lock.
- * Nested calls join the outer transaction (the Rust pipe turns a nested
- * db_batch into a SAVEPOINT, so partial rollback still works there).
+ *
+ * Every call queues on the write lock, including one made while another
+ * transaction is open. There used to be a shortcut here: "if a transaction is
+ * already open, just run `fn` inside it". `txDepth` is a module-level counter,
+ * so that shortcut could not tell a genuinely nested call from an unrelated
+ * writer that happened to arrive while an import held the lock. The unrelated
+ * writer skipped the lock, wrote into the import's transaction, and lost its
+ * work when the import rolled back, with no error shown (F-OPS-12).
+ *
+ * The repository rule already forbids a repository write from calling another
+ * repository's write function, so no caller nests on purpose, and the whole
+ * test suite runs with nesting turned into a throw. A caller that does nest
+ * now fails loudly at `raw.begin()` (TX_STATE from the pipe) instead of
+ * silently joining a stranger's transaction. That is the failure we want.
  */
 export async function withTransaction<T>(
   fn: () => Promise<T>,
   label: string | null = null,
 ): Promise<T> {
-  if (txDepth > 0) {
-    // Already inside a transaction held by this same lock holder.
-    return fn();
-  }
   return withWrite(async () => {
     await raw.begin();
     txDepth += 1;
