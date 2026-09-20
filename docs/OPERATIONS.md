@@ -340,52 +340,63 @@ by it. The only thing pointing at "these rows came from this file" is
 whatever the owner put in the CSV's own Source column, if anything, or the
 timestamp. This is a real gap — see below.
 
-**Is a backup taken before an import runs? No.** Read `runImport()` in
-`importRun.ts` end to end: `readMappedRows`, `loadLookups`, the write loop,
-`flush`, and the one final `change_log` insert — no call to `backupsFs.ts`
-anywhere. Compare `restoreFromBackup` in `src/features/data/lib/backupsFs.ts`,
-which *does* take a `"pre-restore"` backup before it overwrites the file.
-Import gets no equivalent safety net today.
+**Is a backup taken before an import runs? Yes, as of this phase.** This
+also landed while this document was being written: commit `22befc4`, "take
+the backup an import is undone with, before the import." Both importers now
+call `backupBeforeImport()` (`src/features/data/lib/backupsFs.ts`) before
+the write lock and before the transaction open — tagged `"pre-import"`,
+mirroring `"pre-restore"`. If the backup itself cannot be taken, the import
+**never starts**: `BackupWriteError`, "Helix could not back up your data
+before the import, so the import was not started. Nothing has been
+changed." This is the same rule `migrate()` already follows, for the same
+reason. The result screen (`ResultStep.tsx`) shows the backup's path with
+the sentence: "Helix saved a backup before this import. If the file was
+wrong, restore it from Settings, then Backups." Before this commit, an
+import that updated existing contacts on a dedupe match — the ordinary case
+for re-importing a second export from the same vendor — could overwrite
+real data with nothing behind it but whatever the last scheduled backup
+happened to be, up to 6 hours stale.
 
 **What the owner does, today, to recover from a bad import:**
 
-1. If nothing has changed since the import except the import itself,
-   Settings > Backups > find a backup from just before the import (the
-   automatic backup runs every 6 hours while the app is open, plus on
-   launch) and Restore it (procedure 7). This loses anything else the owner
-   did after the import too — the only bulk fix that exists is "go back in
-   time," not "remove exactly the imported rows."
-2. Otherwise, fix it by hand: filter/sort the contact list by whatever is
-   distinctive about the bad batch (a shared source, a shared tag, a
-   creation-time window) and delete those records individually or via
-   multi-select. A deleted record goes to Trash for 30 days
-   (`sec.md` data map) before it is purged for good, so a mis-click during
-   cleanup is itself recoverable inside that window.
+1. Settings > Backups > find the `pre-import` backup (its path is also
+   shown right on the import result screen the moment the import finished)
+   and Restore it (procedure 7). This is now a reliable, freshly-taken
+   restore point, not "whichever scheduled backup happens to exist" — but
+   it is still "go back in time," not "remove exactly the imported rows":
+   anything else the owner did after the import is lost too.
+2. If something has changed since and a full restore would lose real work:
+   filter/sort the contact list by whatever is distinctive about the bad
+   batch (a shared source, a shared tag, a creation-time window) and delete
+   those records individually or via multi-select. A deleted record goes to
+   Trash for 30 days (`sec.md` data map) before it is purged for good, so a
+   mis-click during cleanup is itself recoverable inside that window.
 3. For records the dedupe policy merged into *existing* contacts (the "Fill
    in the blanks" policy only adds missing emails/phones/notes, never
    overwrites), there is nothing to undo per record — nothing already
    filled in was touched.
 
-**What Walker does.** If asked before the fact: recommend the owner runs
-Settings > Backups > "Back up now" immediately before a large or risky
-import, since Helix does not do this automatically. If asked after a bad
-import with no recent backup: same manual filter-and-trash path above; there
-is no faster recovery to offer.
+**What Walker does.** Point the owner at the `pre-import` backup named on
+the result screen first — it is now the reliable answer, not a hopeful one.
+Fall back to the manual filter-and-trash path only when real work happened
+after the bad import that a full restore would also erase.
 
-**Recommendation to the lead (Required, not implemented here —
-`backupsFs.ts` and the backups feature are the lead's this phase):** take an
-automatic backup, tagged distinctly (e.g. `"pre-import"`, mirroring
-`"pre-restore"`), immediately before `runImport()`'s write phase opens its
-transaction. That alone would make procedure 6's first recovery path
-reliable instead of "whichever backup happens to exist." A `UNIQUE`/indexed
-import-run id on the affected tables (Follow-up) would additionally let a
-future "undo this import" feature exist at all — today there is no data
-model to build one against.
+**Is there a way to bulk-select what one import created? Still no.**
+Unaffected by the backup fix above: contacts, companies and deals created
+by an import still carry no import-run id of their own — only
+`change_log`'s one summary row knows the batch id, and nothing in
+`src/db/repos/contacts.ts` or the contacts list/saved-view screens filters
+by it. This is still a real, open gap — see Findings — but it now matters
+less: with a reliable `pre-import` backup, "go back in time" is a solid
+answer for most cases; a `UNIQUE`/indexed import-run id would still be
+needed for a real "undo this import" that spares work done afterward.
 
-**Mark: inspected only.** Read `src/app/undo.ts`, `src/features/data/lib/importRun.ts`,
-`src/features/data/lib/typedImportRun.ts`, `src/features/data/lib/backupsFs.ts`,
-and `src/features/data/import/ResultStep.tsx` (no undo/bulk-delete affordance
-there either). Not exercised against a real bad import in this session.
+**Mark: tested.** `npx vitest run tests/repo/data/importPreBackup.test.ts`
+at this revision — 3 passed, covering the pre-import backup being taken,
+its path reaching the result, and the import refusing to start when the
+backup itself fails. `src/app/undo.ts` (no per-import undo, unaffected by
+this fix) and `ResultStep.tsx` (the new backup-path line) read directly to
+confirm the rest of this procedure.
 
 ---
 
@@ -738,7 +749,7 @@ a CI check, or an honest "nothing catches this today."
 | # | class | finding | why |
 |---|---|---|---|
 | F-OPS-W3-1 | Resolved during this phase | `deals.external_id` had no `UNIQUE` constraint (F-SEC-28); the poller's idempotency (procedure 5) was correct only because the single write lock serialized every writer. Flagged while writing procedure 5, then closed by commits `3adc34c`/`658c066` before this document was finished: a partial `UNIQUE` index plus graceful per-lead retry on conflict. | Restated here for the record, not as an open item — `deals.external_id` is now safe against a second write path too, not only against the write lock. |
-| F-OPS-W3-2 | Required | No pre-import backup (procedure 6). `runImport()` has no call into `backupsFs.ts` anywhere; `restoreFromBackup` does take a `"pre-restore"` backup, so the asymmetry is real, not an oversight this task can confirm as intentional. | A bad CSV import today has a worse recovery path (manual filter-and-trash, or "lose everything since the last backup") than a bad restore does. Not implemented here — `backupsFs.ts` is the lead's file this phase. |
+| F-OPS-W3-2 | Resolved during this phase | No pre-import backup (procedure 6): `runImport()` had no call into `backupsFs.ts`, while `restoreFromBackup` did take a `"pre-restore"` backup — a real asymmetry, not an intentional one. Flagged while procedure 6 was being drafted; closed by commit `22befc4` before this document was finished, under the lead's own "LR-OPS, F-OPS-4" (again a different numbering sequence — see Deviations). | Restated for the record. `npx vitest run tests/repo/data/importPreBackup.test.ts` — 3 passed. The remaining gap (no bulk-select of what one import created, so a full restore is still "go back in time," not "undo exactly this") is unaffected and still open — see procedure 6. |
 | F-OPS-W3-3 | Resolved during this phase | The keychain-denial boot screen (procedure 9) showed the generic "Helix can't open your data / another copy may have it, or the folder may not be writable" headline for a `SECRET_ERROR`. Flagged twice while procedure 9 was being drafted (once after `a5ac006` improved only the Details text, restated as still-open) and closed both times: `d084392` gave `SECRET_ERROR` its own `SecretStoreError` class, its own re-throw in `boot.ts`, and its own `BootScreens.tsx` screen headed "Helix needs permission to use this computer's keychain," landing under the lead's own finding number (their commit and `tests/unit/app/bootFailure.test.ts` cite it as "LR-OPS F-OPS-5" — a different numbering sequence from this one; see Deviations for why this document's findings are prefixed `F-OPS-W3-`). | Restated for the record. `npx vitest run tests/unit/app/bootFailure.test.ts` — 9 passed, asserting the new heading contains "keychain" and the two wrong causes are both absent. |
 | F-OPS-W3-4 | Follow-up | No scheduled dependency-audit run; `npm audit`/`rust-audit` (this task's A1/A2) only run on push/PR, so an advisory published against an unchanged dependency is not caught until the next commit. | Adding a `schedule` trigger changes `rustsec/audit-check`'s own behavior (it creates GitHub issues on a scheduled run, never on push/PR) — a product decision about issue-spam, not a mechanical CI addition, left for the lead. |
 | F-OPS-W3-5 | Follow-up | Nothing enforces "a version bump was followed by a tag" or "a tag was followed by publishing the draft release" (founder-task inventory, items 2–3). | Both are pure process gaps with no in-repo data to check against (task 2) or check against a page this repo does not control (task 3, the Releases UI). Documented as procedure, not automated. |
@@ -796,13 +807,13 @@ a CI check, or an honest "nothing catches this today."
   parallel work, and every "as of this revision" statement in this document
   means the revision it was actually checked against, not necessarily the
   one this file is finally committed at.
-- At hand-off, `git status` shows uncommitted, in-progress changes to
-  `src/features/data/lib/importRun.ts`, `backupsFs.ts`, `typedImportRun.ts`,
-  `importResultView.ts`, and `src/features/data/import/ResultStep.tsx`, plus
-  a new untracked `tests/repo/data/importPreBackup.test.ts` — the shape of
-  exactly what F-OPS-W3-2 (procedure 6, no pre-import backup) recommends.
-  Not read or cited here: those files were mid-edit by another worker and
-  not yet a stable commit to check facts against. If they land as described
-  by their own names, F-OPS-W3-2 and procedure 6's "is a backup taken before
-  an import runs? No" should be revisited and corrected in a follow-up pass
-  — flagging now so it is not missed.
+- F-OPS-W3-2 (procedure 6, no pre-import backup) went through the same cycle
+  as F-OPS-W3-1: seen mid-edit as uncommitted changes to `importRun.ts`,
+  `backupsFs.ts`, `typedImportRun.ts`, `importResultView.ts`, and
+  `ResultStep.tsx` while this document was still open, then landed as commit
+  `22befc4` before hand-off. Procedure 6 and F-OPS-W3-2 were both rewritten
+  against the committed code, not the in-progress diff, and cite
+  `tests/repo/data/importPreBackup.test.ts` (3 passed). This is the fourth
+  finding in this document that a concurrent worker closed between being
+  noticed and this file being committed — see the note above about what
+  "as of this revision" means here.
