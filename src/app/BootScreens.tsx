@@ -4,6 +4,11 @@
  * migration failed, this build is older than the workspace it opened, and the
  * top-level error boundary. Each one names
  * the problem in plain words, shows the path, and never swallows the detail.
+ *
+ * Every one of these also carries "Report an issue on GitHub" (LR-CS-W3,
+ * contextual help reachability): a boot failure is the one place in the
+ * product an owner cannot get to Help to find that link himself, so it is
+ * reachable straight from the screen he is actually stuck on instead.
  */
 import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import {
@@ -16,7 +21,8 @@ import {
 import { cn } from "@/ui/cn";
 import { MigrationError, NewerSchemaError } from "@/db/migrator";
 import { DbOpenError, Fts5MissingError, SecretStoreError } from "@/db/client";
-import { Brand, Button, Card, CardBody, Spinner } from "@/ui";
+import { Brand, Button, Card, CardBody, Spinner, toast } from "@/ui";
+import { ISSUES_URL } from "@/features/help/lib/content";
 
 function FullScreen({
   icon,
@@ -92,9 +98,32 @@ function ShowFolderButton({ path }: { path: string }) {
   );
 }
 
+/**
+ * "Report an issue on GitHub", reachable straight from a boot failure rather
+ * than only from Help (LR-CS-W3, contextual help reachability) - a boot
+ * screen is the one place an owner cannot even reach Help to find it. Same
+ * pattern as `HelpScreen.tsx`'s own copy: the OS opener rather than a bare
+ * href, so a refusal never navigates this screen away from itself, and the
+ * address is said in full only in the toast that fires on that refusal.
+ */
+function ReportIssueButton() {
+  async function onClick() {
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(ISSUES_URL);
+    } catch {
+      toast.error(`Your browser did not open. The address is ${ISSUES_URL}`);
+    }
+  }
+  return (
+    <Button variant="secondary" onClick={() => void onClick()}>
+      Report an issue on GitHub
+    </Button>
+  );
+}
+
 /** The row of escapes under a boot failure. */
 function Actions({ path, onRetry }: { path?: string; onRetry?: () => void }) {
-  if (!onRetry && !path) return null;
   return (
     <div className="mt-[var(--space-4)] flex flex-wrap items-center gap-[var(--space-2)]">
       {onRetry ? (
@@ -103,6 +132,7 @@ function Actions({ path, onRetry }: { path?: string; onRetry?: () => void }) {
         </Button>
       ) : null}
       {path ? <ShowFolderButton path={path} /> : null}
+      <ReportIssueButton />
     </div>
   );
 }
@@ -221,6 +251,7 @@ export function Fts5MissingScreen({ error }: { error: Fts5MissingError }) {
         broken and no setting will fix it.
       </p>
       <Detail>{error.message}</Detail>
+      <Actions />
     </FullScreen>
   );
 }
@@ -245,6 +276,7 @@ export function MigrationErrorScreen({ error }: { error: MigrationError }) {
         {"\n"}
         {error.message}
       </Detail>
+      <Actions />
     </FullScreen>
   );
 }
@@ -264,6 +296,7 @@ export function NewerSchemaErrorScreen({ error }: { error: NewerSchemaError }) {
     >
       <p className="m-0">{error.message}</p>
       <Detail>{error.unknownVersions.join(", ")}</Detail>
+      <Actions />
     </FullScreen>
   );
 }
@@ -388,13 +421,14 @@ export class AppErrorBoundary extends Component<BoundaryProps, BoundaryState> {
           {error.message}
           {stack ? `\n${stack}` : ""}
         </Detail>
-        <div className="mt-[var(--space-4)] flex gap-[var(--space-3)]">
+        <div className="mt-[var(--space-4)] flex flex-wrap gap-[var(--space-3)]">
           <Button variant="primary" onClick={this.reset}>
             Back to the app
           </Button>
           <Button variant="secondary" onClick={() => window.location.reload()}>
             Reload Helix
           </Button>
+          <ReportIssueButton />
         </div>
       </FullScreen>
     );
