@@ -37,6 +37,8 @@
       "allow": [{ "url": "https://api.anthropic.com/*" }]
     },
 
-    "log:default"
+    "log:default",
+
+    "window-state:default"
   ]
 }

@@ -81,6 +81,9 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }));
+        // Remembers the window's size and position between launches; the
+        // configured minWidth/minHeight still clamp whatever it restores.
+        builder = builder.plugin(tauri_plugin_window_state::Builder::new().build());
     }
 
     builder
