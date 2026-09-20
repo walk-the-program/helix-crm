@@ -3339,8 +3339,7 @@ accent never a background, dark mode with no light controls left in it.
 
 ### Left open
 
-- **`gh run list` on this push is the only proof for Windows.** The e2e-win job
-  runs on GitHub and cannot be reproduced from a Mac.
+(Windows is now proved, and is no longer open — see the addendum below.)
 - **Three large empty panels stack up on a populated Today** — Coming up, New
   leads and Gone quiet each draw a full-height empty state on a workspace that has
   plenty in it. Each one is correct on its own and each is asserted by a spec;
@@ -3353,3 +3352,26 @@ accent never a background, dark mode with no light controls left in it.
   (L* 0.451 against 0.530 for its two neighbours). The solver spends lightness
   where it must to keep the dichromat separation; narrowing further costs more
   than it buys.
+
+### Addendum — both GitHub jobs green
+
+`CI` and `e2e-win` were both green on the push
+(<https://github.com/walk-the-program/helix-crm/actions/runs/35482334063> and
+<https://github.com/walk-the-program/helix-crm/actions/runs/35482334061>),
+after one fix on top.
+
+The first e2e-win run got through the onboarding branch and then failed typing
+into the business name field: `invalid element state` on `clear`.
+`aria/What is the business called?` matched the **`<label>`**, not the input it
+points at — `src/ui/Field.tsx` renders the label beside a control it clones the
+same id onto, so both answer to that accessible name, and msedgedriver returned
+the one that cannot be cleared. The spec reads the label's `for` and matches the
+input by id now, which is still text-driven (the id is never written down, it is
+read off the label the owner sees) and can only resolve to the control; XPath
+rather than `#id`, because React's `useId` puts characters in the id that a CSS
+id selector cannot carry unescaped.
+
+The green run drives the whole first-run flow against a real WebView2 — trade
+tile, "Use this setup", "Start empty" — and then asserts the three original smoke
+assertions: 3 passing in 2.8s, with `Helix 0.1.0 starting` in the app's own log.
+This is the first time the setup flow has been proved on Windows.
