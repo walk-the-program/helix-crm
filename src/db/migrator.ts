@@ -6,6 +6,9 @@
  *            v                                   v
  *   [ordered tags] --minus--> schema_migrations --> [pending]
  *            |
+ *            +--> schema_migrations names a version this build's journal does
+ *            |    not know? --> NewerSchemaError, before anything else runs
+ *            |    (an older build must never touch a newer workspace)
  *            +--> pending? --> raw.backup("pre-migration")
  *            |
  *            +--> PRAGMA foreign_keys = OFF        (outside any transaction:
@@ -21,6 +24,15 @@
  * Migrations are forward-only. A failure leaves the database untouched (the
  * batch rolled back) and carries the pre-migration backup path so the caller
  * can offer the message in docs/PLAN.md's error map.
+ *
+ * The newer-schema guard exists because there is no auto-update: an owner can
+ * reinstall an older Helix over a workspace a newer Helix already migrated.
+ * Before this guard, `migrate()` never looked at a `schema_migrations` row it
+ * did not recognise - the pending computation only asks "is this tag done
+ * yet", so a future version's row was simply invisible to it, and the older
+ * build carried on as if nothing had happened, reading and writing a schema it
+ * does not fully understand. The guard runs first, before the backup and
+ * before any PRAGMA, so an older build that cannot help touches nothing.
  */
 import { raw } from "@/db/client";
 import { nowIso } from "@/lib/dates";
@@ -52,6 +64,44 @@ export class MigrationError extends Error {
     this.backupPath = backupPath;
     this.cause = cause;
   }
+}
+
+/**
+ * `schema_migrations` names a version this build's journal has never heard
+ * of: the workspace was migrated by a newer Helix. This is not a failed
+ * migration - nothing was attempted, nothing was rolled back, and there is no
+ * backup to point to, because `migrate()` refuses before it touches the
+ * database at all (no PRAGMA, no backup, no read beyond the version list
+ * already read to reach this decision).
+ *
+ * Deliberately not a subclass of `MigrationError`: the two are different
+ * situations (a migration that ran and failed vs. one that must never run at
+ * all) and `BootScreens.tsx` renders them as two different screens, so an
+ * `instanceof MigrationError` check must not accidentally catch this one.
+ */
+export class NewerSchemaError extends Error {
+  /** The versions present in `schema_migrations` this build's journal does not list. */
+  readonly unknownVersions: string[];
+  constructor(unknownVersions: string[], message: string) {
+    super(message);
+    this.name = "NewerSchemaError";
+    this.unknownVersions = unknownVersions;
+  }
+}
+
+/**
+ * The one wording for the newer-schema refusal, so the message string tested
+ * here is the exact string BootScreens.tsx renders. DESIGN.md voice: direct,
+ * names the real situation and the real action, no apology, no exclamation
+ * mark, and no offer to downgrade, delete or repair anything - none of those
+ * are this build's to offer.
+ */
+export function newerSchemaMessage(): string {
+  return (
+    "This workspace was made by a newer version of Helix than the one running here. " +
+    "Install the latest version of Helix, then open this workspace again. " +
+    "Your data has not been changed."
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -193,6 +243,18 @@ export async function migrate(
 
   const files = orderMigrations(await source.list());
   const already = await appliedVersions();
+
+  // An older build must never act on a workspace a newer one has already
+  // migrated (F-LC-10 follow-up): if schema_migrations names a version this
+  // build's journal does not know, refuse before anything else runs. This
+  // check comes before the backup and before either foreign_keys PRAGMA, so a
+  // refusal here has touched nothing.
+  const knownTags = new Set(files.map((f) => f.tag));
+  const unknownVersions = already.filter((tag) => !knownTags.has(tag));
+  if (unknownVersions.length > 0) {
+    throw new NewerSchemaError(unknownVersions, newerSchemaMessage());
+  }
+
   const appliedSet = new Set(already);
   const pending = files.filter((f) => !appliedSet.has(f.tag));
 
