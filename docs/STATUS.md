@@ -4364,3 +4364,76 @@ virtualised and owns its own scroll box, so it can prove nothing about
 `<main>`; the Tasks list below its virtualisation threshold is a plain mounted
 list and genuinely overflows. Worth knowing before anyone writes another
 scroll assertion against a list screen.
+
+---
+
+## 2026-09-20 — CPO / CDQO pass (Fable, coordinator)
+
+Assignment: `docs/rounds/2026-09-20-cpo-cdqo-prompt.md`, run verbatim after round 3.
+Record: `docs/rounds/2026-09-20-cpo-cdqo-record.md`; every lead and worker return in
+`docs/rounds/cpo-returns/`. Three Opus leads (records; money and leads; platform, shell
+and kit), each with up to three Sonnet workers, on a shared checkout with disjoint
+ownership and pathspec commits. Nothing pushed; no app launch; nothing spent.
+
+### Phase one (product)
+
+Three audits: 18 + 4 findings on records and the owner's day, 23 on the money path and the
+website leads, 24 on the platform, shell and kit; all confirmed against the harness and
+the screenshots, none manufactured. Every one is implemented, deferred with a written
+reason, or refuted with evidence (record §4, §6.1). The consequential ones:
+
+- Money told the truth again. Quoted read from quote documents, so the deal page's
+  primary figure was $0 beside a $14,800 board card and a won deal read $0 across the
+  strip; it is the deal's value now, one definition in `money.ts`, and the Revenue table
+  always sums to its headline (a "No job" row for orphaned billing). The sample week has
+  line items and invoices, so the product's own example shows real money for the first
+  time.
+- Records stopped drifting: quick add double-saved on a fast Enter; a contact changing
+  company left its jobs and invoices behind; the pipeline headline counted closed deals;
+  overdue meant three things; a trashed company was named as if live; a wrong won date
+  could not be corrected; Reopen had no undo and kept the recurring clock running.
+- The money path stopped lying: a malformed lead page was accepted as success and
+  manufactured deals; a paid invoice was terminal; a sent invoice's bill-to was rewritten
+  when the deal's customer changed; a lost deal kept drafting monthly invoices; the poll
+  error read "[object Object]"; deposits have a workflow (deposit and balance invoices).
+- The platform kept its promises: the 30-day Trash purge now runs; products, custom
+  fields and documents have a Trash path and a deal a sent invoice refers to cannot be
+  purged; export covers every table and has an entry point; workspace currency and
+  locale reach every screen through one hook; the region-aware phone dedupe; AI that is
+  off is silent on record pages.
+
+### Phase two (design and quality)
+
+Kit first, then screens: the table, empty-state, overlay, label, icon and dialog-focus
+rules are enforced in `src/ui` and written in `docs/CONTRACTS.md` ("CPO / CDQO pass").
+The design pass also caught a product defect no navigating test could (the deal money
+strip never invalidated its query key), two 1024-px reachability bugs (Trash tabs off
+screen, Reminders actions clipped), Send reappearing on a paid invoice, and a
+virtualised list that could hide rows under one arrangement; all fixed and pinned. The
+boot chunk went from 3,040 kB to 1,355 kB raw (886 → 358 kB gzip) with nothing on the
+boot path lazy.
+
+### Verification
+
+Baseline (before any change): typecheck clean; 1789 unit/repo; 49 Rust; 121 e2e. Gate 1
+(phase one integrated): typecheck clean; 2049 unit/repo; 49 Rust; build clean; 148 e2e;
+the discovery walk re-run on the finished product with zero page or console errors.
+Gate 2 (phase two integrated, port 4223): typecheck clean; **2102 unit/repo passed, 3
+skipped**; **49 Rust**; build clean with the main chunk at 1,354.75 kB / 357.54 kB gzip;
+**164 e2e green** (163 in the run plus one Help assertion that checked for a raw URL the
+design pass deliberately removed, moved to the named button and re-run green); the
+discovery walk (`tests/e2e-mac/specs/cpoWalk.e2e.ts`) with zero page or console errors on
+every route, dense and sparse, and the coordinator looked at the resulting screens. A
+committed-state typecheck ran after every lead commit through the round. All commits
+are local on main; nothing pushed.
+
+Not verifiable in this session: the real window, the keychain prompt, real file copy,
+HTTP to a real site, restore, workspace switch and the Windows layout (the harness stubs
+every Tauri command). They remain the owner's manual checks on his next launch.
+
+### Left open, deliberately
+
+The payments table (deposits are two invoices instead), PDF fonts on the app font switch
+(documented exception), module-load vocabulary in search headings and zod messages, and
+the gone-quiet rule for contacts without deals. Two shared-index git incidents left three
+commits with wrong messages; content correct, recorded in the record, not rewritten.

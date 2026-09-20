@@ -114,6 +114,13 @@ affected workflow · consequence · decision · owner · status.
 
 ### 4.2 Lead findings
 
+Totals: phase one 69 findings (records 18 + worker 4, money 23, platform 24) — 63
+implemented, 3 deferred with a written reason (payments table; PDF fonts; lazy routes →
+done in phase two), 2 refuted with evidence (F-LC-19 onboarding overwrite; rev 2.1b
+duplicate route), 1 closed by ruling. Phase two: 12 + 26 + 10 design findings plus 5
+product findings the design pass exposed (F-P2-*), all implemented except two recorded
+deferrals (F-P2-LA-4) and one ruling (F-P2-LA-5). 161+ commits on main since `487c2b2`.
+
 **Lead A, records (return relayed to `docs/rounds/cpo-returns/lead-a-records-audit.md`,
 23:43).** 18 findings, F-LA-1..18. Critical: quick add double-submits (F-LA-1). High:
 pipeline headline counts closed deals (2); Quoted strip (3, = F-0-1); a contact changing
@@ -265,7 +272,16 @@ look but a set of pattern-level rules the screens do not yet share:
 7. **Density is a setting the kit honours**, so no screen hard-codes a height; compact is
    verified on a table, a dialog and the board, not assumed.
 
-These are refined after lead-platform's design notes and the phase-two audit.
+**Refined after the phase-two audit (settled, on main).** Rule 1 is enforced by the
+kit (Table ends at its last hairline; `TD align="right"`; `dashZero` + `moneyOrDash` for
+period zeros; `VirtualList fit` for the two virtualised lists). Rule 6 is enforced by
+`EmptyState variant="quiet"` for section empties and the centred form for whole screens.
+Rule 8 adds: one overlay system (`src/ui/Overlay.tsx`; ⌘K and ⌘⇧K match), one label prop
+(`aria-label`), the icon canon in `icons.ts`, one save model on Settings > Workspace, and
+a dialog opened by key returns focus to the main region. Copy: buttons name what happens
+("Move to Quoted"), statuses are words, a permanent instruction becomes a tooltip or a
+Help line, and "Connect a website" is one sentence a landscaper reads. Performance is
+part of quality: the boot chunk is 358 kB gzip and nothing on the boot path is lazy.
 
 ## 6. Tasks and ownership
 
@@ -275,9 +291,9 @@ ownership, pathspec commits. Integration owner: Fable. Merge order: repo-level c
 
 | Task | Lead | Writable paths (implementation) | Ports | State |
 | --- | --- | --- | --- | --- |
-| CPO-LA (records and the day) | lead-records (Opus) | src/features/{records,today,recurring,templates}/**, src/db/repos/{contacts,companies,deals,activities,tasks,tags,customFields,stages,pipelines,recurring,templates,savedViews,search,trash,sources}.ts, their tests, e2e specs records/today/depth/listNav/laAudit | 4231-4233 | audit running |
-| CPO-LB (money and leads) | lead-money (Opus) | src/features/{catalog,invoices,leads}/**, src/db/repos/{money,documents,dealItems,products,invoiceSchedules,receivables,reports,leadSync}.ts, their tests, e2e specs invoices/revenue/leads/lbAudit | 4241-4243 | audit running |
-| CPO-LC (platform, shell, kit) | lead-platform (Opus) | src/features/{data,settings,onboarding,ai,help}/**, src/app/**, src/ui/**, src/styles/**, src/main.tsx, index.html, public/**, src/db/{client,migrator,changeLog,writeLock,errors}.ts, src/db/drivers/**, src/db/repos/{seed,settings,attachments,merge}.ts, src-tauri/**, their tests, e2e specs data/settings/smoke/onboarding/ai/hig/lcAudit | 4251-4253 | audit running |
+| CPO-LA (records and the day) | lead-records (Opus) | src/features/{records,today,recurring,templates}/**, src/db/repos/{contacts,companies,deals,activities,tasks,tags,customFields,stages,pipelines,recurring,templates,savedViews,search,trash,sources}.ts, their tests, e2e specs records/today/depth/listNav/laAudit | 4231-4233 | accepted (both phases) |
+| CPO-LB (money and leads) | lead-money (Opus) | src/features/{catalog,invoices,leads}/**, src/db/repos/{money,documents,dealItems,products,invoiceSchedules,receivables,reports,leadSync}.ts, their tests, e2e specs invoices/revenue/leads/lbAudit | 4241-4243 | accepted (both phases) |
+| CPO-LC (platform, shell, kit) | lead-platform (Opus) | src/features/{data,settings,onboarding,ai,help}/**, src/app/**, src/ui/**, src/styles/**, src/main.tsx, index.html, public/**, src/db/{client,migrator,changeLog,writeLock,errors}.ts, src/db/drivers/**, src/db/repos/{seed,settings,attachments,merge}.ts, src-tauri/**, their tests, e2e specs data/settings/smoke/onboarding/ai/hig/lcAudit | 4251-4253 | accepted (both phases) |
 | lead-platform also owns for this pass | | src/lib/money.ts, src/lib/dates.ts (R13); src/app/formats.ts (new) | | |
 | Coordinator-owned | Fable | src/db/schema.ts, drizzle/**, package.json, package-lock.json, tests/e2e-mac/fixtures.ts, tests/e2e-mac/playwright.config.ts, vite.config.ts, docs/**, README.md, tests/e2e-mac/specs/cpoWalk.e2e.ts | 4220-4229 | — |
 
@@ -285,6 +301,21 @@ Cross-feature mounts (internals belong to the component's lead; the mount point 
 page's lead): DealPage mounts DealServicesPanel + DealInvoicesPanel (money) and
 AttachmentList (platform); Today mounts UnpaidInvoicesSection (money); Settings mounts
 SiteConnectionScreen (money) and BackupsScreen (platform).
+
+## 6.1 What remains: deferred, blocked, unavailable
+
+| item | state | reason and where it is written down |
+| --- | --- | --- |
+| Payments table (part payments as data) | deferred | R7: deposits are a deposit invoice plus a balance invoice; migration text kept in Lead B's audit return (F-LB-7). Revisit only if the guidance form fails an owner. |
+| PDF fonts follow the app font switch | deferred, documented | R18: the PDF embeds the brand guide's print faces; DESIGN.md §4. |
+| Search group headings and zod `newDealSchema` messages follow the vocabulary | deferred | F-P2-LA-4: module-load constants; repository ValidationError messages already follow it. |
+| Template merge tokens renamed per vocabulary | closed by ruling | F-P2-LA-5: token names are stable identifiers; the glossary describes them in the owner's word. |
+| Gone-quiet rule for tagged contacts without deals | untouched | PLAN.md TODO; not raised by any audit. |
+| Multiple stakeholders on one deal (a stakeholder table) | not built | Lead A scenario 6: proportionate for v1 is contact + company on the deal; D2. |
+| Route-level lazy for anything else | done as far as measured | main chunk 3,040 → 1,355 kB raw (886 → 358 kB gzip); the rest is the app. |
+| `c0bd452` and `3ed1145` carry wrong commit messages; `1db875c` lacks the trailer | recorded, not rewritten | two shared-index incidents (§7); content correct in all three. |
+| Real window, keychain single prompt, real file copy, HTTP to a real site, restore, workspace switch, Windows layout | not verifiable here | the owner is asleep and the app may not be launched; the macOS harness stubs every Tauri command (tests/README.md). These remain the owner's manual checks on his next launch, unchanged from round 3. |
+| Push to GitHub, tag, rebuild | the owner's | this session never pushes. |
 
 ## 7. Verification log
 
@@ -316,6 +347,9 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 | 03:0x | Lead A phase-two return: typecheck clean; vitest 154 files / 2094 passed / 3 skipped; records+today+depth+listNav e2e 56 passed on 4231; audit specs deleted. Fable inspected `62a5067`, `2b5c627`, `cfcbff7`. | accepted; Lead A finished |
 
 Second incident (03:0x): Lead A's worker W1 ran `git commit --amend` on the shared index; `3ed1145` carries a Trash message over four Lead A list files (content intact) and `3ee7a3d` left main as a result. Left alone under the standing rule; attribution trailers are mixed across the round. Recorded, not rewritten.
+
+| 03:2x | Lead C phase-two return: 29 commits; tsc clean; 1005 unit/repo tests in its areas; e2e data/settings/smoke/onboarding/ai/hig 63 + listNav/records 28 on 4251; build clean. Fable inspected `1d3763f`, `7343c7d`, `b1846c2`, `c167cd1`, `4242fec`; greps for eager re-exports of lazy screens and static pdf-lib importers clean. | accepted; Lead C finished |
+| 03:4x | **Gate 2 (final integration, Fable, port 4223):** typecheck clean; vitest 156 files / **2102 passed** / 3 skipped; cargo **49 passed**; vite build clean, main chunk **1,354.75 kB / 357.54 kB gzip** (was 3,039.94 / 886.17); full e2e **163 passed, 1 failed**: `depth.e2e.ts` "help renders its six sections" asserted the raw GitHub issues URL, which `ff5f59f` removed on purpose; assertion moved to the named button (`Report an issue on GitHub`, URL in its title) and re-run green in isolation. Final walk (`cpoWalk.e2e.ts`) zero page errors and zero console errors on every route, dense and sparse; screenshots reviewed by the coordinator (Today, Revenue, Invoices, Receivables, Tasks, first-run, Contacts compact). | phase two verified; 164 e2e green in total |
 
 Incident (00:5x, verified by Fable from the reflog): a lead-money Sonnet worker committed
 with `git add <file> && git commit -m …`, which swept another worker's staged PDF files
