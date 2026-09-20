@@ -13,6 +13,7 @@
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { installRadixStubs } from "../ui/radixSetup";
 import { todayLocal } from "@/lib/dates";
@@ -35,16 +36,29 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/**
+ * RuleDialog reads the workspace's currency/locale through `useFormats()`,
+ * which needs a QueryClient in the tree even though nothing here asserts on
+ * its output — the sentence under the fields is the only place it shows up,
+ * and this dialog's own tests are about the date field, not that sentence.
+ */
+function renderDialog(props: { open: boolean; onOpenChange: () => void; target: object }) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    createElement(QueryClientProvider, { client }, createElement(RuleDialog, props as never)),
+  );
+}
+
 describe("RuleDialog: first one due", () => {
   it("has no native date input; the field is the DatePicker", () => {
-    render(createElement(RuleDialog, { open: true, onOpenChange: vi.fn(), target: {} }));
+    renderDialog({ open: true, onOpenChange: vi.fn(), target: {} });
     expect(document.querySelector('input[type="date"]')).toBeNull();
     expect(screen.getByTestId("date-picker")).toBeTruthy();
   });
 
   it("defaults to a real date and saves it as-is", async () => {
     const user = userEvent.setup();
-    render(createElement(RuleDialog, { open: true, onOpenChange: vi.fn(), target: {} }));
+    renderDialog({ open: true, onOpenChange: vi.fn(), target: {} });
 
     await user.type(screen.getByLabelText("What is it"), "Spring cleanup");
     await user.click(screen.getByRole("button", { name: "Add reminder" }));
@@ -56,7 +70,7 @@ describe("RuleDialog: first one due", () => {
 
   it("picking a day in the grid is what the dialog saves as nextDueOn", async () => {
     const user = userEvent.setup();
-    render(createElement(RuleDialog, { open: true, onOpenChange: vi.fn(), target: {} }));
+    renderDialog({ open: true, onOpenChange: vi.fn(), target: {} });
 
     // The dialog opens with the grid focused on its own default - a year
     // from today, since no rule was passed - so that default date's own
@@ -82,7 +96,7 @@ describe("RuleDialog: first one due", () => {
 
   it("clearing the date blocks save with the same message the native input gave", async () => {
     const user = userEvent.setup();
-    render(createElement(RuleDialog, { open: true, onOpenChange: vi.fn(), target: {} }));
+    renderDialog({ open: true, onOpenChange: vi.fn(), target: {} });
 
     await user.type(screen.getByLabelText("What is it"), "Spring cleanup");
 
