@@ -231,6 +231,23 @@
 @source inline("{bg,text,border}-stage-{1,2,3,4,5,6,7,8}{,-soft}");
 
 /* ---------------------------------------------------------------------------
+ * Keep the source scan out of prose.
+ *
+ * Tailwind 4 auto-detects source files by walking the project tree, and it
+ * does not know a Markdown file from a component: docs/CONTRACTS.md,
+ * docs/ORCHESTRATION.md, docs/STATUS.md, the round records under docs/rounds,
+ * and design/ all contain class-name-shaped strings in running prose (quoting
+ * a utility, showing a diff, discussing a token). Tailwind read those strings
+ * as real usage and emitted junk rules from them — a `font-[var(--font-mono)]`
+ * that sets font-weight to a font family, and four "Unexpected token Delim"
+ * warnings on every build. Neither directory ever holds source the app
+ * builds, so both are excluded outright.
+ * ------------------------------------------------------------------------ */
+
+@source not "../../docs";
+@source not "../../design";
+
+/* ---------------------------------------------------------------------------
  * The macOS title bar, and why this one rule lives here.
  *
  * The window runs `titleBarStyle: "Overlay"`, so the web view starts at y=0 and
