@@ -136,7 +136,14 @@ Never `pkill`. Kill only a PID you started yourself.
 
 ## What is still by hand
 
-`tests/RELEASE-CHECKLIST.md` (not written yet) covers the macOS real-app checks
-that no suite here can make: first launch on a machine that has never run Helix,
-the right-click-open gatekeeper dance on an unsigned build, the keychain prompt,
-restore from backup, and switching workspaces.
+`tests/RELEASE-CHECKLIST.md` covers the real-app checks no suite here can make:
+first launch on a machine that has never run Helix, the right-click-open
+gatekeeper dance on an unsigned build (macOS) and the SmartScreen dance
+(Windows), the keychain prompt, restore from backup, and switching
+workspaces. Run it on both platforms before tagging a release.
+
+That checklist is pre-release verification only. What to do when something
+goes wrong after a release is already out — a broken build, a partial
+migration, a lead applied twice, a bad import, a denied keychain prompt, and
+the rest of it — is `docs/OPERATIONS.md`, along with the operational tasks
+that only happen today if Walker remembers them.

@@ -1,0 +1,808 @@
+# Operations
+
+What to do when something goes wrong with a running Helix install, and the
+operational work that keeps Helix running at all. This is the manual for the
+worst moment, not a design document: lead with the symptom, then the fix.
+
+This is not `tests/RELEASE-CHECKLIST.md`. That file is what you verify by
+hand on a real machine before you tag a release. This file is what you do
+after a release is out and something breaks, plus the recurring jobs nobody
+but Walker does today. Where the two would otherwise say the same thing, this
+file points at the checklist instead of repeating it.
+
+Each procedure below is marked exactly one of:
+
+- **tested** — exercised here, with the command and its real result
+- **inspected only** — read the code and traced the behavior, not executed
+- **needs access** — needs Walker's machine, a real release, or a real client
+  site; written from the code so it is ready to verify
+
+Helix has no accounts, no server, and no second user (`docs/rounds/2026-09-20-launch-readiness-record.md`,
+decision LR-2; `docs/rounds/launch-returns/sec.md` §0). Every procedure below
+is scoped to one owner, one machine, one workspace file.
+
+---
+
+## 1. A release build fails, or ships broken
+
+**Symptom.** After installing a new version, Helix will not open, crashes on
+a normal action, or does something wrong badly enough that the client needs
+the previous version back.
+
+**What the owner sees.** A crash, a blank window, or a `BootScreens.tsx`
+full-screen error. If the reinstalled build is *older* than the one that last
+touched this workspace, the owner instead sees "This workspace needs a newer
+Helix" (see below) — that is not a bug, it is the safety refusal working.
+
+**What the owner does.**
+
+1. Quit Helix completely.
+2. Get the previous version's installer from the repository's GitHub
+   Releases page (Walker tells them which asset).
+3. macOS: right-click the app, choose Open, confirm the Gatekeeper dialog
+   (unsigned build — `tests/RELEASE-CHECKLIST.md`, "First launch"). Windows:
+   click SmartScreen's "More info," then "Run anyway."
+4. Reinstall over the existing app. This replaces only the app bundle; the
+   workspace files under Application Support (macOS) / AppData (Windows) are
+   untouched.
+5. Relaunch. Helix reopens the workspace it had open before.
+
+**What Walker does.** Confirm which installer actually matches this client's
+workspace schema before handing over a link — installing something *older*
+than what already touched the file trips the refusal below, not a working
+rollback. Reproduce the break, fix it, cut a new tagged release (see the
+founder-task inventory, "Cut and ship a release").
+
+**What happens to a database the newer version already migrated — the
+refusal.** `src/db/migrator.ts`'s `migrate()` reads `schema_migrations`
+before doing anything else. If it finds a version tag its own migration
+journal does not know, it throws `NewerSchemaError` — before the
+pre-migration backup, before either `PRAGMA foreign_keys` statement, before
+any table is touched (`migrate()`, the `unknownVersions` check, comment: "an
+older build must never touch a newer workspace"). `src/app/BootScreens.tsx`'s
+`NewerSchemaErrorScreen` (wired through `BootFailure`) renders the title
+"This workspace needs a newer Helix" with the exact sentence from
+`newerSchemaMessage()`:
+
+> This workspace was made by a newer version of Helix than the one running
+> here. Install the latest version of Helix, then open this workspace again.
+> Your data has not been changed.
+
+Note what this means for "rollback": if the broken release included a
+migration that already ran before the bug was noticed, reinstalling the
+*previous* version does not work — it hits this refusal, because the file is
+now one schema version ahead of that build. The only ways forward are (a)
+ship a *newer*, fixed build and let it open the file as-is, or (b) restore
+the `pre-migration` backup Helix took automatically right before that
+migration ran (procedure 2), then install a true previous version against
+that restored file. If the broken release shipped no new migration, the
+previous installer opens the file with no refusal and no data question at
+all.
+
+**What recovers the data.** Nothing needs recovering in the refusal case —
+it is designed to touch nothing, so the workspace sits exactly as it was
+until the right build opens it. If the previous release actually needs
+restoring to a pre-migration state, see procedure 2 and procedure 7.
+
+**Mark: needs access**, for the reinstall-a-real-installer action itself,
+which needs a real release asset and a real machine. The refusal mechanism
+it depends on is tested: `npx vitest run tests/repo/migrations.test.ts` at
+`44d72d8` — 12 passed, including "migrate() now refuses, before touching
+anything, with the exact message" and "does not offer to downgrade, delete
+or repair: the message only names the version problem."
+
+**Note to the lead.** The packet described this refusal as still being
+built by W1. Reading `src/db/migrator.ts` and `src/app/BootScreens.tsx` at
+this revision, it is already implemented and already covered by
+`tests/repo/migrations.test.ts` (`describe("older build vs. a newer
+workspace (LR-OPS-W1 A1)")`). No placeholder needed — this procedure is
+written against the real message and the real screen. If the wording changes
+before launch, this section needs a one-line update, not a rewrite.
+
+---
+
+## 2. A migration partially completes
+
+**Symptom.** After an update, Helix shows "This update could not finish."
+
+**Mechanism.** `migrate()` takes a `pre-migration` backup once, before the
+first pending migration file runs. Each pending file then runs as **one**
+`raw.batch()` — the `INSERT INTO schema_migrations` row for that file is
+the last statement in the same batch — so a file either commits completely
+or rolls back completely. There is no state where one migration file is half
+applied. If file *N* fails, files before it are already committed (that is
+forward progress, not corruption) and file *N*'s statements are rolled back
+as a unit. `PRAGMA foreign_keys` is restored to `ON` in a `finally` no matter
+what happens.
+
+**What the owner sees** (`MigrationErrorScreen` in `src/app/BootScreens.tsx`):
+
+> This update could not finish. Nothing was changed: the update was rolled
+> back. Your data was backed up first, and that backup is untouched. Install
+> the previous version to keep working, and send us the detail below.
+
+The pre-migration backup's path is shown on screen, and the raw error is one
+click away behind "Details," with a "Copy the details" button.
+
+**What the owner does.**
+
+1. Note the backup path shown on screen (also findable at
+   `<workspace>/backups/*-pre-migration.db` via Settings > Diagnostics >
+   Reveal data folder).
+2. Reinstall the previous Helix version (procedure 1) to keep working now.
+3. Copy the details from the error screen and send them to Walker.
+
+**What Walker does.** Reproduce against the named migration tag, fix the SQL,
+ship a corrected release. If the client's workspace is stuck between
+versions (some migration files applied, one failed), the safest path is to
+restore the `pre-migration` backup from Settings > Backups so the file is
+back to its state immediately before the update started, then wait for the
+fixed release — do not try to hand-edit `schema_migrations`.
+
+**What recovers the data.** The `pre-migration` backup, or simply reinstalling
+the previous version: a failed batch never touched the live file in the
+first place, SQLite rolled it back inside the same transaction.
+
+**Mark: tested.** `npx vitest run tests/repo/migrations.test.ts` at `44d72d8`
+— 12 passed, including `describe("partial-failure atomicity (LR-OPS-W1 A2)")`:
+"a single migration whose LAST statement fails leaves no partial DDL and no
+schema_migrations row" and "migration N commits and migration N+1 fails: N
+stays applied, N+1 does not, and the error names N+1," plus
+`describe("foreign_keys is restored after a throwing migration")`.
+
+---
+
+## 3. The client's website is down, or the token was rotated
+
+**What the owner sees.** Two places, by design (`src/features/leads/components/PollNotice.tsx`'s
+own header comment explains the split — the quiet line is what most owners
+actually see, the full explanation lives where the fix is):
+
+- **Today** (`PollNotice`, one quiet sentence with a link, no color, no icon):
+  - Auth failure: "New leads are not coming in: your website turned the
+    connection down." — linking "Check the website connection" to
+    Settings > Website (`/settings/site`).
+  - Network failure: "New leads are not coming in: Helix cannot reach your
+    website." — same link.
+- **Settings > Website** (`SiteConnectionScreen`, full banner via
+  `PollBanner`):
+  - Auth: "Your website turned the connection down. Check the token." /
+    "New leads are not coming in until the token is right. Paste a fresh one
+    below and save."
+  - Network: "Helix cannot reach your website." / "Nothing has come through
+    for `{N}` tries. Helix keeps trying on its own."
+  - Clicking **Test connection** with a stale token shows:
+    "Your website turned the token down. Check that you copied all of it."
+    (`describeFetchError`, `SiteConnectionScreen.tsx`).
+
+**The timing rules** (`src/features/leads/lib/backoff.ts`): a healthy
+connection polls every 5 minutes. A network failure backs off 1, 2, 4, 8
+minutes, then holds at 8 minutes forever until a poll succeeds
+(`BACKOFF_MINUTES`). The banner stays silent for the first two consecutive
+network failures (`FAILURES_BEFORE_BANNER = 3`) so one blip does not alarm
+the owner. A 401 or 403 (`isAuthStatus`) is treated differently: the poll
+timer **stops outright** rather than backing off — nothing tries again until
+the owner saves a corrected token.
+
+**What the owner does.** Settings > Website (`/settings/site`): paste the
+new token into the Token field — leaving it blank keeps the token already
+stored — click **Test connection**, then save.
+
+**What Walker does.** If it is a rotation: reissue the token on the
+ClearPath site side, confirm it works with a manual `Test connection` before
+handing it to the client. If it is a site outage: nothing to do in Helix —
+network failures keep retrying on their own and resume the moment the site
+answers; only a 401/403 needs the manual fix above.
+
+**What recovers the data.** Nothing is lost. The site is the source of
+truth; Helix's poll uses a server-side cursor (`next_cursor`), not a time
+window, so leads that arrived while disconnected are still on the site and
+land on the next successful poll.
+
+**Mark: tested**, for the state machine and the exact thresholds:
+`npx vitest run tests/unit/leads/backoff.test.ts` at `44d72d8` — 12 passed.
+The banner strings above are read directly from `PollBanner.tsx` and
+`PollNotice.tsx`, not paraphrased. Seeing the banner actually appear in a
+running window against a real or a `tools/fake-site` outage was not driven
+in this session.
+
+---
+
+## 4. Anthropic is down, or the key is revoked
+
+**What the owner sees.** The named error classes in `src/features/ai/errors.ts`,
+surfaced through `aiErrorMessage()`:
+
+- No key saved: "No Anthropic key is saved for this workspace."
+- Key revoked/wrong (401): "Anthropic rejected that key. `{Anthropic's own
+  detail}`" (`AiKeyRejected`).
+- Rate limited (429): "Anthropic is rate limiting this key. Wait a moment
+  and try again."
+- Anthropic down (5xx): "Anthropic had a problem answering. Try again."
+- No network at all: "Could not reach Anthropic. Check the connection and
+  try again."
+- A malformed answer: "The answer was not in the shape we asked for," with
+  the raw model text kept on the error so nothing the owner pasted is lost
+  (`AiParseError`).
+
+Where it shows up depends on whether AI is on at all
+(`src/features/ai/components/AiGate.tsx`): if the module is off, there is no
+button anywhere to fail — the one honest sentence lives on Settings > AI
+(`/settings/ai`). If the module is on and the key is missing or rejected,
+every AI button across contacts, companies and deals stays visible but
+disabled, with the reason in its tooltip and in `aria-describedby`
+(`AiActionButton`, `useAi().disabledReason`) rather than repeated as body
+text on every record.
+
+**What the owner does.** Settings > AI (`/settings/ai`): click **Test key**.
+A rejected or missing key shows the sentence above inline
+(`AiSettingsScreen.tsx`, `keyError` / `testResult`). Paste a corrected key,
+or wait out a 429/5xx and try again — both are explicitly retryable
+(`AiRequestError.retryable`).
+
+**What Walker does.** Nothing on Helix's side for an Anthropic outage — it
+is Anthropic's status, not Helix's. For a revoked key, tell the client to
+generate a new one from their own Anthropic console and paste it in; Helix
+never has a copy of a key to hand back (read fresh from the keychain per
+call, never cached — `sec.md` §1, "AI key handling").
+
+**What recovers the data.** Nothing to recover. No AI response is ever
+stored as a side effect of failing; the record it would have filled in is
+simply not filled in yet.
+
+**Mark: tested.** `npx vitest run tests/unit/ai/provider.test.ts` at
+`44d72d8` — 14 passed, including "401 is AiKeyRejected and carries the API's
+own message," "429 retries once, then reports AiRequestError as retryable,"
+"a 500 that clears on the retry succeeds," "a dropped connection is
+AiRequestError after the retry," and "malformed JSON is AiParseError and
+keeps the raw text."
+
+---
+
+## 5. The lead poller applies a lead twice
+
+**Symptom.** A concern to check, not something clients are expected to
+report: could the same website lead ever become two deals?
+
+**Mechanism** (`src/features/leads/lib/applyLeads.ts`). Every lead gets an
+`external_id` of `<site origin>:<lead id>`. Before creating anything,
+`applyLeadPage` checks `deals.findByExternalId(mapped.externalId)`; a match
+means this is a re-poll of a lead already on file — the existing deal is
+left alone (the owner may have edited it), and only a genuine site-side edit
+writes one system activity noting what changed. A second guard,
+`claimedThisPage`, catches the case `findByExternalId` cannot: two leads
+sharing one id inside the *same* page, before either is committed. The whole
+page applies inside one `withTransaction`, so a failure partway through
+leaves nothing behind and the cursor never advances past work that did not
+commit.
+
+**This landed mid-phase, too.** `sec.md` F-SEC-28 flagged `deals.external_id`
+as an ordinary index with no `UNIQUE` constraint — safe only because the
+app's single write lock serializes every writer. Commits `3adc34c` and
+`658c066` closed that while this task was being written: `drizzle/0005_lead_dedup.sql`
+adds a partial `UNIQUE` index (`external_id IS NOT NULL AND deleted_at IS
+NULL`), soft-deleting every duplicate but the oldest live deal per
+`external_id` first so an existing workspace with a violation still
+migrates. `applyLeadPage` now batches each lead's own statements (contact +
+deal + activity) as its own unit inside the page's transaction; if the
+combined batch trips the constraint, each unit retries in its own nested
+savepoint, and a unit that conflicts is reclassified exactly like an
+ordinary re-poll — already applied, skipped, nothing left behind — instead
+of failing the whole page. So the guard described above is now backed by an
+actual database constraint, not only by the write lock.
+
+**What the owner does.** Nothing — there is nothing to fix. If a deal looks
+duplicated, it was created from two genuinely different `external_id`s (for
+example the client re-submitted the website form with a different email),
+not from the poller re-applying the same one. The Duplicates screen
+(`src/features/data/duplicates/DuplicatesScreen.tsx`) is where that gets
+merged, same as a duplicate from an import.
+
+**What Walker does.** If a client reports a duplicate that really does share
+one `external_id`, that is a bug report, not routine operation — get the
+two deal ids and the site origin and escalate to engineering.
+
+**What recovers the data.** Nothing to recover; merging two legitimately
+separate deals uses the existing Duplicates / merge flow, which is reversible
+inside its own 30-day window (`src/db/repos/merge.ts`, `MERGE_REVERSAL_DAYS`).
+
+**Mark: tested.** `npx vitest run tests/repo/leads/applyLeads.test.ts
+tests/repo/leads/pollerRace.test.ts` at this revision — 30 passed, including
+"is idempotent: the same page applied twice creates nothing the second
+time," "creates exactly one deal when two leads in the same page share a
+real id," "still recognises a duplicate id already committed from an
+earlier page," "writes nothing at all when the re-poll repeats exactly what
+is on file," and (`pollerRace.test.ts`) the forced-stale-read tests proving
+a `UNIQUE` violation on `external_id` is now reclassified as skipped rather
+than failing the page.
+
+---
+
+## 6. A client imports bad data
+
+**Symptom.** An owner imports a CSV with the wrong mapping, garbage rows, or
+a file that should never have been imported, and wants it gone.
+
+**Is there an import undo? No.** `src/app/undo.ts` reverses one
+`change_log` batch through `undoBatch`/`redoBatch`, and the stack is emptied
+on every `db_open` besides. `src/features/data/lib/importRun.ts` writes
+**one** `change_log` row for the *whole* import (batch id = the import's own
+id) holding only the summary counts (`created`, `updated`, `skipped`,
+`companiesCreated`) — not a per-row before/after. The module comment says
+why: "undo for an import is 'restore the backup,' not 'walk the log.'" So
+Cmd+Z cannot undo an import; `undoBatch` has nothing per-record to reverse.
+
+**Is there a way to bulk-select what one import created? No.** Contacts,
+companies and deals created by an import carry no import-run id of their own
+— only `change_log`'s one summary row knows the batch id, and nothing in
+`src/db/repos/contacts.ts` or the contacts list/saved-view screens filters
+by it. The only thing pointing at "these rows came from this file" is
+whatever the owner put in the CSV's own Source column, if anything, or the
+timestamp. This is a real gap — see below.
+
+**Is a backup taken before an import runs? No.** Read `runImport()` in
+`importRun.ts` end to end: `readMappedRows`, `loadLookups`, the write loop,
+`flush`, and the one final `change_log` insert — no call to `backupsFs.ts`
+anywhere. Compare `restoreFromBackup` in `src/features/data/lib/backupsFs.ts`,
+which *does* take a `"pre-restore"` backup before it overwrites the file.
+Import gets no equivalent safety net today.
+
+**What the owner does, today, to recover from a bad import:**
+
+1. If nothing has changed since the import except the import itself,
+   Settings > Backups > find a backup from just before the import (the
+   automatic backup runs every 6 hours while the app is open, plus on
+   launch) and Restore it (procedure 7). This loses anything else the owner
+   did after the import too — the only bulk fix that exists is "go back in
+   time," not "remove exactly the imported rows."
+2. Otherwise, fix it by hand: filter/sort the contact list by whatever is
+   distinctive about the bad batch (a shared source, a shared tag, a
+   creation-time window) and delete those records individually or via
+   multi-select. A deleted record goes to Trash for 30 days
+   (`sec.md` data map) before it is purged for good, so a mis-click during
+   cleanup is itself recoverable inside that window.
+3. For records the dedupe policy merged into *existing* contacts (the "Fill
+   in the blanks" policy only adds missing emails/phones/notes, never
+   overwrites), there is nothing to undo per record — nothing already
+   filled in was touched.
+
+**What Walker does.** If asked before the fact: recommend the owner runs
+Settings > Backups > "Back up now" immediately before a large or risky
+import, since Helix does not do this automatically. If asked after a bad
+import with no recent backup: same manual filter-and-trash path above; there
+is no faster recovery to offer.
+
+**Recommendation to the lead (Required, not implemented here —
+`backupsFs.ts` and the backups feature are the lead's this phase):** take an
+automatic backup, tagged distinctly (e.g. `"pre-import"`, mirroring
+`"pre-restore"`), immediately before `runImport()`'s write phase opens its
+transaction. That alone would make procedure 6's first recovery path
+reliable instead of "whichever backup happens to exist." A `UNIQUE`/indexed
+import-run id on the affected tables (Follow-up) would additionally let a
+future "undo this import" feature exist at all — today there is no data
+model to build one against.
+
+**Mark: inspected only.** Read `src/app/undo.ts`, `src/features/data/lib/importRun.ts`,
+`src/features/data/lib/typedImportRun.ts`, `src/features/data/lib/backupsFs.ts`,
+and `src/features/data/import/ResultStep.tsx` (no undo/bulk-delete affordance
+there either). Not exercised against a real bad import in this session.
+
+---
+
+## 7. Restore a database from a backup
+
+**What the owner sees and does** (`BackupsScreen.tsx`, Settings > Backups,
+`/settings/backups`): each backup is listed newest-first with its date and
+size; clicking **Restore** on a row opens a confirmation dialog titled
+"Restore this backup?" naming both the backup's date and today's date, with
+a destructive **Restore** button.
+
+**Mechanism** (`restoreFromBackup`, `src/features/data/lib/backupsFs.ts`),
+in exact order:
+
+1. Pause the background timers (resumed in a `finally`, whatever happens).
+2. Take a backup of *today's* file first, tagged `"pre-restore"` — so
+   restoring an old backup never destroys the most recent state without a
+   way back.
+3. Close the database (checkpoints the WAL, drops `-wal`/`-shm`).
+4. Copy the chosen backup file into place.
+5. Reopen it and re-run the boot path, so migrations and the query cache
+   re-run against the restored file.
+
+If anything after step 3 throws, the database may be left closed; the
+screen's own failure message says so rather than pretending it worked:
+"Restore failed: `{message}`. Please restart Helix."
+
+**Retention, so the owner knows what is actually available to restore**
+(`src/features/data/lib/retention.ts`, `planRetention`): every backup from
+the last 24 hours is kept; from 24 hours to 30 days, the newest backup of
+each calendar day is kept and the rest dropped; the single newest backup on
+disk is always kept regardless of age (a workspace closed for a month still
+has one restore point). Automatic backups run on launch and roughly every 6
+hours the app stays open (`BACKUP_INTERVAL_MS`); "Back up now" runs one on
+demand.
+
+**What Walker does.** Confirm with the owner which backup date they actually
+want before they click Restore — the dialog names both dates, but the owner
+is the one under time pressure. After a restore, confirm the change that
+prompted it is really gone and the expected state is back, per
+`tests/RELEASE-CHECKLIST.md`'s "Backup and restore" section.
+
+**What recovers the data if the restore itself goes wrong.** The
+`pre-restore` backup taken in step 2, from Settings > Backups, the same way.
+
+**Mark: needs access**, for clicking Restore in a real running app and
+watching the window. What can be verified without that has moved since this
+packet was written: `src-tauri/tests/recovery_tests.rs` (landed this phase,
+commit `a5ac006`) now proves the assumption the whole restore design rests
+on at the file level — that an encrypted workspace file and an encrypted
+backup of it are truly interchangeable by copying one over the other.
+`cargo test --test recovery_tests` at this revision — 9 passed, including
+`restore_over_the_live_file_brings_the_old_rows_back` ("what Settings ->
+Backups -> Restore does, minus the React: back up, change something, copy
+the backup over the live file, reopen") and confirming the restored file
+"must still be encrypted."
+
+That test's own comment says "The JS side is covered by its own tests" —
+searched for a test of `restoreFromBackup` itself
+(`src/features/data/lib/backupsFs.ts`) and found none;
+`tests/unit/data/backupCopyOut.test.ts` only exercises `runBackup`'s failure
+message, not the restore orchestration (pause timers, pre-restore backup,
+close, copy, reopen, re-boot). Flagging this gap between the comment and
+what actually exists rather than taking the comment's word for it — see
+Findings, F-OPS-W3-6.
+
+**Placeholder for the lead:** replace the mark with **tested** and cite
+either a real click-through restore or a JS-level test of
+`restoreFromBackup`'s five-step orchestration, once either exists; the file
+-level mechanism it depends on is now solidly covered.
+
+---
+
+## 8. The laptop dies
+
+**This landed mid-phase.** The packet described this as the lead's
+in-flight work with a placeholder to fill in later. Commits `a5ac006` and
+`a773ff3` shipped it while this task was being written — recovery key and
+second-copy folder, both in Settings > Backups. What follows is the real
+mechanism, not a placeholder.
+
+**The two pieces, both in Settings > Backups (`/settings/backups`):**
+
+1. **Recovery key** (`RecoveryKeyPanel`, `src/features/data/backups/BackupsScreen.tsx`).
+   Nothing is shown until the owner clicks **Show recovery key**
+   (`revealRecoveryKey()`, backed by Rust's `recovery_key_reveal` and
+   `DbKey::expose_for_recovery` — the one place in the codebase this key is
+   deliberately handed out in the clear). The screen's own words: "Your
+   backups are encrypted with a key that is kept on this computer and
+   nowhere else. If this computer is lost, stolen or replaced, that key is
+   what lets you open a backup on the new one. Write it down now, while you
+   still can." Once revealed, **Save to a file** writes a plain-text file
+   (`recovery_key_file_contents`, `src-tauri/src/recovery.rs`) headed
+   "Helix CRM recovery key," naming the workspace, formatted as
+   `HLX1-XXXX-XXXX-...` (grouped in 4s so it can be read back off paper), with
+   its own instructions ("Keep it somewhere that is not this computer: a
+   password manager, a printed copy in a drawer, a note in a safe") and its
+   own warning ("Anyone who has both this key and a copy of one of your
+   backup files can read everything in your CRM. Do not email it to
+   yourself and do not store it in the same place as your backups.").
+2. **A second copy** (`BackupCopyFolderPanel`, same screen). The owner
+   points Helix at a folder — an external drive, or a folder Dropbox,
+   iCloud Drive or OneDrive already syncs — and Helix copies each new
+   backup there right after it is written. Screen's own words: "Nothing is
+   uploaded by Helix, and the copies are encrypted the same way, so you
+   will need your recovery key to open one elsewhere." This is local
+   copying to a path the owner chose, not a network call Helix makes on its
+   own — whatever gets it further offsite (Dropbox syncing that folder) is
+   the owner's existing service doing its own job.
+
+**Getting a dead laptop's data onto a new machine, end to end:**
+
+1. Before the laptop dies: the owner has clicked Show recovery key and
+   saved it somewhere that is not that laptop, and ideally has a second-copy
+   folder configured that already synced backups offsite.
+2. Install Helix on the replacement machine.
+3. Settings > Backups > **Open a backup from another machine**
+   (`OpenFromAnotherMachinePanel`): choose the backup `.db` file (from the
+   second-copy folder, a cloud sync, or any copy the owner has), paste the
+   recovery key, name the workspace, and Helix adds it as a new workspace —
+   "Helix adds it as a second workspace and leaves everything here as it
+   is."
+4. Rust's `adopt_backup` (`src-tauri/src/recovery.rs`) does the actual work,
+   in order, refusing and leaving nothing behind at any wrong step: (a)
+   prove the typed key actually opens that file, (b) prove the opened file
+   looks like a real Helix database, not some other SQLite file, (c) create
+   a new workspace folder, (d) copy the file in as `helix.db`, (e) write the
+   key into *this* machine's keychain under the new workspace id — refusing
+   outright if that id somehow already has a key, since overwriting one is
+   "the worst thing this module can do" — (f) prove the copy now opens
+   through that keychain entry. If step (f) or anything after (c) fails,
+   both the new folder and the new keychain entry are removed again, so a
+   failed recovery attempt leaves no half-adopted workspace behind.
+
+**What Walker does.** Point the client at Settings > Backups before
+anything goes wrong — this is a "the owner has to have already done it"
+mitigation, same as any backup. If a laptop has already died with no
+recovery key saved and no second copy configured, say so plainly: without
+the key, an existing backup file recovered by any other means (a cloud
+sync's own history, a drive image) is unreadable ciphertext, because the
+only other copy of that key lived in that machine's keychain.
+
+**What recovers the data.** The recovery key plus any one backup file —
+`adopt_backup` needs both and nothing else; it does not need the original
+machine, its keychain, or Helix to have been open recently.
+
+**Mark: tested.** `cargo test --test recovery_tests` at this revision — 9
+passed, including `a_backup_opens_on_a_machine_that_has_never_seen_it`
+(the exact new-machine scenario above, at the Rust level), `a_wrong_key_writes_nothing`,
+`a_missing_file_is_refused`, `a_database_that_is_not_helix_is_refused`, and
+`two_adoptions_of_one_backup_do_not_collide`. `npx vitest run
+tests/unit/data/recoveryKey.test.tsx` — 10 passed, covering the panel UI
+described above.
+
+---
+
+## 9. The keychain prompt was denied
+
+**This improved mid-phase.** Commit `a5ac006` (the same recovery-key change
+that landed procedure 8) added `is_access_refusal`/`access_refused` to
+`src-tauri/src/secrets.rs`, specifically to tell a denied prompt apart from
+a broken keychain. What follows is that current behavior, not the packet's
+premise.
+
+**What actually happens when a keychain read or write fails**
+(`src-tauri/src/secrets.rs`):
+
+- A **denied prompt**, sniffed by `is_access_refusal` from
+  `keyring::Error::NoStorageAccess` or from the OS's own wording (`"denied"`,
+  `"canceled"`, `"not authorized"`, `"user interaction"`, or the raw Security
+  framework codes `-128`/`-25293`) — the comment names this as macOS in
+  practice, since Windows Credential Manager has no prompt to deny — now
+  gets its own message, `access_refused()`, from both `raw_get` and
+  `raw_set`:
+
+  > This machine's keychain turned Helix down, so Helix cannot reach this
+  > workspace's key. Quit Helix, open it again, and choose Always Allow when
+  > the keychain asks. Nothing on disk has been changed. (`{OS detail}`)
+
+- Any **other** keychain fault (not a denial — the item is missing, the
+  service is unreachable, disk trouble) still gets the older, plainer
+  messages: "Can't read from the keychain: `{e}`" / "Can't save the key
+  securely on this machine: `{e}`" / "Can't reach the keychain for `{user}`:
+  `{e}`".
+- A bundle that exists but will not **parse** (data corruption, a different
+  failure from either of the above) is refused outright with the one
+  message this module treats as load-bearing — unchanged by this phase:
+
+  > This workspace's saved keys are on this machine but Helix could not read
+  > them. Helix will not replace them, because writing a new database key
+  > over the old one would make this workspace's file unreadable for good.
+  > Restore the keychain entry "helix" for this workspace from a Time
+  > Machine or keychain backup, or open a different workspace.
+
+**This closed completely while this document was being written.** Commit
+`d084392` — landing after the paragraph above was drafted around
+`access_refused()` alone — gave `SECRET_ERROR` its own class end to end.
+`src/db/client.ts` now has `SecretStoreError extends DbError`; `src/app/boot.ts`
+re-throws it before the generic `if (err instanceof DbError) throw new
+DbOpenError(...)` catch-all can fold it into a file-open failure; and
+`src/app/BootScreens.tsx`'s new `SecretStoreErrorScreen` gives it its own
+title, **"Helix needs permission to use this computer's keychain,"** with
+the body:
+
+> This machine's keychain turned Helix down, so Helix cannot reach this
+> workspace's key. Quit Helix, open it again, and choose Always Allow when
+> the keychain asks. Nothing on disk has been changed. (`{OS detail}`)
+>
+> Your workspace is encrypted, and the key that opens it is kept in the
+> keychain. Helix cannot read your data without it, and nothing on disk has
+> been changed.
+
+with a **Try again** button (the right move here — the prompt reappears)
+and **Show the workspace folder**. The old, wrong headline — "Helix can't
+open your data... Another copy of Helix may have it, or the folder may not
+be writable" — no longer shows for this cause at all. The commit's own
+message names exactly why: on an unsigned macOS build the Keychain prompt
+reappears after every rebuild, so a denied prompt "is the single most
+likely way an owner ever sees a boot failure at all," and the old screen
+sent him looking for a second copy of Helix that does not exist.
+
+**What the owner sees and does.** The screen above, headed with the word
+"keychain." Quit and reopen Helix; on the next prompt, click **Always
+Allow** rather than Deny or Allow Once. An unsigned build re-prompts on
+every rebuild regardless (`tests/RELEASE-CHECKLIST.md`, "Keychain and
+secrets"), but a normal relaunch of the same build should only ask once per
+item — then **Try again** on the screen itself.
+
+**What Walker does.** If the denial repeats after a clean relaunch with
+Always Allow chosen, this stops being "the owner clicked the wrong button"
+and becomes a real keychain problem — check whether the keychain entry
+itself needs restoring (procedure 8's "getting a dead laptop's data onto a
+new machine" covers the adjacent case of no entry at all), or escalate.
+
+**What recovers the data.** Nothing was written, so nothing needs
+recovering — `db_key`'s critical section (`KEY_CREATE`, a shared `Mutex` as
+of this phase) means a failed read never mints and writes a replacement key
+over a real one, and both the new screen and the Rust message say plainly
+that nothing on disk has changed.
+
+**Mark: tested.** `npx vitest run tests/unit/app/bootFailure.test.ts` at
+this revision — 9 passed, including "sends a refused keychain to its own
+screen, not to the file-locked one," which asserts the heading contains
+"keychain," the body contains "choose Always Allow," and the two wrong
+causes ("Another copy of Helix," "may not be writable") are both absent.
+`is_access_refusal`/`access_refused` themselves (the Rust functions that
+decide denial-vs-fault) remain untested directly — both are private,
+triggered only by a real OS response, and `cargo test` runs against the
+in-memory secret store — but the JS-visible behavior this procedure
+actually describes is exercised end to end.
+
+---
+
+## 10. helix.log is needed by support
+
+**What to ask the client for.** Have them open **Settings > Diagnostics**
+(`/settings/diagnostics`) and click **Copy log** — this reads the whole log
+file and puts its text on the clipboard, so they can paste it straight into
+an email with no need to find the file themselves. If more is needed (a
+specific backup file, an attachment, the raw `helix.db`), **Reveal data
+folder** on the same screen opens the workspace folder in Finder/Explorer.
+
+**Where it lives.**
+
+- macOS: `~/Library/Application Support/com.clearpathdigital.helix/logs/helix.log`
+- Windows: `%APPDATA%\com.clearpathdigital.helix\logs\helix.log`
+
+(`src-tauri/src/lib.rs`: `app_data_dir().join("logs")`, file name `helix`.)
+
+**What it does and does not contain.** Rotation keeps 7 files
+(`RotationStrategy::KeepSome(7)`) capped at 4 MB each (`MAX_LOG_BYTES`), with
+anything older swept on launch (`sweep_old_logs`). Per Diagnostics' own
+footnote and `sec.md`'s data map: it records when Helix started, backed up,
+checked the connected website, or hit an error, plus the connected website's
+address (its origin, not a customer's data). As of F-SEC-6 it does **not**
+contain the site's bearer token or the site's raw response body on an
+authentication failure — both used to leak into this file and into
+`lead_sync.last_error` before that fix; a non-auth failure still keeps a
+200-character, token-redacted snippet of the site's reply in
+`lead_sync.last_error` (visible in Settings > Website), but not in the log
+file itself. It never contains a customer's name, phone number, email, or
+message. Verified: `npx vitest run tests/unit/leads/pollerLogRedaction.test.ts`
+at `44d72d8` — 3 passed, asserting the token-bearing text lands in the
+database field but is explicitly absent from the log.
+
+**How to read it.** It is plain text (`tauri-plugin-log`'s default line
+format: timestamp, level, target, message), one line per event — no special
+tool needed, `cat`, a text editor, or pasting into an email all work as-is.
+
+**The Diagnostics screen** (`src/features/settings/components/DiagnosticsScreen.tsx`,
+`/settings/diagnostics`) shows, read-only, in five groups: this copy of
+Helix (version, workspace name, write-queue state, whether the keychain is
+reachable), the database (file path, size, SQLite version, FTS5 status,
+applied migration, last backup time), encryption (whether the workspace file
+itself is encrypted, and separately whether the OS's own full-disk
+encryption — FileVault/BitLocker — is on, each answering "Unknown" rather
+than a false negative when the build cannot tell), website leads (connected
+site origin, last checked, last error), and files (app data path, log file
+path with the "what it does and does not contain" sentence above printed
+right on the screen). It has exactly two actions: Copy log and Reveal data
+folder — everything else on the screen only reads.
+
+**Mark: inspected only.** Read `DiagnosticsScreen.tsx`, `src/features/settings/lib/diagnostics.ts`,
+and the log configuration in `src-tauri/src/lib.rs`; ran the redaction test
+above for the log-content claim. Did not operate a live Diagnostics screen
+or read a real `helix.log` off disk in this session.
+
+---
+
+# Founder-task inventory
+
+Everything below only happens today if Walker remembers it. For each: how
+often, what breaks if it is missed, and what this phase turns it into — a
+written procedure (here), a checklist line (`tests/RELEASE-CHECKLIST.md`),
+a CI check, or an honest "nothing catches this today."
+
+| # | Task | How often | What breaks if missed | What this phase does about it |
+|---|---|---|---|---|
+| 1 | Keep the three version strings in sync (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` — all three read `0.1.0` at this revision) | Every release | The build still runs, but Diagnostics' "This copy of Helix > Version" row and the installer's own file metadata can disagree with each other and with what CHANGELOG says shipped | Added a checklist line, `tests/RELEASE-CHECKLIST.md`, "Before you tag" |
+| 2 | Tag `vX.Y.Z` and push it | Every release | Nothing — no installer is ever built. `ci.yml` runs regardless of tags, so this can silently never happen while every other check stays green | Documented below; no code check exists for "did a tag ever follow a version bump," and adding one is out of this task's ownership (`release.yml` is not mine to edit) |
+| 3 | Publish the draft release on GitHub (`release.yml` sets `releaseDraft: true` deliberately, so tauri-action never publishes on its own) | Every release | The tag exists, CI is green, installers are built and attached — and none of it is visible on the public Releases page until the draft is published by hand | Documented below; genuinely nothing catches a forgotten draft today |
+| 4 | Tell each client a new version exists | Every release with a client-facing fix | There is no auto-update and no in-app "a new version is available" check (confirmed: `README.md`'s Installing section, no update-check code anywhere in `src-tauri` or `src/app`) — a client can sit on a fixed bug forever without knowing a fix shipped | Documented below; nothing catches this today, by design (no phone-home) |
+| 5 | Rotate or hand over a client's site token when asked | As needed, not scheduled | Until rotated, the old token keeps working (not urgent by itself); if it IS rotated on the site side without telling the client's Helix, leads silently stop until the owner notices the Today banner (procedure 3) or Walker asks | Procedure 3 above covers the fix once noticed; nothing proactively notifies Walker — there is no telemetry, by design |
+| 6 | Run `tests/RELEASE-CHECKLIST.md` on **both** macOS and Windows before tagging, not just the machine at hand | Every release | `e2e-win.yml` only runs an automated smoke subset on a fresh Windows VM; the full manual checklist (SmartScreen wording, path handling, WebView2 quirks) has no automated equivalent | No code check possible for a manual step; the checklist itself already says this explicitly — left as-is, cross-referenced from here |
+| 7 | Purge stale GitHub Actions artifacts | — | Checked: nothing to purge. The only workflow that ever uploads an artifact is `e2e-win.yml`, and it already runs `if: failure()` with `retention-days: 3` — self-cleaning by design. `ci.yml` (this phase's changes included) uploads nothing | Nothing to do; confirmed by reading all three workflow files |
+| 8 | Notice when CI goes red on `main` | Every push | Commits land straight on `main` with no PR gate (per Walker's own standing instruction — no branch protection was found or added), so a red `js`, `rust`, or the new `rust-audit` job has no automatic consequence beyond the Actions tab | No code check added — a status check with nothing to block against does not enforce anything; noted honestly rather than papered over |
+| 9 | Confirm a client's backups are actually being written | Occasional, when something feels off | No telemetry reaches Walker; the only way to know is to ask the client to open Settings > Diagnostics and read "Last backup," or to read `helix.log` (procedure 10), which logs every backup event | Documented in procedure 10 and here; this is the existing Diagnostics screen doing the job, nothing new needed |
+| 10 | Keep the Rust and npm dependency trees free of new advisories between releases | Continuous | `ci.yml`'s new `npm audit` and `rust-audit` jobs (part A of this task) only run on `push`/`pull_request` — a newly published advisory for a dependency that has not changed sits uncaught until the next commit touches the repo | **Finding, class Follow-up** (below) — a `schedule`-triggered audit workflow would close this, but adding one was outside this task's explicit scope and changes `rustsec/audit-check`'s behavior (it opens GitHub issues on a scheduled run, never on push/PR) — a decision for the lead, not made unilaterally here |
+| 11 | Unsigned installers re-prompt for keychain access on every rebuild, and clients see a Gatekeeper/SmartScreen warning on every first run | Every release, forever, until TODO E5 (code signing) | Nothing breaks — it is a known, accepted cost documented in `sec.md`'s escalations and in `tests/RELEASE-CHECKLIST.md`'s "Keychain and secrets" section, restated here so it is not mistaken for a new bug during support | Already tracked as TODO E5, a spending decision; not re-litigated here |
+
+### Cut and ship a release, end to end (procedure, for task 1-4 above)
+
+1. Sync the version in `package.json`, `src-tauri/tauri.conf.json`, and
+   `src-tauri/Cargo.toml` (checklist line added, see below).
+2. Confirm `main` is green: `js`, `rust`, and `rust-audit` all passing on the
+   commit about to be tagged.
+3. Run `tests/RELEASE-CHECKLIST.md` in full, on both macOS and Windows.
+4. Update `CHANGELOG.md`'s Unreleased section into the new version heading.
+5. Tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. This triggers
+   `release.yml`'s matrix build (macOS arm64, macOS x86_64, Windows).
+6. Once all three legs finish, open the repository's Releases page and
+   publish the draft `release.yml` created — it does not publish itself.
+7. Tell each affected client the new version is out and, if the release
+   notes matter to them, what changed.
+
+---
+
+# Findings
+
+| # | class | finding | why |
+|---|---|---|---|
+| F-OPS-W3-1 | Resolved during this phase | `deals.external_id` had no `UNIQUE` constraint (F-SEC-28); the poller's idempotency (procedure 5) was correct only because the single write lock serialized every writer. Flagged while writing procedure 5, then closed by commits `3adc34c`/`658c066` before this document was finished: a partial `UNIQUE` index plus graceful per-lead retry on conflict. | Restated here for the record, not as an open item — `deals.external_id` is now safe against a second write path too, not only against the write lock. |
+| F-OPS-W3-2 | Required | No pre-import backup (procedure 6). `runImport()` has no call into `backupsFs.ts` anywhere; `restoreFromBackup` does take a `"pre-restore"` backup, so the asymmetry is real, not an oversight this task can confirm as intentional. | A bad CSV import today has a worse recovery path (manual filter-and-trash, or "lose everything since the last backup") than a bad restore does. Not implemented here — `backupsFs.ts` is the lead's file this phase. |
+| F-OPS-W3-3 | Resolved during this phase | The keychain-denial boot screen (procedure 9) showed the generic "Helix can't open your data / another copy may have it, or the folder may not be writable" headline for a `SECRET_ERROR`. Flagged twice while procedure 9 was being drafted (once after `a5ac006` improved only the Details text, restated as still-open) and closed both times: `d084392` gave `SECRET_ERROR` its own `SecretStoreError` class, its own re-throw in `boot.ts`, and its own `BootScreens.tsx` screen headed "Helix needs permission to use this computer's keychain," landing under the lead's own finding number (their commit and `tests/unit/app/bootFailure.test.ts` cite it as "LR-OPS F-OPS-5" — a different numbering sequence from this one; see Deviations for why this document's findings are prefixed `F-OPS-W3-`). | Restated for the record. `npx vitest run tests/unit/app/bootFailure.test.ts` — 9 passed, asserting the new heading contains "keychain" and the two wrong causes are both absent. |
+| F-OPS-W3-4 | Follow-up | No scheduled dependency-audit run; `npm audit`/`rust-audit` (this task's A1/A2) only run on push/PR, so an advisory published against an unchanged dependency is not caught until the next commit. | Adding a `schedule` trigger changes `rustsec/audit-check`'s own behavior (it creates GitHub issues on a scheduled run, never on push/PR) — a product decision about issue-spam, not a mechanical CI addition, left for the lead. |
+| F-OPS-W3-5 | Follow-up | Nothing enforces "a version bump was followed by a tag" or "a tag was followed by publishing the draft release" (founder-task inventory, items 2–3). | Both are pure process gaps with no in-repo data to check against (task 2) or check against a page this repo does not control (task 3, the Releases UI). Documented as procedure, not automated. |
+| F-OPS-W3-6 | Follow-up | `src-tauri/tests/recovery_tests.rs`'s `restore_over_the_live_file_brings_the_old_rows_back` says in its own comment "The JS side is covered by its own tests." Searched `tests/` for a test of `restoreFromBackup` (`src/features/data/lib/backupsFs.ts`) and found none — `tests/unit/data/backupCopyOut.test.ts` only covers `runBackup`'s failure message. | The comment overstates existing coverage. Not a functional bug — the Rust-level file mechanism is genuinely well tested — but worth a one-line correction to the comment, or better, an actual JS-level test of the five-step restore orchestration, so procedure 7 can move from "needs access" to "tested." |
+
+---
+
+# Deviations from the packet
+
+- The packet describes the "newer Helix" refusal (procedure 1) as something
+  the lead and W1 are still adding, with an ask to leave a placeholder for
+  the final message text. Reading `src/db/migrator.ts` and
+  `src/app/BootScreens.tsx` at this revision, it is already fully
+  implemented and covered by `tests/repo/migrations.test.ts`
+  (`describe("older build vs. a newer workspace (LR-OPS-W1 A1)")` and
+  `describe("partial-failure atomicity (LR-OPS-W1 A2)")`). No placeholder
+  was left; procedures 1 and 2 are written and marked against the real code
+  and cite a real test run. Flagging this so the lead knows W1's work landed
+  ahead of this packet being written, in case the packet's other assumptions
+  about in-flight work need the same check.
+- The packet asked procedure 8 to carry a placeholder for the lead's
+  in-flight recovery-key and second-backup-copy design, and procedure 9 to
+  carry a proposed message rewrite for the lead to apply. Both landed as
+  real commits partway through this task, ahead of the packet's assumption,
+  in two waves: `a5ac006`/`a773ff3` shipped the recovery key, the second
+  copy, and a better *message* for a keychain denial; `d084392`, landing
+  after that, gave the denial its own screen entirely. Procedure 8 is
+  rewritten against the shipped feature and marked **tested** (`cargo test
+  --test recovery_tests`, `npx vitest run tests/unit/data/recoveryKey.test.tsx`).
+  Procedure 9 went through two drafts in this session — first marked
+  **inspected only** against `access_refused()` alone, noting the headline
+  gap as F-OPS-W3-3, then rewritten and remarked **tested** once `d084392`
+  closed that gap too (`npx vitest run tests/unit/app/bootFailure.test.ts`).
+  Its own commit and test name the fix as the lead's own "LR-OPS F-OPS-5" —
+  a different, lead-owned numbering sequence from this document's findings.
+  To avoid two documents' findings colliding under the same `F-OPS-N` label
+  during integration, every finding in this document is prefixed
+  `F-OPS-W3-` (this task's id) instead of the bare `F-OPS-` the packet's
+  own template suggested.
+- Procedure 7 also gained real supporting evidence mid-phase
+  (`src-tauri/tests/recovery_tests.rs`'s `restore_over_the_live_file_...`
+  test, from the same commit) even though the packet's own end-to-end
+  restore test was not what produced it. Procedure 7 stays marked **needs
+  access** — the JS orchestration around the file copy is still untested and
+  a live click-through was not done here — but now cites that evidence
+  rather than carrying an empty placeholder. See F-OPS-W3-6 for a discrepancy
+  found while checking this.
+- F-SEC-28 (the missing `UNIQUE` index on `deals.external_id`, restated here
+  as F-OPS-W3-1 while procedure 5 was being written) was closed by commits
+  `3adc34c` and `658c066`, landing after F-OPS-W3-1 was drafted and before this
+  document was finished. F-OPS-W3-1 and procedure 5 were both updated to
+  describe the fix rather than the gap; this is the third instance this
+  phase of a concurrent worker resolving something between this document
+  noticing it and being committed — this branch is under active, fast
+  parallel work, and every "as of this revision" statement in this document
+  means the revision it was actually checked against, not necessarily the
+  one this file is finally committed at.
+- At hand-off, `git status` shows uncommitted, in-progress changes to
+  `src/features/data/lib/importRun.ts`, `backupsFs.ts`, `typedImportRun.ts`,
+  `importResultView.ts`, and `src/features/data/import/ResultStep.tsx`, plus
+  a new untracked `tests/repo/data/importPreBackup.test.ts` — the shape of
+  exactly what F-OPS-W3-2 (procedure 6, no pre-import backup) recommends.
+  Not read or cited here: those files were mid-edit by another worker and
+  not yet a stable commit to check facts against. If they land as described
+  by their own names, F-OPS-W3-2 and procedure 6's "is a backup taken before
+  an import runs? No" should be revisited and corrected in a follow-up pass
+  — flagging now so it is not missed.

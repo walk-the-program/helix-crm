@@ -18,6 +18,30 @@ was not available for that run, so nothing about the actual window has been
 looked at yet. Check every box below regardless; a passing backend doesn't
 mean the window drew correctly.
 
+This file is what you verify by hand *before* tagging a release. For what
+to do when something goes wrong *after* a release is out — a broken build,
+a partial migration, a bad import, a denied keychain prompt, and the rest —
+see `docs/OPERATIONS.md`. The two do not repeat each other: this file never
+says what to do about a failure, and `docs/OPERATIONS.md` never re-states
+these by-hand checks.
+
+## Before you tag
+
+- [ ] `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+      all report the same version number. Tauri's build reads its own
+      `tauri.conf.json`; a mismatch here means the installer's version and
+      what Diagnostics' "This copy of Helix" row reports can disagree with
+      each other and with what `CHANGELOG.md` says shipped.
+- [ ] `CHANGELOG.md`'s Unreleased section has been turned into the new
+      version's heading.
+- [ ] `main` is green at the commit you are about to tag: `js`, `rust`, and
+      `rust-audit` all passing in GitHub Actions.
+
+Tagging, pushing, publishing the resulting draft release, and telling
+clients it exists are process steps, not hand-verification — see
+`docs/OPERATIONS.md`'s founder-task inventory, "Cut and ship a release, end
+to end."
+
 ## Setup
 
 - [ ] Build the real app (`npm run tauri dev` for a dev check, or a built
