@@ -29,6 +29,14 @@ import type { ExampleContext } from "../../../src/features/data/import/fields/ty
 
 const STUB_CONTEXT: ExampleContext = { stageNames: ["New", "Quoted", "Won", "Lost"] };
 
+describe("IMPORT_TYPES: what 'Download an example' covers", () => {
+  it("offers exactly contacts, companies, deals and services - the four things an owner brings in", () => {
+    expect(IMPORT_TYPES.map((t) => t.id).sort()).toEqual(
+      ["companies", "contacts", "deals", "services"].sort(),
+    );
+  });
+});
+
 describe.each(IMPORT_TYPES.map((t) => [t.label, t] as const))(
   "%s example file",
   (_label, type) => {
