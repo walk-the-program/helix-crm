@@ -12,14 +12,21 @@
  * coloured - an overdue bucket is not a warning, it is a row with a number in
  * it (§5 "What has no colour" names the word "overdue" explicitly). Takes no
  * required props so a second screen can mount it with one line.
+ *
+ * "Copy as CSV" (F-LB-19) builds its text through `agingCsv` in
+ * `lib/format.ts`, which calls the same `toCsv` / `centsToDecimalString`
+ * helpers every report card's own button already uses, so this aging table
+ * pastes the same way the rest of Reports does: money as a plain decimal, not
+ * a formatted "$1,234.56" string a spreadsheet would read as text.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardGroupLabel, CardRow } from "@/ui";
+import { Button, Card, CardGroupLabel, CardRow, toast } from "@/ui";
 import { formatMoney } from "@/lib/money";
 import { todayLocal } from "@/lib/dates";
 import { iqk, useInvoiceSettings } from "@/features/invoices/lib/hooks";
 import * as receivables from "@/db/repos/receivables";
 import type { AgingBucket } from "@/db/repos/receivables";
+import { agingCsv } from "@/features/invoices/lib/format";
 
 const BUCKET_LABELS: Record<AgingBucket, string> = {
   current: "Not yet due",
@@ -54,9 +61,26 @@ export function AgingBlock() {
   const collected = data?.collected;
   const nothingOwed = !isLoading && (!aging || aging.totalCents === 0);
 
+  async function handleCopyCsv() {
+    if (!aging) return;
+    try {
+      await navigator.clipboard.writeText(agingCsv(aging, (bucket) => BUCKET_LABELS[bucket]));
+      toast.success("Copied the report to the clipboard");
+    } catch {
+      toast.error("The clipboard refused it.");
+    }
+  }
+
   return (
     <div>
-      <CardGroupLabel>Money owed to you</CardGroupLabel>
+      <div className="flex items-center justify-between">
+        <CardGroupLabel>Money owed to you</CardGroupLabel>
+        {nothingOwed ? null : (
+          <Button variant="ghost" size="sm" onClick={() => void handleCopyCsv()}>
+            Copy as CSV
+          </Button>
+        )}
+      </div>
       <Card>
         {isLoading ? (
           <div className="px-[var(--space-4)] py-[var(--space-6)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">

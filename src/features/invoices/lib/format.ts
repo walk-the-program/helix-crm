@@ -6,9 +6,17 @@
  * "3 unpaid, $4,150 outstanding, 1 overdue by 12 days" rather than a warning.
  * DESIGN.md section 5 says the word "overdue" has no colour; it is the words
  * and the position at the top of a list that carry the weight.
+ *
+ * The CSV builders at the bottom (F-LB-19) live here rather than inline in
+ * the components so the exact columns and number formatting are unit
+ * testable without rendering anything - they call the same `toCsv` /
+ * `centsToDecimalString` helpers every other report card's own "Copy as
+ * CSV" button uses.
  */
-import { formatMoney } from "@/lib/money";
-import { parseDateOnly, todayLocal } from "@/lib/dates";
+import { formatMoney, centsToDecimalString } from "@/lib/money";
+import { parseDateOnly, todayLocal, formatDateDisplay } from "@/lib/dates";
+import { toCsv } from "@/features/leads/lib/reportKeys";
+import type { Aging, ReceivableRow } from "@/db/repos/receivables";
 
 export type BadgeTone =
   | "neutral"
@@ -178,4 +186,46 @@ export function unpaidEmptyCopy(documentsExist: boolean): { title: string; descr
   return documentsExist
     ? { title: NOTHING_OUTSTANDING_TITLE, description: NOTHING_OUTSTANDING_DESCRIPTION }
     : { title: NO_INVOICES_YET_TITLE, description: NO_INVOICES_YET_DESCRIPTION };
+}
+
+/* -------------------------------------------------------------------------- */
+/* F-LB-19: "Copy as CSV" for the two receivables views                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The AR aging table as CSV: the five buckets in their fixed order, then the
+ * total row, matching `AgingBlock`'s own rows exactly. `bucketLabel` is
+ * injected rather than imported so this stays free of any component import -
+ * `AgingBlock.tsx` passes its own `BUCKET_LABELS`.
+ */
+export function agingCsv(
+  aging: Aging,
+  bucketLabel: (bucket: Aging["rows"][number]["bucket"]) => string,
+): string {
+  return toCsv(
+    ["Bucket", "Invoices", "Amount"],
+    [
+      ...aging.rows.map((row) => [bucketLabel(row.bucket), row.count, centsToDecimalString(row.cents)]),
+      ["Total owed", aging.totalCount, centsToDecimalString(aging.totalCents)],
+    ],
+  );
+}
+
+/**
+ * The outstanding-invoices list as CSV. The header row is the same five
+ * labels `ReceivablesScreen`'s table renders; "Days over" keeps the table's
+ * own em dash for a row that is not yet late, and "Amount" is a plain decimal
+ * rather than a formatted currency string, so it pastes as a number.
+ */
+export function receivablesCsv(rows: ReceivableRow[]): string {
+  return toCsv(
+    ["Number", "Customer", "Due", "Days over", "Amount"],
+    rows.map((row) => [
+      row.number,
+      row.customer,
+      formatDateDisplay(row.dueOn),
+      row.daysOverdue > 0 ? row.daysOverdue : "—",
+      centsToDecimalString(row.totalCents),
+    ]),
+  );
 }
