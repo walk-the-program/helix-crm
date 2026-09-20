@@ -34,7 +34,16 @@ vi.mock("@/db/repos/settings", () => ({
   setRaw: (...args: unknown[]) => setRaw(...args),
 }));
 
+// RecoveryKeyCard now mounts BackupsScreen.tsx's shared RecoveryKeyControls
+// (F-CS-1 A9), which also imports @/app/boot; mocked the same way
+// tests/unit/data/recoveryKey.test.tsx already mocks it, so importing that
+// module here does not need a real Tauri runtime behind it.
+vi.mock("@/app/boot", () => ({
+  switchWorkspace: vi.fn(),
+}));
+
 import { RecoveryKeyCard, useShowRecoveryKeyCard } from "@/features/today/sections/RecoveryKeyCard";
+import { RecoveryKeyPanel } from "@/features/data/backups/BackupsScreen";
 
 const KEY =
   "HLX1-0123-4567-89AB-CDEF-0123-4567-89AB-CDEF-0123-4567-89AB-CDEF-0123-4567-89AB-CDEF";
@@ -70,12 +79,12 @@ describe("RecoveryKeyCard", () => {
     revealRecoveryKey.mockResolvedValue({ key: KEY, fileText: "..." });
     render(withQuery(<RecoveryKeyCard />));
 
-    expect(screen.queryByTestId("today-recovery-key")).toBeNull();
+    expect(screen.queryByTestId("recovery-key")).toBeNull();
     expect(revealRecoveryKey).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
 
-    await waitFor(() => expect(screen.getByTestId("today-recovery-key").textContent).toBe(KEY));
+    await waitFor(() => expect(screen.getByTestId("recovery-key").textContent).toBe(KEY));
     expect(revealRecoveryKey).toHaveBeenCalledTimes(1);
   });
 
@@ -90,7 +99,7 @@ describe("RecoveryKeyCard", () => {
     render(withQuery(<RecoveryKeyCard />));
 
     fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
-    await waitFor(() => expect(screen.getByTestId("today-recovery-key")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
 
     const confirm = () => screen.getByRole("button", { name: "I have saved it" }) as HTMLButtonElement;
     expect(confirm().disabled).toBe(true);
@@ -105,7 +114,7 @@ describe("RecoveryKeyCard", () => {
     render(withQuery(<RecoveryKeyCard />));
 
     fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
-    await waitFor(() => expect(screen.getByTestId("today-recovery-key")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
 
     const confirm = () => screen.getByRole("button", { name: "I have saved it" }) as HTMLButtonElement;
     expect(confirm().disabled).toBe(true);
@@ -120,7 +129,7 @@ describe("RecoveryKeyCard", () => {
     render(withQuery(<RecoveryKeyCard />));
 
     fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
-    await waitFor(() => expect(screen.getByTestId("today-recovery-key")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Save to a file" }));
 
     await waitFor(() => expect(saveRecoveryKeyFile).toHaveBeenCalledTimes(1));
@@ -136,7 +145,7 @@ describe("RecoveryKeyCard", () => {
     render(withQuery(<RecoveryKeyCard />));
 
     fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
-    await waitFor(() => expect(screen.getByTestId("today-recovery-key")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() =>
       expect(
@@ -158,7 +167,7 @@ describe("RecoveryKeyCard", () => {
       revealRecoveryKey.mockResolvedValue({ key: KEY, fileText: "..." });
       render(withQuery(<RecoveryKeyCard />));
       fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
-      await waitFor(() => expect(screen.getByTestId("today-recovery-key")).toBeTruthy());
+      await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
       expect(screen.queryByRole("button", { name: "Print" })).toBeNull();
     } finally {
       window.print = original;
@@ -169,6 +178,54 @@ describe("RecoveryKeyCard", () => {
     render(withQuery(<RecoveryKeyCard />));
     const link = screen.getByRole("link", { name: "Settings → Backups" }) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/settings/backups");
+  });
+});
+
+describe("RecoveryKeyPanel (Settings > Backups) also clears the Today card's condition (F-CS-1 A9)", () => {
+  it("writes recoveryKey.confirmedAt on a successful save, the same key Today's card reads", async () => {
+    revealRecoveryKey.mockResolvedValue({ key: KEY, fileText: "..." });
+    saveRecoveryKeyFile.mockResolvedValue("/Users/x/Desktop/key.txt");
+    render(withQuery(<RecoveryKeyPanel />));
+
+    fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Save to a file" }));
+
+    // An owner who did the conscientious thing here has kept the key: the
+    // panel writes the confirmation itself, with no separate confirm click,
+    // because a workspace where this already happened must not still show
+    // Today's card (there is one truth, read from one setting).
+    await waitFor(() =>
+      expect(setRaw).toHaveBeenCalledWith("recoveryKey.confirmedAt", expect.any(String)),
+    );
+  });
+
+  it("writes it on a successful copy too, not only on save", async () => {
+    revealRecoveryKey.mockResolvedValue({ key: KEY, fileText: "..." });
+    stubClipboard();
+    render(withQuery(<RecoveryKeyPanel />));
+
+    fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    await waitFor(() =>
+      expect(setRaw).toHaveBeenCalledWith("recoveryKey.confirmedAt", expect.any(String)),
+    );
+  });
+
+  it("does not write anything on a mere reveal, or on a save the owner cancelled", async () => {
+    revealRecoveryKey.mockResolvedValue({ key: KEY, fileText: "..." });
+    saveRecoveryKeyFile.mockResolvedValue(null); // the owner closed the dialog
+    render(withQuery(<RecoveryKeyPanel />));
+
+    fireEvent.click(screen.getByRole("button", { name: "Show recovery key" }));
+    await waitFor(() => expect(screen.getByTestId("recovery-key")).toBeTruthy());
+    expect(setRaw).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save to a file" }));
+    await waitFor(() => expect(saveRecoveryKeyFile).toHaveBeenCalledTimes(1));
+    expect(setRaw).not.toHaveBeenCalled();
   });
 });
 

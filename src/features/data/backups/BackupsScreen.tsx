@@ -10,6 +10,7 @@
  * folder owns the screen, the scheduler and the retention policy.
  */
 import { useEffect, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DatabaseBackup, Warning } from "@/ui/icons";
 import {
@@ -42,7 +43,9 @@ import {
   suggestedName,
   type RevealedKey,
 } from "@/features/data/backups/recovery";
-import { todayLocal } from "@/lib/dates";
+import { nowIso, todayLocal } from "@/lib/dates";
+import { qk } from "@/app/queryClient";
+import * as settingsRepo from "@/db/repos/settings";
 import { dqk } from "@/features/data/lib/queries";
 import {
   backupCopyDir,
@@ -89,16 +92,88 @@ function messageFrom(err: unknown, fallback: string): string {
 }
 
 /**
- * The recovery key panel.
- *
- * The key is fetched on a button press and dropped when the panel is closed:
- * nothing holds it across a navigation, and nothing renders it until the owner
- * has asked for it, so it cannot be read over a shoulder or caught in a
- * screen-share that happened to be on this screen.
+ * Today's recovery-key card (src/features/today/sections/RecoveryKeyCard.tsx)
+ * reads and writes the same key. Both files hardcode the literal on purpose,
+ * the same way onboarding's dotted keys are hardcoded in more than one place
+ * (src/db/repos/settings.ts) — the dots are part of the stored key, and a
+ * shared constant would be the only thing importing across the two features.
  */
-export function RecoveryKeyPanel() {
+const RECOVERY_KEY_CONFIRMED_AT = "recoveryKey.confirmedAt";
+
+/**
+ * The print-only block plus the CSS that hides everything else on the page
+ * while printing.
+ *
+ * There is no print stylesheet either screen owns, so the rule ships with the
+ * component that needs it: `visibility: hidden` on every element, overridden
+ * back to `visible` on this block and its children. That works regardless of
+ * how deep the block sits in the tree — unlike `display`, a descendant's
+ * `visibility` isn't forced by an ancestor's — so the sidebar, the toolbar and
+ * the rest of whichever screen this is on never show up on the page.
+ */
+function PrintableKey({ revealed }: { revealed: RevealedKey }) {
+  return (
+    <div className="helix-recovery-print hidden">
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .helix-recovery-print, .helix-recovery-print * { visibility: visible; }
+          .helix-recovery-print {
+            display: block !important;
+            position: fixed;
+            inset: 0;
+            white-space: pre-wrap;
+          }
+        }
+      `}</style>
+      {revealed.fileText}
+    </div>
+  );
+}
+
+export type RecoveryKeyControlsState = {
+  revealed: RevealedKey | null;
+  /** At least one of copy / save / print has succeeded. */
+  kept: boolean;
+  /** Drop the key and start over — what "Hide" calls. */
+  reset: () => void;
+};
+
+/**
+ * The reveal / display / copy / save / print controls, shared by
+ * `RecoveryKeyPanel` below and Today's `RecoveryKeyCard`
+ * (src/features/today/sections/RecoveryKeyCard.tsx). Both screens ask Rust
+ * for the same key through `revealRecoveryKey`/`saveRecoveryKeyFile`; this is
+ * the one place that draws it, so the words that tell an owner what a
+ * recovery key is for cannot drift between the two screens that show them.
+ *
+ * It holds no more state than its own screen needs — `revealed`, and whether
+ * a copy/save/print has succeeded — and never writes anything to the
+ * database itself. `onKept` fires once after any one of copy/save/print
+ * succeeds; what "kept" means is the caller's decision: the Backups panel
+ * below treats it as consent and writes the confirmation there and then,
+ * because an owner who did this conscientiously has already complied. Today's
+ * card only unlocks its own separate, explicit confirm button — a brand-new
+ * workspace needs the deliberate second click, not an inference from one
+ * click on Copy.
+ *
+ * `footer` renders after the button row, with the current `revealed`/`kept`
+ * state and a `reset`: the panel's "Hide" and the card's confirm button are
+ * each the caller's own control, not this component's.
+ */
+export function RecoveryKeyControls({
+  onKept,
+  footer,
+}: {
+  onKept?: () => void;
+  footer?: (state: RecoveryKeyControlsState) => ReactNode;
+}) {
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
+  const [copied, setCopied] = useState(false);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  const [printed, setPrinted] = useState(false);
+
+  const kept = copied || savedTo !== null || printed;
 
   const reveal = useMutation({
     mutationFn: () => revealRecoveryKey(),
@@ -107,6 +182,20 @@ export function RecoveryKeyPanel() {
       toast.error(
         messageFrom(err, "Helix could not read this workspace's recovery key."),
       ),
+  });
+
+  const copy = useMutation({
+    mutationFn: async () => {
+      if (!revealed) return;
+      await navigator.clipboard.writeText(revealed.key);
+    },
+    onSuccess: () => {
+      setCopied(true);
+      toast.success("Recovery key copied.");
+      onKept?.();
+    },
+    onError: (err: unknown) =>
+      toast.error(messageFrom(err, "Helix could not copy the recovery key.")),
   });
 
   const save = useMutation({
@@ -118,9 +207,120 @@ export function RecoveryKeyPanel() {
       if (path === null) return; // the owner closed the dialog
       setSavedTo(path);
       toast.success("Recovery key saved.");
+      onKept?.();
     },
     onError: (err: unknown) =>
       toast.error(messageFrom(err, "Helix could not save the recovery key.")),
+  });
+
+  const canPrint = typeof window !== "undefined" && typeof window.print === "function";
+
+  const print = (): void => {
+    setPrinted(true);
+    onKept?.();
+    window.print();
+  };
+
+  const reset = (): void => {
+    setRevealed(null);
+    setCopied(false);
+    setSavedTo(null);
+    setPrinted(false);
+  };
+
+  if (revealed === null) {
+    return (
+      <div>
+        <Button
+          variant="secondary"
+          onClick={() => reveal.mutate()}
+          loading={reveal.isPending}
+          loadingLabel="Reading the key…"
+        >
+          Show recovery key
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-[var(--space-3)]">
+      <code
+        data-testid="recovery-key"
+        className={[
+          "block select-all break-all",
+          "border border-[var(--color-border-strong)]",
+          "bg-[var(--color-bg)] px-[var(--space-3)] py-[var(--space-3)]",
+          "font-[family-name:var(--font-mono)] text-[length:var(--text-sm)]",
+          "leading-[var(--leading-normal)] tabular-nums text-[var(--color-text)]",
+        ].join(" ")}
+      >
+        {revealed.key}
+      </code>
+      <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+        Keep it away from this computer and away from your backups. Anyone who
+        has both can read everything in your CRM.
+      </p>
+      <div className="flex flex-wrap items-center gap-[var(--space-2)]">
+        <Button
+          variant="secondary"
+          onClick={() => copy.mutate()}
+          loading={copy.isPending}
+          loadingLabel="Copying…"
+        >
+          Copy
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => save.mutate()}
+          loading={save.isPending}
+          loadingLabel="Saving…"
+        >
+          Save to a file
+        </Button>
+        {canPrint ? (
+          <Button variant="secondary" onClick={print}>
+            Print
+          </Button>
+        ) : null}
+        {footer?.({ revealed, kept, reset })}
+      </div>
+      {savedTo ? (
+        <p
+          title={savedTo}
+          className="truncate text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
+        >
+          Saved to {savedTo}
+        </p>
+      ) : null}
+      <PrintableKey revealed={revealed} />
+    </div>
+  );
+}
+
+/**
+ * The recovery key panel.
+ *
+ * The key is fetched on a button press and dropped when the panel is closed:
+ * nothing holds it across a navigation, and nothing renders it until the owner
+ * has asked for it, so it cannot be read over a shoulder or caught in a
+ * screen-share that happened to be on this screen.
+ *
+ * A successful copy, save or print here IS a kept key, so it writes the same
+ * `recoveryKey.confirmedAt` Today's card writes and invalidates the same
+ * query: an owner who does the conscientious thing from Settings never sees
+ * the Today card again, without a reload (F-CS-1 A9). There is one truth —
+ * `shouldShowRecoveryKeyCard`, reading this one setting — and this is the
+ * second of the two places allowed to set it.
+ */
+export function RecoveryKeyPanel() {
+  const queryClient = useQueryClient();
+
+  const confirm = useMutation({
+    mutationFn: () => settingsRepo.setRaw(RECOVERY_KEY_CONFIRMED_AT, nowIso()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.setting(RECOVERY_KEY_CONFIRMED_AT) });
+    },
   });
 
   return (
@@ -136,64 +336,14 @@ export function RecoveryKeyPanel() {
           still can.
         </p>
 
-        {revealed === null ? (
-          <div>
-            <Button
-              variant="secondary"
-              onClick={() => reveal.mutate()}
-              loading={reveal.isPending}
-              loadingLabel="Reading the key…"
-            >
-              Show recovery key
+        <RecoveryKeyControls
+          onKept={() => confirm.mutate()}
+          footer={({ reset }) => (
+            <Button variant="ghost" onClick={reset}>
+              Hide
             </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-[var(--space-3)]">
-            <code
-              data-testid="recovery-key"
-              className={[
-                "block select-all break-all",
-                "border border-[var(--color-border-strong)]",
-                "bg-[var(--color-bg)] px-[var(--space-3)] py-[var(--space-3)]",
-                "font-[family-name:var(--font-mono)] text-[length:var(--text-sm)]",
-                "leading-[var(--leading-normal)] tabular-nums text-[var(--color-text)]",
-              ].join(" ")}
-            >
-              {revealed.key}
-            </code>
-            <p className="text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
-              Keep it away from this computer and away from your backups. Anyone
-              who has both can read everything in your CRM.
-            </p>
-            <div className="flex flex-wrap items-center gap-[var(--space-2)]">
-              <Button
-                variant="secondary"
-                onClick={() => save.mutate()}
-                loading={save.isPending}
-                loadingLabel="Saving…"
-              >
-                Save to a file
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setRevealed(null);
-                  setSavedTo(null);
-                }}
-              >
-                Hide
-              </Button>
-            </div>
-            {savedTo ? (
-              <p
-                title={savedTo}
-                className="truncate text-[length:var(--text-xs)] text-[var(--color-text-faint)]"
-              >
-                Saved to {savedTo}
-              </p>
-            ) : null}
-          </div>
-        )}
+          )}
+        />
       </CardBody>
     </Card>
   );
