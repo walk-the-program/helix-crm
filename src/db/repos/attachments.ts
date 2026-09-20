@@ -38,6 +38,64 @@ export class AttachmentTooLargeError extends Error {
   }
 }
 
+const MAX_DISPLAY_NAME_LEN = 255;
+
+/**
+ * True for a NUL byte or a bidi override/embedding character (the code
+ * points U+200E, U+200F, U+202A-U+202E and U+2066-U+2069): none has a
+ * legitimate reason to be in a file name, and a right-to-left override is
+ * exactly the trick that disguises "evil.exe" as something safer-looking in
+ * a rendered list. Written as numeric code-point comparisons, never as a
+ * regex literal holding the characters themselves, so no invisible
+ * character has to sit in this source file.
+ */
+function isDisguiseCodePoint(codePoint: number): boolean {
+  if (codePoint === 0x0000) return true;
+  if (codePoint === 0x200e || codePoint === 0x200f) return true;
+  if (codePoint >= 0x202a && codePoint <= 0x202e) return true;
+  if (codePoint >= 0x2066 && codePoint <= 0x2069) return true;
+  return false;
+}
+
+/**
+ * Sanitises the attachment's DISPLAY name only (LR-SEC-W1 item 8).
+ * `storedName` is what ever touches disk or the OS opener - chosen in Rust
+ * from a fresh UUID with a sanitised extension (docs/CONTRACTS.md, `copy_in`)
+ * - so this is purely about what the file list and the "Removed <name>"
+ * toast show. Nothing upstream of `create` sanitised whatever the OS file
+ * dialog (or, in future, an import or a rename) handed back:
+ *
+ *   - a NUL byte and a bidi override/embedding character are stripped, one
+ *     code point at a time via `isDisguiseCodePoint` (`Array.from` splits by
+ *     code point, not UTF-16 code unit, so a 4-byte emoji elsewhere in the
+ *     name is never split in half);
+ *   - a path separator is replaced, so the display string can never look
+ *     like a path (defence in depth: no real filesystem lets a single path
+ *     component contain one, so this only matters if some future caller
+ *     other than the file picker feeds this a name it did not validate
+ *     itself);
+ *   - length is capped so one absurd name cannot bloat the database or the
+ *     list's layout.
+ *
+ * A Windows-reserved device name (`CON`, `PRN.txt`, ...) is left alone on
+ * purpose: `fileName` is never used as a real path component - only
+ * `storedName` is - so displaying one is cosmetically odd at worst, and
+ * "fixing" it would just be showing the owner a different string than what
+ * their file is actually named.
+ */
+export function sanitizeDisplayName(name: string): string {
+  const cleaned = Array.from(name)
+    .filter((ch) => !isDisguiseCodePoint(ch.codePointAt(0) ?? 0))
+    .join("")
+    .replace(/[/\\]/g, "_")
+    .trim();
+  const safe = cleaned.length > 0 ? cleaned : "file";
+  const chars = Array.from(safe);
+  return chars.length > MAX_DISPLAY_NAME_LEN
+    ? chars.slice(0, MAX_DISPLAY_NAME_LEN).join("")
+    : safe;
+}
+
 export type Attachment = {
   id: string;
   entityType: string;
@@ -128,7 +186,7 @@ export async function create(
       ...stamps,
       entityType: trimmed(parsed.entityType),
       entityId: trimmed(parsed.entityId),
-      fileName: trimmed(parsed.fileName),
+      fileName: sanitizeDisplayName(trimmed(parsed.fileName)),
       storedName: trimmed(parsed.storedName),
       bytes: parsed.bytes,
       mime: trimmed(parsed.mime),
