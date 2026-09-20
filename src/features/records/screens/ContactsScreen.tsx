@@ -52,6 +52,7 @@ import {
   useTags,
 } from "@/features/records/lib/hooks";
 import { dueLabel } from "@/features/records/lib/taskGroups";
+import { HelpLink } from "@/features/help";
 import { NewContactDialog } from "@/features/records/components/NewContactDialog";
 import { trashSuffix, TrashMark } from "@/features/records/components/RecordChip";
 import {
@@ -403,9 +404,14 @@ export function ContactsScreen() {
           <EmptyState
             title={showArchived ? "Nothing archived" : "No contacts yet"}
             description={
-              showArchived
-                ? "Contacts you archive stay here until you restore them."
-                : "Add the person you spoke to this morning, or bring a spreadsheet in from Import."
+              showArchived ? (
+                "Contacts you archive stay here until you restore them."
+              ) : (
+                <>
+                  Add the person you spoke to this morning, or bring a spreadsheet in from
+                  Import. <HelpLink to="customers-in">How importing works</HelpLink>
+                </>
+              )
             }
             action={
               showArchived ? (

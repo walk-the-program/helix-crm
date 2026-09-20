@@ -17,6 +17,13 @@ import type { FeatureModule } from "@/app/feature";
 import { Info } from "@/ui/icons";
 import { HelpScreen } from "@/features/help/screens/HelpScreen";
 
+/**
+ * The one thing another feature is meant to import from here directly: a
+ * link to a named Help section, for the empty states and failure banners
+ * that need to point somewhere more specific than "/help" (LR-CS-W3).
+ */
+export { HelpLink } from "@/features/help/components/HelpLink";
+
 export const feature: FeatureModule = {
   id: "help",
   routes: [{ path: "/help", element: <HelpScreen /> }],

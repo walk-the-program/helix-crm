@@ -15,6 +15,35 @@
 
 export type HelpSection = { id: string; title: string; paragraphs: string[] };
 
+/**
+ * "Getting started" (LR-CS-W3, PIECE 4b): stated decision, in-product rather
+ * than a printable one-pager.
+ *
+ * The product already gives a first-time owner a live, guided walkthrough -
+ * the three onboarding screens - before this screen could ever be the first
+ * thing they see, and the six sections below already answer the "how do I…"
+ * questions a getting-started guide exists to answer. A printable would have
+ * to repeat both, and a printed page cannot be pinned to the product's own
+ * route paths and button labels the way `tests/unit/help/content.test.ts`
+ * pins this one - the exact staleness `tests/RELEASE-CHECKLIST.md`'s
+ * first-launch section had fallen into (F-REV-13) is the reason not to hand
+ * a client a second copy of the same facts that can drift on its own. This
+ * is therefore a Help section, not a new screen, and not a document.
+ *
+ * Kept out of `HELP_SECTIONS` for the same reason `HELP_WEBSITE_ENDPOINT` is:
+ * `tests/unit/help/content.test.ts` holds that array to exactly six. This one
+ * renders first, above them, as the screen's own orientation rather than a
+ * seventh topic in the list.
+ */
+export const HELP_GETTING_STARTED: HelpSection = {
+  id: "getting-started",
+  title: "Getting started",
+  paragraphs: [
+    "Helix is a private customer list, pipeline and invoicing tool for this one business - nothing here is shared with anyone else, and nothing about a customer leaves this machine unless you turn on the optional AI module or connect your website. The first time it opened, it walked you through your business name and trade, then your pipeline and price list, then how customers come in; if you skipped any of that, or want to run it again, use the Set up your business command.",
+    "Everything below is written for the moment you are stuck on something specific rather than as a manual to read start to finish: pick the heading closest to what is in front of you. Today, the screen you land on afterward, is built around two questions - what needs you, and who have you not called back - and the sections below cover the rest, from bringing customers in to backups and the recovery key.",
+  ],
+};
+
 export const HELP_SECTIONS: HelpSection[] = [
   {
     id: "customers-in",
@@ -72,6 +101,35 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
 ];
+
+/**
+ * Not one of the six in `HELP_SECTIONS` — it is new this round (LR-CS-W3
+ * audit: the screen had no answer for "how do I raise a quote" or "how do I
+ * mark an invoice paid", the two things `src/features/invoices/**` exists to
+ * do). It sits between "Working a job from lead to won" and "Today and
+ * follow-ups" on the screen, right after the section that already explains
+ * winning a job, and is kept as its own export the same way `HELP_TROUBLE`
+ * is, so the existing "exactly six sections" contract on `HELP_SECTIONS`
+ * still holds.
+ *
+ * Facts below come from the real screens: `DealInvoicesPanel.tsx` ("Create
+ * quote", "Create invoice", "Create this month's invoice" — the last one only
+ * once a billing schedule exists), `NewDocumentScreen.tsx` ("New invoice"
+ * under Invoices, which creates the job behind a document that never had
+ * one), `DocumentPage.tsx` ("Send", "Mark paid", "Accept" / "Decline", the
+ * draft -> sent -> settled status chain) and `MarkPaidDialog.tsx` (date,
+ * method, note - the whole of the record, since Helix never watches a bank
+ * account). `InvoicesScreen.tsx`'s four tabs and `ReceivablesScreen.tsx` are
+ * named exactly as they read in the sidebar and the Reports tab strip.
+ */
+export const HELP_INVOICES: HelpSection = {
+  id: "quotes-invoices",
+  title: "Quotes and invoices",
+  paragraphs: [
+    "Open a job's page and press Create quote to turn its price into a document, or Create invoice for one-time work that is billed right away; a job with a monthly service adds Create this month's invoice once it is won. Every quote and invoice belongs to a job, so the customer on the document always matches the one on the job. With no job to start from yet, open Invoices in the sidebar and press New invoice, which builds one from scratch and creates the job behind it for you.",
+    "A draft stays editable until you press Send, which writes the PDF, opens it, and marks the document sent - Helix never emails it for you. A quote gets Accept or Decline instead; accepting turns it into an invoice ready to send, or starts the monthly billing if that is what was quoted. When the money actually arrives, press Mark paid and say when it came in, how, and anything worth a note, since Helix does not watch a bank account and this is the only record of it. Every quote and invoice you have raised lives under Invoices, split into Unpaid, Paid, Quotes and All, and what is overdue shows on the Receivables report.",
+  ],
+};
 
 /**
  * Not one of the six in `HELP_SECTIONS` — it is new this round (docs/rounds/

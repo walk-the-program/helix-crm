@@ -43,6 +43,7 @@ import {
 import type { Document } from "@/db/repos/documents";
 import { useFormats } from "@/app/formats";
 import { useVocabulary } from "@/app/vocabulary";
+import { HelpLink } from "@/features/help";
 import { useDocuments, useOutstandingSummary } from "@/features/invoices/lib/hooks";
 import {
   customerLabel,
@@ -186,7 +187,12 @@ export function InvoicesScreen() {
             empty={
               <EmptyState
                 title="No paid invoices yet"
-                description="Invoices show up here once you mark them paid."
+                description={
+                  <>
+                    Invoices show up here once you mark them paid.{" "}
+                    <HelpLink to="quotes-invoices">How quotes and invoices work</HelpLink>
+                  </>
+                }
               />
             }
           />
@@ -202,7 +208,12 @@ export function InvoicesScreen() {
             empty={
               <EmptyState
                 title="No quotes yet"
-                description={`Raise one from a ${vocabulary.lower}, or start a blank one here.`}
+                description={
+                  <>
+                    Raise one from a {vocabulary.lower}, or start a blank one here.{" "}
+                    <HelpLink to="quotes-invoices">How quotes and invoices work</HelpLink>
+                  </>
+                }
                 action={
                   <Button variant="secondary" onClick={() => navigate("/invoices/new")}>
                     New quote
@@ -223,7 +234,12 @@ export function InvoicesScreen() {
             empty={
               <EmptyState
                 title="No invoices yet"
-                description={`Create your first invoice, or raise one from a ${vocabulary.lower}.`}
+                description={
+                  <>
+                    Create your first invoice, or raise one from a {vocabulary.lower}.{" "}
+                    <HelpLink to="quotes-invoices">How quotes and invoices work</HelpLink>
+                  </>
+                }
                 action={
                   <Button variant="secondary" onClick={() => navigate("/invoices/new")}>
                     New invoice

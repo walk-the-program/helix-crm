@@ -19,6 +19,17 @@
  * `HELP_WORKSPACE_REMOVAL` (SEC audit, launch round 2026-09-20) is the same
  * shape, spliced in right after "Backups and where your data lives"; the
  * Workspaces settings screen points here by the section's own title.
+ * `HELP_INVOICES` (LR-CS-W3) is the same shape again, spliced in right after
+ * "Working a job from lead to won" - the section that already explains
+ * winning a job, so quotes and invoices follow it rather than sitting apart.
+ *
+ * Deep-linking: a few screens outside this one now link straight to a
+ * section here (an empty state on Invoices, a failed website connection, the
+ * Diagnostics screen) rather than only sending the owner to Help and leaving
+ * him to scroll. `navigate("/help#<id>")` changes the URL's hash but nothing
+ * about a client-side route change makes the browser scroll to it, so this
+ * screen does that itself on mount - the smallest version of this that works,
+ * not a router feature or a scroll-restoration library.
  *
  * Two sections carry a real action instead of just words:
  *  - "Keyboard shortcuts" opens the same sheet the "?" key does. It looks the
@@ -36,12 +47,14 @@
  * One hairline, at most, separates the everyday sections from the "something
  * is wrong" one; every other gap is air, not a rule.
  */
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { navigate } from "wouter/use-browser-location";
 import { Button, PageHeader, toast } from "@/ui";
 import { findCommand } from "@/app/registry";
 import {
+  HELP_GETTING_STARTED,
+  HELP_INVOICES,
   HELP_SECTIONS,
   HELP_TROUBLE,
   HELP_WEBSITE_ENDPOINT,
@@ -49,6 +62,20 @@ import {
   ISSUES_URL,
   type HelpSection,
 } from "@/features/help/lib/content";
+
+/**
+ * Scroll a section into view when the URL already names one, e.g. a link
+ * from an Invoices empty state to "/help#quotes-invoices". A hash change from
+ * `navigate()` (a `pushState`, not a real page load) never scrolls the
+ * browser on its own, so this is the one thing this screen has to do itself.
+ */
+function useScrollToHash(): void {
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    document.getElementById(hash)?.scrollIntoView({ block: "start" });
+  }, []);
+}
 
 /** Runs the registered shortcuts command, or navigates there if it is gone. */
 function openShortcuts(): void {
@@ -152,6 +179,7 @@ function TroubleSection() {
 }
 
 export function HelpScreen() {
+  useScrollToHash();
   return (
     <div data-testid="help-screen" className="flex flex-col">
       <PageHeader
@@ -160,9 +188,13 @@ export function HelpScreen() {
       />
 
       <div className="flex max-w-[var(--content-max)] flex-col gap-[var(--space-8)]">
+        <HelpSectionBlock section={HELP_GETTING_STARTED} />
         {HELP_SECTIONS.map((section) => (
           <Fragment key={section.id}>
             <HelpSectionBlock section={section} />
+            {section.id === "lead-to-won" ? (
+              <HelpSectionBlock section={HELP_INVOICES} />
+            ) : null}
             {section.id === "website-leads" ? (
               <HelpSectionBlock section={HELP_WEBSITE_ENDPOINT} />
             ) : null}
