@@ -23,6 +23,7 @@ import { formatPhone } from "@/lib/phone";
 import {
   DEDUPE_POLICIES,
   type DedupePolicy,
+  type DuplicateEstimate,
 } from "@/features/data/lib/importRun";
 import type { MappedRow } from "@/features/data/lib/mapping";
 
@@ -38,8 +39,10 @@ export function PreviewStep(props: {
   totalRows: number;
   policy: DedupePolicy;
   onPolicyChange: (policy: DedupePolicy) => void;
+  /** Null while it is still being worked out, or when the estimate failed. */
+  duplicateEstimate?: DuplicateEstimate | null;
 }) {
-  const { rows, totalRows, policy, onPolicyChange } = props;
+  const { rows, totalRows, policy, onPolicyChange, duplicateEstimate } = props;
   const problems = rows.filter((r) => r.flags.length > 0).length;
   const unimportable = rows.filter((r) => !r.importable).length;
 
@@ -146,6 +149,13 @@ export function PreviewStep(props: {
       <fieldset className="m-0 border-0 p-0">
         <legend className="sr-only">When someone is already in Helix</legend>
         <CardGroupLabel aria-hidden="true">When someone is already in Helix</CardGroupLabel>
+        {duplicateEstimate ? (
+          <p className="px-[var(--space-1)] pb-[var(--space-2)] text-[length:var(--text-sm)] text-[var(--color-text-muted)]">
+            {duplicateEstimate.matched === 0
+              ? "None of these rows match an email or phone already in Helix."
+              : `${duplicateEstimate.matched.toLocaleString()} of ${duplicateEstimate.importableRows.toLocaleString()} rows match an email or phone already in Helix. The option below decides what happens to them.`}
+          </p>
+        ) : null}
         <Card>
           {DEDUPE_POLICIES.map((option) => (
             <CardRow key={option.value} interactive>

@@ -41,8 +41,10 @@ import {
   rememberTypedMapping,
 } from "@/features/data/lib/rememberMapping";
 import {
+  estimateDuplicateMatches,
   runImport,
   type DedupePolicy,
+  type DuplicateEstimate,
   type ImportProgress,
 } from "@/features/data/lib/importRun";
 import { runTypedImport } from "@/features/data/lib/typedImportRun";
@@ -195,6 +197,7 @@ export function ImportScreen() {
   const [signature, setSignature] = useState("");
   const [remembered, setRemembered] = useState(false);
   const [policy, setPolicy] = useState<DedupePolicy>("skip");
+  const [duplicateEstimate, setDuplicateEstimate] = useState<DuplicateEstimate | null>(null);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
   const [view, setView] = useState<ResultView | null>(null);
   const [parseError, setParseError] = useState<ImportParseError | null>(null);
@@ -236,6 +239,7 @@ export function ImportScreen() {
     setDelimiterWord("");
     setProgress(null);
     setPolicy("skip");
+    setDuplicateEstimate(null);
   }, []);
 
   const onLoaded = useCallback(
@@ -245,28 +249,37 @@ export function ImportScreen() {
       // papaparse (behind @/lib/csv) is only worth downloading once a file has
       // actually been picked, so it is loaded here rather than at the top of
       // this module.
-      const { parseCsvText, delimiterLabel, ImportParseError } = await import("@/lib/csv");
+      const { walkCsv, delimiterLabel, ImportParseError } = await import("@/lib/csv");
       try {
-        const preview = parseCsvText(loaded.text, {
-          delimiter: loaded.delimiter,
-          limit: PREVIEW_ROWS,
+        // `walkCsv` with no `limit` walks the whole file - which is what a
+        // correct row count needs - but only the first PREVIEW_ROWS rows are
+        // kept in memory here; the rest are counted and discarded as they are
+        // read. `parseCsvText({ limit: PREVIEW_ROWS })` used to feed this
+        // screen: it aborts after 20 rows, so its `rowCount` was never the
+        // file's total, it was `min(totalRows, 20)`. On anything past 20 rows
+        // the preview step said "The first 20 of 20 rows" for a file that
+        // might have three thousand, which told the owner nothing true about
+        // how much was about to be imported.
+        const sample: string[][] = [];
+        const { headers, rowCount } = walkCsv(loaded.text, { delimiter: loaded.delimiter }, (cells) => {
+          if (sample.length < PREVIEW_ROWS) sample.push(cells);
         });
         setFile(loaded);
         setDelimiterWord(delimiterLabel(loaded.delimiter));
-        setHeaders(preview.headers);
-        setSampleRows(preview.rows);
-        setTotalPreviewed(preview.rowCount);
-        if (preview.rowCount === 0) {
+        setHeaders(headers);
+        setSampleRows(sample);
+        setTotalPreviewed(rowCount);
+        if (rowCount === 0) {
           setEmptyFile(true);
           return;
         }
         if (isLegacy) {
-          const initial = await initialMapping(preview.headers);
+          const initial = await initialMapping(headers);
           setMapping(initial.mapping);
           setSignature(initial.signature);
           setRemembered(initial.remembered);
         } else {
-          const initial = await initialTypedMapping(type, preview.headers);
+          const initial = await initialTypedMapping(type, headers);
           setTypedMapping(initial.mapping);
           setSignature(initial.signature);
           setRemembered(initial.remembered);
@@ -324,6 +337,32 @@ export function ImportScreen() {
           ),
     [isLegacy, type, typedMapping],
   );
+
+  // The preview's policy choice ("Skip them" / "Fill in the blanks" / "Import
+  // anyway") describes what happens to a match, but not how many rows that
+  // touches - the owner had no way to know that before committing. This reads
+  // the whole file against the workspace's real emails and phones (no write
+  // lock, no transaction) as soon as the preview step opens, for the contacts
+  // path only: the other three import types resolve duplicates differently
+  // per type and are not covered by this pass.
+  useEffect(() => {
+    if (step !== "preview" || !isLegacy || !file) return;
+    let cancelled = false;
+    setDuplicateEstimate(null);
+    void estimateDuplicateMatches(file.text, mapping, { delimiter: file.delimiter }).then(
+      (estimate) => {
+        if (!cancelled) setDuplicateEstimate(estimate);
+      },
+      () => {
+        // A failed estimate is not worth blocking or alarming the owner over:
+        // the import itself still runs the real lookups. The preview simply
+        // shows nothing extra.
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [step, isLegacy, file, mapping]);
 
   async function startImport() {
     if (!file) return;
@@ -472,6 +511,7 @@ export function ImportScreen() {
               totalRows={totalPreviewed}
               policy={policy}
               onPolicyChange={setPolicy}
+              duplicateEstimate={duplicateEstimate}
             />
             <StepFooter
               onBack={() => setStep("map")}

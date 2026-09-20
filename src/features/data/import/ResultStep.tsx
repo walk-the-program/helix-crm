@@ -128,13 +128,24 @@ export function ResultStep(props: {
       </p>
 
       {view.preImportBackupPath ? (
-        <p
-          title={view.preImportBackupPath}
-          className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
-        >
-          Helix saved a backup before this import. If the file was wrong, restore it
-          from Settings, then Backups.
-        </p>
+        <Card>
+          <CardRow className="flex-wrap py-[var(--space-3)]">
+            <span className="flex min-w-0 flex-col gap-[var(--space-1)]">
+              <span className="font-medium text-[var(--color-text)]">
+                Helix saved a backup before this import
+              </span>
+              <span
+                title={view.preImportBackupPath}
+                className="truncate text-[length:var(--text-sm)] text-[var(--color-text-muted)]"
+              >
+                If the file was wrong, restore it from Backups.
+              </span>
+            </span>
+            <Link href="/settings/backups">
+              <Button variant="secondary">Go to Backups</Button>
+            </Link>
+          </CardRow>
+        </Card>
       ) : null}
 
       {view.warnings.length > 0 ? (
