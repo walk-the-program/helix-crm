@@ -42,6 +42,9 @@ export const qk = {
   activities: (filter?: unknown) => ["activities", filter ?? null] as const,
   tasks: (filter?: unknown) => ["tasks", filter ?? null] as const,
   today: () => ["today"] as const,
+  /** The Schedule's derived feed, one query per visible range. */
+  schedule: (from?: string, to?: string) =>
+    ["schedule", from ?? null, to ?? null] as const,
   tags: () => ["tags"] as const,
   sources: () => ["sources"] as const,
   savedViews: (entityType?: string) =>

@@ -50,6 +50,10 @@ export async function invalidateRecords(): Promise<void> {
     queryClient.invalidateQueries({ queryKey: ["tags"] }),
     queryClient.invalidateQueries({ queryKey: ["trash"] }),
     queryClient.invalidateQueries({ queryKey: qk.today() }),
+    // The Schedule derives its week from tasks, deals, reminders and invoices
+    // on every read (no denormalised table), so any records write can change
+    // what it shows. One key covers every range currently mounted.
+    queryClient.invalidateQueries({ queryKey: ["schedule"] }),
     // Search's own results and its "recent" list are both keyed off
     // qk.search(...) (src/features/today/search/SearchDialog.tsx), so a
     // record restored from the Trash, or any other write, reappears in

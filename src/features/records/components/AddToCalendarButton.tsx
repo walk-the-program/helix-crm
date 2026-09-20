@@ -36,6 +36,12 @@ export type CalendarSubject = {
   dateOnly?: string | null;
   /** An instant, when the record has a time on it. */
   startAt?: string | null;
+  /**
+   * When it ends. Only meaningful beside `startAt`; left out, a timed event
+   * runs for the hour `src/lib/ics.ts` defaults to. The Schedule passes this
+   * from a visit's duration, which is the whole reason a duration is stored.
+   */
+  endAt?: string | null;
   description?: string | null;
   /** Given explicitly, or resolved from the record below. */
   location?: string | null;
@@ -115,6 +121,7 @@ export async function saveAndOpenIcs(subject: CalendarSubject): Promise<string |
     summary: subject.summary,
     dateOnly: subject.dateOnly ?? null,
     startAt: subject.startAt ?? null,
+    endAt: subject.endAt ?? null,
     description: subject.description ?? null,
     location: await resolveLocation(subject),
   };
