@@ -664,9 +664,11 @@ test("captures every settings screen in both themes", async ({ page, helix }) =>
  * `writeRegistry` publishes the new registry to any listener, and the footer
  * subscribes - so this asserts the footer moves WITHOUT a reload.
  *
- * The rename control exists (`workspace-name-input` / `workspace-name-save`
- * on WorkspaceScreen), so this drives it directly rather than falling back to
- * creating a second workspace.
+ * The rename commits the way every other field on that screen commits, since
+ * the phase-two "one save model" pass removed the header's "Save name" button:
+ * type into `workspace-name-input` and press Enter (blur does the same). This
+ * drives that directly rather than falling back to creating a second
+ * workspace.
  */
 test("renaming the workspace updates the sidebar footer immediately, with no reload", async ({
   page,
@@ -686,7 +688,7 @@ test("renaming the workspace updates the sidebar footer immediately, with no rel
 
   const newName = `Fitzgerald & Daughters ${Date.now()}`;
   await page.getByTestId("workspace-name-input").fill(newName);
-  await page.getByTestId("workspace-name-save").click();
+  await page.getByTestId("workspace-name-input").press("Enter");
 
   // No reload, no navigation away and back - just the write landing.
   await expect(footer).toHaveText(newName);

@@ -15,10 +15,20 @@
  * during setup: the one button that takes the example back out again. The
  * onboarding feature owns the button and the confirm behind it; this screen
  * only decides that here is where the owner will look for it.
+ *
+ * ONE SAVE MODEL (phase two).
+ * This screen used to have three at once: the name needed a "Save name" button
+ * in the header, the address and the tax ID saved themselves when you left the
+ * field, and the three pop-up menus saved on the spot. So the loudest control
+ * on the page — its only primary block — saved one field out of six, and the
+ * owner had no way to know which of the other five needed pressing. Everything
+ * now commits the same way: a text field saves when you leave it or press
+ * Enter, a menu saves when you choose, and each one says so once. The button is
+ * gone, and with it the question of whether anything is still unsaved.
  */
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Input, Select, Textarea, toast } from "@/ui";
+import { Input, Select, Textarea, toast } from "@/ui";
 import * as settingsRepo from "@/db/repos/settings";
 import { readRegistry, updateRegistry } from "@/app/appSettings";
 import { formatMoney } from "@/lib/money";
@@ -112,6 +122,15 @@ export function WorkspaceScreen() {
     await refetchRegistry(client);
   }
 
+  /**
+   * Committed on blur and on Enter, like every other field here.
+   *
+   * An empty name is the one thing this screen refuses, and it refuses it in
+   * place: the field keeps what was typed, the row shows why, and nothing is
+   * written. Leaving the name untouched writes nothing at all, so tabbing
+   * through the form does not fire a rename toast for a name that did not
+   * change.
+   */
   async function saveName() {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
@@ -119,6 +138,7 @@ export function WorkspaceScreen() {
       return;
     }
     setNameError(null);
+    if (trimmed === data?.workspaceName) return;
     setSaving(true);
     try {
       await settingsRepo.set("workspaceName", trimmed);
@@ -184,22 +204,8 @@ export function WorkspaceScreen() {
       title="Workspace"
       subtitle="The business this file belongs to, and how numbers and dates are written."
       testId="settings-workspace"
-      actions={
-        <Button
-          variant="primary"
-          onClick={() => void saveName()}
-          loading={saving}
-          loadingLabel="Saving…"
-          data-testid="workspace-name-save"
-        >
-          Save name
-        </Button>
-      }
     >
-      <SettingsGroup
-        label="Business"
-        footnote="The name shows at the bottom of the sidebar and in the workspace list."
-      >
+      <SettingsGroup label="Business">
         <SettingsRow
           label="Name"
           htmlFor="workspace-name"
@@ -220,9 +226,11 @@ export function WorkspaceScreen() {
               setName(e.target.value);
               if (nameError) setNameError(null);
             }}
+            onBlur={() => void saveName()}
             onKeyDown={(e) => {
               if (e.key === "Enter") void saveName();
             }}
+            disabled={saving}
             placeholder="Sorensen Landscaping"
             data-testid="workspace-name-input"
           />
@@ -268,10 +276,7 @@ export function WorkspaceScreen() {
         </SettingsRow>
       </SettingsGroup>
 
-      <SettingsGroup
-        label="Formats"
-        footnote="Used everywhere a price, a date or a phone number is shown."
-      >
+      <SettingsGroup label="Formats">
         <SettingsRow
           label="Currency"
           hint={`A deal worth 12,450 reads ${sampleMoney}.`}
