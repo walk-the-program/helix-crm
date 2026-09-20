@@ -466,7 +466,15 @@ export function DatePicker(props: {
             aria-invalid={ariaInvalid || undefined}
             className={cn(
               "flex w-full h-[var(--control-h)] items-center gap-[var(--space-2)]",
-              "border border-[var(--color-border-strong)]",
+              "border",
+              // An invalid field turns its BORDER --color-danger and nothing
+              // else, exactly as `Input` does (docs/DESIGN.md §5: the ink stays
+              // the ink). `Field` sets `aria-invalid` on whatever control it
+              // wraps, so the picker was already being told it was invalid and
+              // was the only control in the kit that did not show it.
+              ariaInvalid
+                ? "border-[var(--color-danger)]"
+                : "border-[var(--color-border-strong)]",
               "bg-[var(--color-surface)] text-[var(--color-text)]",
               "px-[var(--space-3)] text-[length:var(--text-base)]",
               "enabled:hover:bg-[var(--color-hover)]",
