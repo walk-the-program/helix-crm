@@ -1,0 +1,41 @@
+# Lead C (platform audit) return block, relayed by Fable (main session)
+
+TASK: CPO-LC-AUDIT / attempt 1 / rev 1. STATUS: submitted. Ran ~75 min (over the 60-min mark). Specs added (uncommitted): tests/e2e-mac/specs/lcAudit.e2e.ts, lcAuditWorker.e2e.ts; evidence tests/e2e-mac/.cache/screens/lc/** (33 PNGs, lcAudit.json, lcAudit-0.json). Nothing committed; no product file touched.
+
+## Findings (id · severity · kind · one line · owner/size)
+- F-LC-1 · high · defect · workspace Currency and Date format never reach 54 formatMoney and 42 formatDate call sites (CAD workspace: Reports show "$", Invoices show "CA$"). Fix: one useFormats()/useMoney()/useDate() hook over useWorkspaceSettings; sweep leads/screens (21+16+10+5 calls), data import preview/run, records/today/recurring dates. src/lib/money.ts and dates.ts have no owner. M · ESCALATION: Fable assigns.
+- F-LC-2 · high · defect · phone duplicate lookup ignores workspace region (contacts.ts:310 normalizePhone without region; same in companies.ts) → silent duplicates for GB/AU/NZ. S · lead-records. ESCALATION.
+- F-LC-3 · high · defect · Trash promises a 30-day purge but trash.expired() (trash.ts:171) has zero callers; products, custom_fields, documents soft-delete but are not TrashEntityType so no undo path. Fix: boot sweep behind timersPaused() in data onBoot; add product + custom_field to Trash; documents = product call (Trash them, or keep Void only). M · lead-records (trash.ts, TrashScreen) + Lead C (boot sweep). ESCALATION.
+- F-LC-4 · high · strategic · /export covers 5 of ~25 tables (no invoices, services, tags, custom fields, recurring, templates, views) and has NO sidebar or settings entry (only the palette). Fix: add invoices/quotes and services to export + zip; a Settings > Workspace "Your data" row (preferred) or sidebar row. M · Lead C.
+- F-LC-5 · medium · defect · /import mounts scrolled 44 px (ImportScreen.tsx:208-210 headingRef.focus() on mount). Fix: focus({preventScroll:true}) and skip first mount. S · Lead C.
+- F-LC-6 · medium · defect · Tailwind scans docs/ and design/ prose, ships a junk `.font-[var(--font-mono)]` rule and 4 build warnings. Fix: `@source not "../../docs"; @source not "../../design";` in app.css. S · Lead C.
+- F-LC-7 · medium · defect · shortcuts sheet: ⌘K and ? listed twice under two names; ⌘/ search alias (today/search/overlay.tsx:40) missing; 12 of 26 rows show "—". Fix: derive from allCommands + one shell list; register mod+/ as alias on the search command (lead-records file); move keyless commands to a palette list. M · Lead C (+1 line lead-records). ESCALATION.
+- F-LC-8 · medium · defect · deleting a custom field claims values go (FieldsScreen.tsx:325) but customFields.softDelete leaves custom_values; no Trash entry. Fix: Trash the field; honest copy. S · Lead C + lead-records.
+- F-LC-9 · medium · usability · Deals report ignores vocabulary (ReportsFrame.tsx:42, DealsReportScreen hardcoded "Deals"). S · lead-money. ESCALATION.
+- F-LC-10 · medium · usability · boot error screen blames locks/permissions for any error (a TypeError shown as "another copy may have it") and offers only Try again. Fix: claim the lock cause only for DB_LOCKED/IO_ERROR; add "Open a different workspace" and "Show the workspace folder". M · Lead C.
+- F-LC-11 · medium · a11y · Field's aria-describedby/aria-invalid not forwarded by Combobox or Select (Field.tsx:46-52; Combobox.tsx:419-430; Select.tsx:25-37); live on NewDocumentScreen. S · Lead C (kit), contract growth (CONTRACTS.md:819 mentions DatePicker only).
+- F-LC-12 · medium · usability · Combobox renders every option and never scrolls the highlight into view; no PageUp/Down. Fix: scrollIntoView({block:"nearest"}), page keys; virtualise only if measured slow. S · Lead C.
+- F-LC-13 · low · defect · 4 dialogs nest DialogFooter inside <form> (TagsScreen.tsx:193-221, 262-285; FieldsScreen.tsx:204-226, 270-291) defeating the hoist. Fix: footer outside form, `form="<id>"` on the button. S · Lead C.
+- F-LC-14 · low · defect · contact shows a trashed company as live (CONTACT_FROM join lacks deleted_at). Label "(in Trash)". S · lead-records. (Same as Lead A's F-LA-9.)
+- F-LC-15 · low · defect · Diagnostics "Key storage: Keychain available" always (secrets.ts:93-99 reads "did not throw" as present). Say Unknown unless a secret round-tripped. S · Lead C.
+- F-LC-16 · low · defect · phone-region hint shows raw digits for GB (WorkspaceScreen.tsx:161-163 fallback). Per-region sample. S · Lead C.
+- F-LC-17 · low · defect · `color: black` in globals.css:574 @media print. S · Lead C.
+- F-LC-18 · low · defect · PDF renderer hardcodes ZillaSlab TTFs (pdf/assets.ts:21-24) while headings are DM Sans per the font switch. Shared constant. S · lead-money + Lead C. ESCALATION.
+- F-LC-19 · hypothesis · onboarding screen 1 may overwrite typed business name (OnboardingFlow.tsx:81-102 async setDraft after the field renders); 3 failed runs of one test; cpoWalk passes. Needs a targeted test. S · Lead C.
+- F-LC-20 · low · strategic · "AI is off…" sentence on every record page; deal page hides the duplicate with a CSS hack (DealPage.tsx:227). Proposal: keep the button, move the reason to tooltip/aria-description, one honest line in Settings. Needs Fable's decision. S · Lead C + lead-records.
+- F-LC-21 · low · usability · Quick add (⌘N) has no on-screen affordance in the toolbar. Add a quiet "+" IconButton beside Search. S · Lead C.
+- F-LC-22 · low · perf · one 2.98 MB JS chunk; dynamic import of @tauri-apps/api/core ineffective. Route-level lazy() for reports, PDF, AI. M · Lead C, phase two.
+- F-LC-23 · low · defect · /settings/site registered twice; leads' bare route wins so the page loses the settings frame. leads drops the route. S · lead-money. ESCALATION.
+- F-LC-24 · low · latent · InlineText prop union allows type "date" (InlineEdit.tsx:96). Drop it. S · lead-records.
+
+## Scenarios (verdicts)
+1 import: fine on existing e2e; dedupe policies side by side, save-skipped-rows, import timeline entries NOT walked. 2 onboarding: fine on existing evidence except F-LC-19. 3 import deals/services: fine on existing evidence, not re-run. 4 export: escaping proven (formula guard works); F-LC-4; 10k timing NOT run. 5 backups: not walked; restore is Rust-only. 6 trash: F-LC-3, F-LC-14; nine of twelve types restore intact; purge removes no files (copy admits it). 7 settings: rename/vocabulary/tags/fields fine except F-LC-8, F-LC-9, F-LC-7, F-LC-15. 8 site connection: not walked (lead-money). 9 workspaces: existing coverage only; real switch unprovable here. 10 shell: fine; Escape order correct; "?" does not fire while typing; focus after closing the sheet lands on body (phase-two note); compact density, 700px dialog NOT measured. 11 boot/error: F-LC-10; MigrationError/Fts5Missing not driven. 12 AI: existing coverage; F-LC-20. 13 kit/greps: native date/time = 0; records via Select = 0; radius = 0; hex outside tokens = 0 (one named colour F-LC-17; PDF exception documented); fonts outside switch = 0 in UI (F-LC-18 in PDF); emoji/exclamation = 0; 27 dialogs, 23 hoist (F-LC-13); pickers reviewed (F-LC-11, F-LC-12); one primary block per screen held.
+
+## Design notes (not findings)
+Icon sizes disagree (undocumented 12 px in Checkbox/Combobox/TimePicker; menu check 16 vs 14); Combobox search glyph 14 vs toolbar 16; stale kit docs (Input.tsx "system-blue ring"; DESIGN.md §1 still says Zilla Slab); aria-label vs ariaLabel prop naming split; Settings > Workspace mixes three save models; CommandPalette is a second overlay system (not the kit Dialog); shortcuts "—" rows; Trash copy describes non-existent purge; /import explains one decision three ways; boot error shows raw JS in monospace.
+
+## Verification run
+vite build (4 CSS warnings, 2,982 kB chunk); tsc clean; lcAudit.e2e 7 passed 1 failed (F-LC-19; re-run twice); lcAuditWorker 11/11; worker-1 claims re-checked by the lead. Not run: cargo test, 10k export timing, compact density, 700px dialog, MigrationError/Fts5Missing, error boundary, dedupe UI comparison, all presets via UI, site connection.
+
+## Deviations
+Over time (~75 min). Port 4252 collision with its own worker (resolved). No schema change needed. Contract growth requested for Combobox/Select aria props.
