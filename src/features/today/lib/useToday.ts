@@ -16,6 +16,8 @@ import * as dealsRepo from "@/db/repos/deals";
 import * as stagesRepo from "@/db/repos/stages";
 import * as activitiesRepo from "@/db/repos/activities";
 import * as settingsRepo from "@/db/repos/settings";
+import * as documentsRepo from "@/db/repos/documents";
+import * as recurringRepo from "@/db/repos/recurring";
 import { nowIso, todayLocal } from "@/lib/dates";
 import { newLeads, type NewLead } from "@/db/repos/deals";
 import {
@@ -220,6 +222,20 @@ export function useOpenDealCount() {
 }
 
 /**
+ * What Today reports on, counted. One entry per section that can put a row on
+ * the screen; the predicate below is the whole of the first-run decision.
+ */
+export type TodayActivityCounts = {
+  tasks: number;
+  openDeals: number;
+  activities: number;
+  /** Quotes and invoices, any status: raising one is starting work. */
+  documents: number;
+  /** Recurring reminders, which "Coming up" reports on. */
+  reminders: number;
+};
+
+/**
  * Whether Today still has nothing to show — which is not the same question as
  * whether the workspace is empty.
  *
@@ -229,19 +245,52 @@ export function useOpenDealCount() {
  * deal is moving". The owner did the thing the screen asked and got a blanker
  * screen than before, with no link to the person he had just created (CPO
  * audit, F-LA-6). A workspace of contacts and nothing else still needs the
- * starter cards, so the test is whether anything Today actually reports on
- * exists yet: a task, an open deal, or a logged activity.
+ * starter cards.
+ *
+ * Every Today section has to be represented here, or the gate hides the one
+ * thing the owner needed to see. The first version counted tasks, open deals
+ * and activities only, which hid the Unpaid invoices section from an owner
+ * whose sole outstanding item was an overdue invoice: he was owed money and
+ * Today said "Nothing here yet". Adding a section to Today means adding its
+ * count here.
+ *
+ * Pure, so the rule is testable without a database.
  */
+export function todayIsUnstarted(counts: TodayActivityCounts): boolean {
+  return (
+    counts.tasks === 0 &&
+    counts.openDeals === 0 &&
+    counts.activities === 0 &&
+    counts.documents === 0 &&
+    counts.reminders === 0
+  );
+}
+
 export function useTodayIsUnstarted() {
   return useQuery({
     queryKey: [...qk.today(), "unstarted"] as const,
     queryFn: async () => {
-      const [tasks, deals, activities] = await Promise.all([
+      // Five `count(*)`s behind a LIMIT 1, in parallel. Documents are counted
+      // through the repository rather than through the invoices feature's
+      // `useOutstandingSummary`, which reads up to 1000 rows to total them:
+      // this only needs to know whether there is one, and keeping it a single
+      // query keeps the hook's loading state a single thing. A reminder set
+      // for six months out counts too - it is a promise the owner recorded,
+      // and "Coming up" is where it lands.
+      const [tasks, deals, activities, documents, reminders] = await Promise.all([
         tasksRepo.list({}, { limit: 1 }),
         dealsRepo.list({ openOnly: true }, { limit: 1 }),
         activitiesRepo.list({}, { limit: 1 }),
+        documentsRepo.list({}, { limit: 1 }),
+        recurringRepo.list({}, { limit: 1 }),
       ]);
-      return tasks.total === 0 && deals.total === 0 && activities.total === 0;
+      return todayIsUnstarted({
+        tasks: tasks.total,
+        openDeals: deals.total,
+        activities: activities.total,
+        documents: documents.total,
+        reminders: reminders.total,
+      });
     },
   });
 }
