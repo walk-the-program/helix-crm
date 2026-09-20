@@ -317,7 +317,8 @@ export class AppErrorBoundary extends Component<BoundaryProps, BoundaryState> {
         <p className="m-0">
           Helix hit an error it did not expect. Your data is untouched. Go back
           to the app and carry on; if it keeps happening, copy the details and
-          send them to us.
+          send them to us. Read them first - an error can quote a name, an
+          address or a note from your own records.
         </p>
         <Detail>
           {error.message}
