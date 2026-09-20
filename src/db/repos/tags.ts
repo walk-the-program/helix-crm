@@ -247,7 +247,8 @@ export async function detach(
 ): Promise<void> {
   await withWrite(async () => {
     const rows = await raw.query(
-      `SELECT tl.id AS tl_id FROM tag_links tl
+      `SELECT tl.id AS tl_id, tl.created_at AS tl_created_at, tl.updated_at AS tl_updated_at
+       FROM tag_links tl
        WHERE tl.tag_id = ? AND tl.entity_type = ? AND tl.entity_id = ?`,
       [tagId, entityType, entityId],
     );
@@ -256,8 +257,26 @@ export async function detach(
       `DELETE FROM tag_links WHERE tag_id = ? AND entity_type = ? AND entity_id = ?`,
       [tagId, entityType, entityId],
     );
+    // A link is hard-deleted, so undo has to re-insert it: log the whole row,
+    // `id` included. Without the id, undoBatch treats the entry as a soft
+    // delete and issues an UPDATE that matches nothing (docs/CONTRACTS.md, "Undo").
     for (const r of rows) {
-      await logWrite("tag_link", String(r[0]), "delete", null, null, options.batchId);
+      await logWrite(
+        "tag_link",
+        String(r[0]),
+        "delete",
+        {
+          id: String(r[0]),
+          tagId,
+          entityType,
+          entityId,
+          createdAt: String(r[1]),
+          updatedAt: String(r[2]),
+          deletedAt: null,
+        },
+        null,
+        options.batchId,
+      );
     }
   }, "Untagging");
 }
@@ -300,12 +319,18 @@ export async function setForEntity(
 ): Promise<void> {
   await withWrite(async () => {
     const rows = await raw.query(
-      `SELECT tl.id AS tl_id, tl.tag_id AS tl_tag_id FROM tag_links tl
+      `SELECT tl.id AS tl_id, tl.tag_id AS tl_tag_id, tl.created_at AS tl_created_at,
+              tl.updated_at AS tl_updated_at
+       FROM tag_links tl
        WHERE tl.entity_type = ? AND tl.entity_id = ? AND tl.deleted_at IS NULL`,
       [entityType, entityId],
     );
     const existingByTagId = new Map<string, string>();
-    for (const r of rows) existingByTagId.set(String(r[1]), String(r[0]));
+    const stampsByLinkId = new Map<string, { createdAt: string; updatedAt: string }>();
+    for (const r of rows) {
+      existingByTagId.set(String(r[1]), String(r[0]));
+      stampsByLinkId.set(String(r[0]), { createdAt: String(r[2]), updatedAt: String(r[3]) });
+    }
 
     const wanted = new Set(tagIds);
     const toRemove = [...existingByTagId.entries()].filter(
@@ -328,8 +353,26 @@ export async function setForEntity(
 
     if (statements.length > 0) await raw.batch(statements);
 
+    // Hard delete: log the whole row with its id so undo re-inserts it
+    // instead of updating a row that is gone (see detach()).
     for (const [tagId, linkId] of toRemove) {
-      await logWrite("tag_link", linkId, "delete", { tagId, entityType, entityId }, null, options.batchId);
+      const stamps = stampsByLinkId.get(linkId);
+      await logWrite(
+        "tag_link",
+        linkId,
+        "delete",
+        {
+          id: linkId,
+          tagId,
+          entityType,
+          entityId,
+          createdAt: stamps?.createdAt ?? nowIso(),
+          updatedAt: stamps?.updatedAt ?? nowIso(),
+          deletedAt: null,
+        },
+        null,
+        options.batchId,
+      );
     }
     for (const added of newLinks) {
       await logWrite(
