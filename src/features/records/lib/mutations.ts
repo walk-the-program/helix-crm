@@ -50,6 +50,12 @@ export async function invalidateRecords(): Promise<void> {
     queryClient.invalidateQueries({ queryKey: ["tags"] }),
     queryClient.invalidateQueries({ queryKey: ["trash"] }),
     queryClient.invalidateQueries({ queryKey: qk.today() }),
+    // Search's own results and its "recent" list are both keyed off
+    // qk.search(...) (src/features/today/search/SearchDialog.tsx), so a
+    // record restored from the Trash, or any other write, reappears in
+    // search immediately instead of waiting out its 10s staleTime
+    // (F-W1-3).
+    queryClient.invalidateQueries({ queryKey: ["search"] }),
   ]);
 }
 
