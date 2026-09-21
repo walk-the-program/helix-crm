@@ -34,6 +34,49 @@ jobs:
       - name: npm audit (production dependencies only)
         run: npm audit --omit=dev --audit-level=high
 
+  # LR-LA F-LA-1. The Playwright suite - the largest one in the repo, and the
+  # only automated cover the UI has at all - ran nowhere but a developer's own
+  # machine. `ci.yml` had `js` (typecheck, vitest, npm audit) and `rust`;
+  # `e2e-win.yml` runs four Windows smoke assertions. So every screen this
+  # round built (payments, Schedule, automations, bulk actions, the recovery
+  # key card) could regress on main and every check would stay green, and
+  # release.yml cuts an installer from exactly that main. A suite nobody runs
+  # is a suite that is already broken; this is the job that makes the count in
+  # the launch record mean something between rounds.
+  #
+  # macos-latest rather than ubuntu-latest, although the harness is
+  # platform-neutral (Chromium plus better-sqlite3, no Tauri runtime): macOS is
+  # where the suite is developed and where it has been run, `hig.e2e.ts`
+  # reasons about the macOS window chrome, and dates, fonts and locale are the
+  # three things a Linux runner would quietly disagree about. Free for a public
+  # repo, and the suite builds and previews itself, so there is nothing to
+  # cache and no service to stand up.
+  e2e:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - run: npm ci
+
+      # Only Chromium: the config declares one project and the suite has never
+      # been run against another engine, so pulling three browsers would be
+      # three times the download for no extra coverage.
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run e2e:mac
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-report
+          path: tests/e2e-mac/.cache/report*
+          retention-days: 7
+
   # Ubuntu is deliberately excluded from this matrix: Tauri's Linux build
   # depends on system packages (webkit2gtk, libappindicator, etc.) that are
   # not installed in this project's CI setup yet, so `cargo test` would fail
