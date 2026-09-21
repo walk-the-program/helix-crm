@@ -57,7 +57,11 @@ export function DayAgenda(props: {
       <Panel>
         <EmptyState
           title="Nothing on the books"
-          description="No visit, job, reminder or bill falls on this day yet."
+          // `job` here was hard-coded while every other word on this screen
+          // went through kindLabel and the vocabulary (LR-CS-RECHECK,
+          // F-CS-R-3): a workspace that calls them quotes read "No visit,
+          // job, reminder or bill" and met a word it uses nowhere else.
+          description={`No visit, ${vocabulary.lower}, reminder or bill falls on this day yet.`}
           action={
             <Button type="button" variant="secondary" onClick={() => openVisitDialog({ date })}>
               Schedule a visit

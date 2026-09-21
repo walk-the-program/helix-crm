@@ -33,6 +33,7 @@ import { openVisitDialog } from "@/features/schedule/lib/visitDialog";
 import { useSchedule } from "@/features/schedule/lib/hooks";
 import { WeekStrip } from "@/features/schedule/components/WeekStrip";
 import { DayAgenda } from "@/features/schedule/components/DayAgenda";
+import { HelpLink } from "@/features/help";
 
 /** Today when it falls in the week that starts on `weekStart`, else the Monday. */
 function defaultSelectedFor(weekStart: string, today: string): string {
@@ -160,6 +161,20 @@ export function ScheduleScreen() {
         <EmptyState
           variant="quiet"
           title="Nothing in the diary this week."
+          // An owner meeting a blank week has not yet learned that this
+          // screen reads his existing records rather than being a diary he
+          // has to keep, which is the one thing worth saying here
+          // (LR-CS-RECHECK, F-CS-R-4).
+          //
+          // `variant="quiet"` renders `description ?? title`, so the sentence
+          // has to come along with the link rather than sit above it; it
+          // keeps its own element so it is still one findable string.
+          description={
+            <>
+              <span>Nothing in the diary this week.</span>{" "}
+              <HelpLink to="schedule">What turns up here</HelpLink>
+            </>
+          }
           action={
             <Button
               type="button"

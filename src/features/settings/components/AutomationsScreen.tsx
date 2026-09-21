@@ -35,6 +35,7 @@ import {
   type Automation,
   type AutomationKind,
 } from "@/db/repos/automations";
+import { HelpLink } from "@/features/help";
 
 const AUTOMATIONS_KEY = ["automations"] as const;
 
@@ -271,7 +272,18 @@ export function AutomationsScreen() {
     <SettingsScreenFrame
       title="Automations"
       testId="settings-automations"
-      subtitle="Helix's own follow-up rules, switched on and worded your way."
+      // Two of these three are on out of the box, so this screen is where an
+      // owner arrives asking "what wrote that task, and how do I stop it".
+      // The first half is answered on the customer's own timeline; the rest
+      // is said here, once, under the title (LR-CS-RECHECK, F-CS-R-5).
+      subtitle={
+        <>
+          Helix&rsquo;s own follow-up rules, switched on and worded your way. A rule
+          only ever creates an ordinary task, and the customer&rsquo;s history says
+          which rule made it and why. Importing a spreadsheet sets none of them
+          off. <HelpLink to="follow-ups">More about follow-ups</HelpLink>
+        </>
+      }
     >
       {query.isLoading ? (
         <SettingsLoading>Reading your automations…</SettingsLoading>
