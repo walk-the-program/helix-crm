@@ -85,7 +85,7 @@ Model confirmed: Helix is free; the site token is the only link to a paying clie
 | LR-REV | CRevOps | Opus lead | accepted 15:xx (6 commits d376382..5c358a6) | ≤2 | | `launch-returns/rev.md` |
 | LR-CS | CCSO | Opus lead | accepted 16:xx (32 commits 4d23656..889c142) | ≤3 | | `launch-returns/cs.md` |
 | LR-PX | CPEO | 3 Opus leads A/B/C | accepted 18:xx; rechecks SEC (433a62e), CS (9ce26c4), OPS (c3ab2b0) and docs worker (e50c955) accepted 19:xx | ≤9 total | | `launch-returns/px-*.md` |
-| LR-LA | CLAO | Opus lead (fresh) | dispatching after the full gate | ≤3 | | `launch-returns/la.md` |
+| LR-LA | CLAO | Opus lead (fresh) | accepted 21:xx (verdict at 82c06fc; return e7fd591/0689f9c) | ≤3 | | `launch-returns/la.md` |
 
 ## 5. Verification log
 
@@ -98,6 +98,18 @@ Model confirmed: Helix is free; the site token is the only link to a paying clie
 | 13:xx | SEC gate (Fable, 7652ee9): typecheck clean; vitest 170 files / 2221 passed / 3 skipped; cargo 102 passed; vite build clean; tree clean | SEC accepted |
 | 12:0x | baseline `e8e7650`: typecheck clean; vitest 2102 passed / 3 skipped; CI + e2e-win green on GitHub; release app built and installed locally | baseline |
 
+### LA (accepted by Fable; `launch-returns/la.md`, matrix `docs/LAUNCH-ACCEPTANCE.md`)
+
+Verdict: **Ready with specific operating conditions**, no blockers. J1–J14 executed against the integrated app (not read from returns). Required fixes: F-LA-1 the Playwright suite ran in no CI job (added `e2e` job on macos-latest, artifacts failure-only, 7-day retention); F-LA-2 Help's payments section described the deleted Mark paid dialog and said nothing about deposits/balances/statement; F-LA-6 "export everything" lost a visit's place/duration/note, had no attachments manifest and skipped an unquoted job's priced lines (independent reviewer found the third hole). Also fixed: README/CHANGELOG said three rules ship on (two do); timeline line names where to switch a rule off; design walk now covers Schedule/Automations/Sources at 1024. Regression: all 1,866 baseline test titles accounted for (5 justified renames), no skips or `.only` added, all 17 removed assertions read (16 replacements, 1 recorded relaxation). Performance at 3,000 contacts: Today 109 ms, Contacts 216 ms, search 87 ms. Release bundle builds (15 MB), not launched. Deferred: F-LA-7 reopening an archived workspace whose folder was deleted silently creates an empty one (Help warns; boot-path fix handed off).
+
 ## 6. Remaining blockers and operating conditions
 
-(Filled at the end by Fable from the LA return.)
+**Blockers: none.** Every Blocker found in the round (F-SEC-1 key overwrite, F-OPS-1 no recovery key, F-REV-2 cursor loop, F-CS-2 key never surfaced) is fixed with tests and re-verified by launch assurance.
+
+**Operating conditions (owner: Walker), from `la.md` §VERDICT:** C1 real app on a never-run Mac (RELEASE-CHECKLIST "First launch", Keychain **Always Allow**); C2 recovery-key Copy/Print on the real webview; C3 Windows is smoke-tested only, nothing built this round has run there: onboard Mac clients first or run the Windows checklist section; C4 the new CI `e2e` job must be green on the first push before tagging; C5 second backup folder is an install-day step; C6 unsigned installers (decision D-4); C7 do not reopen a removed workspace (F-LA-7 deferred); C8 token hand-over by hand per CL-1 before install day; C9 keep the client roster, there is no telemetry.
+
+**Decisions for Walker (prepared, not made):** D-1 website pricing; D-2 whether Helix is "included" or a free extra; D-3 in-person install vs self-install; D-4 code-signing budget (largest recurring friction, escalated by SEC, REV, LA); D-5 opt-in update check (recommended shape: a manual button, no background call); D-6 where the roster lives. F-OPS-13 scheduled audit runs declined (LR-5).
+
+**Deferred improvements (recorded in the returns):** delete-workspace command (F-SEC-27), backoff persistence (F-SEC-29), export-moment plaintext disclosure for statement/.ics (F-SEC-32, F-SEC-R follow-ups), external_id re-keying on a site address change (F-REV-12), payments import, deposit request on a quote, OS notifications, multi-select on the pipeline board, quadratic wrapText (F-SEC-25), F-LA-7 boot-path fix, `tags.setTags` peers audited for the same undo shape.
+
+**Push:** one push of main by Fable after this record; tag v0.2.0 only after CI including the `e2e` job is green (C4).
