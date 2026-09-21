@@ -370,10 +370,16 @@ process in the order the evidence says it has to happen.
 
 ## HANDOFF
 
-Final revision `82c06fc` on `main`, local only, **not pushed** — Fable pushes.
-Seven commits from this lead (`2fd7f20`, `cbca382`, `0097ccc`, `3d2ce35`,
-`c733a59`, `103a67e`, `1041b6e`, `692145a`, `82c06fc`) and three from its
-workers (`d6ce55f` LA-W1, `f3ae2de` LA-W2, `91e86b8` LA-W3).
+Local only, **not pushed** — Fable pushes. Every check in VERIFICATION above was
+run at `82c06fc`, the last revision that changes code or tests; the two commits
+after it are this return and the matrix, which are documentation.
+
+Ten commits from this lead — `2fd7f20` (J12 spec), `cbca382` (the CI job),
+`0097ccc` (Help and README), `3d2ce35` (the automation timeline line),
+`c733a59` (the Windows section), `103a67e` (CHANGELOG), `1041b6e` (workspace
+isolation), `692145a` and `82c06fc` (the export fixes), `e7fd591` (this return
+and the matrix) — and three from its workers: `d6ce55f` LA-W1, `f3ae2de` LA-W2,
+`91e86b8` LA-W3.
 
 For the next agent:
 
