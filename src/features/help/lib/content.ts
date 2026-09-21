@@ -11,6 +11,24 @@
  *
  * Voice: plain words, short sentences, second person, no hype. See
  * docs/DESIGN.md section 11.
+ *
+ * `HELP_SECTIONS` is the whole screen, in render order, and it is the only
+ * list. It used to be six entries with four more sections exported separately
+ * beside it, each added that way so the "exactly six" pin in
+ * tests/unit/help/content.test.ts would still pass. That pin stopped
+ * describing anything true once the screen rendered ten sections, and - worse
+ * - the test's quality rules (banned words, sentence budget, non-empty
+ * paragraphs) only ever ran over the six, so nearly half of Help was never
+ * held to the standard the rest was. Everything the screen shows is in this
+ * array now, and everything in it is checked (LR-CS-RECHECK, F-CS-R-2).
+ *
+ * `HELP_TROUBLE` is the one exception, and it is a layout exception rather
+ * than a content one: the screen gives it a hairline and two buttons of its
+ * own below everything else. The same quality rules still run over it.
+ *
+ * A section's `id` is a permanent address - `HelpLink`, and every deep link
+ * from an empty state or an error, uses it - so an id is not renamed when a
+ * title is improved.
  */
 
 export type HelpSection = { id: string; title: string; paragraphs: string[] };
@@ -35,7 +53,7 @@ export type HelpSection = { id: string; title: string; paragraphs: string[] };
  * renders first, above them, as the screen's own orientation rather than a
  * seventh topic in the list.
  */
-export const HELP_GETTING_STARTED: HelpSection = {
+const GETTING_STARTED: HelpSection = {
   id: "getting-started",
   title: "Getting started",
   paragraphs: [
@@ -44,7 +62,7 @@ export const HELP_GETTING_STARTED: HelpSection = {
   ],
 };
 
-export const HELP_SECTIONS: HelpSection[] = [
+const CORE_SECTIONS: HelpSection[] = [
   {
     id: "customers-in",
     title: "Getting your customers in",
@@ -122,7 +140,7 @@ export const HELP_SECTIONS: HelpSection[] = [
  * account). `InvoicesScreen.tsx`'s four tabs and `ReceivablesScreen.tsx` are
  * named exactly as they read in the sidebar and the Reports tab strip.
  */
-export const HELP_INVOICES: HelpSection = {
+const QUOTES_INVOICES: HelpSection = {
   id: "quotes-invoices",
   title: "Quotes and invoices",
   paragraphs: [
@@ -143,7 +161,7 @@ export const HELP_INVOICES: HelpSection = {
  * polls (`GET`), it does not receive a push, so a site that is not built by
  * ClearPath answers this request rather than calling out to Helix.
  */
-export const HELP_WEBSITE_ENDPOINT: HelpSection = {
+const WEBSITE_ENDPOINT: HelpSection = {
   id: "website-leads-endpoint",
   title: "Connecting a site Helix didn't build",
   paragraphs: [
@@ -161,7 +179,7 @@ export const HELP_WEBSITE_ENDPOINT: HelpSection = {
  * holds. `src/features/settings/components/WorkspacesScreen.tsx` names this
  * section by its title, so the two must stay in sync.
  */
-export const HELP_WORKSPACE_REMOVAL: HelpSection = {
+const WORKSPACE_REMOVAL: HelpSection = {
   id: "workspace-removal",
   title: "Removing a workspace for good",
   paragraphs: [
@@ -169,6 +187,84 @@ export const HELP_WORKSPACE_REMOVAL: HelpSection = {
     "When a client's relationship with you has genuinely ended and nothing of theirs should remain, archive the workspace first, close Helix, then delete that workspace's folder yourself; Diagnostics, under Settings, names the exact file, one level up from it. Deleting that folder removes the database, its backups and every attached file in one step. One small technical leftover cannot be helped: the saved key that unlocked that database can stay in your Mac Keychain or Windows Credential Manager after the folder is gone, and it names nothing about your customers; remove it by hand there if you want it gone too.",
   ],
 };
+
+/**
+ * Automations (LR-PX-C). Three rules ship with the product and two of them
+ * are ON, so this section exists for a specific moment: the owner finds a
+ * task on Today that he is certain he did not write, and needs to know both
+ * where it came from and how to stop it. The customer's own timeline answers
+ * the first ("Helix added a follow-up: … because a new lead arrived"); this
+ * answers the second.
+ *
+ * The sentence about imports is not padding. Two rules being on by default is
+ * only safe because an import fires neither, and an owner handed a customer
+ * list of three thousand people deserves to be told that in words rather than
+ * left to find out. `tests/repo/onboarding/importDoesNotAutomate.test.ts`
+ * holds the product to it.
+ */
+const FOLLOW_UPS: HelpSection = {
+  id: "follow-ups",
+  title: "Letting Helix chase the follow-up",
+  paragraphs: [
+    "Helix can write the follow-up for you rather than leaving you to remember it. Settings, then Automations, has three switches: a call put on your list an hour after a website lead arrives, a reminder three days after you send a quote, and one for an invoice that has gone past its due date, which stays off until you turn it on. The wording of each sits beside its switch, so it says what you would have written; type {name} for the customer, {number} for the quote or invoice and {job} for the job itself, and Helix fills them in.",
+    "Whatever a rule creates is an ordinary task: it turns up on Today and on your schedule, you tick it off the same way, and the customer's own history says Helix added it and why - so a call you do not remember writing is never a mystery. Importing a spreadsheet never sets any of this off. An imported customer list is history, not work.",
+    "Your pipeline can chase a job too. Open it, press Manage stages, and give a stage a follow-up - after two days in Quoted, remind me to ring them. Every job that moves into that stage gets that reminder once, whether you dragged one card or moved twelve at a time.",
+  ],
+};
+
+/**
+ * The Schedule module (LR-PX-B). Written from `src/features/schedule/**`:
+ * `feed.ts` decides what appears, `labels.ts` names each row in the
+ * workspace's own vocabulary, `VisitDialog.tsx` is the booking form and
+ * `calendar.ts` writes the .ics.
+ *
+ * The third paragraph matters more than it looks: a visit is a task with a
+ * time on it and no new table behind it (decision PX-6), which is why it
+ * turns up on Today and in Trash. An owner who does not know that will look
+ * for a separate place his visits went.
+ */
+const SCHEDULE: HelpSection = {
+  id: "schedule",
+  title: "Your week, and booking a visit",
+  paragraphs: [
+    "Schedule, in the sidebar, is your week in one place: visits you have booked, jobs you expect to start, reminders that have come round, invoices falling due and bills about to go out - all read from the records you already keep, so there is nothing separate to maintain. The week runs Monday to Sunday; the arrows or the left and right arrow keys move between weeks, This week comes back, and the date button jumps anywhere.",
+    "Schedule a visit asks for a title, a date and a time, how long to allow, and who it is for. Pick the customer and Helix fills in the address it already holds for them, which you can change - the van goes where you say it goes. A gate code, or anything else worth remembering on the doorstep, goes in the note.",
+    "A visit is a task with a time on it, nothing more, so it also shows on Today and on the Tasks screen, it ticks off or snoozes like anything else, and deleting one puts it in the Trash with everything else. To change a time or a place later, open the task's menu and choose Edit time and place.",
+    "Add to calendar on any row saves a standard .ics file wherever you choose, and your own calendar takes it from there; the entry carries the customer's name and number, the address and your note. Exporting the same visit twice replaces the first entry rather than making a second. Helix does not connect to your calendar account and does not send anything anywhere.",
+  ],
+};
+
+/**
+ * The screen, in render order, and the only list.
+ *
+ * The core six keep their own array above because they are the sections that
+ * have never moved; everything added since is named here rather than spliced
+ * in by the screen, which is what the render used to do. Order is an editorial
+ * decision and this is where it is made: quotes and invoices follow winning a
+ * job, follow-ups follow quotes (the quote rule is the one an owner meets
+ * first), the schedule follows Today because one is the day and the other the
+ * week, and the two reference sections sit under the topic they qualify.
+ */
+function core(id: string): HelpSection {
+  const section = CORE_SECTIONS.find((s) => s.id === id);
+  if (!section) throw new Error(`No core help section "${id}".`);
+  return section;
+}
+
+export const HELP_SECTIONS: HelpSection[] = [
+  GETTING_STARTED,
+  core("customers-in"),
+  core("lead-to-won"),
+  QUOTES_INVOICES,
+  FOLLOW_UPS,
+  core("today"),
+  SCHEDULE,
+  core("website-leads"),
+  WEBSITE_ENDPOINT,
+  core("backups"),
+  WORKSPACE_REMOVAL,
+  core("shortcuts"),
+];
 
 export const HELP_TROUBLE: HelpSection = {
   id: "trouble",

@@ -12,16 +12,13 @@
  *
  * The copy itself lives in lib/content.ts as data, not in this file, so it
  * can be unit-tested without rendering anything and so this component stays
- * layout only. `HELP_WEBSITE_ENDPOINT` (docs/rounds/2026-09-20-round-3.md
- * #17) is one such section that is not part of `HELP_SECTIONS`: it is
- * spliced in right after "Your website's leads" so `HELP_SECTIONS` can keep
- * its own six-item contract in tests/unit/help/content.test.ts.
- * `HELP_WORKSPACE_REMOVAL` (SEC audit, launch round 2026-09-20) is the same
- * shape, spliced in right after "Backups and where your data lives"; the
- * Workspaces settings screen points here by the section's own title.
- * `HELP_INVOICES` (LR-CS-W3) is the same shape again, spliced in right after
- * "Working a job from lead to won" - the section that already explains
- * winning a job, so quotes and invoices follow it rather than sitting apart.
+ * layout only. This screen used to decide the order itself, splicing four
+ * separately-exported sections in between the six in `HELP_SECTIONS` - a
+ * workaround for a test that pinned that array to exactly six, which meant
+ * the order of the screen lived here and the content lived there. Order is an
+ * editorial decision about the copy, so it went back to the copy:
+ * `HELP_SECTIONS` is now the whole screen, in order, and this file renders it
+ * (LR-CS-RECHECK, F-CS-R-2).
  *
  * Deep-linking: a few screens outside this one now link straight to a
  * section here (an empty state on Invoices, a failed website connection, the
@@ -47,18 +44,14 @@
  * One hairline, at most, separates the everyday sections from the "something
  * is wrong" one; every other gap is air, not a rule.
  */
-import { Fragment, useEffect } from "react";
+import { useEffect } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { navigate } from "wouter/use-browser-location";
 import { Button, PageHeader, toast } from "@/ui";
 import { findCommand } from "@/app/registry";
 import {
-  HELP_GETTING_STARTED,
-  HELP_INVOICES,
   HELP_SECTIONS,
   HELP_TROUBLE,
-  HELP_WEBSITE_ENDPOINT,
-  HELP_WORKSPACE_REMOVAL,
   ISSUES_URL,
   type HelpSection,
 } from "@/features/help/lib/content";
@@ -188,20 +181,8 @@ export function HelpScreen() {
       />
 
       <div className="flex max-w-[var(--content-max)] flex-col gap-[var(--space-8)]">
-        <HelpSectionBlock section={HELP_GETTING_STARTED} />
         {HELP_SECTIONS.map((section) => (
-          <Fragment key={section.id}>
-            <HelpSectionBlock section={section} />
-            {section.id === "lead-to-won" ? (
-              <HelpSectionBlock section={HELP_INVOICES} />
-            ) : null}
-            {section.id === "website-leads" ? (
-              <HelpSectionBlock section={HELP_WEBSITE_ENDPOINT} />
-            ) : null}
-            {section.id === "backups" ? (
-              <HelpSectionBlock section={HELP_WORKSPACE_REMOVAL} />
-            ) : null}
-          </Fragment>
+          <HelpSectionBlock key={section.id} section={section} />
         ))}
         <TroubleSection />
       </div>
