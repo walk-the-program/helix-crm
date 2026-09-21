@@ -37,6 +37,8 @@ import * as activitiesRepo from "../../../src/db/repos/activities";
 import * as reports from "../../../src/db/repos/reports";
 import * as receivables from "../../../src/db/repos/receivables";
 import { recentRecords, searchRows } from "../../../src/db/repos/search";
+import * as paymentsRepo from "../../../src/db/repos/payments";
+import { scheduleItems } from "../../../src/features/schedule/lib/feed";
 import { periodFor } from "../../../src/lib/periods";
 import { todayLocal, nowIso } from "../../../src/lib/dates";
 
@@ -72,6 +74,11 @@ const TIME_BUDGETS = {
   reportsPeople: 500,
   reportsRevenue: 800,
   receivablesAging: 300,
+  // LR-OPS-RECHECK: the product-expansion screens, on the same dataset.
+  scheduleWeek: 400,
+  scheduleMonth: 600,
+  paymentsForCustomer: 300,
+  leadsBySource: 400,
 } as const;
 
 /** Deterministic PRNG so a failure is reproducible without a fixed seed file. */
@@ -305,6 +312,67 @@ beforeAll(async () => {
         now,
       );
     }
+
+    // ---- payments (LR-OPS-RECHECK) ------------------------------------------
+    // One per already-paid invoice, which is exactly the shape migration
+    // 0006's backfill leaves behind on an upgraded workspace, plus a second
+    // one on a slice of them so the partial-payment path is represented too.
+    const insertPayment = db.prepare(
+      `INSERT INTO payments
+         (id, document_id, deal_id, amount_cents, paid_on, method, reference, note, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)`,
+    );
+    const paidInvoices = db
+      .prepare("SELECT id, deal_id, total_cents, paid_on FROM documents WHERE status = 'paid'")
+      .all() as { id: string; deal_id: string | null; total_cents: number; paid_on: string }[];
+    let paymentIndex = 0;
+    for (const invoice of paidInvoices) {
+      insertPayment.run(
+        `perf-pay-${paymentIndex}`,
+        invoice.id,
+        invoice.deal_id,
+        invoice.total_cents,
+        invoice.paid_on,
+        pick(["cash", "check", "card", "transfer", "other"]),
+        now,
+        now,
+      );
+      paymentIndex += 1;
+    }
+
+    // ---- timed visits and automation tasks (LR-OPS-RECHECK) -----------------
+    // The Schedule screen reads tasks with a `due_at`; a third of the task
+    // rows become real appointments with a place and a duration, and a slice
+    // of those are automation-created so the source filter has something to
+    // discriminate.
+    const makeVisit = db.prepare(
+      `UPDATE tasks SET due_at = ?, place = ?, duration_minutes = ?, source = ?
+        WHERE id = ?`,
+    );
+    for (let i = 0; i < N_TASKS; i += 3) {
+      const day = dateOnlyDaysAgo(int(-14, 30));
+      makeVisit.run(
+        `${day}T${String(int(7, 18)).padStart(2, "0")}:00:00.000Z`,
+        `${int(1, 9000)} Main Street`,
+        pick([30, 45, 60, 90, 120]),
+        i % 9 === 0 ? "automation" : "user",
+        `perf-t-${i}`,
+      );
+    }
+
+    // ---- a source on most deals (LR-OPS-RECHECK) ----------------------------
+    // The leads-by-source report groups deals by `source_id`; with every row
+    // NULL it would measure an empty grouping rather than the real one.
+    const sourceRows = db
+      .prepare("SELECT id FROM sources WHERE deleted_at IS NULL")
+      .all() as { id: string }[];
+    if (sourceRows.length > 0) {
+      const setSource = db.prepare("UPDATE deals SET source_id = ? WHERE id = ?");
+      for (let i = 0; i < N_DEALS; i += 1) {
+        if (rand() < 0.15) continue; // some deals genuinely have no source
+        setSource.run(sourceRows[i % sourceRows.length].id, `perf-d-${i}`);
+      }
+    }
   });
 
   seed();
@@ -313,8 +381,11 @@ beforeAll(async () => {
 afterAll(() => {
   h?.dispose();
   rmSync(scratchDir, { recursive: true, force: true });
+  // One line rather than console.table: a table is unreadable in a CI log and
+  // vitest's default reporter swallows it, which made the numbers this file
+  // exists to produce invisible unless you ran it in a terminal by hand.
   // eslint-disable-next-line no-console
-  console.table(measurements);
+  console.info(`[perf] ${JSON.stringify(measurements)}`);
 });
 
 describe("realistic-scale pass: 20k contacts / 5k deals / 10k activities (LR-OPS-W1 B)", () => {
@@ -431,5 +502,78 @@ describe("realistic-scale pass: 20k contacts / 5k deals / 10k activities (LR-OPS
   it(`Receivables aging, within ${TIME_BUDGETS.receivablesAging} ms`, async () => {
     await time("receivables.aging", () => receivables.aging());
     expect(measurements["receivables.aging"]).toBeLessThan(TIME_BUDGETS.receivablesAging);
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* product expansion (LR-OPS-RECHECK item 4)                          */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The Schedule screen's one read. It fans out to five repositories - tasks,
+   * deals, recurring rules, invoice due dates and invoice-schedule issue
+   * dates - and two of those (`listInvoices`, `listInvoiceSchedules`) take no
+   * range at all and are filtered in JavaScript afterwards. That is the one
+   * shape in this feature that could scale badly, so it is measured on a
+   * month rather than only on a week.
+   */
+  it(`Schedule: one week, within ${TIME_BUDGETS.scheduleWeek} ms`, async () => {
+    const from = dateOnlyDaysAgo(3);
+    const to = dateOnlyDaysAgo(-4);
+    const items = await time("schedule.week", () => scheduleItems({ from, to }));
+    expect(Array.isArray(items)).toBe(true);
+    expect(measurements["schedule.week"]).toBeLessThan(TIME_BUDGETS.scheduleWeek);
+  });
+
+  it(`Schedule: one month, within ${TIME_BUDGETS.scheduleMonth} ms`, async () => {
+    const from = dateOnlyDaysAgo(14);
+    const to = dateOnlyDaysAgo(-16);
+    await time("schedule.month", () => scheduleItems({ from, to }));
+    expect(measurements["schedule.month"]).toBeLessThan(TIME_BUDGETS.scheduleMonth);
+  });
+
+  /**
+   * The customer statement: every payment a contact or company has ever made,
+   * joined back through their invoices. Bounded by one customer's own
+   * documents, which is the bound worth stating - it does not grow with the
+   * workspace, only with how much business that one customer has done.
+   */
+  it(`Payments: one customer's statement, within ${TIME_BUDGETS.paymentsForCustomer} ms`, async () => {
+    const withPayments = await raw.query(
+      `SELECT d.contact_id FROM payments p JOIN documents d ON d.id = p.document_id
+        WHERE d.contact_id IS NOT NULL LIMIT 1`,
+      [],
+    );
+    const contactId =
+      withPayments.length > 0 ? String(withPayments[0][0]) : `perf-c-0`;
+    await time("payments.listForCustomer", () =>
+      paymentsRepo.listForCustomer({ contactId }),
+    );
+    expect(measurements["payments.listForCustomer"]).toBeLessThan(
+      TIME_BUDGETS.paymentsForCustomer,
+    );
+  });
+
+  /**
+   * The Sources report: every deal in the period grouped by source. It reads
+   * the whole period rather than a page, which is correct for an aggregate
+   * and is why the number below matters - a year of 5,000 deals is the
+   * realistic worst case for a business this size.
+   */
+  it(`Reports: leads by source, within ${TIME_BUDGETS.leadsBySource} ms`, async () => {
+    const period = periodFor("year");
+    const rows = await time("reports.leadsBySource", () => reports.leadsBySource(period));
+    expect(rows.length, "the seed gave most deals a source").toBeGreaterThan(0);
+    expect(measurements["reports.leadsBySource"]).toBeLessThan(TIME_BUDGETS.leadsBySource);
+  });
+
+  /**
+   * Payments changed what Collected and Outstanding mean: both now join the
+   * payments table on every read. The two report timings above already
+   * exercise that, and this asserts the join really is present in the data
+   * rather than measuring an empty table.
+   */
+  it("the money reports are measuring a workspace that actually has payments", async () => {
+    const rows = await raw.query(`SELECT count(*) FROM payments`, []);
+    expect(Number(rows[0][0]), "one payment per paid invoice").toBeGreaterThan(100);
   });
 });
