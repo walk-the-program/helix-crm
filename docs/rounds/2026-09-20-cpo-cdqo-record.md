@@ -306,7 +306,7 @@ SiteConnectionScreen (money) and BackupsScreen (platform).
 
 | item | state | reason and where it is written down |
 | --- | --- | --- |
-| Payments table (part payments as data) | deferred | R7: deposits are a deposit invoice plus a balance invoice; migration text kept in Lead B's audit return (F-LB-7). Revisit only if the guidance form fails an owner. |
+| Payments table (part payments as data) | **built 2026-09-20 (launch-readiness round, LR-PX-A)** | R7 is superseded: a deposit is a partial payment on one invoice (`payments` table, migration 0006, derived invoice status `partial`). `createDeposit` still works. See `launch-returns/px-a.md`. |
 | PDF fonts follow the app font switch | deferred, documented | R18: the PDF embeds the brand guide's print faces; DESIGN.md §4. |
 | Search group headings and zod `newDealSchema` messages follow the vocabulary | deferred | F-P2-LA-4: module-load constants; repository ValidationError messages already follow it. |
 | Template merge tokens renamed per vocabulary | closed by ruling | F-P2-LA-5: token names are stable identifiers; the glossary describes them in the owner's word. |
