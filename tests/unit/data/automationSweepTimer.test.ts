@@ -13,7 +13,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const automationSweep = vi.fn();
-const onDocumentStatusChanged = vi.fn(() => () => {});
+const onDocumentStatusChanged = vi.fn((..._args: unknown[]) => () => {});
 let paused = false;
 
 vi.mock("@/db/repos/automations", () => ({
