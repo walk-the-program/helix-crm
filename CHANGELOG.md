@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-09-20
 
 - Changed the body font from Poppins to Lato at Walker's request. Self-hosted
   as `lato-400.woff2`, `lato-700.woff2`, and `lato-400italic.woff2` in

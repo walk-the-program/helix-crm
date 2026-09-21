@@ -1,6 +1,6 @@
 [package]
 name = "helix-crm"
-version = "0.1.0"
+version = "0.2.0"
 description = "Helix CRM: a local-first desktop CRM for trade and service businesses"
 authors = ["ClearPath Digital"]
 license = "AGPL-3.0-only"
