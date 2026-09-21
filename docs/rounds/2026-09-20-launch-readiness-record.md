@@ -40,6 +40,10 @@ backups, logs, and the site-lead ingestion path (untrusted input from a public f
 Format: `F-<role>-<n>` | class (Blocker / Required / Follow-up) | finding | why that class | fix commit(s) | evidence.
 Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
+### PX (accepted by Fable; returns `launch-returns/px-a.md`, `px-b.md`, `px-c.md`)
+
+Built and verified end to end: **A** payments as records (migration 0006, derived invoice status draft/sent/partial/paid/void, Collected = sum of payments, backfill proven figure-for-figure, Record payment dialog, balances on invoices/lists/contacts/companies/Today, customer Statement PDF, payments in exports and reports; markPaid/markUnpaid removed; RESTRICT + purge order fixed after Lead C found sample removal failing). **B** Schedule module (/schedule week + day, feed over tasks/deals/reminders/invoices/schedules, visit dialog writing timed tasks with place/duration/notes via 0007 + 0009, Add to calendar .ics, Today's schedule section, Today outstanding-balance line from A's contract). **C** automations (0008: three switchable rules, per-stage follow-ups, automation_runs idempotency ledger, synchronous in the triggering write, overdue sweep), Settings → Automations, Leads by source report, bulk actions with a selection model and BulkBar on Contacts and the deals list (no multi-select on the board, argued). Cross-lead defects caught in flight: payments RESTRICT vs sample-data removal (A fixed), bulk tag-removal undo silently doing nothing (C fixed) and the same hole in single-record tag removal (Fable fixed, c9fb6f5). Incidents: two `--amend`s on the shared index by B's workers swept A's MarkPaidDialog deletion into 163c561 (content correct); trailers missing on two worker commits; recorded, not rewritten. Fable also fixed a pre-existing evening-only flake in purgeSweep.test.ts (3948a8e) and repaired the drizzle snapshot chain (0009_snapshot.json).
+
 ### CS (accepted by Fable; full table in `launch-returns/cs.md`)
 
 1 Blocker (F-CS-2 = LR-6: recovery key never surfaced in first run; now a persistent Today card until the key is revealed and copied/saved/printed, shared component with Settings → Backups, no nag afterwards), 13 Required (Today said "Nothing here yet" after a 52-customer import; mapper sent "Customer Name" to Skip; preview said "first 20 of 20 rows" for 2,997 rows; import warnings hard-coded to []; undo had no route; sample jobs indistinguishable on the board; removeSampleData left change_log rows; Diagnostics had no single support block; 16 vague or "[object Object]" error strings; silent workspace-rename failure; stale RELEASE-CHECKLIST first-launch section), 6 Follow-ups. First meaningful outcome (customers in, Today true, one job moved): 18 actions / 6 screens before → 21 after, the three extra being the recovery key; frictions 6 → 3. Synthetic messy 3,000-row fixture committed with its run record. docs/ONBOARDING-CHECKLIST.md written. Two release-day hand checks remain (Copy/Print on the real webview).
@@ -76,13 +80,14 @@ Model confirmed: Helix is free; the site token is the only link to a paying clie
 | LR-OPS | CROO | Opus lead | accepted 14:xx (23 commits 44d72d8..38835f8 + Fable's F-OPS-12 fix) | ≤3 | | `launch-returns/ops.md` |
 | LR-REV | CRevOps | Opus lead | accepted 15:xx (6 commits d376382..5c358a6) | ≤2 | | `launch-returns/rev.md` |
 | LR-CS | CCSO | Opus lead | accepted 16:xx (32 commits 4d23656..889c142) | ≤3 | | `launch-returns/cs.md` |
-| LR-PX | CPEO | 3 Opus leads A/B/C | running (brief: launch-returns/px-common.md) | ≤9 total | | `launch-returns/px-*.md` |
+| LR-PX | CPEO | 3 Opus leads A/B/C | accepted 18:xx (35 commits b8958aa..e11279d + Fable's tags-undo, purgeSweep-test, drizzle-snapshot fixes); rechecks SEC/OPS/CS + docs worker running | ≤9 total | | `launch-returns/px-*.md` |
 | LR-LA | CLAO | Opus lead (fresh) | planned (after PX) | ≤3 | | `launch-returns/la.md` |
 
 ## 5. Verification log
 
 | when | what | result |
 | --- | --- | --- |
+| 18:xx | PX gate (Fable, e11279d + fixes): typecheck clean; vitest 220 files / 2718 passed / 3 skipped; cargo 123; build clean; `drizzle-kit generate` reports no schema changes after the snapshot repair | PX accepted; rechecks dispatched |
 | 16:xx | CS gate (Fable, 889c142): typecheck clean; vitest 186 files / 2373 passed / 3 skipped; cargo 123; build clean; tree clean | CS accepted |
 | 15:xx | REV gate (Fable, 5c358a6): typecheck clean; vitest 180 files / 2325 passed / 3 skipped; cargo 123; build clean; tree clean | REV accepted |
 | 14:xx | OPS gate (Fable, after F-OPS-12 fix): typecheck clean; vitest 177 files / 2285 passed / 3 skipped; cargo 123 passed; vite build clean; new concurrent-writer test fails on the old code, passes on the fix | OPS accepted |
