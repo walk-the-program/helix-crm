@@ -76,11 +76,14 @@
   you already keep. A visit is a task with a time, a place, and a length,
   and any one of them can be added to your own calendar as a standard .ics
   file.
-- Added automations: three switches in Settings (a call reminder after a
-  website lead arrives, a follow-up after a quote is sent, a nudge on an
-  overdue invoice), plus a follow-up you can set on any pipeline stage.
-  Each one just creates an ordinary task, so it shows up and behaves like
-  anything you'd have typed yourself.
+- Added automations: three switches in Settings, of which two arrive
+  already on — a call reminder an hour after a website lead arrives, and a
+  follow-up three days after a quote is sent. The third, a nudge on an
+  overdue invoice, waits until you switch it on. Any pipeline stage can
+  carry a follow-up of its own as well. Each one just creates an ordinary
+  task, so it shows up and behaves like anything you'd have typed yourself,
+  and the customer's own history names the rule that wrote it and where to
+  switch it off. Importing a spreadsheet sets none of them off.
 - Added a leads-by-source report: how many leads each source sent, how many
   you won, what they were worth, and how long they took to close.
 - Added bulk actions: select a run of rows on Contacts or the deals list
