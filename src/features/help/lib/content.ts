@@ -198,6 +198,7 @@ const WORKSPACE_REMOVAL: HelpSection = {
   paragraphs: [
     "Archiving a workspace, under Settings then Workspaces, takes it out of the switcher and stops it checking for leads or backing itself up; it does not delete anything, which is why it is the right choice whenever there is any chance you will want that business back. There is no button in Helix that deletes a workspace's files - that is deliberate, the same reason a deleted record sits in Trash for thirty days rather than vanishing the moment you click delete.",
     "When a client's relationship with you has genuinely ended and nothing of theirs should remain, archive the workspace first, close Helix, then delete that workspace's folder yourself; Diagnostics, under Settings, names the exact file, one level up from it. Deleting that folder removes the database, its backups and every attached file in one step. One small technical leftover cannot be helped: the saved key that unlocked that database can stay in your Mac Keychain or Windows Credential Manager after the folder is gone, and it names nothing about your customers; remove it by hand there if you want it gone too.",
+    "Helix has no way to remove the workspace from your list, so it stays there, archived, pointing at a folder that is no longer there. Do not restore it later expecting the old data back: opening an archived workspace whose folder is gone quietly starts a new, empty one under the same name instead of telling you anything is missing.",
   ],
 };
 
