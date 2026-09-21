@@ -135,17 +135,30 @@ const CORE_SECTIONS: HelpSection[] = [
  * once a billing schedule exists), `NewDocumentScreen.tsx` ("New invoice"
  * under Invoices, which creates the job behind a document that never had
  * one), `DocumentPage.tsx` ("Send", "Mark paid", "Accept" / "Decline", the
- * draft -> sent -> settled status chain) and `MarkPaidDialog.tsx` (date,
- * method, note - the whole of the record, since Helix never watches a bank
- * account). `InvoicesScreen.tsx`'s four tabs and `ReceivablesScreen.tsx` are
+ * draft -> sent -> partial -> paid status chain), `RecordPaymentDialog.tsx`
+ * (date, method, reference, note) and `MoneyStrip.tsx` ("Statement" on a
+ * customer). `InvoicesScreen.tsx`'s four tabs and `ReceivablesScreen.tsx` are
  * named exactly as they read in the sidebar and the Reports tab strip.
+ *
+ * LR-LA F-LA-2. This section was written against `MarkPaidDialog.tsx`, which
+ * PX-A deleted: the old copy told the owner to "press Mark paid and say when
+ * it came in, how, and anything worth a note", and that dialog no longer
+ * exists - Mark paid is now one click that settles the balance dated today,
+ * and the date/method/reference/note live behind Record payment. Worse, the
+ * whole of what PX-A built - a deposit, a part payment, a balance that follows
+ * the customer, the statement - had no answer anywhere in Help, so an owner
+ * taking a 30% deposit (the ordinary case in every trade this ships for) had
+ * nowhere to look. The two paragraphs below are now three, and the section's
+ * budget in `tests/unit/help/content.test.ts` moves with it.
  */
 const QUOTES_INVOICES: HelpSection = {
   id: "quotes-invoices",
   title: "Quotes and invoices",
   paragraphs: [
     "Open a job's page and press Create quote to turn its price into a document, or Create invoice for one-time work that is billed right away; a job with a monthly service adds Create this month's invoice once it is won. Every quote and invoice belongs to a job, so the customer on the document always matches the one on the job. With no job to start from yet, open Invoices in the sidebar and press New invoice, which builds one from scratch and creates the job behind it for you.",
-    "A draft stays editable until you press Send, which writes the PDF, opens it, and marks the document sent - Helix never emails it for you. A quote gets Accept or Decline instead; accepting turns it into an invoice ready to send, or starts the monthly billing if that is what was quoted. When the money actually arrives, press Mark paid and say when it came in, how, and anything worth a note, since Helix does not watch a bank account and this is the only record of it. Every quote and invoice you have raised lives under Invoices, split into Unpaid, Paid, Quotes and All, and what is overdue shows on the Receivables report.",
+    "A draft stays editable until you press Send, which writes the PDF, opens it, and marks the document sent - Helix never emails it for you. A quote gets Accept or Decline instead; accepting turns it into an invoice ready to send, or starts the monthly billing if that is what was quoted. Every quote and invoice you have raised lives under Invoices, split into Unpaid, Paid, Quotes and All, and what is still owed shows on the Receivables report.",
+    "When money arrives, press Record payment on the invoice and say how much, when it came in, how it was paid, and any cheque or transfer reference worth keeping. Helix does not watch a bank account, so what you record here is the only record of it. A deposit or a part payment is the same action for a smaller amount: the invoice works out what is left, says Partially paid, and the balance follows the customer onto their own page, the invoice list and Today. Mark paid is the shortcut for the usual case - one click, the whole balance, dated today - and it writes an ordinary payment you can edit or remove afterwards like any other.",
+    "A customer's page adds up everything they still owe across every invoice, and the Statement button there writes a PDF of every invoice and payment between two dates, which is what to send when somebody asks what they are up to date on. Collected on the Revenue report is the sum of the payments you have recorded, never the invoices you have sent, so the two stay honest about each other.",
   ],
 };
 

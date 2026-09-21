@@ -45,8 +45,13 @@ const EXPECTED_ORDER: { id: string; title: string; budget?: number }[] = [
   { id: "customers-in", title: "Getting your customers in", budget: 9 },
   { id: "lead-to-won", title: "Working a job from lead to won", budget: 7 },
   // Quotes, invoices, payments and the statement: four documents' worth of
-  // lifecycle, and the only place any of it is written down.
-  { id: "quotes-invoices", title: "Quotes and invoices", budget: 10 },
+  // lifecycle, and the only place any of it is written down. Raised from 10
+  // to 12 by LR-LA F-LA-2, which found the section still describing the
+  // deleted MarkPaidDialog and silent about deposits, part payments, the
+  // balance and the statement - the whole of what PX-A built. Three of the
+  // four sentences added are the deposit case, which is the ordinary way a
+  // trade gets paid and had no answer anywhere in the product's own help.
+  { id: "quotes-invoices", title: "Quotes and invoices", budget: 12 },
   // Three rules, what they create, and the pipeline's own follow-up. Two of
   // the rules are ON by default, so this cannot be shortened by leaving one
   // of them unexplained.
@@ -143,5 +148,43 @@ describe("HELP_SECTIONS", () => {
     expect(backups).toBeDefined();
     const text = backups!.paragraphs.join(" ").toLowerCase();
     expect(text.includes("internet") || text.includes("offline")).toBe(true);
+  });
+
+  /**
+   * LR-LA F-LA-2.
+   *
+   * This section went stale the moment PX-A replaced `MarkPaidDialog` with
+   * payments as records, and nothing caught it: the rules above count
+   * sentences and ban words, and none of them can tell that the copy is
+   * describing a dialog that was deleted. The Help screen then spent the rest
+   * of the round telling an owner to "press Mark paid and say when it came in,
+   * how, and anything worth a note" - four fields behind a button that is now
+   * one silent click - while the deposit, the part payment, the balance and
+   * the statement had no answer anywhere in the product's own help.
+   *
+   * So this pins the copy to the buttons that actually exist. It is a coarse
+   * test on purpose: it asserts the words a screen shows, which is the one
+   * thing a reader of the copy and a reader of the screen can disagree about.
+   */
+  it("the quotes and invoices section names the payment controls that exist", () => {
+    const section = HELP_SECTIONS.find((s) => s.id === "quotes-invoices");
+    expect(section).toBeDefined();
+    const text = section!.paragraphs.join(" ");
+
+    // The four things PX-A shipped and the copy has to be able to answer.
+    for (const label of ["Record payment", "Partially paid", "Statement", "Mark paid"]) {
+      expect(text, `Help never mentions "${label}"`).toContain(label);
+    }
+    expect(text.toLowerCase(), "Help says nothing about a deposit").toContain("deposit");
+    expect(text.toLowerCase(), "Help says nothing about the balance").toContain("balance");
+
+    // And the specific false sentence that was there: Mark paid does not ask
+    // for a date, a method or a note - `RecordPaymentDialog` does. If Mark
+    // paid ever grows a dialog again this fails, which is the right moment to
+    // rewrite the sentence rather than to discover it from a client.
+    expect(
+      /Mark paid[^.]*\b(say when|how it was paid|method|note)\b/i.test(text),
+      "Help describes Mark paid as asking for details; it is one click",
+    ).toBe(false);
   });
 });

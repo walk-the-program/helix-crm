@@ -51,12 +51,14 @@ and your bank's app; Helix is built to feel that ordinary. It is not an
   due, all read from records you already keep. Book a timed visit with a
   place and a length, and add any one of them to your own calendar as a
   standard .ics file.
-- **Automations**: switch on a call reminder an hour after a website lead
-  arrives, a follow-up a few days after a quote goes out, or a nudge when an
-  invoice runs overdue, plus a follow-up on any pipeline stage. Every one
-  just writes an ordinary task, so it behaves like everything else on Today
-  and the Tasks screen; edit the wording or the delay, or turn any of them
-  off, in Settings.
+- **Automations**: a call reminder an hour after a website lead arrives and a
+  follow-up three days after a quote goes out are on from the start; a nudge
+  when an invoice runs overdue waits until you switch it on, and any pipeline
+  stage can carry a follow-up of its own. Every one just writes an ordinary
+  task, so it behaves like everything else on Today and the Tasks screen, and
+  the customer's history says which rule wrote it. Edit the wording or the
+  delay, or turn any of them off, in Settings. Importing a spreadsheet never
+  sets any of them off.
 - **Bulk actions**: on the Contacts and Pipeline lists, select a run of rows
   with a click and a shift-click, then tag, retag a company, move stage, or
   trash them all in one step and one undo.
