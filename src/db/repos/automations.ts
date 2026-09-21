@@ -246,8 +246,16 @@ export type AutomationResult = { statements: Statement[]; taskId: string | null 
  * (src/features/leads/lib/leadMapping.ts): a test that needs to tell "the line
  * a rule wrote" from "the line the owner's own work wrote" must not re-type
  * the sentence and quietly stop matching when the wording is improved.
+ *
+ * The parenthesis is F-CS-R-7, reconfirmed still open by LR-LA-W1 and closed
+ * here. Two of these rules ship on, so the owner most likely to read this line
+ * is one who found a task on Today that he is certain he did not write. The
+ * line already answered "who" and "why"; it did not answer the question that
+ * actually follows, which is "where do I stop it" - and a line in a timeline
+ * is the one place he is looking at the moment he wants to know. Naming the
+ * screen here costs four words and saves a search through Settings.
  */
-export const FOLLOW_UP_INTRO = "Helix added a follow-up:";
+export const FOLLOW_UP_INTRO = "Helix added a follow-up (Settings, then Automations):";
 
 function computeDue(now: string, delayMinutes: number): { dueOn: string; dueAt: string } {
   const at = new Date(new Date(now).getTime() + delayMinutes * 60_000);
