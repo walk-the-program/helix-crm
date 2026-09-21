@@ -34,8 +34,16 @@ these by-hand checks.
       each other and with what `CHANGELOG.md` says shipped.
 - [ ] `CHANGELOG.md`'s Unreleased section has been turned into the new
       version's heading.
-- [ ] `main` is green at the commit you are about to tag: `js`, `rust`, and
-      `rust-audit` all passing in GitHub Actions.
+- [ ] `main` is green at the commit you are about to tag: `js`, `e2e`,
+      `rust`, and `rust-audit` all passing in GitHub Actions. `e2e` is the
+      Playwright suite, added by LR-LA F-LA-1 — before that it ran on nobody's
+      machine but a developer's, so "main is green" did not cover the UI at
+      all. Its first run on a runner has not happened yet; if it is red on a
+      fresh checkout for an environment reason rather than a real failure,
+      fix the job, do not tag around it.
+- [ ] `e2e-win` is green too, or you have accepted its absence knowingly: it
+      runs on push to main and is four smoke assertions, not coverage (see
+      "Windows" below and `tests/e2e-win/README.md`).
 
 Tagging, pushing, publishing the resulting draft release, and telling
 clients it exists are process steps, not hand-verification — see
@@ -230,3 +238,38 @@ calendar application, and a real clock.
 - [ ] Quit the app completely (not just close the window) and relaunch it.
       Confirm your workspace, its data, your theme, and your density
       setting are all exactly as you left them.
+
+## Windows: what is covered and what is not
+
+Added by LR-LA J13. This section exists because "e2e-win is green" reads like
+Windows coverage and is not.
+
+`tests/e2e-win` is **one spec file with four assertions**, run on
+`windows-latest` in CI against a **debug** build, not the `.msi`/`.exe` a
+client installs. It walks the three onboarding screens (business name +
+Landscaping, "Use this setup", "Start empty") and then checks: the window
+title is "Helix CRM", the sidebar renders a Today item, and the Today heading
+is on screen. That is the whole of it. `ci.yml` also runs `cargo test` on
+`windows-latest`, so the Rust unit tests do cover Windows.
+
+**Not covered by any automated suite on Windows**, and therefore hand checks
+on a Windows machine before a release goes to a client:
+
+- [ ] SmartScreen, the installer itself, and first launch from the installed
+      `.exe` rather than a debug binary.
+- [ ] Windows Credential Manager: the first prompt, a denied prompt, and the
+      prompt that returns after an unsigned update replaces the app identity.
+- [ ] The recovery key's Copy and Print on the real WebView2 control.
+- [ ] Backup, restore, and the second backup folder against real Windows
+      paths (spaces, a OneDrive-redirected `%APPDATA%`, a long path).
+- [ ] Everything this round built: payments and the Record payment dialog,
+      the Schedule and the .ics a Windows calendar opens, Settings →
+      Automations, the Sources report, and bulk actions. None of these has
+      ever been run on Windows by anything.
+- [ ] Attachments: dropping in a file, and the `attachments` folder beside
+      the database.
+- [ ] Workspace switching, and the workspace-removal procedure against a real
+      `%APPDATA%\com.clearpathdigital.helix` folder.
+
+Until a Windows client is actually being onboarded, the honest statement is
+that Helix is verified on macOS and smoke-tested on Windows.
