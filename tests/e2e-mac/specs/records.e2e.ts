@@ -692,6 +692,10 @@ test.describe("records screens", () => {
   }
 
   test("captures every screen, light and dark", async ({ page, helix }) => {
+    // A walk through every records screen in two themes and two densities.
+    // Long by design, and three times longer on GitHub's macOS runner, where
+    // its first CI run timed out mid-walk at the default 60 s.
+    test.slow();
     await page.goto("/");
     await waitForShell(page);
 

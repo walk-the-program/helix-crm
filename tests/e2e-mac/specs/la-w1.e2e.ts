@@ -575,7 +575,11 @@ test.describe("J3: website leads, the speed-to-lead rule, rotation, and Disconne
     ]);
     await page.getByRole("button", { name: "Poll now" }).click();
     // Nothing new: EXACT count stays 1, never 2.
-    await expect(page.getByText("Checked your website. Nothing new.")).toBeVisible();
+    // The runner can take longer than the toast's default expectation to get
+    // the poll round trip back (flaky once on the first CI run, green on retry).
+    await expect(page.getByText("Checked your website. Nothing new.")).toBeVisible({
+      timeout: 20_000,
+    });
     expect(Number(helix.bridge.query("SELECT count(*) FROM deals", [])[0][0])).toBe(1);
     expect(Number(helix.bridge.query("SELECT count(*) FROM contacts", [])[0][0])).toBe(1);
 
