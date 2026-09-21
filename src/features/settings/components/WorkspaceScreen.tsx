@@ -46,6 +46,7 @@ import {
   settingsKeys,
   useWorkspaceSettings,
 } from "@/features/settings/lib/queries";
+import { useVocabulary } from "@/app/vocabulary";
 
 /** The currencies a US or Canadian trade business actually invoices in. */
 const CURRENCIES = [
@@ -96,6 +97,7 @@ const SAMPLE_PHONE_BY_REGION: Record<string, { typed: string; digits: string }> 
 
 export function WorkspaceScreen() {
   const client = useQueryClient();
+  const vocabulary = useVocabulary();
   const { data, isLoading } = useWorkspaceSettings();
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
@@ -327,7 +329,10 @@ export function WorkspaceScreen() {
           footnote="Everything you added yourself stays where it is."
         >
           <SettingsRow
-            label="Example customers and jobs"
+            // `jobs` was hard-coded here, in a product whose whole vocabulary
+            // system exists so a dental practice never reads the word
+            // (LR-CS-RECHECK, F-CS-R-3).
+            label={`Example customers and ${vocabulary.lowerMany}`}
             hint="Helix put these in so the screens had something on them."
             field
           >
