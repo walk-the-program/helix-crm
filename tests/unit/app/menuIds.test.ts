@@ -51,7 +51,10 @@ function featureSources(): string {
 
 describe("the native menu's ids", () => {
   const features = featureSources();
-  const appCommands = readFileSync(join(repoRoot, "src", "app", "undo.ts"), "utf8");
+  // The shell's own commands live beside the registry, one module each.
+  const appCommands = ["undo.ts", "sidebarCommand.ts", "refresh.ts"]
+    .map((file) => readFileSync(join(repoRoot, "src", "app", file), "utf8"))
+    .join("\n");
   const everywhere = `${features}\n${appCommands}`;
 
   it("finds at least the menu we think we built", () => {

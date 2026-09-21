@@ -140,12 +140,16 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .map(|(id, text, accel)| item(app, id, text, Some(*accel)))
         .collect::<tauri::Result<Vec<_>>>()?;
     let toggle_theme = item(app, "toggle-theme", "Toggle theme", None)?;
+    // Cmd+R is claimed here, at the menu, so AppKit routes it to the command
+    // instead of the web view reloading the whole page.
+    let refresh = item(app, "refresh", "Refresh", Some("CmdOrCtrl+R"))?;
     let mut view_menu = SubmenuBuilder::new(app, "View");
     for view_item in &view_items {
         view_menu = view_menu.item(view_item);
     }
     let view_menu = view_menu
         .separator()
+        .item(&refresh)
         .item(&toggle_theme)
         .separator()
         .fullscreen()

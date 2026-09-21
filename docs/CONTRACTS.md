@@ -568,6 +568,16 @@ Wave 3 closed the seams between the features. This closes the seams between the
 features and the shell: three mechanisms every feature invented for itself,
 because the shell had no slot for them, are now the shell's job.
 
+### Fresh pages (2026-09-20)
+
+`src/app/queryClient.ts` runs with `staleTime: 0` and `refetchOnWindowFocus: true`: every
+screen that mounts refetches, and so does the app when it regains focus. `src/app/refresh.ts`
+adds `useRefreshOnNavigate(location)` (the shell invalidates every query on each route
+change, not on first render) and the app command `refresh` ("Refresh this page", `mod+r`,
+View menu, palette; `Cmd+R` is claimed by the menu in `menu.rs` so the web view never
+reloads). A feature must not set a long `staleTime` on its own queries to "save work":
+reads are local and cheap, and a stale number on screen is the bug the owner reported.
+
 ### The keys the shell binds
 
 **`FeatureCommand.shortcut` is a binding, not a label.** The shell installs one

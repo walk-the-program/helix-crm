@@ -46,6 +46,7 @@ import {
   PALETTE_SHORTCUT,
 } from "@/app/CommandPalette";
 import { TOGGLE_SIDEBAR_EVENT, TOGGLE_SIDEBAR_SHORTCUT } from "@/app/sidebarCommand";
+import { useRefreshOnNavigate } from "@/app/refresh";
 import {
   navGroupPosition,
   type FeatureNavItem,
@@ -340,6 +341,7 @@ export function deriveViewTitle(
 
 export function Shell({ registry, workspace }: ShellProps) {
   const [location, navigate] = useLocation();
+  useRefreshOnNavigate(location);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const routes = useMemo(() => allRoutes(), []);
   const navItems = useMemo(() => allNavItems(), []);

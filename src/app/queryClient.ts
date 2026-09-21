@@ -1,19 +1,22 @@
 /**
  * The TanStack Query client.
  *
- * Everything here is local SQLite, so there is no network latency to hide and
- * no reason to refetch on window focus. The cache is cleared after every
- * db_open (launch, restore, workspace switch), because the rows behind it
- * belong to a different file from that moment on.
+ * Everything here is local SQLite, so a refetch costs milliseconds and the
+ * cached rows stay on screen while it runs. That is why nothing is treated as
+ * fresh for long: every screen that mounts asks again (staleTime 0), the app
+ * asks again when it regains focus, and `src/app/refresh.ts` invalidates on
+ * every route change and on the owner's own Refresh. The cache is cleared
+ * after every db_open (launch, restore, workspace switch), because the rows
+ * behind it belong to a different file from that moment on.
  */
 import { QueryClient } from "@tanstack/react-query";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 0,
       gcTime: 5 * 60_000,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
       refetchOnReconnect: false,
       retry: false,
     },
