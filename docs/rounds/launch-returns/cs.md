@@ -384,3 +384,161 @@ For the phases that come next:
 - Product expansion should know that Today now has **three** states, not two, and that the
   third one (`records`, nothing yet to chase) is the screen a brand-new paying client will
   spend his first afternoon looking at.
+
+---
+
+# Recheck after product expansion (LR-CS-RECHECK)
+
+TASK: LR-CS-RECHECK (parent: Fable) · ATTEMPT 1 · PACKET REV 1
+STATUS: **submitted**
+Base: `e11279d`. Revision this section describes and was verified at: `9ce26c4`.
+No Sonnet children; the lead did this alone. 6 commits, by pathspec.
+
+The question this recheck had to answer is narrower than the phase's: the
+expansion added payments, a Schedule, automations, a Sources report and bulk
+actions, all of it good work. Did any of it land on the path a brand-new client
+walks on install day, and does the product still tell that client the truth
+about itself now that there is a third more of it?
+
+## Re-measurement
+
+Same spec (`tests/e2e-mac/specs/csWalk.e2e.ts`), same fresh workspace, same
+52-row imperfect CSV, port 4290, `dist-cs`.
+
+| | CS phase (`c37b955`) | recheck (`9ce26c4`) |
+|---|---|---|
+| Actions to the first meaningful outcome | 21 | **21** |
+| Screens crossed to it | 6 | **6** |
+| Actions for the whole ten-leg walk | 32 | **32** |
+| Frictions the walk recorded | 3 | **3** (the same three) |
+| Page errors / console errors | none | **none** |
+
+**The expansion added nothing to the path, and took nothing off it.** That is
+the right answer and it was not guaranteed: five new capabilities landed in the
+product and none of them put a step, a prompt or a decision between a new owner
+and his first moved job. The recovery-key card is still the first thing on
+Today and still will not let go until the key is kept. The three remaining
+frictions are the three already classified as Follow-ups in the phase above
+(F-CS-15 the board's save navigation, F-CS-16 Export not in the sidebar, F-CS-17
+Gatekeeper and the Keychain prompt); none is new and none is mine to fix.
+
+Today reads true with the new sections. `OutstandingLine` renders nothing when
+nothing is outstanding, `TodaySchedule` renders nothing on a day with nothing
+timed on it, and the three-state rule from F-CS-1 is unchanged — the walk's leg
+5 still gets "Your customers are in Helix" after the import rather than the
+first-run screen, with the new sections silent because there is nothing yet for
+them to report. Lead B wrote the render tests for both; I did not need to add
+to them.
+
+## Findings
+
+| # | class | finding | fix / verdict | evidence |
+|---|---|---|---|---|
+| **F-CS-R-1** | **verified, no defect** | **Do the two default-on automations fire on an import?** They must not: a 3,000-row install-day import that fired the lead rule would hand a brand-new client three thousand overdue calls on his first Today, and the product would have made itself useless in its first ten minutes. | **They do not.** The importers write through `insertStatement` into a batch; the two firing sites are `applyLeadPage` (a page of leads off the website) and `deals.moveToStage` (a real stage change), and an import passes through neither. That is a structural guarantee rather than a conditional one, which is exactly the kind that survives until somebody refactors an importer to go "properly" through the repository — so it is now pinned at the level the owner would feel it rather than left to the arrangement of the code. | `322375a`, `tests/repo/onboarding/importDoesNotAutomate.test.ts`, 4 tests: the two rules ship on; a contacts import of 52 people creates **no tasks at all**; a deals import into a stage that *does* carry a follow-up creates none either; and a real move into that same stage fires it **once**, not again on a re-save. |
+| **F-CS-R-2** | **Required** | **`HELP_SECTIONS` pinned six sections while the screen rendered ten.** The other four were exported separately and spliced in by `HelpScreen`, each one added that way to get past a `toHaveLength(6)` assertion. Two consequences, and the second is the one that matters: the screen's *order* lived in the component while its *copy* lived in the data, and the test's quality rules — banned words, no emoji, the sentence budget, non-empty paragraphs — only ever ran over six sections out of ten. Nearly half of Help was never held to the standard the rest was, and the pattern was about to absorb two more sections this round. | `1c86956`. `HELP_SECTIONS` is the whole screen, in render order, and the only list; `HelpScreen` renders it; `HELP_TROUBLE` stays separate for its footer treatment and is still checked. The sentence budget survives as a per-section number with its reason written beside it, because a reference section for somebody else's developer and a procedure with a destructive step in it are not the same length as a topic. | The first thing the widened check found was a banned word ("just") sitting in copy proposed this round — which is the argument for the change, made by the change. `tests/unit/help/content.test.ts`, 21 passed, including a new test that fails if a section is ever exported to the screen without entering the list. |
+| **F-CS-R-3** | **Required** | **Two user-facing strings hard-coded "job"** in a product whose vocabulary system exists so a dental practice never reads that word: the Schedule's empty day ("No visit, job, reminder or bill falls on this day yet") and the sample-data row in Settings → Workspace ("Example customers and jobs"). The Schedule one is the worse of the two — it is the single sentence on an otherwise blank screen, and every other word on that screen already went through `kindLabel` and the vocabulary. The hook was already in scope. | `6f12e2c`, `9ce26c4`. | `tests/unit/schedule` 94 passed, including the existing `DayAgenda: vocabulary` tests; `tests/unit/settings` green. |
+| **F-CS-R-4** | **Required** | **A blank Schedule week said nothing about what the screen is.** An owner meeting it has not yet learned that it reads the records he already keeps rather than being a diary he now has to maintain — which is the whole idea of the feature and the one thing worth saying on an empty one. Without it the reasonable reading is "another calendar to keep up to date", which is the reason people abandon this kind of screen. | `6f12e2c`: a `HelpLink` to the new Schedule section, beside the sentence rather than replacing it. (`EmptyState variant="quiet"` renders `description ?? title`, so a description silently *replaces* the message — caught by the existing test, which is why it now carries both.) | `tests/unit/schedule/screens.test.tsx` unchanged and green. |
+| **F-CS-R-5** | **Required** | **Settings → Automations did not answer the question an owner arrives there with.** Two rules ship ON, so the first website lead a client ever gets also writes a task he did not. The customer's own timeline says which rule made it and why — that half is well done — but nothing said it anywhere he would look first, and nothing said the thing install day actually raises: whether importing his customer list will do the same. | `6f12e2c`: the screen's subtitle now says a rule only ever creates an ordinary task, that the customer's history names the rule and why, and that importing a spreadsheet sets none of them off, with a link to the Help section. | The claim about imports is the one held by F-CS-R-1's tests, not asserted on its own. |
+| **F-CS-R-6** | **Required** | **The example set had no booked visit.** Every sample task was dateless (`dueAt: null`), which was right until the Schedule shipped. A visit is a task with a time on it and nothing else (PX-6), so "Show me an example" filled every screen in the product except the newest one: a Schedule week showing jobs expected and invoices falling due, and not one thing actually booked. The emptiest screen in the demo a prospective client is shown is the feature you most want to show them. | `7746a38`: the loader promotes exactly one task — the first that is not done and is not already overdue — to nine in the morning of its own due day, for an hour, on site at the customer's company when there is one. Central, so ten trade sample files needed no new field. It carries the Sample tag like every other row, so it leaves with the rest of the example and the purge needed nothing new. | `tests/repo/onboarding` 34 passed, including `sampleDataRemoval.test.ts` unchanged. Payments were already covered by lead A: a sample paid invoice carries a real payment row, and the purge deletes payments before the documents they hang off (`payments.document_id` is `ON DELETE RESTRICT`). |
+| F-CS-R-7 | **Follow-up, escalated** | **The timeline line names Helix but not the switch.** `FOLLOW_UP_INTRO` reads "Helix added a follow-up: … because a new lead arrived", which answers *what wrote this* and not *how do I stop it*. An owner who does not want it has to guess that the answer is under Settings. | **Not fixed: `src/db/repos/automations.ts` is outside this recheck's ownership, and another agent had it modified in the shared checkout while I worked.** Proposed text below. | — |
+| F-CS-R-8 | Follow-up | **A task created by a rule is not marked as such on Today or on the Tasks screen.** `tasks.source` distinguishes them in the data and nothing shows it in a list; the only place that says so is the customer's own timeline, which is a click away from where the task is read. | Not fixed: marking a row is a component change in `src/features/records/**`, which this recheck may only touch for strings. Worth doing when somebody owns those files: a task the owner did not write should say so where he meets it. Classed Follow-up rather than Required because the timeline does answer it, the Help section now says where to look, and the install-day checklist has Walker say it out loud. | — |
+| F-CS-R-9 | observation | Today's "records" state (F-CS-1) names opening a job, setting a follow-up and logging a call, and does not mention the Schedule or payments. **Checked and deliberately left.** That screen exists to get a workspace from "customers are in" to "something is being chased"; booking a visit or recording a payment are not that, and a fourth and fifth card would make the one thing it is for harder to find. | no change | walk leg 5 |
+
+## Help, after integration
+
+The screen is now twelve sections in one checked list, in this order, with the
+three proposals merged rather than appended: `getting-started`,
+`customers-in` (+ bulk actions, from PX-C), `lead-to-won`, `quotes-invoices`
+(the payment sentence corrected — it described a dialog that no longer asks
+what it asked — plus the statement and the Revenue breakdown, from PX-A),
+**`follow-ups`** (new, PX-C), `today`, **`schedule`** (new, PX-B),
+`website-leads` (+ the Sources report, from PX-C), `website-leads-endpoint`,
+`backups`, `workspace-removal`, `shortcuts`.
+
+Two of PX-C's proposals were folded into sections that already existed rather
+than starting new ones: bulk selection belongs with getting customers in, and
+the Sources report with the website's leads. A new section for each would have
+been two more headings for an owner to scan past.
+
+"Reachable from where the owner is stuck" held: the blank Schedule week links
+to `schedule` (F-CS-R-4) and Settings → Automations links to `follow-ups`
+(F-CS-R-5). Payments needed nothing new — the Invoices empty states already
+deep-link to `quotes-invoices` from the CS phase, and that is the section the
+payment copy went into.
+
+## Strings changed
+
+| where | before | after |
+|---|---|---|
+| Schedule, empty day | "No visit, job, reminder or bill falls on this day yet." | the owner's own word for a job, from the vocabulary |
+| Schedule, empty week | "Nothing in the diary this week." | the same, plus "What turns up here" → Help |
+| Settings → Automations, subtitle | "Helix's own follow-up rules, switched on and worded your way." | + a rule only creates an ordinary task, the customer's history names it and why, importing a spreadsheet sets none of them off, and a link to Help |
+| Settings → Workspace, sample row | "Example customers and jobs" | the owner's own word |
+| Help, Quotes and invoices | "press Mark paid and say when it came in, how, and anything worth a note" | Mark paid settles in full in one click; Record payment logs a deposit or part with its own date, method and reference; each is its own line with the balance beside it — plus the customer statement and how Revenue counts |
+| Help, Getting your customers in | — | bulk selection on Contacts and Pipeline, and that one Undo takes it all back |
+| Help, Your website's leads | "The Reports screen shows which sources are actually bringing in the work" | the Sources report: how many won, what they were worth, how long they took |
+| Help, new | — | "Letting Helix chase the follow-up" and "Your week, and booking a visit" |
+
+Vocabulary swept across `src/features/{invoices,schedule,leads,settings,records}`
+for user-facing strings carrying a hard-coded job word; the two above were the
+only hits. No new error string in the five areas was found saying what happened
+without saying what to do next — the expansion leads did that work, and
+`AutomationsScreen`'s "Automations did not save. Try again." is the shape the
+rest of the product uses.
+
+## Verification
+
+At `9ce26c4`, all actually run by the lead:
+
+| command | result |
+|---|---|
+| `npm run typecheck` | clean |
+| `npx vitest run` | **226 files passed, 1 skipped · 2,760 passed, 3 skipped** |
+| `npm run build` | clean, `built in 902ms` |
+| `E2E_PORT=4290 E2E_OUT=dist-cs npx playwright test` on `onboarding`, `today`, `data`, `settings` | **43 passed** |
+| the walk, same port and dist | passed; no page errors, no console errors |
+| `dist-cs` | removed |
+
+There is no `help.e2e.ts`; Help is covered by `tests/unit/help/content.test.ts`
+(21) and exercised through `onboarding`, `smoke` and `depth`.
+
+**One honest note about the tree.** This is a shared checkout and other recheck
+agents were committing throughout. A `tsc` error in
+`tests/unit/data/automationSweepTimer.test.ts` and a modified
+`src/db/repos/automations.ts` passed through my working tree mid-run; both were
+another agent's in-flight work and both are resolved at the revision above.
+Every commit in this section was made by explicit pathspec; nothing of anyone
+else's was staged or committed by me. `git status` is not clean at hand-off, and
+what is dirty in it (`docs/OPERATIONS.md`, the regenerated `design/round3`
+report screenshots) is not mine.
+
+## Escalations
+
+1. **F-CS-R-7, one string I could not change.** `FOLLOW_UP_INTRO` in
+   `src/db/repos/automations.ts` currently opens every automation's timeline
+   entry with `"Helix added a follow-up:"`. Proposed:
+   `"Helix added a follow-up (Settings, then Automations):"` — it names the
+   switch at the exact moment the owner is asking where the task came from, and
+   it is the only place in the product where that question is already being
+   answered. `src/db/repos/automations.ts` is not in this recheck's ownership
+   and another agent had it modified while I worked; whoever owns it should make
+   this change or say why not. The constant is already exported precisely so
+   tests do not re-type the sentence.
+2. **F-CS-R-8** wants a visible marker on an automation-created task row in
+   `src/features/records/**`, which this recheck may only touch for strings.
+   Recorded above with its reason for being a Follow-up rather than Required.
+3. **Nothing needs Walker that did not already.** D-3 and D-4 are unchanged. The
+   expansion adds one sentence to the install-day conversation (automations are
+   on) and that is now a checklist section rather than something to remember.
+
+## Handoff
+
+`docs/ONBOARDING-CHECKLIST.md` has two new sections — automations before the
+first lead arrives, and the Schedule for a client who books visits — and its
+"what the client can do alone" list picks up payments, statements, follow-up
+rules and visits. The recovery key is still its own section and still the step
+to slow down for.
+
+`tests/repo/onboarding/importDoesNotAutomate.test.ts` is the one to keep. It is
+the only thing standing between a future refactor of an importer and a client's
+first Today filled with three thousand calls he never asked for.
