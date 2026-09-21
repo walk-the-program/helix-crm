@@ -662,6 +662,108 @@ async function invoicesRows(): Promise<{ headers: Header[]; rows: Row[] }> {
 }
 
 /** document_items has no deleted_at of its own; a line is excluded when its document is. */
+/**
+ * A deal's own priced service lines (LR-LA F-LA-6, second pass, found by the
+ * independent review of the first).
+ *
+ * `deals.csv` carries only the rolled-up Value. `document_items.csv` carries
+ * these lines only once a quote or an invoice was raised from the deal. So the
+ * whole priced breakdown of a job that is still open - the services on it, the
+ * quantities, the price the owner actually agreed as against the one the
+ * catalogue suggested, the discount that sits in the difference - was in no
+ * file a leaving client received. That is most of the value of a live
+ * pipeline, and by the same argument that made the visit's address Required
+ * it belongs in "everything".
+ *
+ * Both prices are exported, not just the agreed one: the gap between the
+ * catalogue price and what was charged is the owner's own pricing history and
+ * it exists nowhere else.
+ */
+async function dealItemsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
+  const headers = headersFor([
+    "Deal",
+    "Name",
+    "Description",
+    "Qty",
+    "Suggested Unit Price",
+    "Unit Price",
+    "Taxable",
+    "Kind",
+    "Interval",
+  ]);
+
+  const mainRows = await raw.query(
+    `SELECT di.id AS di_id, d.title AS di_deal_title, di.name AS di_name,
+            di.description AS di_description, di.qty AS di_qty,
+            di.suggested_unit_cents AS di_suggested_unit_cents,
+            di.actual_unit_cents AS di_actual_unit_cents,
+            di.taxable AS di_taxable, di.kind AS di_kind, di.interval AS di_interval
+     FROM deal_items di
+     JOIN deals d ON d.id = di.deal_id
+     WHERE di.deleted_at IS NULL AND d.deleted_at IS NULL
+     ORDER BY d.created_at ASC, di.position ASC`,
+  );
+
+  const rows = mainRows.map(
+    (r): Row => ({
+      Deal: str(r[1]),
+      Name: str(r[2]),
+      Description: str(r[3]),
+      Qty: Number(r[4] ?? 0),
+      "Suggested Unit Price": centsToDecimalString(Number(r[5] ?? 0)),
+      "Unit Price": centsToDecimalString(Number(r[6] ?? 0)),
+      Taxable: boolFromSql(r[7]),
+      Kind: productKindLabel(r[8]),
+      Interval: intervalLabel(r[9]),
+    }),
+  );
+
+  return { headers, rows };
+}
+
+/**
+ * Recurring billing, per deal (LR-LA F-LA-6, second pass).
+ *
+ * Excluded until now on the stale grounds that it was "not in the packet's
+ * list for A" - a reason from before recurring invoicing shipped. It is
+ * owner-set-up configuration: which job bills monthly, when the next one goes
+ * out, whether it is still running. A client moving a recurring customer to
+ * another system needs it, and nothing else in the export implies it.
+ */
+async function invoiceSchedulesRows(): Promise<{ headers: Header[]; rows: Row[] }> {
+  const headers = headersFor([
+    "Deal",
+    "Interval",
+    "Next Issue On",
+    "Last Issued On",
+    "Active",
+    "Created At",
+  ]);
+
+  const mainRows = await raw.query(
+    `SELECT s.id AS s_id, d.title AS s_deal_title, s.interval AS s_interval,
+            s.next_issue_on AS s_next_issue_on, s.last_issued_on AS s_last_issued_on,
+            s.active AS s_active, s.created_at AS s_created_at
+     FROM invoice_schedules s
+     JOIN deals d ON d.id = s.deal_id
+     WHERE s.deleted_at IS NULL AND d.deleted_at IS NULL
+     ORDER BY s.created_at ASC`,
+  );
+
+  const rows = mainRows.map(
+    (r): Row => ({
+      Deal: str(r[1]),
+      Interval: intervalLabel(r[2]),
+      "Next Issue On": str(r[3]),
+      "Last Issued On": str(r[4]),
+      Active: boolFromSql(r[5]),
+      "Created At": str(r[6]),
+    }),
+  );
+
+  return { headers, rows };
+}
+
 async function documentItemsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
   const headers = headersFor([
     "Document Number",
@@ -1070,12 +1172,14 @@ const ZIP_ENTRIES: readonly ZipEntry[] = [
   { fileName: "contacts.csv", jsonKey: "contacts", build: contactsRows },
   { fileName: "companies.csv", jsonKey: "companies", build: companiesRows },
   { fileName: "deals.csv", jsonKey: "deals", build: dealsRows },
+  { fileName: "deal_items.csv", jsonKey: "dealItems", build: dealItemsRows },
   { fileName: "tasks.csv", jsonKey: "tasks", build: tasksRows },
   { fileName: "activities.csv", jsonKey: "activities", build: activitiesRows },
   { fileName: "documents.csv", jsonKey: "documents", build: documentsRows },
   { fileName: "document_items.csv", jsonKey: "documentItems", build: documentItemsRows },
   { fileName: "services.csv", jsonKey: "services", build: productsRows },
   { fileName: "payments.csv", jsonKey: "payments", build: paymentsRows },
+  { fileName: "invoice_schedules.csv", jsonKey: "invoiceSchedules", build: invoiceSchedulesRows },
   { fileName: "tags.csv", jsonKey: "tags", build: tagsRows },
   { fileName: "tag_links.csv", jsonKey: "tagLinks", build: tagLinksRows },
   { fileName: "custom_fields.csv", jsonKey: "customFields", build: customFieldsRows },

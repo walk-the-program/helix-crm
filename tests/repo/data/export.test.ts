@@ -22,6 +22,7 @@ import * as recurring from "../../../src/db/repos/recurring";
 import * as templates from "../../../src/db/repos/templates";
 import * as savedViews from "../../../src/db/repos/savedViews";
 import * as attachments from "../../../src/db/repos/attachments";
+import * as dealItems from "../../../src/db/repos/dealItems";
 import {
   buildEntityCsv,
   buildEverythingZip,
@@ -620,6 +621,16 @@ describe("exportRun: the newly added zip tables (F-LC-4)", () => {
 // (internal bookkeeping, not the owner's data) and invoice_schedules (not in
 // the packet's list for A).
 //
+// deal_items.csv and invoice_schedules.csv also joined in LR-LA (F-LA-6,
+// second pass, raised by the independent review of the first). deals.csv
+// carries only a deal's rolled-up Value and document_items.csv only captures
+// its lines once a quote or invoice exists, so an open job's whole priced
+// breakdown - services, quantities, the price agreed against the price the
+// catalogue suggested - reached no file at all. invoice_schedules was excluded
+// on the stale grounds of "not in the packet's list for A", written before
+// recurring invoicing shipped; it is owner-set-up configuration and a client
+// moving a recurring customer needs it.
+//
 // attachments.csv joined the list in LR-LA (F-LA-6). It was excluded as
 // "binary files, not a CSV concern", which is true of the files and was then
 // read as true of the table: the result was that a leaving client got an
@@ -630,12 +641,14 @@ const ZIP_FILES = [
   "contacts.csv",
   "companies.csv",
   "deals.csv",
+  "deal_items.csv",
   "tasks.csv",
   "activities.csv",
   "documents.csv",
   "document_items.csv",
   "services.csv",
   "payments.csv",
+  "invoice_schedules.csv",
   "tags.csv",
   "tag_links.csv",
   "custom_fields.csv",
@@ -670,12 +683,14 @@ describe("exportRun: buildEverythingZip", () => {
         "contacts",
         "companies",
         "deals",
+        "dealItems",
         "tasks",
         "activities",
         "documents",
         "documentItems",
         "services",
         "payments",
+        "invoiceSchedules",
         "tags",
         "tagLinks",
         "customFields",
@@ -775,5 +790,73 @@ describe("exportRun: the attachments manifest", () => {
     const zip = await JSZip.loadAsync(bytes);
     const csv = (await zip.file("attachments.csv")?.async("string")) ?? "";
     expect(csv).not.toContain("wrong-file.pdf");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* LR-LA F-LA-6, second pass: a deal's own priced lines                        */
+/* -------------------------------------------------------------------------- */
+
+describe("exportRun: deal_items", () => {
+  /**
+   * The case that was silently missing. A job the owner has priced but not yet
+   * quoted has all of its money in `deal_items`; `deals.csv` carries only the
+   * rolled-up Value, and `document_items.csv` needs a quote or an invoice to
+   * exist first. So a live pipeline exported with its whole priced breakdown
+   * absent, which is most of what a pipeline is.
+   */
+  it("exports the priced services on a deal that was never quoted", async () => {
+    h = await createSeededHarness();
+    const pipeline = (await pipelines.list())[0];
+    const stage = (await stages.list(pipeline.id))[0];
+    const ada = await contacts.create({ firstName: "Ada", lastName: "Lovelace" });
+    const deal = await deals.create({
+      title: "Back fence replacement",
+      stageId: stage.id,
+      contactId: ada.id,
+    });
+
+    const service = await products.create({
+      name: "Cedar fence panel",
+      unitPriceCents: 12_000,
+      kind: "one_time",
+      taxable: true,
+    });
+    const line = await dealItems.addFromProduct(deal.id, service.id, { qty: 6 });
+    // The owner knocked the price down on the day. The gap between what the
+    // catalogue suggested and what was agreed is the owner's own pricing
+    // history and lives nowhere else, so both columns are exported.
+    await dealItems.update(line.id, { actualUnitCents: 10_500 });
+
+    const { bytes } = await buildEverythingZip();
+    const zip = await JSZip.loadAsync(bytes);
+    const csv = await zip.file("deal_items.csv")?.async("string");
+    expect(csv, "deal_items.csv is missing from the zip").toBeTruthy();
+
+    const { headers, rows } = await csvRows(csv ?? "");
+    expect(headers).toEqual([
+      "Deal",
+      "Name",
+      "Description",
+      "Qty",
+      "Suggested Unit Price",
+      "Unit Price",
+      "Taxable",
+      "Kind",
+      "Interval",
+    ]);
+
+    const row = rows.find((r) => r[1] === "Cedar fence panel");
+    expect(row, "the priced line is not in the export").toBeTruthy();
+    expect(row?.[0]).toBe("Back fence replacement");
+    expect(row?.[3]).toBe("6");
+    expect(row?.[4]).toBe("120.00");
+    expect(row?.[5]).toBe("105.00");
+    expect(row?.[6]).toBe("true");
+    expect(row?.[7]).toBe("One time");
+
+    // And no quote or invoice was ever raised, which is the whole point.
+    const documentItemsCsv = (await zip.file("document_items.csv")?.async("string")) ?? "";
+    expect(documentItemsCsv).not.toContain("Cedar fence panel");
   });
 });
