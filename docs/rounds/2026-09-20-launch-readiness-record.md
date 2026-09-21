@@ -91,6 +91,8 @@ Model confirmed: Helix is free; the site token is the only link to a paying clie
 
 | when | what | result |
 | --- | --- | --- |
+| 22:xx | Release gate: CI on 2e035c6 green incl. the new `e2e` job (202 e2e on the runner), e2e-win green; tag v0.2.0 pushed | round closed |
+| 21:xx | LA gate (Fable, 0689f9c): typecheck clean; vitest 235 files / 2798 passed / 3 skipped; cargo 125; build clean; LA's own full e2e 202 passed at 82c06fc | LA accepted |
 | 18:xx | PX gate (Fable, e11279d + fixes): typecheck clean; vitest 220 files / 2718 passed / 3 skipped; cargo 123; build clean; `drizzle-kit generate` reports no schema changes after the snapshot repair | PX accepted; rechecks dispatched |
 | 16:xx | CS gate (Fable, 889c142): typecheck clean; vitest 186 files / 2373 passed / 3 skipped; cargo 123; build clean; tree clean | CS accepted |
 | 15:xx | REV gate (Fable, 5c358a6): typecheck clean; vitest 180 files / 2325 passed / 3 skipped; cargo 123; build clean; tree clean | REV accepted |
@@ -112,4 +114,4 @@ Verdict: **Ready with specific operating conditions**, no blockers. J1–J14 exe
 
 **Deferred improvements (recorded in the returns):** delete-workspace command (F-SEC-27), backoff persistence (F-SEC-29), export-moment plaintext disclosure for statement/.ics (F-SEC-32, F-SEC-R follow-ups), external_id re-keying on a site address change (F-REV-12), payments import, deposit request on a quote, OS notifications, multi-select on the pipeline board, quadratic wrapText (F-SEC-25), F-LA-7 boot-path fix, `tags.setTags` peers audited for the same undo shape.
 
-**Push:** one push of main by Fable after this record; tag v0.2.0 only after CI including the `e2e` job is green (C4).
+**Push and release:** main pushed at 941ca78 (release 0.2.0 bump), then fd73b6b (CI headroom for the screen-capture walk and one toast wait after the new `e2e` job's first run timed out on the macOS runner) and 2e035c6 (Walker's request after seeing 0.2.0: pages refetch on open/switch/focus, Refresh command on mod+R / View menu / palette). CI on 2e035c6: js, rust (macOS + Windows), e2e, Security audit, rust-audit all green; e2e-win green. **C4 is cleared.** Tag v0.2.0 set on 2e035c6; GitHub Release builds the installers from it. Local 0.2.0 app installed from the same commit.
