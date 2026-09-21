@@ -322,17 +322,46 @@ export async function loadSampleData(
 
     /* -- tasks ------------------------------------------------------------ */
 
-    for (const task of set.tasks) {
+    /*
+     * One of them is a booked visit (LR-CS-RECHECK, F-CS-R-6).
+     *
+     * Every sample task used to be dateless - `dueAt: null` - which was right
+     * until the Schedule shipped. A visit is a task with a time on it and
+     * nothing else (decision PX-6), so a sample set with no timed task left
+     * the Schedule week showing jobs expected and invoices falling due and
+     * not one thing actually booked: the newest screen in the product, and
+     * the emptiest one in the demo the owner is shown.
+     *
+     * Rather than give ten trade sample files a new field each, the loader
+     * promotes exactly one task: the first one that is not done and is not
+     * already overdue, at nine in the morning of the day it is due, for an
+     * hour. It carries the Sample tag like every other row, so it leaves with
+     * the rest of the example and needs nothing new in the purge.
+     */
+    const visitIndex = set.tasks.findIndex((t) => !t.done && t.dueInDays >= 0);
+
+    for (const [i, task] of set.tasks.entries()) {
       const stamps = stampNew();
+      const isVisit = i === visitIndex;
+      const companyId = task.companyKey ? companyIds.get(task.companyKey) ?? null : null;
+      const companyName = task.companyKey
+        ? set.companies.find((c) => c.key === task.companyKey)?.name ?? null
+        : null;
       const row = {
         ...stamps,
         createdAt: daysFromNow(-Math.max(1, Math.abs(task.dueInDays))),
         title: task.title,
         dueOn: dateFromNow(task.dueInDays),
-        dueAt: null,
+        // 09:00 on its own due date, in this machine's timezone, so the row
+        // reads "9:00 AM" on the owner's clock rather than shifting a day.
+        dueAt: isVisit
+          ? new Date(`${dateFromNow(task.dueInDays)}T09:00:00`).toISOString()
+          : null,
+        durationMinutes: isVisit ? 60 : null,
+        place: isVisit && companyName ? `On site at ${companyName}` : null,
         doneAt: task.done ? daysFromNow(-1) : null,
         contactId: task.contactKey ? contactIds.get(task.contactKey) ?? null : null,
-        companyId: task.companyKey ? companyIds.get(task.companyKey) ?? null : null,
+        companyId,
         dealId: task.dealKey ? dealIds.get(task.dealKey) ?? null : null,
         deletedAt: null,
       };

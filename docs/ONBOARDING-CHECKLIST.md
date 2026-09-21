@@ -140,6 +140,41 @@ the one to slow down for.
       here is not a partial mess to clean up by hand, but it is still
       easier to choose right once than to re-run it.
 
+## Automations, before the first lead arrives
+
+Two follow-up rules ship switched on, so the first website lead this client
+ever gets will also put a task on their Today that they did not write. Sixty
+seconds here saves the call that starts "something added something to my list".
+
+- [ ] Open **Settings → Automations** with the client and read the three
+      rules out: a call an hour after a website lead arrives (on), a nudge
+      three days after a quote goes out (on), and an overdue-invoice reminder
+      (off until they want it). The words are theirs to change, right there.
+- [ ] Say the two things that stop it being spooky: whatever a rule creates is
+      an ordinary task they can tick off or delete, and the customer's own
+      history names the rule that made it and why.
+- [ ] Say the one thing that would otherwise worry them on install day:
+      **importing a spreadsheet sets none of this off.** Three thousand
+      imported customers do not become three thousand calls. This is held by
+      `tests/repo/onboarding/importDoesNotAutomate.test.ts`, not by luck.
+- [ ] If the client says outright they do not want Helix adding anything,
+      switch both on-by-default rules off while you are sitting there. It
+      costs nothing and it is their list.
+
+## The Schedule, if this client books visits
+
+- [ ] Open **Schedule** and show them the week: it is read from the records
+      they already keep, so there is nothing separate to maintain. Nothing to
+      set up, nothing to migrate.
+- [ ] Book one real visit with them, from their own diary, so they have done
+      it once with someone in the room. Point out that a visit is a task with
+      a time on it — which is why it also turns up on Today and why deleting
+      one puts it in the Trash like anything else.
+- [ ] **Add to calendar** if they keep a calendar: it saves a standard .ics
+      file that their own calendar app takes from there. Helix does not
+      connect to a calendar account and never will — worth saying out loud,
+      because most tools they have used do.
+
 ## Before you leave
 
 - [ ] Confirm the banner on **Settings → Website** (if connected) says
@@ -194,4 +229,9 @@ version, not a second copy of the numbers.
 - Choosing a new backup folder, or moving it, without Walker if their
   storage situation changes.
 - Deciding on their own to load or remove the sample data, at any time —
-  not only during setup.
+  not only during setup. The example set now includes one booked visit, one
+  recorded payment and the balances that follow from it, so the Schedule,
+  Invoices and Revenue screens all have something true on them in a demo.
+- Recording payments against an invoice, part or whole, and printing a
+  customer statement; changing their own follow-up rules, or switching them
+  off; booking and exporting visits. None of these needs Walker.
