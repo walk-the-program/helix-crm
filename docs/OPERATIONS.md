@@ -4,6 +4,10 @@ What to do when something goes wrong with a running Helix install, and the
 operational work that keeps Helix running at all. This is the manual for the
 worst moment, not a design document: lead with the symptom, then the fix.
 
+Procedures 11 to 13 cover the screens product expansion added (payments, the
+Schedule and its calendar export, and the follow-up automations); everything
+before them predates it and was rechecked against the new schema.
+
 This is not `tests/RELEASE-CHECKLIST.md`. That file is what you verify by
 hand on a real machine before you tag a release. This file is what you do
 after a release is out and something breaks, plus the recurring jobs nobody
@@ -442,6 +446,31 @@ prompted it is really gone and the expected state is back, per
 **What recovers the data if the restore itself goes wrong.** The
 `pre-restore` backup taken in step 2, from Settings > Backups, the same way.
 
+**Restoring a backup older than the running Helix.** This is the normal case
+after product expansion and it works: the restore copies the old file into
+place, reopens it, and `openWorkspace` runs the migrator on it exactly as it
+would at launch. A backup taken before migration 0006 therefore arrives with
+its payments table created and the backfill run, so every money figure reads
+the same after the restore as it did before the upgrade. The migrator takes its
+own `pre-migration` backup first, so such a restore leaves two safety copies
+behind, not one.
+
+**Restoring a backup NEWER than the running Helix — the one trap.** The order
+above matters: the file is copied over the live database *before* anything
+tries to open it. So if the chosen backup came from a newer Helix (an owner who
+downgraded, or a file carried from a machine on a later version), the copy
+succeeds, the reopen runs the migrator, and the migrator refuses it —
+"This workspace was made by a newer version of Helix" (procedure 1). The
+workspace is now a file this build will not open, and the live data it
+replaced is gone from that path.
+
+It is not lost: the `pre-restore` backup taken in step 2 is exactly the file
+that was there a moment earlier. The way out is to install the newer Helix, or
+to restore that `pre-restore` backup — which is why step 2 exists and why it
+runs before the close rather than after it. Nothing checks the backup's version
+before copying it, because doing so means opening the file while the live one
+is still open; recorded as F-OPS-R-5 rather than built.
+
 **Mark: tested**, for everything except clicking Restore in a real running
 app and watching the window, which still **needs access**.
 
@@ -708,6 +737,136 @@ folder — everything else on the screen only reads.
 and the log configuration in `src-tauri/src/lib.rs`; ran the redaction test
 above for the log-content claim. Did not operate a live Diagnostics screen
 or read a real `helix.log` off disk in this session.
+
+---
+
+## 11. A payment was recorded in error
+
+**What the owner sees.** The invoice page carries a Payments card listing every
+payment against that invoice, oldest first, with a running Balance column so it
+reads top to bottom the way the money actually moved
+(`src/features/invoices/components/PaymentsCard.tsx`). A payment recorded for
+the wrong amount, on the wrong invoice, or twice, shows up there.
+
+**What the owner does.**
+
+1. Open the invoice. On the Payments card, use the pencil to correct an amount,
+   a date, a method or a reference; use the bin ("Remove payment") to take the
+   payment off entirely.
+2. A removal is soft and reversible. The toast carries **Undo** for ten
+   seconds; taking it calls the payments repository's own `restore`, which is
+   what recomputes the invoice's status - so the invoice goes back to `paid` or
+   `partial` exactly as it was.
+3. Past the ten seconds, record the payment again from **Record payment**. The
+   removed one is in Trash and is purged after 30 days like anything else.
+4. To undo the whole thing - "I marked this paid and it was never paid" - use
+   **Mark unpaid** on the invoice, which clears every payment off it in one
+   write. The status follows the payments, so there is no separate status to
+   correct afterwards and nothing can disagree with anything.
+
+**What this changes elsewhere, so nobody is surprised.** Collected, Outstanding,
+the Revenue report, Receivables aging and the customer statement are all sums
+over the payments table now (PX-5), so they all move the moment the payment
+does. There is no cache to clear and no figure that lags.
+
+**What Walker does.** Nothing, unless the owner asks. This is entirely
+self-service and reversible.
+
+**What recovers the data if it goes wrong.** The payment is soft-deleted, so
+Trash for 30 days. Past that, the backup from before the mistake (procedure 7).
+
+**Mark: tested**, for the mechanism.
+`npx vitest run tests/repo/payments` exercises create, update, remove, restore
+and `clearForDocument` against a real database, and
+`tests/repo/payments/backfill.test.ts` holds every money figure to being
+identical before and after the upgrade that introduced the table. Clicking the
+bin in a real window is a checklist line, not a test.
+
+---
+
+## 12. An automation fired when it should not have
+
+**What the owner sees.** A task on Today that they did not write - most often
+"Call {name} about their request" an hour after a website lead, or a follow-up
+three days after a quote went out. Tasks an automation created are marked as
+such (`tasks.source = "automation"`), so they can be told apart from the
+owner's own.
+
+**What the owner does.**
+
+1. Delete the task. It is an ordinary task; deleting it changes nothing about
+   the rule.
+2. If the rule itself is wrong, open **Settings > Automations**. Each of the
+   three rules - new lead follow-up, quote follow-up, overdue invoice follow-up
+   - has a switch, a delay, and its own wording. Switch off the one that is
+   firing, or change the delay so it stops arriving too early.
+3. Two rules ship on (new lead, quote follow-up) and one ships off (overdue
+   invoice). That is deliberate: the first two are about work that is genuinely
+   new, and the third would otherwise greet an owner who imported a year of
+   history with a task per old invoice.
+
+**What will not happen, so it is not worth looking for.** An import never fires
+a rule. This is structural rather than conditional - the importers write
+through a batch, and the firing sites are a lead arriving, a quote being marked
+sent, and a real stage move - and it is pinned by a test that asserts the
+absence of the rows, because an import of three thousand old customers firing
+the lead rule would have made the product useless in its first ten minutes
+(`tests/repo/onboarding/importDoesNotAutomate.test.ts`).
+
+**A rule cannot fire twice for the same thing.** Every rule checks the
+`automation_runs` ledger before it does any work and writes its ledger row in
+the same statement batch, and that table has a unique index on (kind, subject).
+So a re-poll, a second stage move into a stage the job already sits in, or a
+sweep that runs twice all produce nothing the second time.
+
+**What Walker does.** If the owner says "Helix keeps making me tasks", the
+question is which of the three rules, and the answer is one switch in Settings.
+Nothing needs a rebuild and nothing needs Walker's machine.
+
+**Mark: tested.** `npx vitest run tests/repo/leads/applyLeads.test.ts
+tests/repo/onboarding/importDoesNotAutomate.test.ts` covers firing, not firing,
+and firing once. The daily overdue sweep's own beat - that it runs again a day
+later without the app being relaunched, skips while an import holds the write
+lock, never overlaps itself and survives throwing - is
+`tests/unit/data/automationSweepTimer.test.ts`, 7 passed.
+
+---
+
+## 13. The Schedule, and what a calendar export does not do
+
+**What it is.** The Schedule screen answers "what is on this week" by reading
+what is already in the workspace: tasks with a date or a time, jobs with an
+expected date, recurring reminders, invoice due dates and invoice-schedule
+issue dates. There is no appointments table and nothing is duplicated - a visit
+is a task with a time, a place and a duration.
+
+**Exporting one item to a calendar.** Any dated row offers **Add to calendar**,
+which writes a `.ics` file wherever the owner chooses. Their calendar imports
+it. The UID is stable per row and per kind, so exporting the same visit twice
+replaces the first entry rather than creating a second one.
+
+**What it does not do, and will not.** There is no calendar sync, in either
+direction. Moving the event in Apple Calendar or Google Calendar does not move
+it in Helix, and moving it in Helix does not move the entry already exported.
+Nothing subscribes, nothing refreshes, and there is no feed URL. This follows
+from the product promise rather than from a missing feature: Helix does not
+talk to anybody's server unless the owner turns on AI or connects their own
+website.
+
+So the operational answer to "my calendar and Helix disagree" is always the
+same: Helix is the record, the calendar entry is a copy that was true when it
+was exported, and re-exporting the item replaces it.
+
+**What Walker does.** Say the above, once, at onboarding. An owner who expects
+two-way sync and finds out three weeks later is a support call; an owner who
+was told at the start uses the export as the one-way convenience it is.
+
+**Mark: inspected only.** The file's text is built by `src/lib/ics.ts` and is
+covered by its own unit tests, and `tests/e2e-mac/specs/px-b-schedule.e2e.ts`
+drives the week, a visit and the export through the mocked harness. What is
+inspected rather than tested is the part that matters here - what a real
+calendar application does with the file - and that needs a real machine. It is
+a checklist line.
 
 ---
 
@@ -1064,6 +1223,9 @@ a CI check, or an honest "nothing catches this today."
 | 9 | Confirm a client's backups are actually being written | Occasional, when something feels off | No telemetry reaches Walker; the only way to know is to ask the client to open Settings > Diagnostics and read "Last backup," or to read `helix.log` (procedure 10), which logs every backup event | Documented in procedure 10 and here; this is the existing Diagnostics screen doing the job, nothing new needed |
 | 10 | Keep the Rust and npm dependency trees free of new advisories between releases | Continuous | `ci.yml`'s new `npm audit` and `rust-audit` jobs (part A of this task) only run on `push`/`pull_request` — a newly published advisory for a dependency that has not changed sits uncaught until the next commit touches the repo | **Finding, class Follow-up** (below) — a `schedule`-triggered audit workflow would close this, but adding one was outside this task's explicit scope and changes `rustsec/audit-check`'s behavior (it opens GitHub issues on a scheduled run, never on push/PR) — a decision for the lead, not made unilaterally here |
 | 11 | Unsigned installers re-prompt for keychain access on every rebuild, and clients see a Gatekeeper/SmartScreen warning on every first run | Every release, forever, until TODO E5 (code signing) | Nothing breaks — it is a known, accepted cost documented in `sec.md`'s escalations and in `tests/RELEASE-CHECKLIST.md`'s "Keychain and secrets" section, restated here so it is not mistaken for a new bug during support | Already tracked as TODO E5, a spending decision; not re-litigated here |
+| 12 | Say at onboarding that the calendar export is one-way | Once per client | An owner who assumes their calendar syncs back moves a visit in Apple Calendar, finds Helix unchanged three weeks later, and calls it a bug. Nothing in the product can catch this, because nothing is wrong | Procedure 13 above, plus a line in `docs/ONBOARDING-CHECKLIST.md`'s remit (not this pass's file to edit — flagged to Fable) |
+| 13 | Check the three automation rules suit the client before handing the machine over | Once per client, at install | Two rules ship ON. For a client who works from a written quote and never chases, the quote follow-up is noise from day one, and noise on Today is how Today stops being read | Added to `tests/RELEASE-CHECKLIST.md`'s new "Product-expansion screens" section as a hand check; the switches are in Settings > Automations (procedure 12) |
+| 14 | Nothing tells Walker a client's overdue-invoice sweep is not running | Continuous | The sweep only runs while Helix is open, and it is the one rule that is off by default. A client who switches it on and then works with the app shut most of the day gets fewer follow-ups than they expect, and there is no signal either way | Nothing catches this today, by design (no telemetry). The daily beat added this pass (F-OPS-R-1) is what makes "while Helix is open" actually mean every day rather than every launch |
 
 ### Cut and ship a release, end to end (procedure, for task 1-4 above)
 

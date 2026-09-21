@@ -153,6 +153,59 @@ to end."
       dialog appears, and the resulting file (CSV, or the zip plus JSON)
       actually exists on disk afterward and opens correctly.
 
+## Product-expansion screens
+
+Everything below is a real-window check for a screen that shipped after the
+first release. The mocked harness drives all of them, so what is left here is
+only what a mocked Tauri layer cannot answer: a real save dialog, a real
+calendar application, and a real clock.
+
+### Payments
+
+- [ ] On a sent invoice, use **Record payment** for part of the total.
+      Confirm the invoice reads `partial`, the Payments card shows the
+      running balance, and Receivables shows the remainder rather than the
+      whole amount.
+- [ ] Pay the rest. Confirm the invoice flips to `paid` on its own, with no
+      separate status to set.
+- [ ] Remove a payment and take the toast's **Undo** within ten seconds.
+      Confirm the invoice's status goes back to what it was.
+- [ ] Remove a payment and let the toast expire. Confirm the invoice is owed
+      again and the removed payment is in Trash.
+- [ ] Open the customer statement for a contact with several invoices and
+      confirm the totals match the invoices they came from.
+
+### Schedule
+
+- [ ] Add a visit with a time, a place and a duration. Confirm it appears on
+      the right day of the week strip, at the right time.
+- [ ] Use **Add to calendar** on it. Confirm the OS save dialog appears, the
+      `.ics` file exists on disk afterward, and **double-clicking it actually
+      imports into the real calendar app** with the right title, time and
+      duration. This is the one thing no suite can check.
+- [ ] Export the same visit again and confirm the calendar REPLACES the
+      entry rather than adding a second one.
+- [ ] Change the visit's time in Helix, and confirm the already-exported
+      calendar entry does NOT move — this is expected, and is what the owner
+      has to be told at onboarding (`docs/OPERATIONS.md` procedure 13).
+
+### Automations
+
+- [ ] Open **Settings > Automations**. Confirm new-lead follow-up and quote
+      follow-up are ON and overdue-invoice follow-up is OFF.
+- [ ] Mark a quote sent, and confirm one follow-up task appears with the
+      wording from that rule, dated by its delay.
+- [ ] Mark the same quote sent again and confirm no second task appears.
+- [ ] Switch a rule off, repeat its trigger, and confirm nothing is created.
+- [ ] Reword a rule's title, trigger it, and confirm the new wording is what
+      lands on the task.
+
+### Sources report
+
+- [ ] Open the Sources report with a real period selected and confirm the
+      counts add up to the jobs in that period, and that jobs with no source
+      are shown as such rather than silently dropped.
+
 ## Opener actions
 
 - [ ] Tap a phone number and confirm the OS's phone/FaceTime/dialer
