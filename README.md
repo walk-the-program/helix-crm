@@ -33,15 +33,33 @@ and your bank's app; Helix is built to feel that ordinary. It is not an
   stage moved, an invoice sent).
 - **Services, quotes and invoices**: keep a price list of what you sell, put
   services on a job, turn the job into a quote or an invoice as a branded
-  PDF, mark it sent and paid, and see who owes you what and how late it is.
-  Every invoice belongs to a job, so the money on a job, a customer and the
-  reports always agrees.
+  PDF, and see who owes you what and how late it is. Every invoice belongs
+  to a job, so the money on a job, a customer and the reports always agrees.
+- **Payments**: record a deposit, a partial payment, or the full amount
+  against an invoice, each with its own date, method and reference. Helix
+  works out the balance and the status (sent, part paid, paid) for you; a
+  customer's own page adds up what they still owe across every invoice, and
+  a Statement PDF lists every invoice and payment for a period.
 - **Reminders**: work that comes back around (a spring cleanup every year, a
   filter change every three months) shows up on Today a week before it is due.
 - **Templates**: the text messages and emails you send again and again, with
   the customer's name and details filled in.
 - **Tasks and follow-ups**: a due date, a done checkbox, snooze to tomorrow
   or next week. Nothing fancier than that.
+- **Schedule**: your week at a glance, in day or week view: visits you've
+  booked, jobs you expect to start, reminders, and invoices and bills coming
+  due, all read from records you already keep. Book a timed visit with a
+  place and a length, and add any one of them to your own calendar as a
+  standard .ics file.
+- **Automations**: switch on a call reminder an hour after a website lead
+  arrives, a follow-up a few days after a quote goes out, or a nudge when an
+  invoice runs overdue, plus a follow-up on any pipeline stage. Every one
+  just writes an ordinary task, so it behaves like everything else on Today
+  and the Tasks screen; edit the wording or the delay, or turn any of them
+  off, in Settings.
+- **Bulk actions**: on the Contacts and Pipeline lists, select a run of rows
+  with a click and a shift-click, then tag, retag a company, move stage, or
+  trash them all in one step and one undo.
 - **Today screen**: what's due, new leads from the last week, and who's gone
   quiet, the moment you open the app.
 - **Instant search**: press Cmd/Ctrl+K and start typing. Results come back
@@ -61,7 +79,8 @@ and your bank's app; Helix is built to feel that ordinary. It is not an
   away.
 - **Reports**: revenue (quoted, won, invoiced, collected), deals (new,
   won rate, time to win), contacts and companies, receivables and pipeline
-  value by stage, as charts and tables with a period picker.
+  value by stage, and leads by source (how many you win, what they're
+  worth, and how fast), as charts and tables with a period picker.
 - **Duplicate detection**: Helix finds the same person entered twice and
   walks you through merging them, with a 30-day undo.
 - **Attachments**: drop in a photo, a signed quote, or a contract. It's

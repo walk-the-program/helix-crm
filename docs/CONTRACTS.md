@@ -1137,3 +1137,162 @@ new-machine journey, and every refusal leaving no folder and no keychain entry b
 `src-tauri/src/recovery.rs` (7) for the format and the parser, `src-tauri/src/backups.rs`
 (5) for the mirror. On the TypeScript side, `tests/unit/data/recoveryKey.test.tsx` (10)
 and `tests/unit/data/backupCopyOut.test.ts` (6).
+
+## Payments, schedule and automations (LR-PX, 2026-09-20, binding)
+
+### Payments and the money model
+
+`payments` (`drizzle/0006_payments.sql`, `src/db/repos/payments.ts`) hang off invoices
+only. A payment carries `amountCents` (CHECKed positive), a local calendar day `paidOn`
+(the day the money arrived), `method` CHECKed against `cash | check | card | transfer |
+other`, an optional `reference` and `note`, and `dealId` copied from the document when
+the payment is written. `documentId` is `ON DELETE RESTRICT`: nothing may destroy the
+record of what a customer paid as a side effect of deleting something else, so every
+path that removes an invoice deletes its payments first, on purpose
+(`documents.purgePaymentsOf`, called from `documents.purge` and `trash.purge`). Soft
+delete does **not** cascade: a trashed invoice keeps its payments, invisible because
+every money query joins `documents` and tests `deleted_at IS NULL`, and a restore brings
+them back unchanged.
+
+An invoice's status is **derived, never typed**. `documents.deriveInvoiceStatus(totalCents,
+paidCents)` is the one rule: `paid` when payments >= total, `partial` when 0 < payments <
+total, `sent` at zero. `documents.recomputeInvoiceStatus` writes it inside the same
+transaction as every payment create, edit, delete and restore. `INVOICE_STATUSES` is
+`draft | sent | partial | paid | void`, exported as `InvoiceStatus` from `documents.ts`.
+`documents.markPaid` and `markUnpaid` no longer exist: "Mark paid" is
+`payments.recordFullPayment(id)` (a payment for the balance, dated today) and "Mark
+unpaid" is `payments.clearForDocument(id)`. This supersedes the deposit-invoice ruling
+recorded elsewhere for this product: a deposit is now a partial payment on the one
+invoice, not a second invoice, though `createDeposit` and the Deposit dialog still exist
+and still work for an owner who prefers two documents.
+
+A payment is refused, with a `ValidationError` naming the fix, when: the document is a
+quote; the invoice is a draft; the invoice is void; the amount is zero, negative, or
+exceeds the remaining balance (unless the caller passes `allowOverpayment: true`, and
+the refusal names the balance); or `paidOn` is in the future. Undo of a payment is
+`payments.restore`, not `changeLog.undoBatch`: only the repository's own restore
+recomputes the invoice status, so `payment` is deliberately absent from `changeLog`'s
+`TABLE_FOR_ENTITY` and payments do not enter the Cmd+Z stack (ordinary `change_log` rows
+are still written for the trail).
+
+The money numbers, in `src/db/repos/money.ts`: `collectedCents` is the sum of payments,
+by `paidOn` over a period. `outstandingCents` is `sent`- and `partial`-status invoice
+totals less their payments. Every payments join is pre-aggregated per document before it
+reaches `documents`, so an invoice with several payments cannot multiply its own total.
+Also exported: `invoiceBalanceCents` / `invoiceBalances` (balance per invoice),
+`customerBalanceCents` (a contact's or company's balance across every invoice),
+`paymentsByMethod` (a period's payments grouped by method), and `statementRows` (the
+rows behind a statement PDF). Payments are **not** indexed for search: a payment has no
+words of its own, and it is reached through its invoice, its customer or its job.
+
+`documents.onDocumentStatusChanged(listener): () => void` registers a listener called
+with `{ document, from, to }` inside the same write as the status change, in
+registration order. A listener that throws fails the whole write. Payments do not use
+this seam; the status recompute is a direct call.
+
+`src/features/invoices/lib/statementFile.ts` exports `saveStatementPdf(input):
+Promise<{ path: string | null }>`, the customer-statement PDF a contact's or company's
+money card saves through the existing save-file dialog; `path` is null when the owner
+cancels.
+
+### Tasks: visits
+
+`tasks` (`drizzle/0007_visits.sql`, `drizzle/0009_visit_note.sql`) carries four columns
+beyond the base task: `source` (`'user' | 'automation'`, indexed, defaulting to
+`'user'`, telling apart what a rule wrote from what the owner typed), `place` (free
+text, prefilled from the linked contact's or company's address and editable), `duration_minutes`
+(1..1440, null when no length was given), and `notes` (a line the title has no room for,
+never folded into the title). `tasks.create` and `tasks.update` accept all four as
+optional fields; `tasks.list` filters on `source` and on a timed-only flag.
+
+There is no appointments table. A **visit is a task with `due_at` set** — Today's
+buckets, the Tasks screen, Trash, undo, the timeline entry and search all apply to a
+visit unchanged, because it is not a different kind of row.
+
+### Schedule feed
+
+`src/features/schedule/lib/feed.ts` exports `scheduleItems(range: { from: string; to:
+string }, deps?): Promise<ScheduleItem[]>`. `from`/`to` are inclusive local calendar
+days. It derives the list on every read from five existing repositories and writes
+nothing: open tasks by `due_on`, open deals by `expected_on`, active recurring rules by
+`next_due_on`, invoices that are `sent` or `partial` by `due_on`, and active invoice
+schedules by `next_issue_on`. There is no denormalised schedule table.
+
+`ScheduleItem` (`src/features/schedule/lib/types.ts`) is one shape for all six kinds
+(`visit`, `task`, `deal-expected`, `recurring-due`, `invoice-due`, `invoice-issue`), and
+`compareScheduleItems` fixes the order within a day: timed items first in time order,
+then all-day items by kind.
+
+The week starts on **Monday**, always; `src/features/schedule/lib/week.ts`
+(`startOfWeekMonday`, `weekDays`, `addWeeksToDate`) is the only place that decides it.
+There is no setting for it.
+
+Calendar export is one item at a time, through the existing save-file path, never over a
+network. `calendarSubjectFor(item)` (`src/features/schedule/lib/calendar.ts`) maps a
+`ScheduleItem` onto the `CalendarSubject` that `AddToCalendarButton.tsx`'s
+`saveAndOpenIcs` already saves: `UID` from the item's id (so a second export replaces
+the first), `DTEND` from the visit's duration (an hour when there is none), `LOCATION`
+from the place, and a description carrying the customer, their phone and the note.
+
+### Automations
+
+Helix has no job queue and no background scheduler. An automation runs
+**synchronously inside the transaction of the write that triggered it** and produces an
+**ordinary task**, told apart only by `tasks.source = 'automation'`.
+
+Three rules are fixed in kind and switchable in Settings, one row each in
+`automations` (`drizzle/0008_automations.sql`, `src/db/repos/automations.ts`):
+
+| `kind` | trigger | default |
+| --- | --- | --- |
+| `lead_arrived` | a website lead becomes a deal, inside `applyLeadPage`'s per-page transaction | on, 60 minutes |
+| `quote_sent` | a quote's status becomes `sent`, through `documents.onDocumentStatusChanged` | on, 3 days |
+| `invoice_overdue` | the boot sweep finds a `sent`/`partial` invoice past its due date | off, 3 days |
+
+A fourth kind of rule belongs to a **stage**, not to `automations`: `stages.follow_up_days`
+and `stages.follow_up_title` (both nullable) mean "when a job enters this stage, remind me
+in N days." It fires from `deals.moveToStage`/`moveManyToStage`, on a real stage change
+only. Title templates take `{name}` (customer), `{number}` (quote or invoice number) and
+`{job}` (the job's title); an unknown token is left alone.
+
+Firing exactly once is guaranteed by `automation_runs (kind, subject_id)`, a unique
+index checked before a runner does any work: a marker on `tasks` would be destroyed by a
+purge and would depend on the rendered title, either of which the owner can change.
+Subject ids: the deal id for `lead_arrived`, the document id for `quote_sent`,
+`<dealId>:<stageId>:<YYYY-MM-DD>` for a stage rule, and `<documentId>:<YYYY-MM-DD>` for
+`invoice_overdue`.
+
+The runners (`runLeadArrived`, `runQuoteSent`, `runStageEntered`, `runInvoiceOverdue`,
+`automationSweep`) never take the write lock themselves except the sweep, which has no
+caller's transaction and opens its own; the other four assume the caller is already
+inside `withWrite`/`withTransaction`, since the lock is not reentrant. Every automation
+that fires leaves a timeline entry on the record, in the same transaction, saying what
+Helix did and why. Rules are registered and the sweep run once from
+`src/features/settings/lib/automationBoot.ts`'s `startAutomations()`; a failure there is
+logged and swallowed so a rule can never stop the app from starting.
+
+### Bulk actions and selection
+
+`deals.moveManyToStage(ids, toStageId, options) => { moved, batchId }` is ONE
+transaction sharing ONE `change_log` batch id, so Cmd+Z reverses the whole move. It
+shares its body with `moveToStage` (`applyStageMove`): same validation, same
+`deal_stage_events` row, same timeline line, same follow-up task, once per deal. A deal
+already in the target stage is not a move and fires nothing; a deal that fails
+validation takes every other deal in the call back with it. `stages.remove(id,
+moveToStageId)` still moves its orphaned deals with raw SQL and fires no stage rules,
+deliberately: deleting a stage is bookkeeping, not each deal entering a stage.
+
+`src/lib/selection.ts` is the selection model: pure, framework-free, a `SelectionState`
+of ids plus an anchor, with `selectOnly`, `toggle`, `selectRange` (the inclusive run
+between the anchor and the clicked row in the list's current order) and `reconcile`.
+Selection is keyed by **id, never row index**, so a `VirtualList` reassigning rows to
+scroll positions cannot silently reassign the selection; `reconcile` drops ids a
+refilter removed, so a bulk action can never act on a row the owner can no longer see.
+`src/ui/BulkBar.tsx` renders nothing at a count of zero and carries no primary button
+(the screen has already spent its one primary block). Bulk row actions live in
+`src/db/repos/bulk.ts` (tag, company, source, trash on contacts and deals) plus
+`deals.moveManyToStage` above.
+
+There is deliberately no multi-select on the pipeline **board**: the card is
+simultaneously the drag source and the open target, and a selection model would put two
+meanings on one gesture. The deals **list** carries the full bulk bar instead.

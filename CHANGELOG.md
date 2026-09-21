@@ -23,6 +23,69 @@
   attachments and exports are plain, unencrypted files and that the log does
   not name a customer. Added "Removing a workspace for good" to Help, since
   archiving a workspace never deletes it and there was nowhere that said so.
+- Added a recovery key. Settings, then Backups, can show the key that
+  encrypts your workspace and every backup of it, formatted to copy, save as
+  a file, or print; a card on Today stays until you've kept a copy one of
+  those ways. The key otherwise lives only in this computer's keychain, so
+  it's the only way to open your files again on a new machine after this
+  one dies, is stolen, or is wiped.
+- Added a second backup copy. Pick a folder in Settings, then Backups (an
+  external drive, or one already synced by Dropbox, iCloud Drive, or
+  OneDrive), and Helix keeps it matching your own backups folder after every
+  backup. It matches rather than piles up, so the folder can't grow without
+  bound.
+- Added a backup before every import, taken automatically before anything
+  is written; if it can't be taken, the import stops rather than risk your
+  existing records. The import result screen now names that backup and adds
+  a button straight to it.
+- Fixed a Keychain access prompt you deny (expected after every rebuild of
+  an unsigned build) showing a screen that guessed the wrong cause. It now
+  says plainly what happened and that choosing Always Allow next time is
+  the fix, instead of pointing you at a second copy of Helix or a folder
+  that isn't writable.
+- Fixed an older build of Helix silently reading and writing a workspace a
+  newer build had already upgraded. It now refuses to open one, with its
+  own screen naming the problem.
+- Fixed several website-connection failures that named the wrong cause or
+  gave no way back: a site with no lead endpoint blamed on your internet, a
+  bad cursor that looped forever with nothing to do about it from inside
+  the app, Test connection checking the token already saved instead of the
+  one you'd just pasted, and changing a site's address duplicating your
+  whole pipeline. Pasting a token now trims quotes, line breaks, and the
+  placeholder every template ships with, before it's ever saved.
+- Fixed the CSV importer: "Customer Name" and "Co." columns no longer
+  default to Skip, a row's warnings (a missing name, an unusable phone) are
+  kept instead of thrown away, and the preview's row count now reflects the
+  whole file instead of always reading 20.
+- Fixed Today asking you to import customers you had just imported. It now
+  tells an empty workspace apart from one with customers in it but no work
+  started yet, and the second case says what fills Today next instead of
+  repeating the import prompt.
+- Added a "Copy details" block to Diagnostics: one block you can paste into
+  an email with the version, OS, workspace id, encryption state, last
+  backup, and website-connection state, so a support call doesn't start
+  with reading rows off the screen.
+- Added payments. Record a deposit, a partial payment, or the full amount
+  against an invoice, each with its own date, method, and reference. An
+  invoice's status (sent, partially paid, paid) is worked out from its
+  payments rather than a single paid flag, and Collected everywhere is now
+  the sum of what actually came in. Added a Statement PDF for a contact or
+  company, listing every invoice and payment for a period.
+- Added Schedule: your week or day, gathering booked visits, jobs' expected
+  start dates, reminders, and invoice and bill due dates from the records
+  you already keep. A visit is a task with a time, a place, and a length,
+  and any one of them can be added to your own calendar as a standard .ics
+  file.
+- Added automations: three switches in Settings (a call reminder after a
+  website lead arrives, a follow-up after a quote is sent, a nudge on an
+  overdue invoice), plus a follow-up you can set on any pipeline stage.
+  Each one just creates an ordinary task, so it shows up and behaves like
+  anything you'd have typed yourself.
+- Added a leads-by-source report: how many leads each source sent, how many
+  you won, what they were worth, and how long they took to close.
+- Added bulk actions: select a run of rows on Contacts or the deals list
+  and tag, retag a company, move stage, or trash them together, in one step
+  and one undo.
 
 ## 0.1.0 - 2026-09-18
 
@@ -151,7 +214,8 @@ The following were considered and deliberately left out of this release:
 - Multiple users or team accounts
 - Cloud sync between machines
 - Mobile builds (iOS/Android)
-- Payment processing (an invoice can be marked paid; Helix never moves money)
+- Payment processing (Helix records the payments you tell it about; it
+  never moves money itself)
 - Gmail and Google Calendar integration
 - A map view
 - Signed and notarized installers, and auto-update (which depends on
