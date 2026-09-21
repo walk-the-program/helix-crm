@@ -61,9 +61,22 @@ afterEach(() => {
   h = null;
 });
 
-/** Put a row's deleted_at into the past, the way real time would have. */
+/**
+ * Put a row's deleted_at into the past, the way real time would have.
+ *
+ * Anchored to the sweep's own cutoff (midnight UTC of the local date, minus
+ * 30 days) rather than to `Date.now()`. Anchoring to now made the 31-day
+ * cases flake every evening in the Americas: once local time lags UTC by a
+ * calendar day, "now minus 31 days" lands on the cutoff's own UTC day but
+ * after 00:00Z, so the row is not yet older than the cutoff and the sweep
+ * correctly leaves it. `daysAgo` keeps its meaning: 31 is one day past the
+ * cutoff, 1 is well inside the window.
+ */
 async function backdate(table: string, id: string, daysAgo: number): Promise<void> {
-  const at = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(trash.purgeCutoffIso());
+  const at = new Date(
+    cutoff.getTime() - (daysAgo - trash.PURGE_AFTER_DAYS) * 24 * 60 * 60 * 1000,
+  ).toISOString();
   await raw.execute(`UPDATE ${table} SET deleted_at = ? WHERE id = ?`, [at, id]);
 }
 
