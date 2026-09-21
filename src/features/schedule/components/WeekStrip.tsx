@@ -98,6 +98,7 @@ export function WeekStrip(props: {
               key={date}
               type="button"
               data-testid="week-strip-day"
+              data-date={date}
               onClick={() => onSelectDate(date)}
               aria-current={isToday ? "date" : undefined}
               aria-pressed={isSelected}

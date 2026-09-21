@@ -16,8 +16,7 @@
  * re-applies the same rule, and jumping to a specific date always lands
  * exactly there.
  */
-import { useState } from "react";
-import type { KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus } from "@/ui/icons";
 import { Button, EmptyState, PageHeader } from "@/ui";
 import { isTypingTarget } from "@/app/shortcuts";
@@ -79,30 +78,52 @@ export function ScheduleScreen() {
     setSelectedDate(date);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    // Bound on this screen's own container, never as a global shortcut — the
-    // shell owns those. A key a child already handled (the DatePicker's own
-    // calendar grid calls preventDefault on its arrow keys) is left alone,
-    // and so is anything typed into a field, a select or a contenteditable,
-    // so paging the mini calendar never also flips the week.
-    if (event.defaultPrevented) return;
-    if (isTypingTarget(event.target)) return;
-    if (event.key === "ArrowLeft") {
-      handlePrevWeek();
-    } else if (event.key === "ArrowRight") {
-      handleNextWeek();
+  /**
+   * The arrow keys page the week.
+   *
+   * Listened for on the document while this screen is mounted, rather than on
+   * the screen's own container: a container is not focusable, so an owner who
+   * has just opened Schedule and pressed nothing yet has focus on the body,
+   * and a container-bound handler never hears the key he presses first. It is
+   * still not a global shortcut — the listener exists only while this route
+   * does, and the shell keeps ownership of everything in `allCommands()`.
+   *
+   * Four things are left alone: a key a child already handled (the
+   * DatePicker's own grid calls preventDefault on its arrows, so paging the
+   * mini calendar never also flips the week), anything typed into a field, a
+   * select or a contenteditable, any key carrying a modifier, and every key
+   * pressed while a dialog is open — flipping the week behind the visit
+   * dialog while the owner is filling it in would be a poltergeist.
+   */
+  const keyHandlers = useRef({ prev: handlePrevWeek, next: handleNextWeek });
+  keyHandlers.current = { prev: handlePrevWeek, next: handleNextWeek };
+
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTypingTarget(event.target)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (event.key === "ArrowLeft") {
+        keyHandlers.current.prev();
+      } else if (event.key === "ArrowRight") {
+        keyHandlers.current.next();
+      }
     }
-  }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div
       className="flex flex-col gap-[var(--space-6)]"
       data-testid="schedule-screen"
-      onKeyDown={handleKeyDown}
     >
       <PageHeader
         title="Schedule"
-        subtitle={weekRangeLabel(weekStart, formats.locale)}
+        subtitle={
+          <span data-testid="week-range">{weekRangeLabel(weekStart, formats.locale)}</span>
+        }
         actions={
           <Button
             type="button"
