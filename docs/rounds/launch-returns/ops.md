@@ -335,3 +335,163 @@ For whoever comes next:
   whole of F-OPS-1 optional in practice. Getting that into the first-run flow belongs to
   the customer-success phase, and it is the single highest-value thing that phase could
   carry from this one.
+
+---
+
+# Recheck after product expansion (LR-OPS-RECHECK)
+
+TASK: LR-OPS-RECHECK (parent: Fable) · ATTEMPT 1 · PACKET REV 1
+STATUS: **submitted**
+Base: `e11279d`. Revision this section describes and was verified at: `a2e05a2`
+(HEAD moved under me repeatedly during the pass — other rechecks were landing —
+so every number below names the revision it was taken at).
+No Sonnet children; done by the lead.
+
+## What changed under the operations work
+
+Product expansion added migrations 0006–0009, payments as records with a
+backfill, a Schedule module, follow-up automations with a sweep registered on
+boot, and bulk actions. The question for this pass was not whether those
+features work — their leads proved that — but whether the operational
+guarantees from LR-OPS still hold with them in place: forward migration,
+restore, the background beats, and the write lock.
+
+Most of them do. Two did not, and one of those was a promise the product was
+making on a screen while the code did something else.
+
+## Findings
+
+| # | class | finding | fix | evidence |
+|---|---|---|---|---|
+| F-OPS-R-1 | **Required** | **The daily follow-up sweep ran once per launch, not once per day.** `startAutomations()` called `automationSweep()` at boot and nothing rescheduled it. On a Mac an owner shuts the lid rather than quitting, so a Helix left open for a fortnight swept for overdue invoices on the first morning and never again — while Settings went on calling it the daily follow-up and the rule's own description promised a task when an invoice goes past its due date. | `65093df`: the same 24-hour beat `purgeSweep` already uses, with its three rules inherited — never fatal, never competes for the write lock, never overlaps itself. | `tests/unit/data/automationSweepTimer.test.ts`, 7 passed: runs again a day later with no relaunch, does not run twice a day, skips while paused and returns in a minute, survives throwing, one listener and one timer however often it is started, stops when told. |
+| F-OPS-R-2 | **Required** | **The sweep respected none of the background-job rules.** No `timersPaused()` check, so it could start during an import or a restore; no self-overlap guard; and its only error handling was a `try/catch` at the boot call site. | Same commit. It now skips while an import or a restore holds the write lock and looks again in a minute, rather than queueing a few hundred task inserts behind a 100k-row import. | Same test file. |
+| F-OPS-R-3 | Verified, no fix needed | **F-OPS-12's fix holds under the new write paths.** Automations create ordinary tasks, and the sweep opens its own transaction, so "a rule fires while an import is running" stopped being hypothetical. The removed `txDepth` shortcut means it queues. | — | `tests/repo/data/automationQueuesBehindImport.test.ts`: the rule does not write until the import finishes, and its task **survives the import rolling back**. Before the F-OPS-12 fix that assertion is the one that would have failed, silently, in production. |
+| F-OPS-R-4 | Follow-up | **`withTransaction`'s own comment overstates what a nested call now does.** It says such a caller "fails loudly at `raw.begin()` (TX_STATE from the pipe)". It does not: the inner call never reaches `raw.begin()`, because `acquire()` on a non-reentrant lock never resolves. It deadlocks, and the only thing that says so is the 10-second "has waited 10s behind another write" console warning. | Not fixed: `src/db/writeLock.ts` is not this pass's to edit. Either correct the comment or add a fail-fast re-entrancy check; the warning already exists, so correcting the comment is the honest minimum. | Reproduced while writing the test above — the case timed out at 30 s with the warning in stderr. The test was removed rather than kept, because pinning a deadlock costs 10 s of suite time; the reasoning is in that file's tail comment. |
+| F-OPS-R-5 | Follow-up | **Restoring a backup NEWER than the running Helix copies it over the live database before discovering it cannot be opened.** `restoreFromBackup` copies, then reopens, then migrates — and the migrator refuses a newer schema (F-OPS-8). The workspace is then a file this build will not open, and the data it replaced is gone from that path. | Not built. A pre-copy version check means opening the backup while the live database is still open. Documented instead, in procedure 7: the `pre-restore` backup taken in step 2 is exactly the file that was there a moment earlier, which is why that step runs before the close. | Ordering read directly in `src/features/data/lib/backupsFs.ts`; the four-step order is pinned by `tests/unit/data/restorePruneGuard.test.ts`. |
+| F-OPS-R-6 | Near-miss, resolved by Fable mid-pass | **`drizzle-kit generate` had produced `0010_vengeful_iron_lad.sql`, a duplicate of everything 0006–0009 do**, and the journal listed it at idx 10. Applying the chain on a fresh workspace would have failed at `CREATE TABLE payments` — no workspace could be created or opened. It was gone from the journal by the time I re-read it. | None needed; recorded because the sequence that produced it will recur: the snapshots for 0006–0008 were missing, so drizzle-kit diffed `src/db/schema.ts` against `0005_snapshot.json` and re-emitted the whole chain. | Nothing would have shipped: `tests/repo/migrations.test.ts`'s "applies every journal entry once" builds a workspace through the real migrator, so a duplicated `CREATE TABLE` fails that test and every repo test behind it. CI was the guard and it worked. Only `0009_snapshot.json` exists now; the next `drizzle:generate` diffs against that. |
+| F-OPS-R-7 | Follow-up | **The Schedule feed has two unranged reads.** `listInvoices` and `listInvoiceSchedules` take no range and are filtered in JavaScript, so the cost grows with the workspace's total invoices rather than with the window asked for. | Not changed. The bound, stated: at 2,500 invoices a month of Schedule costs 5.6 ms. It would need roughly 250,000 invoices to reach half a second, which is two orders of magnitude past a solo trade business. | `tests/repo/perf/scale.test.ts`, measured on the 20k/5k/10k dataset. |
+
+## Recheck items
+
+**(1) Migrations 0006–0009.** Forward apply on a populated 0005 workspace, the
+backfill's one-payment-per-paid-invoice result, and 0007's `tasks.source`
+backfill are all already proven by Lead A's and Lead B's own tests, so this
+pass covered only what neither is about. New file
+`tests/repo/migrationsPxRecheck.test.ts`, 5 passed:
+
+- the chain applies once on a populated workspace, and a second `migrate()` —
+  which is what every morning's launch does — applies nothing and leaves the
+  payment and automation counts unchanged. The backfill is an `INSERT … SELECT`
+  with no guard of its own, so `schema_migrations` is the thing that stops it
+  doubling the owner's Collected figure, and that is what is now asserted;
+- 0008's three seeded rules survive a deliberate replay of just that file's
+  INSERTs, which is the shape of thing that gets done during a support call;
+- the newer-schema refusal, rechecked against the real scenario rather than a
+  fabricated tag: a v0.1.0 build whose journal stops at 0005, opening a
+  workspace this build took to 0009. It names all four versions, and "your data
+  has not been changed" is asserted rather than assumed;
+- transaction safety: `migrations.test.ts` walks the journal dynamically, which
+  is right and also means its coverage of the new chain is invisible. The four
+  tags are now named out loud and their statements checked against both the
+  implicit-commit pattern and the allow-list.
+
+**(2) The automation sweep.** F-OPS-R-1, R-2 and R-3 above. One thing worth
+stating plainly because the packet assumed otherwise: the sweep was not
+registered beside the purge sweep as a timer. It was a single call at boot.
+It is a timer now.
+
+**(3) Backup and restore with the new tables.** A backup taken before 0006 and
+restored into the current app is migrated forward during the restore —
+`openWorkspace` runs the migrator on the restored file exactly as at launch —
+so the payments backfill runs then, and every money figure reads the same
+afterwards as it did before. That is the same code path
+`migrationsPxRecheck.test.ts`'s first case exercises. A backup taken after 0009
+restores unremarkably. The recovery-key adoption path is unaffected: it checks
+only for `schema_migrations` or `contacts`, both of which predate this chain,
+and `cargo test --test recovery_tests` is still 9 passed. The one new hazard is
+F-OPS-R-5.
+
+**(4) Performance.** The 20k/5k/10k dataset now also carries a payment per
+already-paid invoice, a third of its tasks as timed visits, and a source on
+most deals — otherwise the new screens would have been measured against empty
+tables. On the same run:
+
+| Query | ms | budget |
+|---|---|---|
+| Schedule, one week | 5.2 | 400 |
+| Schedule, one month | 5.6 | 600 |
+| Payments: one customer's statement | 0.2 | 300 |
+| Reports: leads by source | 0.7 | 400 |
+| Reports: revenue (now joining payments) | 15.2 | 800 |
+| Receivables aging (now joining payments) | 1.1 | 300 |
+| Reports: overview | 10.1 | 500 |
+| Contacts, deep page | 35.4 | 200 |
+
+The payments join costs the money reports about a third more than before
+(revenue 10.9 → 15.2 ms, aging 0.7 → 1.1 ms) and they remain an order of
+magnitude inside budget. The file also prints its measurements as one line
+instead of `console.table`, which the default reporter swallowed — the numbers
+it exists to produce were invisible unless it was run by hand.
+
+**(5) Operations documentation.** `docs/OPERATIONS.md` gains procedures 11–13:
+a payment recorded in error (correct, remove with a ten-second Undo, or Mark
+unpaid; every figure is a sum over the payments table so nothing lags), an
+automation firing unexpectedly (delete the task, switch the rule off, plus what
+will *not* happen — an import never fires a rule, and no rule fires twice for
+the same subject), and the Schedule's calendar export (one-way, forever, and
+re-exporting replaces rather than duplicates). Procedure 7 gained the two
+restore facts above. The founder-task inventory gains three rows: saying the
+export is one-way at onboarding, checking the three automation rules suit the
+client before handover, and the honest note that nothing tells Walker a
+client's overdue sweep is not running. `tests/RELEASE-CHECKLIST.md` gains a
+"Product-expansion screens" section holding only what a mocked Tauri layer
+cannot answer — chiefly whether a real calendar application swallows the `.ics`
+and replaces the entry on a second export.
+
+## Verification
+
+At `a2e05a2`, macOS, this machine. Walker's live workspace was never touched
+and the installed app was never launched.
+
+```
+npm run typecheck                 clean, exit 0
+npx vitest run                    226 passed | 1 skipped (227 files)
+                                  2765 passed | 3 skipped | 0 failed
+cd src-tauri && cargo test        85 + 8 + 10 + 11 + 9 = 123 passed, 0 failed
+npm run build                     built in 906ms, exit 0 (pre-existing
+                                  chunking advisories only)
+E2E_PORT=4270 E2E_OUT=dist-ops npm run e2e:mac -- \
+  settings px-c-automation px-b-schedule px-a-payments data smoke
+                                  49 passed (2.0m), 0 failed
+```
+
+`dist-ops` removed; nothing left running. Commits, all local: `e1bd17b`,
+`65093df`, `a66d3e8` (mock typing), `4ac5331`, `a2e05a2`.
+
+Two failures seen mid-pass were other agents' in-flight edits on a shared
+branch, not mine, and both were gone by the final run: a `renderTemplate`
+assertion while `src/db/repos/automations.ts` was open in another session, and
+`importDoesNotAutomate` failing in a full run while passing alone. Recorded
+because "I saw it red once" is worth writing down even when it is green now.
+
+## Escalations
+
+1. **F-OPS-R-4** needs one line changed in `src/db/writeLock.ts` — a comment
+   that describes a loud failure the code does not produce. Not mine this pass.
+2. **F-OPS-R-5** is a real trap with a documented way out. Building the guard
+   means reading a backup's `schema_migrations` before copying it, which needs
+   a Rust read-only open while the live database is still open. Worth doing
+   before a client is ever told to downgrade; not before the first client.
+3. **The drizzle snapshot chain** (F-OPS-R-6) is Fable's to close. Only
+   `0009_snapshot.json` exists; 0006–0008 are absent. That is harmless to the
+   migrator, which reads the journal and the `.sql` files, and it is exactly
+   what caused the duplicate migration, so the next person to run
+   `drizzle:generate` should check what it emits before committing it.
+4. **`docs/ONBOARDING-CHECKLIST.md`** should carry the one-way-calendar
+   sentence (founder-task 12). Not this pass's file.
+
+## Handoff
+
+Nothing running. All work committed locally; nothing pushed. The tree carries
+other agents' uncommitted design screenshots, which are not mine and were left
+alone.
