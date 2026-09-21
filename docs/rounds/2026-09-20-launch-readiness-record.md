@@ -40,6 +40,10 @@ backups, logs, and the site-lead ingestion path (untrusted input from a public f
 Format: `F-<role>-<n>` | class (Blocker / Required / Follow-up) | finding | why that class | fix commit(s) | evidence.
 Roles: SEC, OPS, REV, CS, PX (product expansion), LA (launch assurance).
 
+### Rechecks after PX (accepted by Fable)
+
+SEC recheck: F-SEC-R-1 template titles capped and stripped of NUL/bidi (owner template + third-party data now leaves the screen as task titles, .ics SUMMARY, CSV cells); F-SEC-R-2 .ics builder strips after escaping; property injection pinned; everything else clean with hostile cases. OPS recheck: F-OPS-R-1 the "daily" automation sweep ran once per launch (now on the purge sweep's 24 h beat with pause/overlap guards); F-OPS-R-3 a rule creating a task during an import queues and survives the import's rollback (F-OPS-12 holds); migrations 0006–0009 idempotent, newer-schema refusal names all versions; restore of a pre-0006 backup migrates forward; performance non-issue (Schedule week 5 ms); OPERATIONS.md procedures 11–13. CS recheck: first outcome unchanged at 21 actions; imports never fire automations (pinned test); Help absorbed the three sections and its quality checks now cover all ten; two hard-coded "job" strings fixed; example data books one visit; install checklist updated. Docs worker: CONTRACTS.md new binding section, README feature bullets, CHANGELOG Unreleased. Fable: writeLock.ts comment corrected (a nested call hangs on the non-reentrant lock rather than throwing).
+
 ### PX (accepted by Fable; returns `launch-returns/px-a.md`, `px-b.md`, `px-c.md`)
 
 Built and verified end to end: **A** payments as records (migration 0006, derived invoice status draft/sent/partial/paid/void, Collected = sum of payments, backfill proven figure-for-figure, Record payment dialog, balances on invoices/lists/contacts/companies/Today, customer Statement PDF, payments in exports and reports; markPaid/markUnpaid removed; RESTRICT + purge order fixed after Lead C found sample removal failing). **B** Schedule module (/schedule week + day, feed over tasks/deals/reminders/invoices/schedules, visit dialog writing timed tasks with place/duration/notes via 0007 + 0009, Add to calendar .ics, Today's schedule section, Today outstanding-balance line from A's contract). **C** automations (0008: three switchable rules, per-stage follow-ups, automation_runs idempotency ledger, synchronous in the triggering write, overdue sweep), Settings → Automations, Leads by source report, bulk actions with a selection model and BulkBar on Contacts and the deals list (no multi-select on the board, argued). Cross-lead defects caught in flight: payments RESTRICT vs sample-data removal (A fixed), bulk tag-removal undo silently doing nothing (C fixed) and the same hole in single-record tag removal (Fable fixed, c9fb6f5). Incidents: two `--amend`s on the shared index by B's workers swept A's MarkPaidDialog deletion into 163c561 (content correct); trailers missing on two worker commits; recorded, not rewritten. Fable also fixed a pre-existing evening-only flake in purgeSweep.test.ts (3948a8e) and repaired the drizzle snapshot chain (0009_snapshot.json).
@@ -80,8 +84,8 @@ Model confirmed: Helix is free; the site token is the only link to a paying clie
 | LR-OPS | CROO | Opus lead | accepted 14:xx (23 commits 44d72d8..38835f8 + Fable's F-OPS-12 fix) | ≤3 | | `launch-returns/ops.md` |
 | LR-REV | CRevOps | Opus lead | accepted 15:xx (6 commits d376382..5c358a6) | ≤2 | | `launch-returns/rev.md` |
 | LR-CS | CCSO | Opus lead | accepted 16:xx (32 commits 4d23656..889c142) | ≤3 | | `launch-returns/cs.md` |
-| LR-PX | CPEO | 3 Opus leads A/B/C | accepted 18:xx (35 commits b8958aa..e11279d + Fable's tags-undo, purgeSweep-test, drizzle-snapshot fixes); rechecks SEC/OPS/CS + docs worker running | ≤9 total | | `launch-returns/px-*.md` |
-| LR-LA | CLAO | Opus lead (fresh) | planned (after PX) | ≤3 | | `launch-returns/la.md` |
+| LR-PX | CPEO | 3 Opus leads A/B/C | accepted 18:xx; rechecks SEC (433a62e), CS (9ce26c4), OPS (c3ab2b0) and docs worker (e50c955) accepted 19:xx | ≤9 total | | `launch-returns/px-*.md` |
+| LR-LA | CLAO | Opus lead (fresh) | dispatching after the full gate | ≤3 | | `launch-returns/la.md` |
 
 ## 5. Verification log
 

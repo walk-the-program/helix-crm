@@ -173,8 +173,10 @@ export function inTransaction(): boolean {
  * The repository rule already forbids a repository write from calling another
  * repository's write function, so no caller nests on purpose, and the whole
  * test suite runs with nesting turned into a throw. A caller that does nest
- * now fails loudly at `raw.begin()` (TX_STATE from the pipe) instead of
- * silently joining a stranger's transaction. That is the failure we want.
+ * now queues on the non-reentrant lock behind itself and never proceeds: a
+ * hang that the very first test of that code path exposes, instead of a
+ * silent write into a stranger's transaction that nothing exposes. Do not
+ * "fix" a hang here by restoring the shortcut; fix the caller.
  */
 export async function withTransaction<T>(
   fn: () => Promise<T>,
