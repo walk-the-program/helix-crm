@@ -433,11 +433,24 @@ async function dealsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
 }
 
 async function tasksRows(): Promise<{ headers: Header[]; rows: Row[] }> {
+  // Place, Length and Note are the three columns 0007 and 0009 added, and
+  // they are what makes a task a booked visit rather than a reminder (decision
+  // PX-6). They were not here, so the export - the one path a client leaving
+  // actually uses - handed back a visit with no address, no length and no
+  // gate code. "Export everything" has to mean everything (LR-LA F-LA-6).
+  //
+  // Source says whether the owner wrote the task or a rule did. It costs one
+  // column and it is the difference between a list the owner recognises and a
+  // list with entries in it he does not remember typing.
   const headers = headersFor([
     "Title",
     "Done",
     "Due On",
     "Due At",
+    "Length (minutes)",
+    "Place",
+    "Note",
+    "Source",
     "Contact",
     "Company",
     "Deal",
@@ -447,6 +460,8 @@ async function tasksRows(): Promise<{ headers: Header[]; rows: Row[] }> {
   const mainRows = await raw.query(
     `SELECT t.id AS t_id, t.title AS t_title, t.done_at AS t_done_at,
             t.due_on AS t_due_on, t.due_at AS t_due_at,
+            t.duration_minutes AS t_duration_minutes, t.place AS t_place,
+            t.notes AS t_notes, t.source AS t_source,
             c.first_name AS t_contact_first_name, c.last_name AS t_contact_last_name,
             co.name AS t_company_name, d.title AS t_deal_title,
             t.created_at AS t_created_at
@@ -464,10 +479,14 @@ async function tasksRows(): Promise<{ headers: Header[]; rows: Row[] }> {
       Done: r[2] !== null && r[2] !== undefined,
       "Due On": str(r[3]),
       "Due At": str(r[4]),
-      Contact: fullName(r[5], r[6]),
-      Company: str(r[7]),
-      Deal: str(r[8]),
-      "Created At": str(r[9]),
+      "Length (minutes)": str(r[5]),
+      Place: str(r[6]),
+      Note: str(r[7]),
+      Source: str(r[8]),
+      Contact: fullName(r[9], r[10]),
+      Company: str(r[11]),
+      Deal: str(r[12]),
+      "Created At": str(r[13]),
     }),
   );
 
@@ -944,6 +963,65 @@ async function savedViewsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
   return { headers, rows };
 }
 
+/**
+ * The attachments manifest (LR-LA F-LA-6).
+ *
+ * The zip deliberately does not carry the attached files themselves - a photo
+ * of a finished patio is megabytes and belongs beside the database, which is
+ * where it already is. But excluding the files was read as excluding the
+ * table, and the result was that a client who exported everything got no
+ * record at all of what those files were: the `attachments` folder is named by
+ * a stored name, not by what the owner called the file or which customer it
+ * belonged to. Without this sheet the folder is a pile of opaque blobs, and
+ * this is the one path a client uses on their way out.
+ *
+ * `Stored As` is the on-disk name, so the manifest is the join between the
+ * folder and the records. Nothing here is a file's contents.
+ */
+async function attachmentsRows(): Promise<{ headers: Header[]; rows: Row[] }> {
+  const headers = headersFor([
+    "File Name",
+    "Stored As",
+    "Size (bytes)",
+    "Type",
+    "Record Type",
+    "Record Name",
+    "Created At",
+  ]);
+
+  const mainRows = await raw.query(
+    `SELECT a.id AS a_id, a.file_name AS a_file_name, a.stored_name AS a_stored_name,
+            a.bytes AS a_bytes, a.mime AS a_mime, a.entity_type AS a_entity_type,
+            coalesce(
+              nullif(trim(coalesce(c.first_name, '') || ' ' || coalesce(c.last_name, '')), ''),
+              co.name,
+              d.title,
+              ''
+            ) AS a_record_name,
+            a.created_at AS a_created_at
+     FROM attachments a
+     LEFT JOIN contacts c ON c.id = a.entity_id AND a.entity_type = 'contact'
+     LEFT JOIN companies co ON co.id = a.entity_id AND a.entity_type = 'company'
+     LEFT JOIN deals d ON d.id = a.entity_id AND a.entity_type = 'deal'
+     WHERE a.deleted_at IS NULL
+     ORDER BY a.created_at ASC`,
+  );
+
+  const rows = mainRows.map(
+    (r): Row => ({
+      "File Name": str(r[1]),
+      "Stored As": str(r[2]),
+      "Size (bytes)": str(r[3]),
+      Type: str(r[4]),
+      "Record Type": capitalizeWord(r[5]),
+      "Record Name": str(r[6]),
+      "Created At": str(r[7]),
+    }),
+  );
+
+  return { headers, rows };
+}
+
 async function rowsFor(entity: ExportEntity): Promise<{ headers: Header[]; rows: Row[] }> {
   switch (entity) {
     case "contacts":
@@ -1005,6 +1083,9 @@ const ZIP_ENTRIES: readonly ZipEntry[] = [
   { fileName: "recurring_rules.csv", jsonKey: "recurringRules", build: recurringRulesRows },
   { fileName: "templates.csv", jsonKey: "templates", build: templatesRows },
   { fileName: "saved_views.csv", jsonKey: "savedViews", build: savedViewsRows },
+  // Not the files - a manifest of them. See `attachmentsRows` for why the
+  // distinction stopped being obvious and started being a hole (F-LA-6).
+  { fileName: "attachments.csv", jsonKey: "attachments", build: attachmentsRows },
 ];
 
 export async function buildEverythingZip(): Promise<{ bytes: Uint8Array; files: string[] }> {

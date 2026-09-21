@@ -21,6 +21,7 @@ import * as customFields from "../../../src/db/repos/customFields";
 import * as recurring from "../../../src/db/repos/recurring";
 import * as templates from "../../../src/db/repos/templates";
 import * as savedViews from "../../../src/db/repos/savedViews";
+import * as attachments from "../../../src/db/repos/attachments";
 import {
   buildEntityCsv,
   buildEverythingZip,
@@ -225,11 +226,19 @@ describe("exportRun: buildEntityCsv", () => {
 
     const { csv: taskCsv } = await buildEntityCsv("tasks");
     const { headers: taskHeaders, rows: taskRows } = await csvRows(taskCsv);
+    // Length/Place/Note/Source added by LR-LA F-LA-6: a booked visit is a task
+    // carrying exactly those first three (0007, 0009), and without them the
+    // export handed a leaving client a visit with no address, no length and no
+    // gate code.
     expect(taskHeaders).toEqual([
       "Title",
       "Done",
       "Due On",
       "Due At",
+      "Length (minutes)",
+      "Place",
+      "Note",
+      "Source",
       "Contact",
       "Company",
       "Deal",
@@ -238,9 +247,9 @@ describe("exportRun: buildEntityCsv", () => {
     expect(taskRows).toHaveLength(2);
     const followUp = taskRows.find((r) => r[0] === "Follow up");
     expect(followUp?.[1]).toBe("false");
-    expect(followUp?.[4]).toBe("Ada Lovelace");
-    expect(followUp?.[5]).toBe("Acme Inc");
-    expect(followUp?.[6]).toBe("Analytical Engine");
+    expect(followUp?.[8]).toBe("Ada Lovelace");
+    expect(followUp?.[9]).toBe("Acme Inc");
+    expect(followUp?.[10]).toBe("Analytical Engine");
     const already = taskRows.find((r) => r[0] === "Already done");
     expect(already?.[1]).toBe("true");
 
@@ -607,9 +616,16 @@ describe("exportRun: the newly added zip tables (F-LC-4)", () => {
 
 // Round 2 (F-LC-4): the audit found the zip covered 5 of ~25 tables. This is
 // now the authoritative list this feature is responsible for; it deliberately
-// excludes attachments (binary files, not a CSV concern), document_sequences
-// and settings/lead_sync/change_log/merges (internal bookkeeping, not the
-// owner's data) and invoice_schedules (not in the packet's list for A).
+// excludes document_sequences and settings/lead_sync/change_log/merges
+// (internal bookkeeping, not the owner's data) and invoice_schedules (not in
+// the packet's list for A).
+//
+// attachments.csv joined the list in LR-LA (F-LA-6). It was excluded as
+// "binary files, not a CSV concern", which is true of the files and was then
+// read as true of the table: the result was that a leaving client got an
+// attachments folder full of stored names with nothing anywhere saying what
+// they were or whose they were. The manifest is the join; the files stay where
+// they are.
 const ZIP_FILES = [
   "contacts.csv",
   "companies.csv",
@@ -627,6 +643,7 @@ const ZIP_FILES = [
   "recurring_rules.csv",
   "templates.csv",
   "saved_views.csv",
+  "attachments.csv",
   "helix-export.json",
 ];
 
@@ -666,10 +683,97 @@ describe("exportRun: buildEverythingZip", () => {
         "recurringRules",
         "templates",
         "savedViews",
+        "attachments",
       ].sort(),
     );
     expect(Array.isArray(dump.contacts)).toBe(true);
     expect(dump.contacts[0]["First Name"]).toBe("Ada");
     expect(dump.companies[0].Name).toBe("Acme Inc");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* LR-LA F-LA-6: the attachments manifest                                     */
+/* -------------------------------------------------------------------------- */
+
+describe("exportRun: the attachments manifest", () => {
+  /**
+   * The files stay out of the zip on purpose. What was missing was any record
+   * of them at all, which turned a leaving client's attachments folder - named
+   * by stored name, not by anything a person chose - into a pile of blobs.
+   * This proves the manifest is the join back to the records.
+   */
+  it("names each attached file, what it is stored as, and whose record it is on", async () => {
+    h = await createSeededHarness();
+    const ada = await contacts.create({ firstName: "Ada", lastName: "Lovelace" });
+    const acme = await companies.create({ name: "Acme Inc" });
+
+    await attachments.create({
+      entityType: "contact",
+      entityId: ada.id,
+      fileName: "signed-quote.pdf",
+      storedName: "a1b2c3d4.pdf",
+      bytes: 4096,
+      mime: "application/pdf",
+    });
+    await attachments.create({
+      entityType: "company",
+      entityId: acme.id,
+      fileName: "patio-before.jpg",
+      storedName: "e5f6a7b8.jpg",
+      bytes: 2_200_000,
+      mime: "image/jpeg",
+    });
+
+    const { bytes } = await buildEverythingZip();
+    const zip = await JSZip.loadAsync(bytes);
+    const csv = await zip.file("attachments.csv")?.async("string");
+    expect(csv, "attachments.csv is missing from the zip").toBeTruthy();
+
+    const { headers, rows } = await csvRows(csv ?? "");
+    expect(headers).toEqual([
+      "File Name",
+      "Stored As",
+      "Size (bytes)",
+      "Type",
+      "Record Type",
+      "Record Name",
+      "Created At",
+    ]);
+
+    const quote = rows.find((r) => r[0] === "signed-quote.pdf");
+    expect(quote, "the contact's attachment is not in the manifest").toBeTruthy();
+    expect(quote?.[1]).toBe("a1b2c3d4.pdf");
+    expect(quote?.[2]).toBe("4096");
+    expect(quote?.[3]).toBe("application/pdf");
+    expect(quote?.[4]).toBe("Contact");
+    expect(quote?.[5]).toBe("Ada Lovelace");
+
+    const photo = rows.find((r) => r[0] === "patio-before.jpg");
+    expect(photo?.[4]).toBe("Company");
+    expect(photo?.[5]).toBe("Acme Inc");
+
+    // The manifest is a manifest: no file contents ride along with it.
+    expect(Object.keys(zip.files)).not.toContain("a1b2c3d4.pdf");
+    expect(Object.keys(zip.files)).not.toContain("attachments/");
+  });
+
+  it("leaves a deleted attachment out, the same as every other sheet", async () => {
+    h = await createSeededHarness();
+    const ada = await contacts.create({ firstName: "Ada", lastName: "Lovelace" });
+    const gone = await attachments.create({
+      entityType: "contact",
+      entityId: ada.id,
+      fileName: "wrong-file.pdf",
+      storedName: "deadbeef.pdf",
+      bytes: 10,
+      mime: "application/pdf",
+    });
+    await attachments.softDelete(gone.id);
+
+    const { bytes } = await buildEverythingZip();
+    const zip = await JSZip.loadAsync(bytes);
+    const csv = (await zip.file("attachments.csv")?.async("string")) ?? "";
+    expect(csv).not.toContain("wrong-file.pdf");
   });
 });

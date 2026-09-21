@@ -135,15 +135,19 @@ describe("LA-W3 J9: export everything — real artifacts, opened and read back",
     const visitRow = taskRows.find((r) => r[taskHeaders.indexOf("Title")] === "Visit: fix the kitchen leak");
     expect(visitRow, "the visit should be a row in tasks.csv").toBeTruthy();
     expect(visitRow?.[taskHeaders.indexOf("Due At")]).toContain("2026-04-10");
-    // Documented, not asserted as desirable: the visit's place and duration
-    // (`place`, `durationMinutes` on the row) have no column at all in
-    // tasks.csv today, so they do not survive an export. `tasks.create` above
-    // was given both to prove this rather than assume it — reading
-    // `tasksRows()` in exportRun.ts confirms the header list is exactly
-    // Title/Done/Due On/Due At/Contact/Company/Deal/Created At.
-    expect(taskHeaders).not.toContain("Place");
-    expect(taskHeaders).not.toContain("Duration");
-    void visit; // referenced above for its id-free content assertions only
+    // This block was written the other way up: it asserted that Place and
+    // Duration had NO column in tasks.csv, documenting the gap LA-W3 found
+    // rather than claiming it was acceptable. The LA lead fixed the export
+    // (F-LA-6) instead of the wording, so the assertions are now the right way
+    // round — a booked visit's address, its length and the note the owner put
+    // on it survive the export, which is the whole point of the one path a
+    // leaving client uses.
+    expect(taskHeaders).toContain("Place");
+    expect(taskHeaders).toContain("Length (minutes)");
+    expect(visitRow?.[taskHeaders.indexOf("Place")]).toBe(visit.place);
+    expect(visitRow?.[taskHeaders.indexOf("Length (minutes)")]).toBe(
+      String(visit.durationMinutes),
+    );
 
     // --- invoices (documents.csv carries quotes and invoices together) ---
     const documentsCsv = await zip.file("documents.csv")?.async("string");
@@ -164,8 +168,14 @@ describe("LA-W3 J9: export everything — real artifacts, opened and read back",
     expect(dump.payments.some((r: Record<string, unknown>) => r.Reference === "9911")).toBe(true);
     expect(dump.documents.some((r: Record<string, unknown>) => r["Invoice/Quote #"] === invoice.number || Object.values(r).includes(invoice.number))).toBe(true);
 
-    // --- Finding F-LA-W3-1: no attachments manifest anywhere in the zip ---
-    expect(Object.keys(zip.files)).not.toContain("attachments.csv");
-    expect(dump.attachments).toBeUndefined();
+    // --- F-LA-W3-1, raised here and fixed by the LA lead as F-LA-6 ---
+    // This asserted the absence of any attachments manifest, which was the
+    // finding. The files themselves still, correctly, stay out of the zip -
+    // a patio photo is megabytes and already lives beside the database - but
+    // the manifest is the join between that folder's opaque stored names and
+    // the records they belong to, and without it a leaving client's
+    // attachments folder is unreadable.
+    expect(Object.keys(zip.files)).toContain("attachments.csv");
+    expect(Array.isArray(dump.attachments)).toBe(true);
   });
 });
