@@ -16,14 +16,19 @@ describe("automations: renderTemplate", () => {
     expect(out).toBe("Call Dana Reyes about {something}");
   });
 
+  // The token still renders as nothing, which is what these two are about.
+  // What changed with F-SEC-R-1 is the gap it leaves behind: renderTemplate now
+  // collapses whitespace on the way out, so the owner reads "Call about their
+  // request" rather than a title with a hole in the middle of it. The double
+  // space was never intended, it was just what string replacement produced.
   it("renders a null value as an empty string", () => {
     const out = renderTemplate("Call {name} about their request", { name: null });
-    expect(out).toBe("Call  about their request");
+    expect(out).toBe("Call about their request");
   });
 
   it("renders an omitted (undefined) known token as an empty string", () => {
     const out = renderTemplate("Call {name} about their request", {});
-    expect(out).toBe("Call  about their request");
+    expect(out).toBe("Call about their request");
   });
 
   it("returns a template with no tokens unchanged", () => {

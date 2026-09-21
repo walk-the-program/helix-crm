@@ -146,12 +146,73 @@ export type TemplateTokens = {
 
 const TOKEN_RE = /\{(name|number|job)\}/g;
 
+/**
+ * An automation title is the one string in the product assembled from the
+ * owner's template and somebody else's data, and it does not stay on screen:
+ * it becomes a task title, which the Schedule exports into a .ics `SUMMARY`
+ * and the export writes into a CSV cell.
+ *
+ * `{name}` on the speed-to-lead rule comes from a public web form. That path
+ * is already bounded and stripped in Rust (`leads::enforce_bounds`), but it is
+ * not the only one: a contact imported from a CSV reaches the same token with
+ * nothing stripped at all, and `{job}` is a deal title that can be as long as
+ * the importer made it. So the guard belongs here, at the point the tokens are
+ * substituted, rather than on whichever upstream happened to be hardened first.
+ */
+const MAX_TITLE_LEN = 200;
+
+/**
+ * True for a NUL or a bidi override/embedding character (U+200E, U+200F,
+ * U+202A-U+202E, U+2066-U+2069), or any other C0 control except tab. A
+ * right-to-left override in a task title reads one way in the list and another
+ * in the calendar entry the owner exports, which is the whole trick. Written as
+ * numeric code-point comparisons rather than a regex literal, so no invisible
+ * character sits in this source file - the same reasoning, and the same code
+ * points, as `sanitizeDisplayName` in `src/db/repos/attachments.ts`.
+ */
+function isUnsafeTitleCodePoint(codePoint: number): boolean {
+  if (codePoint < 0x0020 || codePoint === 0x007f) return true;
+  if (codePoint === 0x200e || codePoint === 0x200f) return true;
+  if (codePoint >= 0x202a && codePoint <= 0x202e) return true;
+  if (codePoint >= 0x2066 && codePoint <= 0x2069) return true;
+  return false;
+}
+
+/**
+ * A control character that separates words rather than meaning nothing: tab,
+ * newline, carriage return, vertical tab, form feed. These become a space
+ * instead of being dropped. Dropping them glued "Call\nJane" into "CallJane",
+ * which is a worse title than the one we were protecting the owner from - the
+ * point of the guard is that the title reads honestly, not merely that it is
+ * free of invisible characters.
+ */
+function isWhitespaceControl(codePoint: number): boolean {
+  return codePoint === 0x0009 || (codePoint >= 0x000a && codePoint <= 0x000d);
+}
+
+/** Strip what must never reach a title, collapse whitespace, cap the length. */
+export function sanitizeTitle(value: string): string {
+  let out = "";
+  for (const ch of value) {
+    const codePoint = ch.codePointAt(0) ?? 0;
+    if (isWhitespaceControl(codePoint)) {
+      out += " ";
+      continue;
+    }
+    if (isUnsafeTitleCodePoint(codePoint)) continue;
+    out += ch;
+  }
+  out = out.replace(/\s+/g, " ").trim();
+  return out.length > MAX_TITLE_LEN ? `${out.slice(0, MAX_TITLE_LEN - 1).trimEnd()}…` : out;
+}
+
 /** {name} {number} {job}. Unknown tokens are left alone; a null/empty value renders as "". */
 export function renderTemplate(template: string, tokens: TemplateTokens): string {
-  return template.replace(TOKEN_RE, (_match, key: keyof TemplateTokens) => {
+  const substituted = template.replace(TOKEN_RE, (_match, key: keyof TemplateTokens) => {
     const value = tokens[key];
     return value ? String(value) : "";
   });
+  return sanitizeTitle(substituted);
 }
 
 /**

@@ -71,15 +71,61 @@ function utcBasic(d: Date): string {
   return `${year}${month}${day}T${hour}${minute}${second}Z`;
 }
 
-/** Escape a TEXT value per RFC 5545 section 3.3.11. Order matters. */
+/**
+ * True for a control character RFC 5545 does not allow in a TEXT value, or a
+ * bidi override/embedding character.
+ *
+ * Section 3.3.11 builds TEXT out of SAFE-CHAR, which excludes the C0 controls
+ * apart from HTAB; a NUL or a stray U+0001 in a SUMMARY is a malformed file
+ * that a calendar app may reject or truncate. LF and CR are handled before
+ * this runs - they become the `\n` escape - so by the time a character is
+ * tested here, any control left is one that has no meaning in the format.
+ *
+ * The bidi characters are stripped for the same reason `sanitizeDisplayName`
+ * strips them from an attachment name: a right-to-left override makes the
+ * exported entry read differently in the owner's calendar than it did in
+ * Helix, and a calendar entry is seen weeks later, out of context, on a phone.
+ * Numeric code-point comparisons, never a regex literal holding the characters.
+ */
+function isUnsafeTextCodePoint(codePoint: number): boolean {
+  if (codePoint === 0x0009) return false;
+  if (codePoint < 0x0020 || codePoint === 0x007f) return true;
+  if (codePoint === 0x200e || codePoint === 0x200f) return true;
+  if (codePoint >= 0x202a && codePoint <= 0x202e) return true;
+  if (codePoint >= 0x2066 && codePoint <= 0x2069) return true;
+  return false;
+}
+
+/** Drop the characters above, one pass, surrogate pairs kept whole. */
+function stripUnsafe(value: string): string {
+  let out = "";
+  for (const ch of value) {
+    if (isUnsafeTextCodePoint(ch.codePointAt(0) ?? 0)) continue;
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Escape a TEXT value per RFC 5545 section 3.3.11. Order matters.
+ *
+ * The line-break handling is what closes property injection: a CRLF inside a
+ * value would otherwise end the content line and let the next characters be
+ * read as a new property or component. `\r\n` and `\n` both become the literal
+ * two-character `\n` escape and a lone `\r` is dropped, so nothing a caller
+ * supplies can start a line. That is covered by a test that tries to inject a
+ * `BEGIN:VALARM`. Control characters are stripped AFTER that, so removing them
+ * can never expose a line break that the escaping had already neutralised.
+ */
 export function escapeText(value: string): string {
-  return value
+  const escaped = value
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "")
     .replace(/\\/g, "\\\\")
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
     .replace(/\n/g, "\\n");
+  return stripUnsafe(escaped);
 }
 
 /** The UTF-8 byte length of a single character (not a full string). */
