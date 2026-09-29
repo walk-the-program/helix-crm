@@ -30,7 +30,7 @@ The two things together:
   40px rows, weight and position doing the hierarchy work, no gradient, no
   card shadow, no icon in a coloured circle, no illustration, a real dark
   mode, and a compact density that is a setting rather than the design.
-- **From the brand guide**: Zilla Slab headings against Lato body, a
+- **From the brand guide**: DM Sans headings and Lato body, a
   #FAFAFF canvas, corners at zero, the primary `#97B1C3` used once per view as
   a single confident block, and the accent `#EDF0A3` as a detail and never a
   background. (The guide's offset sticker shadow on the mark was tried,
@@ -589,8 +589,8 @@ is the product's one primary block, and the nav icon takes the row's ink — on
 the selected row that ink is the near-black, so the glyph reads against the
 block without being given a colour of its own.
 
-**Page header.** Title at `--text-heading` (32/1.1) in Zilla Slab bold, tracked
--0.01em, truncated with a `title` attribute; optional breadcrumb above at
+**Page header.** Title at `--text-heading` (32/1.1) in DM Sans bold, tracked
+-0.02em, truncated with a `title` attribute; optional breadcrumb above at
 `--text-sm` in tertiary ink, optional subtitle below at `--text-sm` in
 secondary ink, actions right-aligned on the baseline. **No bottom hairline** —
 the toolbar 24px above already draws one.

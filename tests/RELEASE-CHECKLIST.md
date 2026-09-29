@@ -38,9 +38,10 @@ these by-hand checks.
       `rust`, and `rust-audit` all passing in GitHub Actions. `e2e` is the
       Playwright suite, added by LR-LA F-LA-1 — before that it ran on nobody's
       machine but a developer's, so "main is green" did not cover the UI at
-      all. Its first run on a runner has not happened yet; if it is red on a
-      fresh checkout for an environment reason rather than a real failure,
-      fix the job, do not tag around it.
+      all. It first ran and passed on 2e035c6 (2026-09-21) and must stay
+      green before tagging; if it is red on a fresh checkout for an
+      environment reason rather than a real failure, fix the job, do not
+      tag around it.
 - [ ] `e2e-win` is green too, or you have accepted its absence knowingly: it
       runs on push to main and is four smoke assertions, not coverage (see
       "Windows" below and `tests/e2e-win/README.md`).

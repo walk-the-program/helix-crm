@@ -4,7 +4,7 @@
 
 - Changed the body font from Poppins to Lato at Walker's request. Self-hosted
   as `lato-400.woff2`, `lato-700.woff2`, and `lato-400italic.woff2` in
-  `public/fonts/`; headings stay Zilla Slab. Lato ships at 400/700 only, so
+  `public/fonts/`; headings now use DM Sans. Lato ships at 400/700 only, so
   `font-medium`/`font-semibold` now render 400/700 instead of the old
   Poppins 500/600.
 - Fixed the 30-day trash purge to also remove a purged quote or invoice's own

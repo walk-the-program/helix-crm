@@ -324,10 +324,11 @@ export async function purge(
     // A purged invoice's payments go first, by hand. `payments.document_id`
     // is ON DELETE RESTRICT on purpose - nothing may destroy the record of
     // what a customer paid as a side effect of deleting something else - so
-    // SQLite refuses the DELETE below until they are gone. The payments went
-    // into the Trash with the invoice (documents.softDelete cascades them),
-    // and they leave with it. Ordinary purges reach this through the Trash
-    // screen; the 30-day sweep reaches it through `purgeSweep.ts`.
+    // SQLite refuses the DELETE below until they are gone. A soft delete does
+    // not touch them (documents.softDelete leaves them live; every money query
+    // joins documents and tests deleted_at), so they leave only here, with the
+    // invoice. Ordinary purges reach this through the Trash screen; the 30-day
+    // sweep reaches it through `purgeSweep.ts`.
     const payments: { sql: string; params: unknown[] }[] =
       entityType === "document"
         ? [{ sql: `DELETE FROM payments WHERE document_id = ?`, params: [entityId] }]
